@@ -2453,63 +2453,57 @@ func testSecurity(t *testing.T) security.Handler {
 }
 
 func TestOtelResourceDetection(t *testing.T) {
+	defaultOTelServiceName := "dapr-sidecar"
+	defaultAttrsPrefix := map[string]bool{
+		"os.":            true,
+		"host.":          true,
+		"service.":       true,
+		"process.":       true,
+		"telemetry.sdk.": true,
+	}
+
 	tests := []struct {
 		name                string
 		otelServiceName     string
 		otelResourceAttrs   string
-		fallbackAppID       string
 		expectedServiceName string
+		expectedAttrsPrefix map[string]bool
 		expectedAttrs       map[string]string
 	}{
 		{
-			name:                "No environment variable, use fallback app ID",
+			name:                "No environment variable, use default app ID",
 			otelServiceName:     "",
 			otelResourceAttrs:   "",
-			fallbackAppID:       "my-app",
-			expectedServiceName: "my-app",
-			expectedAttrs:       map[string]string{},
+			expectedServiceName: defaultOTelServiceName,
+			expectedAttrsPrefix: defaultAttrsPrefix,
 		},
 		{
-			name:                "OTEL_SERVICE_NAME set, use it instead of fallback",
+			name:                "OTEL_SERVICE_NAME set, use it instead of default",
 			otelServiceName:     "service-abc",
 			otelResourceAttrs:   "",
-			fallbackAppID:       "my-app",
 			expectedServiceName: "service-abc",
-			expectedAttrs:       map[string]string{},
+			expectedAttrsPrefix: defaultAttrsPrefix,
 		},
 		{
-			name:                "OTEL_RESOURCE_ATTRIBUTES with k8s attributes",
-			otelServiceName:     "",
-			otelResourceAttrs:   "k8s.pod.uid=123-456-789,k8s.namespace.name=default,k8s.pod.name=my-pod",
-			fallbackAppID:       "my-app",
-			expectedServiceName: "my-app",
+			name:                "OTEL_RESOURCE_ATTRIBUTES with custom attributes",
+			otelServiceName:     "service-abc",
+			otelResourceAttrs:   "test-key-a=aaaaa,test-key-b=bbbbb",
+			expectedServiceName: "service-abc",
+			expectedAttrsPrefix: defaultAttrsPrefix,
 			expectedAttrs: map[string]string{
-				"k8s.pod.uid":        "123-456-789",
-				"k8s.namespace.name": "default",
-				"k8s.pod.name":       "my-pod",
+				"test-key-a": "aaaaa",
+				"test-key-b": "bbbbb",
 			},
 		},
 		{
+			// Regression test: per the OTel SDK env var spec, OTEL_SERVICE_NAME must
+			// take precedence over a service.name entry in OTEL_RESOURCE_ATTRIBUTES.
+			// See: https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#general-sdk-configuration
 			name:                "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES",
-			otelServiceName:     "service-from-env",
-			otelResourceAttrs:   "service.name=service-from-attrs,k8s.pod.name=my-pod",
-			fallbackAppID:       "my-app",
-			expectedServiceName: "service-from-env",
-			expectedAttrs: map[string]string{
-				"k8s.pod.name": "my-pod",
-			},
-		},
-		{
-			name:                "Both OTEL vars set with k8s attributes",
-			otelServiceName:     "my-dapr-sidecar",
-			otelResourceAttrs:   "k8s.pod.uid=abc-def,k8s.deployment.name=my-app,k8s.namespace.name=production",
-			fallbackAppID:       "fallback-id",
-			expectedServiceName: "my-dapr-sidecar",
-			expectedAttrs: map[string]string{
-				"k8s.pod.uid":         "abc-def",
-				"k8s.deployment.name": "my-app",
-				"k8s.namespace.name":  "production",
-			},
+			otelServiceName:     "service-from-name",
+			otelResourceAttrs:   "service.name=service-from-attrs",
+			expectedServiceName: "service-from-name",
+			expectedAttrsPrefix: defaultAttrsPrefix,
 		},
 	}
 
@@ -2520,9 +2514,9 @@ func TestOtelResourceDetection(t *testing.T) {
 			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelResourceAttrs)
 
 			ctx := t.Context()
-			r := createOtelResource(ctx, tc.fallbackAppID)
+			r, err := createOtelResource(ctx, defaultOTelServiceName)
+			require.NoError(t, err, "creating OpenTelemetry resource should not error, err: %v", err)
 
-			// Convert attributes to map for easier assertions
 			attrs := r.Attributes()
 
 			attrMap := make(map[string]string)
@@ -2535,6 +2529,19 @@ func TestOtelResourceDetection(t *testing.T) {
 			require.True(t, exists, "service.name attribute should exist")
 			assert.Equal(t, tc.expectedServiceName, serviceName,
 				"service.name should be %s, but got %s", tc.expectedServiceName, serviceName)
+
+			// Verify basic attributes prefixes
+			for prefix := range tc.expectedAttrsPrefix {
+				var found bool
+				for key := range attrMap {
+					if strings.HasPrefix(key, prefix) {
+						found = true
+						break
+					}
+				}
+
+				assert.True(t, found, "%s attribute prefix should be found.", prefix)
+			}
 
 			// Verify additional expected attributes
 			for key, expectedValue := range tc.expectedAttrs {
