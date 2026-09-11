@@ -97,6 +97,66 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 
 		assert.Equal(t, ctx, newCtx)
 	})
+
+	t.Run("span context with tracestate", func(t *testing.T) {
+		traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+		require.NoError(t, err)
+		spanID, err := trace.SpanIDFromHex("0011223344556677")
+		require.NoError(t, err)
+		traceState, err := trace.ParseTraceState("vendor=value")
+		require.NoError(t, err)
+
+		sc := trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     spanID,
+			TraceFlags: trace.FlagsSampled,
+			TraceState: traceState,
+		})
+
+		newCtx := SpanContextToGRPCMetadata(t.Context(), sc)
+
+		md, ok := grpcMetadata.FromOutgoingContext(newCtx)
+		require.True(t, ok)
+		assert.Equal(t, []string{"vendor=value"}, md.Get(diagConsts.TracestateHeader))
+	})
+
+	t.Run("span context without tracestate", func(t *testing.T) {
+		traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+		require.NoError(t, err)
+		spanID, err := trace.SpanIDFromHex("0011223344556677")
+		require.NoError(t, err)
+
+		sc := trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     spanID,
+			TraceFlags: trace.FlagsSampled,
+		})
+
+		newCtx := SpanContextToGRPCMetadata(t.Context(), sc)
+
+		md, ok := grpcMetadata.FromOutgoingContext(newCtx)
+		require.True(t, ok)
+		assert.Empty(t, md.Get(diagConsts.TracestateHeader))
+	})
+}
+
+func TestSpanContextFromIncomingGRPCMetadata(t *testing.T) {
+	t.Run("traceparent and tracestate headers, no grpc-trace-bin", func(t *testing.T) {
+		md := grpcMetadata.New(map[string]string{
+			diagConsts.TraceparentHeader: "00-00112233445566778899aabbccddeeff-0011223344556677-01",
+			diagConsts.TracestateHeader:  "vendor=value",
+		})
+		testCtx := grpcMetadata.NewIncomingContext(t.Context(), md)
+		_, err := metadata.SetMetadataInContextUnary(testCtx, nil, nil, func(ctx context.Context, req any) (any, error) {
+			testCtx = ctx
+			return nil, nil
+		})
+		require.NoError(t, err)
+
+		sc, ok := SpanContextFromIncomingGRPCMetadata(testCtx)
+		require.True(t, ok)
+		assert.Equal(t, "vendor=value", sc.TraceState().String())
+	})
 }
 
 // runBaggageHeaderPropagationTest runs the same baggage tests across both types of interceptors

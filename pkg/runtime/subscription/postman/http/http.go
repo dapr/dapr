@@ -23,12 +23,14 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -87,9 +89,17 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if traceID, ok := iTraceID.(string); ok {
 		sc, _ := diag.SpanContextFromW3CString(traceID)
+		if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+			sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+		}
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
 	} else if iTraceID != nil {
 		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+	}
+	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+		if parsedBaggage, err := baggage.Parse(baggageString); err == nil {
+			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+		}
 	}
 
 	start := time.Now()
@@ -246,6 +256,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
+			if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+			}
 
 			var span trace.Span
 
@@ -256,6 +269,11 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			}
 		} else if iTraceID != nil {
 			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+		}
+		if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+			if parsedBaggage, err := baggage.Parse(baggageString); err == nil {
+				ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+			}
 		}
 	}
 
