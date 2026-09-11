@@ -189,6 +189,18 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 	t.Run("churn halt writes, heartbeats, completes and deletes the record", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
+		// The Completed record is readable only for Retention before the
+		// guard deletes it, and this test asserts that state. The harness
+		// default of 50ms is narrower than a loaded runner can schedule
+		// this goroutine, which observes a record that is already deleted
+		// and can then never satisfy the condition.
+		f.claims = claim.New(claim.Options{
+			ActorType:      f.actorType,
+			State:          store.fake(),
+			HeartbeatEvery: time.Millisecond * 10,
+			Retention:      time.Second,
+			StaleAfter:     time.Hour,
+		})
 
 		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
