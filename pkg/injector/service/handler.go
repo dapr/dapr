@@ -29,14 +29,26 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/streams"
 )
+
+// maxAdmissionRequestBodySize is the maximum size, in bytes, of an admission
+// request body the injector will read. AdmissionReview payloads embed the
+// full Pod object, which is normally small, so this is a generous ceiling
+// meant to bound memory use against oversized or malicious requests.
+const maxAdmissionRequestBodySize = 4 << 20 // 4 MiB
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	RecordSidecarInjectionRequestsCount()
 
 	body, err := readRequestBody(r)
 	if err != nil {
-		log.Error("Empty body")
+		if errors.Is(err, streams.ErrStreamTooLarge) {
+			log.Errorf("Request body exceeds the %d byte limit", maxAdmissionRequestBodySize)
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		log.Errorf("Failed to read request body: %v", err)
 		http.Error(w, "empty body", http.StatusBadRequest)
 		return
 	}
@@ -81,15 +93,23 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	i.writeAdmissionResponse(w, ar, gvk, patchOps, err)
 }
 
-// readRequestBody reads the full request body and returns it. Returns an error
-// if the body is nil, unreadable, or empty.
+// readRequestBody reads the request body, up to maxAdmissionRequestBodySize,
+// and returns it. Returns an error if the body is nil, unreadable, empty, or
+// exceeds maxAdmissionRequestBodySize (streams.ErrStreamTooLarge).
 func readRequestBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, errors.New("empty body")
 	}
-	defer r.Body.Close()
-	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
+	limited := streams.LimitReadCloser(r.Body, maxAdmissionRequestBodySize)
+	defer limited.Close()
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		if errors.Is(err, streams.ErrStreamTooLarge) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+	if len(body) == 0 {
 		return nil, errors.New("empty body")
 	}
 	return body, nil
