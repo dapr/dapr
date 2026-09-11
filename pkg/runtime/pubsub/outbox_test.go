@@ -590,6 +590,187 @@ func TestPublishInternal(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("projection operation excluded from returned operations", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+
+			assert.Equal(t, "projection-value", cloudEvent["data"])
+
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:   "key",
+				Value: "original-value",
+			},
+			state.SetRequest{
+				Key:      "key",
+				Value:    "projection-value",
+				Metadata: map[string]string{"outbox.projection": "true"},
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+
+		assert.Len(t, trs, 2, "expected 1 original op + 1 transaction marker")
+
+		setReq, ok := trs[0].(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "key", setReq.Key)
+		assert.Equal(t, "original-value", setReq.Value, "returned op should have the original value, not the projection value")
+	})
+
+	t.Run("multiple projections in same batch excluded from returned operations", func(t *testing.T) {
+		var publishedData []any
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+			publishedData = append(publishedData, cloudEvent["data"])
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:   "keyA",
+				Value: "valA",
+			},
+			state.SetRequest{
+				Key:      "keyA",
+				Value:    "projA",
+				Metadata: map[string]string{"outbox.projection": "true"},
+			},
+			state.SetRequest{
+				Key:   "keyB",
+				Value: "valB",
+			},
+			state.SetRequest{
+				Key:      "keyB",
+				Value:    "projB",
+				Metadata: map[string]string{"outbox.projection": "true"},
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+
+		originalCount := 0
+		for _, op := range trs {
+			if sr, ok := op.(state.SetRequest); ok {
+				if sr.Key == "keyA" || sr.Key == "keyB" {
+					originalCount++
+					_, hasProj := sr.Metadata["outbox.projection"]
+					assert.False(t, hasProj, "returned operation should not have outbox.projection metadata")
+				}
+			}
+		}
+		assert.Equal(t, 2, originalCount, "expected 2 original ops in returned operations (plus transaction markers)")
+	})
+
+	t.Run("no projection preserves original value in returned operations", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+			assert.Equal(t, "my-value", cloudEvent["data"])
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:   "key",
+				Value: "my-value",
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+		require.Len(t, trs, 2, "expected 1 original op + 1 transaction marker")
+
+		setReq, ok := trs[0].(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "my-value", setReq.Value)
+	})
+
 	t.Run("missing state store", func(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
 
