@@ -276,7 +276,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, messages.ErrDirectInvokeNotReady
+		return nil, apierrors.ServiceInvocation("").NotReady()
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -326,7 +326,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			if c := status.Code(rErr); c == codes.DeadlineExceeded || c == codes.Canceled {
 				return rResp, rErr
 			}
-			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
+      return rResp, apierrors.ServiceInvocation(in.GetId()).InvokeFailed(rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
