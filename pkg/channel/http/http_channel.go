@@ -673,7 +673,7 @@ func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.In
 	// Limit response body if needed
 	var body io.ReadCloser
 	if h.maxResponseBodySize > 0 {
-		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)<<20)
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize))
 	} else {
 		body = channelResp.Body
 	}
