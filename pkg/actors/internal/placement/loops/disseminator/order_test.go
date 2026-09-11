@@ -23,9 +23,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/timeout"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	healthzfake "github.com/dapr/dapr/pkg/healthz/fake"
+	"github.com/dapr/dapr/pkg/internal/placement/timeout"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	schedfake "github.com/dapr/dapr/pkg/runtime/scheduler/client/fake"
 	loopfake "github.com/dapr/kit/events/loop/fake"
@@ -63,9 +63,16 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 	}
 
 	diss.loop = dissLoop
-	diss.timeoutQ = timeout.New(timeout.Options{
-		Loop:    dissLoop,
+	diss.timeoutTimer = timeout.New(timeout.Options{
+		OnTimeout: func(version uint64) {
+			dissLoop.Enqueue(&loops.DisseminationTimeout{
+				Version: version,
+			})
+		},
 		Timeout: time.Second * 30,
+	})
+	t.Cleanup(func() {
+		require.NoError(t, diss.timeoutTimer.Close())
 	})
 
 	return diss, ht, sched
@@ -99,6 +106,26 @@ func TestHandleTimeout(t *testing.T) {
 		diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 3})
 		assert.False(t, streamClosed, "stream should not be closed for stale timeout version")
 	})
+
+	for _, operation := range []v1pb.HostOperation{
+		v1pb.HostOperation_UPDATE,
+		v1pb.HostOperation_UNLOCK,
+	} {
+		t.Run("completed lock phase at "+operation.String()+" is ignored", func(t *testing.T) {
+			diss, _, _ := newTestDisseminator(t)
+
+			var streamClosed bool
+			diss.streamLoop = loopfake.New[loops.EventStream]().
+				WithClose(func(loops.EventStream) {
+					streamClosed = true
+				})
+
+			diss.timeoutVersion = 3
+			diss.currentOperation = operation
+			diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 3})
+			assert.False(t, streamClosed, "stream should not be closed after the lock phase completed")
+		})
+	}
 }
 
 func TestHandleOrder_UpdateVersionMismatch(t *testing.T) {
@@ -170,7 +197,7 @@ func TestHandleTimeout_UpdateDequeuesTimeout(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		savedVersion := diss.timeoutVersion - 1
+		savedVersion := diss.timeoutVersion
 		diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{
 			Version: savedVersion,
 		})

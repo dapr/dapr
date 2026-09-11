@@ -20,9 +20,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/pkg/internal/placement/timeout"
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/store"
-	"github.com/dapr/dapr/pkg/placement/internal/loops/disseminator/timeout"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/events/loop/fake"
 )
@@ -40,13 +40,17 @@ func newTestDisseminator(t *testing.T) *disseminator {
 		streams:          make(map[uint64]*streamConn),
 		store:            store.New(store.Options{ReplicationFactor: 1}),
 		currentOperation: v1pb.HostOperation_REPORT,
-		timeoutQ: timeout.New(timeout.Options{
-			Loop:    dissLoop,
+		timeoutTimer: timeout.New(timeout.Options{
+			OnTimeout: func(version uint64) {
+				dissLoop.Enqueue(&loops.DisseminationTimeout{
+					Version: version,
+				})
+			},
 			Timeout: 5 * time.Second,
 		}),
 	}
 
-	t.Cleanup(func() { d.timeoutQ.Close() })
+	t.Cleanup(func() { d.timeoutTimer.Close() })
 
 	return d
 }
@@ -110,6 +114,21 @@ func TestHandleTimeout_IgnoresStaleVersion(t *testing.T) {
 
 	assert.Len(t, d.streams, 1)
 	assert.True(t, d.store.Has(0))
+}
+
+func TestHandleTimeout_IgnoresCompletedRound(t *testing.T) {
+	d := newTestDisseminator(t)
+	addFakeStream(d, 0, []string{"actorA"})
+	d.currentVersion = 1
+	d.currentOperation = v1pb.HostOperation_REPORT
+	d.streams[0].currentState = v1pb.HostOperation_UNLOCK
+
+	d.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 1})
+
+	assert.Contains(t, d.streams, uint64(0))
+	assert.True(t, d.store.Has(0))
+	assert.Equal(t, uint64(1), d.currentVersion)
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
 }
 
 func TestHandleTimeout_ClosesOnlyNonRespondingStreams(t *testing.T) {
