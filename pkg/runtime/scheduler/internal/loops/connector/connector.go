@@ -34,6 +34,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler.loops.connector")
 type Options struct {
 	Namespace    string
 	AppID        string
+	ActorAddress string
 	WorkflowSpec *config.WorkflowSpec
 
 	Actors   actors.Interface
@@ -60,12 +61,13 @@ type connector struct {
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	return loop.New[loops.EventConn](1024).NewLoop(&connector{
-		namespace:    opts.Namespace,
-		appID:        opts.AppID,
-		workflowSpec: opts.WorkflowSpec,
-		actors:       opts.Actors,
-		channels:     opts.Channels,
-		wfEngine:     opts.WFEngine,
+		namespace:           opts.Namespace,
+		appID:               opts.AppID,
+		workflowSpec:        opts.WorkflowSpec,
+		actors:              opts.Actors,
+		channels:            opts.Channels,
+		wfEngine:            opts.WFEngine,
+		currentActorAddress: opts.ActorAddress,
 	})
 }
 
@@ -109,10 +111,6 @@ func (c *connector) handleReconnect(ctx context.Context, e *loops.Reconnect) {
 
 	if e.ActorTypes != nil {
 		c.currentActorTypes = *e.ActorTypes
-	}
-
-	if e.ActorAddress != nil {
-		c.currentActorAddress = *e.ActorAddress
 	}
 
 	c.maybeClientConnect(ctx)

@@ -112,6 +112,7 @@ func (h *churn) Run(t *testing.T, ctx context.Context) {
 	// Two sidecars join: invocations keep succeeding through the rebalance.
 	for _, d := range h.cyclers {
 		d.Run(t, ctx)
+		t.Cleanup(func() { d.Cleanup(t) })
 	}
 	for _, d := range h.cyclers {
 		d.WaitUntilRunning(t, ctx)

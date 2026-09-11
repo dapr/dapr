@@ -240,6 +240,7 @@ func New(opts Options) (Interface, error) {
 			StreamFactory:        factory,
 			SchedulerPlacement:   opts.SchedulerPlacement,
 			Fallback:             fallback,
+			Leadership:           opts.SchedulerLeadership,
 			DisseminationTimeout: opts.DisseminationTimeout,
 		}),
 	}, nil

@@ -58,6 +58,8 @@ func New(opts Options) connector.Interface {
 	}
 }
 
+// Connect dials the advertised placement leader. The context must outlive
+// the returned connection: the leader watcher runs on it.
 func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// Close any previous connection before dialing anew.
 	l.lock.Lock()
@@ -121,14 +123,15 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 }
 
 // watchLeader closes the current connection whenever the placement leader
-// moves away from the connected address, forcing the placement client to
-// reconnect to the new leader.
+// moves to another host. A leaderless broadcast closes nothing: a scheduler
+// which really loses leadership closes the stream itself.
 func (l *leader) watchLeader(ctx context.Context) {
 	for {
-		addr, unsupported, changed := l.leadership.Leader()
-
+		// Read and compare under the lock Connect stores under, so a stale
+		// read cannot close a connection to the current leader.
 		l.lock.Lock()
-		if l.conn != nil && l.addr != "" && (unsupported || addr != l.addr) {
+		addr, unsupported, changed := l.leadership.Leader()
+		if l.conn != nil && l.addr != "" && (unsupported || (addr != "" && addr != l.addr)) {
 			log.Infof("Scheduler placement leader changed from %s to %q, closing connection", l.addr, addr)
 			l.conn.Close()
 			l.conn = nil

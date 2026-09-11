@@ -127,17 +127,32 @@ func TestHandleOrderV2_ConcurrentDisjointRounds(t *testing.T) {
 	assert.Len(t, diss.v2Rounds, 1)
 }
 
-func TestHandleOrderV2_UnknownSeqClosesStream(t *testing.T) {
+func TestHandleOrderV2_UnknownSeqIsAckedAndIgnored(t *testing.T) {
 	diss := newTestDisseminatorV2(t)
 
 	var streamClosed bool
+	var acks []*loops.Ack
 	diss.streamLoop = loopfake.New[loops.EventStream]().
-		WithClose(func(loops.EventStream) { streamClosed = true })
+		WithClose(func(loops.EventStream) { streamClosed = true }).
+		WithEnqueue(func(e loops.EventStream) {
+			if send, ok := e.(*loops.StreamSend); ok && send.Ack != nil {
+				acks = append(acks, send.Ack)
+			}
+		})
 
 	require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
 		Order: &loops.Order{Op: loops.OrderUpdate, Version: 99, Partial: true},
 	}))
-	assert.True(t, streamClosed)
+	require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+		Order: &loops.Order{Op: loops.OrderUnlock, Version: 99, Partial: true},
+	}))
+
+	assert.False(t, streamClosed)
+	require.Len(t, acks, 2)
+	assert.Equal(t, loops.OrderUpdate, acks[0].Op)
+	assert.Equal(t, loops.OrderUnlock, acks[1].Op)
+	assert.Equal(t, uint64(99), acks[0].Version)
+	assert.Equal(t, uint64(99), acks[1].Version)
 }
 
 func TestHandleOrderV2_MergeErrorClosesStream(t *testing.T) {

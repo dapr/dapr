@@ -207,6 +207,15 @@ func (h *hashingTopology) run(t *testing.T, ctx context.Context) {
 		}, time.Second*20, time.Millisecond*10)
 	}
 
+	invokeOnce := func(c *assert.CollectT, client rtv1.DaprClient, actorID string) bool {
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: hashingActorType,
+			ActorId:   actorID,
+			Method:    "foo",
+		})
+		return assert.NoError(c, err)
+	}
+
 	ids := make([]string, hashingActorIDs)
 	for i := range ids {
 		ids[i] = "actor-" + strconv.Itoa(i)
@@ -298,7 +307,9 @@ func (h *hashingTopology) run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			h.reset()
 			for i := range 30 {
-				invoke(t, clients[0], "join-probe-"+strconv.Itoa(i))
+				if !invokeOnce(c, clients[0], "join-probe-"+strconv.Itoa(i)) {
+					return
+				}
 			}
 			owners := make(map[int]struct{})
 			for _, hosts := range h.snapshot() {

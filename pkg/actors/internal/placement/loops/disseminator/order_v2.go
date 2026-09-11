@@ -63,7 +63,12 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUpdate:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
-			d.closeStreamV2(fmt.Errorf("received UPDATE for unknown round seq %d", seq))
+			// The scheduler's round timeout path re-sends phases to members
+			// that already acked them, so a completed round's order is acked
+			// again and ignored, never a protocol error.
+			d.streamLoop.Enqueue(&loops.StreamSend{
+				Ack: &loops.Ack{Op: loops.OrderUpdate, Version: seq},
+			})
 			return nil
 		}
 
@@ -95,7 +100,9 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUnlock:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
-			d.closeStreamV2(fmt.Errorf("received UNLOCK for unknown round seq %d", seq))
+			d.streamLoop.Enqueue(&loops.StreamSend{
+				Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
+			})
 			return nil
 		}
 
@@ -124,12 +131,11 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 			Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
 		})
 
-		// The sidecar is ready only once it has a placement table for every
-		// actor type it locally hosts.
-		if d.inflight.HasTables(d.actorTable.Types()) {
-			d.healthTarget.Ready()
-			d.ready.Store(true)
-		}
+		// Readiness matches the v1 protocol: the first completed round
+		// readies the sidecar. Its own types arrive in a follow-up round,
+		// as the snapshot excludes pending types.
+		d.healthTarget.Ready()
+		d.ready.Store(true)
 
 	default:
 		d.closeStreamV2(fmt.Errorf("unknown operation: %s", order.Order.Op))

@@ -142,3 +142,47 @@ func TestConnectClosesPreviousConnection(t *testing.T) {
 
 	assert.Equal(t, connectivity.Shutdown, first.GetState())
 }
+
+func TestWatchLeaderKeepsConnectionOnLeaderlessBroadcast(t *testing.T) {
+	t.Parallel()
+
+	ldr := leadership.New()
+	ldr.Set("127.0.0.1:1")
+	conn, err := newTest(ldr).Connect(t.Context())
+	require.NoError(t, err)
+
+	ldr.Set("")
+	require.Never(t, func() bool {
+		return conn.GetState() == connectivity.Shutdown
+	}, time.Millisecond*400, time.Millisecond*50)
+
+	ldr.Set("127.0.0.1:2")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, connectivity.Shutdown, conn.GetState())
+	}, time.Second*5, time.Millisecond*10)
+}
+
+// TestWatcherSurvivesBoundedConnectContext covers the caller contract: the
+// context given to Connect carries the leader watcher, so a bound lifted
+// after a successful connect must not have cancelled it.
+func TestWatcherSurvivesBoundedConnectContext(t *testing.T) {
+	t.Parallel()
+
+	ldr := leadership.New()
+	ldr.Set("127.0.0.1:1")
+	l := newTest(ldr)
+
+	cctx, cancel := context.WithCancelCause(t.Context())
+	conn, err := l.Connect(cctx)
+	require.NoError(t, err)
+
+	require.Never(t, func() bool {
+		return conn.GetState() == connectivity.Shutdown
+	}, time.Millisecond*400, time.Millisecond*50)
+
+	ldr.Set("127.0.0.1:2")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, connectivity.Shutdown, conn.GetState())
+	}, time.Second*5, time.Millisecond*10)
+	cancel(nil)
+}

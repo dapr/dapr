@@ -277,6 +277,11 @@ func (i *Inflight) ResetSession() {
 	clear(i.versionByType)
 	i.hashTable.Version = ""
 	i.hashTable.Entries = make(map[string]*hashing.Consistent)
+
+	// A round aborted by the stream loss never unlocks its scope. With the
+	// block lifted, the next session's first Open flushes the queue, so a
+	// type which never returns resolves to no address.
+	clear(i.blockedTypes)
 }
 
 // LockTypes marks the given actor types as blocked. New acquires for these

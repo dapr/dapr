@@ -195,6 +195,15 @@ func (i internalConfig) SchedulerEnabled() bool {
 	return false
 }
 
+// SchedulerPlacementEnabled reports whether the scheduler may serve this
+// sidecar's actor placement. In Kubernetes the injector clears the actors
+// service when actors are disabled, so a scheduler address alone must not
+// enable actors there. Self hosted opts in with a scheduler address.
+func (i internalConfig) SchedulerPlacementEnabled() bool {
+	return i.SchedulerEnabled() &&
+		(len(i.actorsService) > 0 || i.mode == modes.StandaloneMode)
+}
+
 // FromConfig creates a new Dapr Runtime from a configuration.
 func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()

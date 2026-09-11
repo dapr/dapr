@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
@@ -35,11 +33,20 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/retry"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.loops.placement")
+
+// startupWaitDefault bounds the wait for a scheduler placement advertisement
+// while the startup fallback is available.
+const startupWaitDefault = time.Second * 30
+
+// errStartupTimeout marks the bounded startup wait for a scheduler placement
+// advertisement expiring.
+var errStartupTimeout = errors.New("no scheduler placement advertisement before the timeout")
 
 type Options struct {
 	Hostname  string
@@ -65,6 +72,10 @@ type Options struct {
 	// the startup choice the other authority's connector is kept, so a
 	// control plane handover is adopted without a restart.
 	Fallback *Fallback
+
+	// Leadership tracks the scheduler's placement advertisement, the only
+	// signal which moves this sidecar off the placement service.
+	Leadership *leadership.Leadership
 
 	ActorTable table.Interface
 	Scheduler  schedclient.Reloader
@@ -111,6 +122,7 @@ type placement struct {
 	idx uint64
 
 	dissLoop           loop.Interface[loops.EventDiss]
+	leadership         *leadership.Leadership
 	report             *loops.Report
 	streamFactory      func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
 	schedulerPlacement bool
@@ -122,6 +134,7 @@ type placement struct {
 	alt *Fallback
 
 	dissTimeout time.Duration
+	startupWait time.Duration
 
 	wg sync.WaitGroup
 }
@@ -136,6 +149,7 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		streamFactory:      opts.StreamFactory,
 		schedulerPlacement: opts.SchedulerPlacement,
 		fallback:           opts.Fallback,
+		leadership:         opts.Leadership,
 		htarget:            opts.Healthz.AddTarget("internal-placement-service"),
 		inflight: inflight.New(inflight.Options{
 			Hostname: opts.Hostname,
@@ -144,6 +158,7 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
 		dissTimeout: opts.DisseminationTimeout,
+		startupWait: startupWaitDefault,
 	}
 	place.loop = loop.New[loops.EventPlace](8).NewLoop(place)
 	return place.loop
@@ -217,14 +232,50 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	var client transport.Transport
 	var err error
 	var unavailableLogged bool
+	adoptFallback := func() {
+		p.alt = &Fallback{
+			Connector:          p.connector,
+			StreamFactory:      p.streamFactory,
+			SchedulerPlacement: p.schedulerPlacement,
+		}
+		p.connector = p.fallback.Connector
+		p.streamFactory = p.fallback.StreamFactory
+		p.schedulerPlacement = p.fallback.SchedulerPlacement
+		p.fallback = nil
+	}
+
 	for {
-		client, err = p.tryConnect(ctx)
+		// While the startup choice is still open, a scheduler which never
+		// answers must not park the sidecar with a healthy placement
+		// service configured: bound the wait for its advertisement. The
+		// leader connector's watcher runs on the connect context, so on
+		// success the bound is lifted rather than the context cancelled.
+		cctx := ctx
+		var ccancel context.CancelCauseFunc
+		var timer *time.Timer
+		if p.fallback != nil && p.schedulerPlacement {
+			cctx, ccancel = context.WithCancelCause(ctx)
+			timer = time.AfterFunc(p.startupWait, func() { ccancel(errStartupTimeout) })
+		}
+		client, err = p.tryConnect(ctx, cctx)
+		if timer != nil {
+			timer.Stop()
+		}
 		if err == nil {
 			break
+		}
+		if ccancel != nil {
+			ccancel(err)
 		}
 
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		if p.fallback != nil && p.schedulerPlacement && errors.Is(context.Cause(cctx), errStartupTimeout) {
+			log.Warn("No scheduler placement advertisement before the timeout, using the placement service")
+			adoptFallback()
+			continue
 		}
 
 		// The scheduler cluster does not serve placement. Only reachable
@@ -233,15 +284,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		if errors.Is(err, leader.ErrSchedulerPlacementUnsupported) {
 			if p.fallback != nil {
 				log.Warn("Scheduler cluster does not serve actor placement, using the placement service")
-				p.alt = &Fallback{
-					Connector:          p.connector,
-					StreamFactory:      p.streamFactory,
-					SchedulerPlacement: p.schedulerPlacement,
-				}
-				p.connector = p.fallback.Connector
-				p.streamFactory = p.fallback.StreamFactory
-				p.schedulerPlacement = p.fallback.SchedulerPlacement
-				p.fallback = nil
+				adoptFallback()
 				continue
 			}
 
@@ -278,9 +321,14 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 
 		log.Errorf("Failed to connect to placement service: %s. Retrying...", err)
 
-		// The active authority may have handed over: probe the other one.
-		if p.alt != nil {
-			p.swapAlt()
+		// An unreachable placement service is not by itself a handover
+		// signal. Only the scheduler's placement advertisement moves this
+		// sidecar off the placement service.
+		if p.alt != nil && p.alt.SchedulerPlacement && p.leadership != nil {
+			if addr, _, _ := p.leadership.Leader(); addr != "" {
+				log.Warn("Placement service unreachable while a scheduler advertises actor placement, adopting it")
+				p.swapAlt()
+			}
 		}
 
 		select {
@@ -385,20 +433,6 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
 	}
 
-	// A refusal arrives on the first receive rather than at connect, so it
-	// lands here as a stream close. Probe the other authority and back off
-	// once per cycle, or the close-and-reconnect cycle spins with no pause.
-	if status.Code(closeStream.Error) == codes.FailedPrecondition {
-		if p.alt != nil {
-			p.swapAlt()
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
-		}
-	}
-
 	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }
 
@@ -416,8 +450,10 @@ func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoin
 	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
-func (p *placement) tryConnect(ctx context.Context) (transport.Transport, error) {
-	conn, err := p.connector.Connect(ctx)
+// tryConnect connects with connectCtx, which a bounded startup wait may
+// cancel, and opens the stream with ctx so it outlives that bound.
+func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, error) {
+	conn, err := p.connector.Connect(connectCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to placement service: %w", err)
 	}

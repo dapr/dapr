@@ -70,7 +70,6 @@ func newSchedulerPlacementStream(t *testing.T, ctx context.Context, sched *sched
 		for {
 			order, rerr := stream.Recv()
 			if rerr != nil {
-				t.Logf("scheduler placement stream ended: %v", rerr)
 				close(p.orders)
 				return
 			}
