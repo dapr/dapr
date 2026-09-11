@@ -355,7 +355,7 @@ func New(opts Options) (*Subscription, error) {
 			PubSub:       name,
 			SubscriberID: s.connectionID,
 		}
-		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			pErr := s.postman.Deliver(ctx, sm)
 
