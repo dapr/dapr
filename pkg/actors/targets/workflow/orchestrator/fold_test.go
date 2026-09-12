@@ -14,9 +14,13 @@ limitations under the License.
 package orchestrator
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,9 +28,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func eventRaisedEvent(name string) *backend.HistoryEvent {
@@ -45,7 +55,7 @@ func Test_fold_submitHoldsWithoutSave(t *testing.T) {
 	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
-	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7), completionSender{})
 	require.NoError(t, err)
 	require.NotNil(t, entry, "a sender-retried completion must be held for folding")
 
@@ -58,13 +68,36 @@ func Test_fold_submitHoldsWithoutSave(t *testing.T) {
 	assert.Empty(t, h.orch.state.Inbox, "the event must not touch the durable inbox")
 }
 
+func Test_fold_emptyHistoryKeepsInboxPath(t *testing.T) {
+	const instanceID = "test-fold-empty-history"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.state = wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, nil)
+
+	// A completion against an empty history must not be held: a fold entry
+	// would pin its sender against a state only the unstartable
+	// classification can settle.
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7), completionSender{})
+	require.NoError(t, err)
+	assert.Nil(t, entry)
+	assert.Empty(t, h.orch.foldPending)
+	assert.Len(t, h.orch.state.Inbox, 1, "the completion must take the durable inbox path")
+}
+
 func Test_fold_externalEventKeepsInboxPath(t *testing.T) {
 	const instanceID = "test-fold-external"
 	h := newWakeHarness(t, instanceID, true)
 	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
-	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), eventRaisedEvent("go"))
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), eventRaisedEvent("go"), completionSender{})
 	require.NoError(t, err)
 	assert.Nil(t, entry, "external events have no sender durability and must use the durable inbox")
 	assert.Contains(t, h.snapshotOps(), "save", "the inbox path must commit")
@@ -77,7 +110,7 @@ func Test_fold_duplicatePendingJoins(t *testing.T) {
 	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
-	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7), completionSender{})
 	require.NoError(t, err)
 	require.NotNil(t, entry)
 
@@ -85,7 +118,7 @@ func Test_fold_duplicatePendingJoins(t *testing.T) {
 	// join the pending entry (waiting on the same commit), never be acked
 	// early and never double-held: an early ack would stop the retry chain
 	// while the completion exists only in memory.
-	entry2, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7))
+	entry2, err := h.orch.addWorkflowEventMaybeFold(t.Context(), taskCompletedEvent(7), completionSender{})
 	require.NoError(t, err)
 	require.Same(t, entry, entry2, "a retry must join the pending entry")
 	assert.Len(t, h.orch.foldPending, 1)
@@ -203,7 +236,7 @@ func Test_fold_childCompletionKeepsInboxPath(t *testing.T) {
 	h.fact.fastPath = true
 	h.primeRunning(t, instanceID, 7)
 
-	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), childCompletedEvent(7))
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), childCompletedEvent(7), completionSender{})
 	require.NoError(t, err)
 	assert.Nil(t, entry, "child completions must not be held for folding")
 	assert.Contains(t, h.snapshotOps(), "save", "the inbox path must commit")
@@ -251,22 +284,83 @@ func Test_fold_executionIDMismatchKeepsInboxPath(t *testing.T) {
 
 	mismatch := taskCompletedEvent(7)
 	mismatch.GetTaskCompleted().TaskExecutionId = "exec-B"
-	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), mismatch)
+	entry, err := h.orch.addWorkflowEventMaybeFold(t.Context(), mismatch, completionSender{})
 	require.NoError(t, err)
 	assert.Nil(t, entry, "a mismatched execution id must not fold")
 	assert.Empty(t, h.orch.foldPending)
 
 	match := taskCompletedEvent(8)
 	match.GetTaskCompleted().TaskExecutionId = "exec-A"
-	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), match)
+	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), match, completionSender{})
 	require.NoError(t, err)
 	assert.NotNil(t, entry, "a matching execution id folds as usual")
 
 	absent := taskCompletedEvent(42)
 	absent.GetTaskCompleted().TaskExecutionId = "exec-A"
-	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), absent)
+	entry, err = h.orch.addWorkflowEventMaybeFold(t.Context(), absent, completionSender{})
 	require.NoError(t, err)
 	assert.Nil(t, entry, "an execution-id-carrying completion with no scheduling event is unmatched and must not fold")
+}
+
+// A turn stalling on payload size must persist taken folded completions to
+// the durable inbox and ack their senders: a nacked fold dies with the
+// sender's process, leaving the stall unrecoverable once a restart lifts
+// the limit.
+func Test_runWorkflow_oversizeStallPersistsFoldedToInbox(t *testing.T) {
+	t.Parallel()
+	const instanceID = "wf-stall-fold"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunning(t, instanceID, 7)
+	h.orch.maxRequestBodySize = 2048
+
+	var lock sync.Mutex
+	var saved []string
+	h.orch.actorState = statefake.New().
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			if req.Key == wfenginestate.MetadataKey {
+				etag := "etag"
+				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+			}
+			return &actorapi.StateResponse{}, nil
+		}).
+		WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorapi.TransactionalRequest, _ bool) error {
+			lock.Lock()
+			defer lock.Unlock()
+			for _, op := range req.Operations {
+				if u, ok := op.Request.(actorapi.TransactionalUpsert); ok {
+					saved = append(saved, u.Key)
+				}
+			}
+			return nil
+		})
+
+	big := taskCompletedEvent(7)
+	big.GetTaskCompleted().Result = wrapperspb.String(strings.Repeat("x", 4096))
+	entry := &foldEntry{event: big, gen: h.orch.state.Generation, committed: make(chan struct{})}
+	h.orch.foldPending = append(h.orch.foldPending, entry)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var completed todo.RunCompleted
+	runErr := make(chan error, 1)
+	go func() {
+		var err error
+		completed, err = h.orch.runWorkflow(ctx, &actorapi.Reminder{Name: "new-event-x"})
+		runErr <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		lock.Lock()
+		defer lock.Unlock()
+		return slices.ContainsFunc(saved, func(k string) bool { return strings.HasPrefix(k, "inbox") })
+	}, time.Second*5, time.Millisecond*10,
+		"the folded completion must be durably in the inbox before the stall hold")
+
+	cancel()
+	require.ErrorIs(t, <-runErr, api.ErrStalled)
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	<-entry.committed
+	require.NoError(t, entry.err, "the sender must be acked: its completion is durable in the inbox")
 }
 
 // The payload stall guard must count folded completions.
