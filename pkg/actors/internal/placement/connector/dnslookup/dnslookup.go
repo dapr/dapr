@@ -91,8 +91,7 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 
 	log.Debugf("Attempting to connect to placement %s", hostPort)
 
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
+	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...) //nolint:staticcheck // grpc.NewClient has different retry semantics in this connector.
 	if err != nil {
 		return nil, err
 	}
