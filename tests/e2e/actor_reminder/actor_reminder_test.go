@@ -34,21 +34,20 @@ import (
 )
 
 const (
-	appName                      = "actorreminder"                  // App name in Dapr.
-	actorIDRestartTemplate       = "actor-reminder-restart-test-%d" // Template for Actor ID
-	restartReminderName          = "RestartTestReminder"            // Reminder name
-	actorIDGetTemplate           = "actor-reminder-get-test-%d"     // Template for Actor ID
-	reminderNameForGet           = "GetTestReminder"                // Reminder name for getting tests
-	numIterations                = 7                                // Number of times each test should run.
-	numHealthChecks              = 60                               // Number of get calls before starting tests.
-	numActorsPerThread           = 10                               // Number of get calls before starting tests.
-	secondsToCheckReminderResult = 20                               // How much time to wait to make sure the result is in logs.
-	actorName                    = "testactorreminder"              // Actor name
-	actorNameMis                 = "testactorremindermiss"          // Actor name
-	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"            // URL to invoke a Dapr's actor method in test app.
-	actorlogsURLFormat           = "%s/test/logs"                   // URL to fetch logs from test app.
-	shutdownURLFormat            = "%s/test/shutdown"               // URL to shutdown sidecar and app.
-	misconfiguredAppName         = "actor-reminder-no-state-store"  // Actor-reminder app without a state store (should fail to start)
+	appName                = "actorreminder"                  // App name in Dapr.
+	actorIDRestartTemplate = "actor-reminder-restart-test-%d" // Template for Actor ID
+	restartReminderName    = "RestartTestReminder"            // Reminder name
+	actorIDGetTemplate     = "actor-reminder-get-test-%d"     // Template for Actor ID
+	reminderNameForGet     = "GetTestReminder"                // Reminder name for getting tests
+	numIterations          = 7                                // Number of times each test should run.
+	numHealthChecks        = 60                               // Number of get calls before starting tests.
+	numActorsPerThread     = 10                               // Number of get calls before starting tests.
+	actorName              = "testactorreminder"              // Actor name
+	actorNameMis           = "testactorremindermiss"          // Actor name
+	actorInvokeURLFormat   = "%s/test/%s/%s/%s/%s"            // URL to invoke a Dapr's actor method in test app.
+	actorlogsURLFormat     = "%s/test/logs"                   // URL to fetch logs from test app.
+	shutdownURLFormat      = "%s/test/shutdown"               // URL to shutdown sidecar and app.
+	misconfiguredAppName   = "actor-reminder-no-state-store"  // Actor-reminder app without a state store (should fail to start)
 )
 
 // represents a response for the APIs in this app.
@@ -199,8 +198,19 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					require.NoError(t, errInternal)
 				}
 
-				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-				time.Sleep(secondsToCheckReminderResult * time.Second)
+				// The check below is a lower bound (at least one trigger per
+				// actor), so poll the logs until every reminder in this
+				// iteration has fired instead of waiting a fixed window
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					resp, errGet := utils.HTTPGet(logsURL)
+					if !assert.NoError(c, errGet) {
+						return
+					}
+					for i := 0; i < numActorsPerThread; i++ {
+						actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+						assert.GreaterOrEqual(c, countActorAction(resp, actorID, restartReminderName), 1)
+					}
+				}, 60*time.Second, time.Second, "not all reminders triggered")
 
 				for i := 0; i < numActorsPerThread; i++ {
 					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
@@ -239,7 +249,9 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					return err
 				}
 
-				time.Sleep(secondsToCheckReminderResult * time.Second)
+				// Negative window: with a 1s reminder period, 10 quiet seconds
+				// between the two snapshots shows the unregistration took hold
+				time.Sleep(10 * time.Second)
 
 				resp2, err := utils.HTTPGet(logsURL)
 				if err != nil {
@@ -275,8 +287,10 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 		_, err = utils.HTTPPost(fmt.Sprintf(shutdownURLFormat, externalURL), []byte(""))
 		require.NoError(t, err)
 
-		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
+		// Negative window: with a 1s reminder period, 10 quiet seconds on top
+		// of the restart itself is enough for a lingering reminder to show up
+		t.Log("Sleeping to see if reminders will trigger ...")
+		time.Sleep(10 * time.Second)
 
 		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
 		// replace externalUrl and Logs URL since the new port will be assigned
@@ -330,9 +344,6 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
 					require.NoError(t, errInternal)
 				}
-
-				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-				time.Sleep(secondsToCheckReminderResult * time.Second)
 			}(iteration)
 		}
 		wg.Wait()

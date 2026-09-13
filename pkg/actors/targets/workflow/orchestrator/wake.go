@@ -283,33 +283,19 @@ func (o *orchestrator) driveOnce(wakeCtx context.Context, actorType, actorID str
 
 // escalate creates the durable per-event wake-up reminder after a failed
 // local drive, restoring exactly today's non-fast-path recovery chain. It is
-// detached from wakeCtx (see localDrive) and tracked by escWG for tests;
-// production waits it nowhere (the goroutines are rootCtx+timeout bounded),
-// so placement-churn HaltAll latency is unaffected.
+// detached from wakeCtx (see localDrive) on the factory's detached runner,
+// bounded by rootCtx+timeout, so placement-churn HaltAll latency is
+// unaffected.
 func (o *orchestrator) escalate(info *driveInfo) {
-	o.escLock.Lock()
-	rootCtx := o.rootCtx
-	if rootCtx.Err() != nil {
-		o.escLock.Unlock()
-		// Process shutdown: nothing to escalate from; the janitor (which
-		// survives in the scheduler) drives recovery on the next owner.
-		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSkipped)
-		return
-	}
 	if o.wakeEpoch.Load() != info.epoch {
-		o.escLock.Unlock()
 		// A turn committed since this wake was armed: a reminder for it
 		// would be a stray.
 		log.Debugf("Workflow actor '%s': suppressing stale escalation of wake '%s' (a turn committed since it was armed)", o.actorID, info.reminderName)
 		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSuppressed)
 		return
 	}
-	o.escWG.Add(1)
-	o.escLock.Unlock()
 
-	go func() {
-		defer o.escWG.Done()
-
+	started := o.detached.Go(func(rootCtx context.Context) {
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 
@@ -335,7 +321,12 @@ func (o *orchestrator) escalate(info *driveInfo) {
 				}
 			}
 		}
-	}()
+	})
+	if !started {
+		// Process shutdown: nothing to escalate from; the janitor (which
+		// survives in the scheduler) drives recovery on the next owner.
+		diag.DefaultWorkflowMonitoring.WorkflowLocalWake(context.Background(), diag.StatusEscalateSkipped)
+	}
 }
 
 func sleepWake(wakeCtx context.Context, d time.Duration) bool {

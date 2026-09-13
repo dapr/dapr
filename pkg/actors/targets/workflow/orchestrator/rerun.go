@@ -159,6 +159,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		Namespace:         o.namespace,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
+		Signer:            o.signer,
 	})
 
 	newState.FromWorkflowState(&workflowState)

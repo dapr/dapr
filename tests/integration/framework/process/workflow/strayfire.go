@@ -16,9 +16,7 @@ package workflow
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +35,5 @@ func (w *Workflow) StrayFire(t *testing.T, ctx context.Context, index int, insta
 		_, err = sched.Client(t, ctx).ScheduleJob(ctx, job)
 	}
 	require.NoError(t, err)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Zero(c, sched.JobKeyCount(t, ctx, "new-event-stray-"+instanceID), "the stray reminder must fire and be consumed")
-	}, time.Second*20, time.Millisecond*10)
+	sched.WaitJobKeyCount(t, ctx, "new-event-stray-"+instanceID, func(n int) bool { return n == 0 })
 }

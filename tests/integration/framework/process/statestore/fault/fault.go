@@ -53,6 +53,10 @@ type Store struct {
 	getFailKeySubstring string
 	getFailRemaining    int
 	getFailNotifyCh     chan struct{}
+
+	getEmptyKeySubstring string
+	getEmptyRemaining    int
+	getEmptyNotifyCh     chan struct{}
 }
 
 // holdSpec is a one-shot arm-able hold on a store operation matching a key
@@ -180,9 +184,31 @@ func (s *Store) ArmGetFailures(keySubstring string, n int, notify chan struct{})
 	s.mu.Unlock()
 }
 
-// Get implements state.Store, honouring armed Get failures and holds.
+// ArmGetEmpty arms the store to answer the next n Gets whose key contains
+// keySubstring with an empty response, as a store whose reads lag its own
+// writes would. n=0 disarms. notify, when non-nil, is closed on the first.
+func (s *Store) ArmGetEmpty(keySubstring string, n int, notify chan struct{}) {
+	s.mu.Lock()
+	s.getEmptyKeySubstring = keySubstring
+	s.getEmptyRemaining = n
+	s.getEmptyNotifyCh = notify
+	s.mu.Unlock()
+}
+
+// Get implements state.Store, honouring armed Get failures, empty answers
+// and holds.
 func (s *Store) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	s.mu.Lock()
+	if s.getEmptyKeySubstring != "" && s.getEmptyRemaining > 0 && strings.Contains(req.Key, s.getEmptyKeySubstring) {
+		s.getEmptyRemaining--
+		notify := s.getEmptyNotifyCh
+		s.getEmptyNotifyCh = nil
+		s.mu.Unlock()
+		if notify != nil {
+			close(notify)
+		}
+		return &state.GetResponse{}, nil
+	}
 	if s.getFailKeySubstring != "" && s.getFailRemaining > 0 && strings.Contains(req.Key, s.getFailKeySubstring) {
 		s.getFailRemaining--
 		notify := s.getFailNotifyCh
