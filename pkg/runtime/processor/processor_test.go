@@ -236,6 +236,8 @@ func TestExtractComponentCategory(t *testing.T) {
 		{"states.redis", ""},
 		{"bindings.kafka", "bindings"},
 		{"binding.kafka", ""},
+		{"binarystore.fake", "binarystore"},
+		{"binarystore", ""},
 		{"this.is.invalid.category", ""},
 	}
 
