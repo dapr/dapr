@@ -114,17 +114,7 @@ func (o *orchestrator) reapEscalatedReminder(appID string, id int32) {
 		activityActorType = o.actorTypeBuilder.Activity(appID)
 	}
 
-	o.escLock.Lock()
-	rootCtx := o.rootCtx
-	if rootCtx.Err() != nil {
-		o.escLock.Unlock()
-		return
-	}
-	o.escWG.Add(1)
-	o.escLock.Unlock()
-
-	go func() {
-		defer o.escWG.Done()
+	o.detached.Go(func(rootCtx context.Context) {
 		cctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 		if derr := o.reminders.Delete(cctx, &actorapi.DeleteReminderRequest{
@@ -138,5 +128,5 @@ func (o *orchestrator) reapEscalatedReminder(appID string, id int32) {
 			return
 		}
 		log.Debugf("Workflow actor '%s': reaped escalated run-activity reminder for resolved task %d", o.actorID, id)
-	}()
+	})
 }

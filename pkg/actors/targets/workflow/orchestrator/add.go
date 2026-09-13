@@ -52,6 +52,7 @@ type completionSender struct {
 
 // addWorkflowEvent appends an inbound event to the inbox and drives it.
 func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryEvent, sender completionSender) error {
+	fresh := o.state == nil
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -81,8 +82,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// consume, after confirming the cache it was judged on is current: the
 	// child clears its pending notification on this ack.
 	ackDropped := func(reason string) error {
-		if err := o.confirmCachedState(ctx, state); err != nil {
-			return err
+		if !fresh {
+			if err := o.confirmCachedState(ctx, state); err != nil {
+				return err
+			}
 		}
 		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, reason)
 		return nil

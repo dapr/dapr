@@ -83,6 +83,8 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 				scheduler.WithOverrideBroadcastHostPort(opts.overrideBroadcastHostPorts[i]),
 			)
 		}
+		sopts = append(sopts, opts.schedulerOptions...)
+		sopts = append(sopts, opts.schedulerNOptions[i]...)
 
 		schedulers[i] = scheduler.New(t, sopts...)
 	}
@@ -142,6 +144,12 @@ func (c *Cluster) ClientN(t *testing.T, ctx context.Context, n int) schedulerv1p
 	t.Helper()
 	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
 	return c.schedulers[n].Client(t, ctx)
+}
+
+func (c *Cluster) SchedulerN(t *testing.T, n int) *scheduler.Scheduler {
+	t.Helper()
+	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
+	return c.schedulers[n]
 }
 
 func (c *Cluster) EtcdClientPortN(t *testing.T, n int) int {

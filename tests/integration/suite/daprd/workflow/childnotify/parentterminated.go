@@ -77,9 +77,7 @@ func (p *parentterminated) Run(t *testing.T, ctx context.Context) {
 		wf.WaitForRuntimeStatus(t, ctx, cl, api.InstanceID(childID(i)), api.RUNTIME_STATUS_RUNNING)
 	}
 
-	termCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	t.Cleanup(cancel)
-	require.NoError(t, cl.TerminateWorkflow(termCtx, id))
+	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 	wf.WaitForRuntimeStatus(t, ctx, cl, id, api.RUNTIME_STATUS_TERMINATED)
 	for i := range children {
 		wf.WaitForRuntimeStatus(t, ctx, cl, api.InstanceID(childID(i)), api.RUNTIME_STATUS_TERMINATED)

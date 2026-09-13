@@ -16,6 +16,7 @@ package state
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -1541,6 +1543,7 @@ func TestGetSaveRequest_MetadataETagLost(t *testing.T) {
 func TestGetSaveRequest_CreationInput(t *testing.T) {
 	t.Parallel()
 
+	parent := &protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: "p", ExecutionId: wrapperspb.String("pe")}}
 	ops := func(t *testing.T, s *State) (upserts map[string][]byte, deletes map[string]bool) {
 		t.Helper()
 		req, err := s.GetSaveRequest("actor1")
@@ -1558,15 +1561,18 @@ func TestGetSaveRequest_CreationInput(t *testing.T) {
 		return upserts, deletes
 	}
 
-	t.Run("kept from the first ContinueAsNew and dropped by Reset", func(t *testing.T) {
+	t.Run("kept from the first ContinueAsNew, stamped with the creating parent, dropped by Reset", func(t *testing.T) {
 		t.Parallel()
 		s := NewState(testOpts())
 		s.AddToHistory(testEvent(0))
-		s.SetCreationInput(wrapperspb.String(`"in"`))
+		s.setCreationInput(wrapperspb.String(`"in"`), parent)
 		upserts, _ := ops(t, s)
-		var in wrapperspb.StringValue
-		require.NoError(t, proto.Unmarshal(upserts[creationInputKey], &in))
-		assert.Equal(t, `"in"`, in.GetValue())
+		var row creationInputRow
+		require.NoError(t, json.Unmarshal(upserts[creationInputKey], &row))
+		assert.Equal(t, `"in"`, row.Input)
+		assert.Equal(t, creationParent{InstanceID: "p", ExecutionID: "pe"}, row.creationParent)
+		assert.True(t, s.CreationInputFor(parent))
+		assert.False(t, s.CreationInputFor(&protos.ParentInstanceInfo{WorkflowInstance: &protos.WorkflowInstance{InstanceId: "p", ExecutionId: wrapperspb.String("other")}}))
 
 		s.ResetChangeTracking()
 		assert.True(t, s.creationInputPersisted)
@@ -1580,18 +1586,138 @@ func TestGetSaveRequest_CreationInput(t *testing.T) {
 		t.Parallel()
 		s := NewState(testOpts())
 		s.AddToHistory(testEvent(0))
-		s.SetCreationInput(nil)
+		s.setCreationInput(nil, parent)
 		require.NotNil(t, s.CreationInput)
 		upserts, _ := ops(t, s)
 		_, ok := upserts[creationInputKey]
 		assert.True(t, ok)
 	})
 
+	t.Run("recorded at creation for a signed child, survives ContinueAsNew", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		s.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String(`"first"`), ParentInstance: parent})
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent))
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true, NewEvents: []*protos.HistoryEvent{{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}}}})
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue(), "ContinueAsNew does not touch it")
+	})
+
+	t.Run("nothing is inferred at ContinueAsNew", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.Signer = &signer.Signer{}
+		s := NewState(opts)
+		// A child created before the input was recorded: the current start
+		// event may already carry a continued input, so it is not trusted.
+		s.AddToHistory(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}})
+		s.ApplyRuntimeStateChanges(&backend.WorkflowRuntimeState{ContinuedAsNew: true})
+		assert.Nil(t, s.CreationInput)
+	})
+
+	t.Run("a root workflow or an unsigned child keeps nothing", func(t *testing.T) {
+		t.Parallel()
+		signed := testOpts()
+		signed.Signer = &signer.Signer{}
+		root := NewState(signed)
+		root.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "root", Input: wrapperspb.String("x")})
+		assert.Nil(t, root.CreationInput)
+		unsigned := NewState(testOpts())
+		unsigned.KeepCreationInput(&protos.ExecutionStartedEvent{Name: "child", Input: wrapperspb.String("x"), ParentInstance: parent})
+		assert.Nil(t, unsigned.CreationInput, "only the attestation reads it")
+	})
+
+	t.Run("a legacy unstamped row is adopted for the current creation and rewritten", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"first"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+			Name: "child", Input: wrapperspb.String(`"second"`), ParentInstance: parent,
+		}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		require.NotNil(t, s)
+		assert.Equal(t, `"first"`, s.CreationInput.GetValue())
+		assert.True(t, s.CreationInputFor(parent), "stamped with the current creation")
+		upserts, _ := ops(t, s)
+		var row creationInputRow
+		require.NoError(t, json.Unmarshal(upserts[creationInputKey], &row), "the next save rewrites the row stamped")
+		assert.Equal(t, `"first"`, row.Input)
+	})
+
+	t.Run("a legacy unstamped row on a root workflow is dropped", func(t *testing.T) {
+		t.Parallel()
+		legacy, err := proto.Marshal(wrapperspb.String(`"x"`))
+		require.NoError(t, err)
+		startRow, err := proto.Marshal(&protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{Name: "root"}}})
+		require.NoError(t, err)
+		meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: 1})
+		require.NoError(t, err)
+		etag := "e"
+		st := statefake.New().
+			WithGetFn(func(_ context.Context, req *api.GetStateRequest, _ bool) (*api.StateResponse, error) {
+				if req.Key == MetadataKey {
+					return &api.StateResponse{Data: meta, ETag: &etag}, nil
+				}
+				return &api.StateResponse{}, nil
+			}).
+			WithGetBulkFn(func(_ context.Context, req *api.GetBulkStateRequest, _ bool) (api.BulkStateResponse, error) {
+				res := make(api.BulkStateResponse, len(req.Keys))
+				for _, k := range req.Keys {
+					switch k {
+					case "history-000000":
+						res[k] = api.BulkStateEntry{Data: startRow, ETag: &etag}
+					case creationInputKey:
+						res[k] = api.BulkStateEntry{Data: legacy, ETag: &etag}
+					default:
+						res[k] = api.BulkStateEntry{}
+					}
+				}
+				return res, nil
+			})
+		s, err := loadWorkflowStateOnce(t.Context(), st, "actor1", testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, s.CreationInput)
+		_, deletes := ops(t, s)
+		assert.True(t, deletes[creationInputKey], "the next save deletes the orphan")
+	})
+
 	t.Run("purge deletes a persisted creation input", func(t *testing.T) {
 		t.Parallel()
 		s := NewState(testOpts())
 		s.AddToHistory(testEvent(0))
-		s.SetCreationInput(wrapperspb.String("x"))
+		s.setCreationInput(wrapperspb.String("x"), parent)
 		s.ResetChangeTracking()
 		req, err := s.GetPurgeRequest("actor1")
 		require.NoError(t, err)

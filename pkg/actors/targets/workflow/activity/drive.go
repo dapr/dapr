@@ -196,25 +196,11 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 
 // escalateActivity creates the durable run-activity reminder after a failed
 // local drive, restoring the non-fast-path recovery chain. It is detached
-// from driveCtx (see driveActivity) and bounded by the factory root context
-// plus escalateTimeout; escWG is not waited on the placement-churn path so
-// HaltAll latency is unaffected.
+// from driveCtx (see driveActivity) on the factory's detached runner and
+// bounded by the root context plus escalateTimeout; the runner is not waited
+// on the placement-churn path so HaltAll latency is unaffected.
 func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) {
-	f.escLock.Lock()
-	rootCtx := f.rootCtx
-	if rootCtx.Err() != nil {
-		f.escLock.Unlock()
-		// Process shutdown: the workflow janitor (which survives in the
-		// scheduler) re-dispatches on the next owner.
-		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateSkipped)
-		return
-	}
-	f.escWG.Add(1)
-	f.escLock.Unlock()
-
-	go func() {
-		defer f.escWG.Done()
-
+	started := f.detached.Go(func(rootCtx context.Context) {
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 
@@ -224,5 +210,10 @@ func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityIn
 			return
 		}
 		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalated)
-	}()
+	})
+	if !started {
+		// Process shutdown: the workflow janitor (which survives in the
+		// scheduler) re-dispatches on the next owner.
+		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateSkipped)
+	}
 }

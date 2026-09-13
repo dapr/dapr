@@ -1,4 +1,4 @@
-{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -14,7 +14,7 @@ metadata:
     {{- end }}
 {{- end }}
 ---
-{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: Role
 {{- else }}
@@ -30,7 +30,7 @@ metadata:
 rules: []
 {{- end }}
 ---
-{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne .Values.global.scheduler.placement.enabled true) }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: RoleBinding
 {{- else }}

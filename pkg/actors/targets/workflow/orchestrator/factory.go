@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -76,6 +77,11 @@ type Options struct {
 	// activity-reminder elision with janitor re-dispatch (redispatch.go),
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
+
+	// Detached runs work that must outlive an invocation or claim context, on
+	// the runtime lifetime rather than this registration's. Nil creates one
+	// bounded by ctx.
+	Detached *detached.Runner
 }
 
 type factory struct {
@@ -133,9 +139,8 @@ type factory struct {
 
 	foldWaitTimeout time.Duration
 
-	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	rootCtx  context.Context
+	detached *detached.Runner
 
 	table sync.Map
 	lock  sync.Mutex
@@ -170,6 +175,11 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	wakeCtx, wakeCancel := context.WithCancel(context.Background())
 
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
 	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
 	foldWaitTimeout := common.EnvDurationOr("DAPR_WORKFLOW_FOLD_WAIT_TIMEOUT", 2*time.Minute)
@@ -202,6 +212,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		wakeCancel:             wakeCancel,
 		driveAliveWindow:       defaultDriveAliveWindow,
 		rootCtx:                ctx,
+		detached:               det,
 	}
 
 	// The worker pool and reaper are factory-lifetime: they exit when the
