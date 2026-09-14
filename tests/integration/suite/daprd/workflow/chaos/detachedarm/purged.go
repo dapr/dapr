@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -29,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -50,17 +53,26 @@ type purged struct {
 }
 
 func (s *purged) Setup(t *testing.T) []framework.Option {
-	s.scheduler = scheduler.New(t)
-	s.proxy = proxy.New(t, s.scheduler)
+	appID := uuid.New().String()
+	sen := sentry.New(t)
+	s.scheduler = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	s.proxy = proxy.New(t, s.scheduler, proxy.WithSentry(t, sen, "default", appID))
 	s.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
 		workflow.WithSchedulerInstance(s.scheduler),
 		workflow.WithSchedulerAddress(s.proxy.Address()),
-		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_WORKFLOW_PENDING_START_REDRIVE_GRACE", "5m",
-		))),
+		workflow.WithDaprdOptions(0,
+			daprd.WithAppID(appID),
+			daprd.WithExecOptions(exec.WithEnvVars(t,
+				"DAPR_WORKFLOW_PENDING_START_REDRIVE_GRACE", "5m",
+			)),
+		),
 	)
 	return []framework.Option{
-		framework.WithProcesses(s.scheduler, s.proxy, s.workflow),
+		framework.WithProcesses(sen, s.scheduler, s.proxy, s.workflow),
 	}
 }
 
