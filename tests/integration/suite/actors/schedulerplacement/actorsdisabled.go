@@ -15,6 +15,9 @@ package schedulerplacement
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +28,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	fhttp "github.com/dapr/dapr/tests/integration/framework/client"
 	fos "github.com/dapr/dapr/tests/integration/framework/os"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -89,10 +93,14 @@ func (a *actorsdisabled) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, rtv1.ActorRuntime_DISABLED, meta.GetActorRuntime().GetRuntimeStatus())
 	}, time.Second*20, time.Millisecond*10)
 
-	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Method:    "foo",
-	})
-	require.Error(t, err)
+	url := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactorid/method/foo", a.daprd.HTTPAddress())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	require.NoError(t, err)
+	resp, err := fhttp.HTTP(t).Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(t, string(body), "ERR_ACTOR_NO_PLACEMENT")
 }
