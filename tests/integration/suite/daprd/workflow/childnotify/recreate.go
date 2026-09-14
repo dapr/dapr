@@ -40,7 +40,7 @@ type recreate struct {
 }
 
 func (r *recreate) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	r.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{framework.WithProcesses(r.workflow)}
 }
 
