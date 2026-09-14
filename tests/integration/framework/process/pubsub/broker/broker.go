@@ -121,6 +121,11 @@ func (b *Broker) PublishHelloWorld(topic string) <-chan *compv1.PullMessagesRequ
 	return b.pmrReqCh
 }
 
+// DropStream ends the in-flight PullMessages stream, cancelling the context
+// the component gave the runtime's inbound handler. Stands in for a Kafka
+// consumer group rebalance.
+func (b *Broker) DropStream() { b.inmem.DropStream() }
+
 // PauseCalled reports how many times the runtime invoked Pause on the
 // pluggable server. Used by tests asserting the pause-and-drain shutdown
 // path was exercised.
