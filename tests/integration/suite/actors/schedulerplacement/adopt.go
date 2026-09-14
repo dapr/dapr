@@ -71,7 +71,6 @@ func (a *adopt) Setup(t *testing.T) []framework.Option {
 			scheduler.WithPort(a.schedOff.Port()),
 			scheduler.WithEtcdClientPort(a.schedOff.EtcdClientPort()),
 			scheduler.WithInitialCluster(a.schedOff.InitialCluster()),
-			scheduler.WithDataDir(a.schedOff.DataDir()),
 		}
 		if placementEnabled {
 			opts = append(opts, scheduler.WithPlacementEnabled(true))
