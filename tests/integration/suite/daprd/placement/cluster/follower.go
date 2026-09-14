@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement/cluster"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -73,6 +74,7 @@ func (f *follower) Run(t *testing.T, ctx context.Context) {
 		daprd.WithScheduler(f.sched),
 		daprd.WithPlacementAddresses(followers...),
 		daprd.WithLogLineStdout(lines),
+		daprd.WithExecOptions(exec.WithStderr(lines.Stderr())),
 	)
 	d.Run(t, ctx)
 	t.Cleanup(func() { d.Cleanup(t) })
