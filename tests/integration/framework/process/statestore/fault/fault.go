@@ -47,8 +47,11 @@ type Store struct {
 	multiObserver func(*state.TransactionalStateRequest)
 
 	multiDeleteHold *holdSpec
+	multiHold       *holdSpec
 	bulkGetHold     *holdSpec
 	getHold         *holdSpec
+
+	multiCancelled atomic.Int32
 
 	getFailKeySubstring string
 	getFailRemaining    int
@@ -138,6 +141,32 @@ func (s *Store) ArmMultiDeleteHold(sub string) (arrived <-chan struct{}, release
 	var once sync.Once
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }, spec.done
 }
+
+// ArmMultiHold arms a one-shot hold on the next Multi touching a key
+// containing sub, whatever the operation type. arrived is closed when the
+// Multi is captured; it then blocks until release is called. Unlike the
+// in-memory store it wraps, a held Multi whose request context died while it
+// waited returns that context error, as every real transactional store does:
+// database/sql rolls a transaction back as soon as its context is cancelled.
+// Tests use this to hold a commit while the host cancels the caller.
+// release is idempotent, so it is safe to register with t.Cleanup.
+func (s *Store) ArmMultiHold(sub string) (arrived <-chan struct{}, release func()) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.multiHold = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// MultiCancelled returns how many held Multi requests were abandoned because
+// their request context was cancelled while the hold was in place.
+func (s *Store) MultiCancelled() int { return int(s.multiCancelled.Load()) }
 
 // ArmBulkGetHold arms a one-shot hold on the next BulkGet touching a key
 // containing sub. arrived is closed when the BulkGet is captured; the call
@@ -299,6 +328,26 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 		case <-ctx.Done():
 		}
 		defer close(hold.done)
+	}
+
+	s.mu.Lock()
+	var general *holdSpec
+	if s.multiHold != nil && anyHasSubstring(keys, s.multiHold.sub) {
+		general = s.multiHold
+		s.multiHold = nil
+	}
+	s.mu.Unlock()
+
+	if general != nil {
+		close(general.arrived)
+		select {
+		case <-general.releaseCh:
+		case <-ctx.Done():
+		}
+		if cerr := ctx.Err(); cerr != nil {
+			s.multiCancelled.Add(1)
+			return cerr
+		}
 	}
 
 	return s.Wrapped.Store.(state.TransactionalStore).Multi(ctx, req)
