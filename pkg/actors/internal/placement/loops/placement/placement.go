@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
@@ -40,12 +42,8 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.loops.placement")
 
-// startupWaitDefault bounds the wait for a scheduler placement advertisement
-// while the startup fallback is available.
 const startupWaitDefault = time.Second * 30
 
-// errStartupTimeout marks the bounded startup wait for a scheduler placement
-// advertisement expiring.
 var errStartupTimeout = errors.New("no scheduler placement advertisement before the timeout")
 
 type Options struct {
@@ -81,6 +79,8 @@ type Options struct {
 	Scheduler  schedclient.Reloader
 
 	DisseminationTimeout time.Duration
+
+	StartupTimeout time.Duration
 }
 
 // Fallback is a secondary connector and stream factory to switch to when the
@@ -158,7 +158,10 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
 		dissTimeout: opts.DisseminationTimeout,
-		startupWait: startupWaitDefault,
+		startupWait: opts.StartupTimeout,
+	}
+	if place.startupWait <= 0 {
+		place.startupWait = startupWaitDefault
 	}
 	place.loop = loop.New[loops.EventPlace](8).NewLoop(place)
 	return place.loop
@@ -245,11 +248,6 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	}
 
 	for {
-		// While the startup choice is still open, a scheduler which never
-		// answers must not park the sidecar with a healthy placement
-		// service configured: bound the wait for its advertisement. The
-		// leader connector's watcher runs on the connect context, so on
-		// success the bound is lifted rather than the context cancelled.
 		cctx := ctx
 		var ccancel context.CancelCauseFunc
 		var timer *time.Timer
@@ -273,7 +271,14 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		}
 
 		if p.fallback != nil && p.schedulerPlacement && errors.Is(context.Cause(cctx), errStartupTimeout) {
-			log.Warn("No scheduler placement advertisement before the timeout, using the placement service")
+			// A reachable scheduler withholds the leader only until this
+			// sidecar registers on WatchJobs, so keep waiting for it rather
+			// than split off to the placement service. Fall back only when
+			// no scheduler has been reachable at all.
+			if p.leadership != nil && p.leadership.Reachable() {
+				continue
+			}
+			log.Warn("No scheduler reachable before the timeout, using the placement service")
 			adoptFallback()
 			continue
 		}
@@ -433,6 +438,17 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 		log.Infof("Placement stream closed: %v. Reconnecting...", closeStream.Error)
 	}
 
+	// A refusal arrives on the first Recv, not at connect, so the reconnect
+	// cycle has no pause of its own. Back off once so a follower bounce or
+	// a stale advertisement does not spin HaltAll.
+	if status.Code(closeStream.Error) == codes.FailedPrecondition {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
+		}
+	}
+
 	return p.handleReconnect(ctx, &loops.PlacementReconnect{TransientPrior: transient})
 }
 
@@ -450,8 +466,6 @@ func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoin
 	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
-// tryConnect connects with connectCtx, which a bounded startup wait may
-// cancel, and opens the stream with ctx so it outlives that bound.
 func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, error) {
 	conn, err := p.connector.Connect(connectCtx)
 	if err != nil {

@@ -58,8 +58,6 @@ func New(opts Options) connector.Interface {
 	}
 }
 
-// Connect dials the advertised placement leader. The context must outlive
-// the returned connection: the leader watcher runs on it.
 func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// Close any previous connection before dialing anew.
 	l.lock.Lock()
@@ -145,6 +143,7 @@ func (l *leader) watchLeader(ctx context.Context) {
 				l.conn.Close()
 				l.conn = nil
 			}
+			l.watchStarted = false
 			l.lock.Unlock()
 			return
 		case <-changed:

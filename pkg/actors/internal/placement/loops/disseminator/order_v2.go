@@ -63,9 +63,10 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUpdate:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
-			// The scheduler's round timeout path re-sends phases to members
-			// that already acked them, so a completed round's order is acked
-			// again and ignored, never a protocol error.
+			if _, done := d.v2Completed[seq]; !done {
+				d.closeStreamV2(fmt.Errorf("received UPDATE for unknown round seq %d", seq))
+				return nil
+			}
 			d.streamLoop.Enqueue(&loops.StreamSend{
 				Ack: &loops.Ack{Op: loops.OrderUpdate, Version: seq},
 			})
@@ -100,6 +101,10 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUnlock:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
+			if _, done := d.v2Completed[seq]; !done {
+				d.closeStreamV2(fmt.Errorf("received UNLOCK for unknown round seq %d", seq))
+				return nil
+			}
 			d.streamLoop.Enqueue(&loops.StreamSend{
 				Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
 			})
@@ -107,6 +112,7 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 		}
 
 		delete(d.v2Rounds, seq)
+		d.v2Completed[seq] = struct{}{}
 		d.timeoutQ.Dequeue(seq)
 
 		// Release the union of the declared scope and every type whose table
@@ -131,11 +137,17 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 			Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
 		})
 
-		// Readiness matches the v1 protocol: the first completed round
-		// readies the sidecar. Its own types arrive in a follow-up round,
-		// as the snapshot excludes pending types.
-		d.healthTarget.Ready()
-		d.ready.Store(true)
+		ready := true
+		for _, t := range d.actorTable.Types() {
+			if !d.inflight.HasTables([]string{t}) && d.inflight.IsBlocked(t) {
+				ready = false
+				break
+			}
+		}
+		if ready {
+			d.healthTarget.Ready()
+			d.ready.Store(true)
+		}
 
 	default:
 		d.closeStreamV2(fmt.Errorf("unknown operation: %s", order.Order.Op))

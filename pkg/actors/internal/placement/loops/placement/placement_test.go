@@ -201,36 +201,49 @@ func TestAdoptionRequiresAdvertisedLeader(t *testing.T) {
 // TestStartupWaitAdoptsFallback covers a scheduler which never answers with
 // a placement service configured: the bounded startup wait expires and the
 // placement service is adopted, keeping the scheduler as the alternative.
-func TestStartupWaitAdoptsFallback(t *testing.T) {
+func TestStartupWait(t *testing.T) {
 	t.Parallel()
 
-	ready := &atomic.Bool{}
-	p := &placement{
-		id:          "test-id",
-		namespace:   "default",
-		ready:       ready,
-		htarget:     healthzfake.New(),
-		actorTable:  tablefake.New(),
-		inflight:    inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
-		startupWait: time.Millisecond * 100,
-		connector:   leaderconnector.New(leaderconnector.Options{Leadership: leadership.New()}),
-		streamFactory: func(context.Context, *grpc.ClientConn) (transport.Transport, error) {
-			return nil, errors.New("no stream")
-		},
-		schedulerPlacement: true,
-		fallback: &Fallback{
-			Connector: &fakeConnector{addr: "placement"},
-		},
+	newPlacement := func(ldr *leadership.Leadership) *placement {
+		return &placement{
+			id:          "test-id",
+			namespace:   "default",
+			ready:       &atomic.Bool{},
+			htarget:     healthzfake.New(),
+			actorTable:  tablefake.New(),
+			inflight:    inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
+			startupWait: time.Millisecond * 50,
+			leadership:  ldr,
+			connector:   leaderconnector.New(leaderconnector.Options{Leadership: ldr}),
+			streamFactory: func(context.Context, *grpc.ClientConn) (transport.Transport, error) {
+				return nil, errors.New("no stream")
+			},
+			schedulerPlacement: true,
+			fallback:           &Fallback{Connector: &fakeConnector{addr: "placement"}},
+		}
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	t.Cleanup(cancel)
-	err := p.handleReconnect(ctx, &loops.PlacementReconnect{})
-	require.Error(t, err)
-	assert.Nil(t, p.fallback)
-	assert.Equal(t, "placement", p.connector.Address(),
-		"the bounded wait must adopt the placement service")
-	require.NotNil(t, p.alt)
-	assert.True(t, p.alt.SchedulerPlacement,
-		"the scheduler side must be kept as the alternative")
+	t.Run("an unreachable scheduler adopts the placement service", func(t *testing.T) {
+		t.Parallel()
+		p := newPlacement(leadership.New())
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Nil(t, p.fallback)
+		assert.Equal(t, "placement", p.connector.Address())
+		require.NotNil(t, p.alt)
+		assert.True(t, p.alt.SchedulerPlacement)
+	})
+
+	t.Run("a reachable leaderless scheduler keeps waiting", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("")
+		p := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*300)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.NotNil(t, p.fallback, "a reachable scheduler must not defect to the placement service")
+		assert.Empty(t, p.connector.Address())
+	})
 }

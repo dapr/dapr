@@ -26,6 +26,7 @@ type Leadership struct {
 	lock        sync.Mutex
 	leader      string
 	unsupported bool
+	reachable   bool
 	changed     chan struct{}
 }
 
@@ -42,12 +43,13 @@ func (l *Leadership) Set(leader string) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	if l.leader == leader && !l.unsupported {
+	if l.leader == leader && !l.unsupported && l.reachable {
 		return
 	}
 
 	l.leader = leader
 	l.unsupported = false
+	l.reachable = true
 	close(l.changed)
 	l.changed = make(chan struct{})
 }
@@ -75,4 +77,12 @@ func (l *Leadership) Leader() (string, bool, <-chan struct{}) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	return l.leader, l.unsupported, l.changed
+}
+
+// Reachable reports whether a WatchHosts broadcast has ever been observed, so
+// a leaderless scheduler which is up can be told apart from an unreachable one.
+func (l *Leadership) Reachable() bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return l.reachable
 }

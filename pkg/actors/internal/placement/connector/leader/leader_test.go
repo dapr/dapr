@@ -186,3 +186,30 @@ func TestWatcherSurvivesBoundedConnectContext(t *testing.T) {
 	}, time.Second*5, time.Millisecond*10)
 	cancel(nil)
 }
+
+// TestWatcherRestartsAfterConnectContextCancelled covers a startup connect
+// whose bounded context is cancelled after the watcher started: the next
+// Connect must start a fresh watcher which still follows leader moves.
+func TestWatcherRestartsAfterConnectContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ldr := leadership.New()
+	ldr.Set("127.0.0.1:1")
+	l := newTest(ldr)
+
+	cctx, cancel := context.WithCancel(t.Context())
+	first, err := l.Connect(cctx)
+	require.NoError(t, err)
+	cancel()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, connectivity.Shutdown, first.GetState())
+	}, time.Second*5, time.Millisecond*10)
+
+	second, err := l.Connect(t.Context())
+	require.NoError(t, err)
+
+	ldr.Set("127.0.0.1:2")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, connectivity.Shutdown, second.GetState())
+	}, time.Second*5, time.Millisecond*10)
+}

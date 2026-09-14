@@ -82,3 +82,16 @@ func TestSetUnsupported(t *testing.T) {
 	assert.Empty(t, leader)
 	assert.False(t, unsupported)
 }
+
+func TestReachable(t *testing.T) {
+	t.Parallel()
+
+	l := New()
+	assert.False(t, l.Reachable())
+
+	l.SetUnsupported()
+	assert.False(t, l.Reachable(), "an unsupported cluster is handled on its own path, not the reachable wait")
+
+	l.Set("")
+	assert.True(t, l.Reachable(), "a broadcast, even leaderless, means the scheduler is reachable")
+}

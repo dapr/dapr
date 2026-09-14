@@ -89,6 +89,10 @@ type Options struct {
 	// SchedulerLeadership tracks the scheduler placement leader. Required
 	// when SchedulerPlacement is set.
 	SchedulerLeadership *leadership.Leadership
+
+	// PlacementStartupTimeout bounds the wait for a scheduler placement
+	// advertisement at startup while Addresses provides a fallback.
+	PlacementStartupTimeout time.Duration
 }
 
 type placement struct {
@@ -241,6 +245,7 @@ func New(opts Options) (Interface, error) {
 			SchedulerPlacement:   opts.SchedulerPlacement,
 			Fallback:             fallback,
 			Leadership:           opts.SchedulerLeadership,
+			StartupTimeout:       opts.PlacementStartupTimeout,
 			DisseminationTimeout: opts.DisseminationTimeout,
 		}),
 	}, nil
