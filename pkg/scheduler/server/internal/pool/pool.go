@@ -74,8 +74,9 @@ func New(opts Options) *Pool {
 func (p *Pool) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	p.nsLoop = namespaces.New(namespaces.Options{
-		Cron:       p.cron,
-		CancelPool: cancel,
+		Cron:             p.cron,
+		CancelPool:       cancel,
+		PlacementEnabled: p.placementEnabled,
 	})
 
 	close(p.readyCh)
