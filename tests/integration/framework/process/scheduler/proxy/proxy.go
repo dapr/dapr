@@ -48,6 +48,7 @@ const (
 	MethodDeleteByMetadata   = "DeleteByMetadata"
 	MethodDeleteByNamePrefix = "DeleteByNamePrefix"
 	MethodWatchHosts         = "WatchHosts"
+	MethodWatchJobs          = "WatchJobs"
 )
 
 type Proxy struct {
@@ -283,6 +284,10 @@ func (p *Proxy) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Delet
 // the shared context to unblock the other goroutine and drain its error so
 // no goroutine leaks.
 func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+	if code, ok := p.takeFailure(MethodWatchJobs, ""); ok {
+		return injected(MethodWatchJobs, code)
+	}
+
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
