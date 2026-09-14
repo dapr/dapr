@@ -115,7 +115,14 @@ func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
 	if s.conn != nil {
 		return s.conn
 	}
-	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	// Match the daprds' journal mode: a database cannot leave WAL while
+	// another connection holds it open (SQLITE_BUSY, no busy wait), so a WAL
+	// connection here makes a daprd started with disableWAL fatal at init.
+	journalMode := "WAL"
+	if s.metadata["disableWAL"] == "true" {
+		journalMode = "DELETE"
+	}
+	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode("+journalMode+")")
 	require.NoError(t, err, "Failed to connect to SQLite database")
 	s.conn = conn
 	return conn
