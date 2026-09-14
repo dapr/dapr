@@ -79,8 +79,14 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 
 	db := h.workflow.DB().GetConnection(t)
 	tableName := h.workflow.DB().TableName()
+	// Signing mode stores one signature row per history save plus a sigcert row.
+	retainedCount := 8
+	if h.workflow.Signing() {
+		retainedCount = 12
+	}
+
 	var count int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 8, count)
+	assert.Equal(t, retainedCount, count)
 	assert.Len(t, h.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
 }
