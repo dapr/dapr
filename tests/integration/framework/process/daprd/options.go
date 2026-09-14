@@ -68,6 +68,7 @@ type options struct {
 	gracefulShutdownSeconds    *int
 	blockShutdownDuration      *string
 	actorsDisseminateTimeout   *time.Duration
+	placementStartupTimeout    *time.Duration
 	hotReloadReconcileInterval *time.Duration
 	controlPlaneTrustDomain    *string
 	appBindingOptionsTimeout   *time.Duration
@@ -342,6 +343,12 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.actorsDisseminateTimeout = &timeout
+	}
+}
+
+func WithActorsPlacementStartupTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.placementStartupTimeout = &timeout
 	}
 }
 
