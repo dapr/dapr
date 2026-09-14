@@ -439,9 +439,11 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 	}
 
 	// A refusal arrives on the first Recv, not at connect, so the reconnect
-	// cycle has no pause of its own. Back off once so a follower bounce or
-	// a stale advertisement does not spin HaltAll.
-	if status.Code(closeStream.Error) == codes.FailedPrecondition {
+	// cycle has no pause of its own. Back off once so a follower bounce, a
+	// stale advertisement, or a scheduler which stopped serving placement
+	// does not spin HaltAll.
+	switch status.Code(closeStream.Error) {
+	case codes.FailedPrecondition, codes.Unimplemented:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
