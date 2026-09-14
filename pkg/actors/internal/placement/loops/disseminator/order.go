@@ -63,9 +63,9 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		// which actor types will change. Lookups continue to resolve
 		// against the current table; per-type queueing only kicks in at
 		// UPDATE once the diff is known.
-		d.timeoutQ.Dequeue(d.timeoutVersion)
+		d.timeoutTimer.Dequeue(d.timeoutVersion)
 		d.timeoutVersion++
-		d.timeoutQ.Enqueue(d.timeoutVersion)
+		d.timeoutTimer.Enqueue(d.timeoutVersion)
 
 		d.currentOperation = v1pb.HostOperation_LOCK
 		d.currentVersion = version
@@ -90,7 +90,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			return nil
 		}
 
-		d.timeoutQ.Dequeue(d.timeoutVersion)
+		d.timeoutTimer.Dequeue(d.timeoutVersion)
 
 		// Diff old vs new tables, install new tables, and block only the
 		// actor types whose hash ring actually changed. Open ensures the

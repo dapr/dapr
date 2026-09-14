@@ -22,10 +22,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/timeout"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/internal/placement/timeout"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
@@ -69,7 +69,7 @@ type disseminator struct {
 	ready        *atomic.Bool
 
 	timeout        time.Duration
-	timeoutQ       *timeout.Timeout
+	timeoutTimer   *timeout.Timeout
 	timeoutVersion uint64
 
 	streamLoop loop.Interface[loops.EventStream]
@@ -107,8 +107,12 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.inflight = opts.Inflight
 
 	diss.timeout = opts.DisseminationTimeout
-	diss.timeoutQ = timeout.New(timeout.Options{
-		Loop:    diss.loop,
+	diss.timeoutTimer = timeout.New(timeout.Options{
+		OnTimeout: func(version uint64) {
+			diss.loop.Enqueue(&loops.DisseminationTimeout{
+				Version: version,
+			})
+		},
 		Timeout: opts.DisseminationTimeout,
 	})
 	diss.streamLoop = stream.New(ctx, stream.Options{
@@ -153,15 +157,16 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 
 	d.streamLoop.Close(shutdown)
 	d.inflight.Close(shutdown.Error)
-	d.timeoutQ.Close()
+	d.timeoutTimer.Close()
 
 	stream.LoopFactory.CacheLoop(d.streamLoop)
 	loopCache.Put(d)
 }
 
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
-	if timeout.Version != d.timeoutVersion {
-		// Ignore old timeouts.
+	if timeout.Version != d.timeoutVersion || d.currentOperation != v1pb.HostOperation_LOCK {
+		// Ignore old timeouts and events which were already queued when the
+		// current lock phase completed successfully.
 		return
 	}
 
