@@ -176,6 +176,9 @@ spec:
 	if opts.actorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
 	}
+	if opts.placementStartupTimeout != nil {
+		args = append(args, "--actors-placement-startup-timeout="+opts.placementStartupTimeout.String())
+	}
 	if opts.hotReloadReconcileInterval != nil {
 		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
 	}
