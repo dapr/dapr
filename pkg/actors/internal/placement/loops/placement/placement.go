@@ -276,6 +276,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			// than split off to the placement service. Fall back only when
 			// no scheduler has been reachable at all.
 			if p.leadership != nil && p.leadership.Reachable() {
+				log.Warnf("Scheduler reachable but no placement leader advertised after %s, still waiting", p.startupWait)
 				continue
 			}
 			log.Warn("No scheduler reachable before the timeout, using the placement service")

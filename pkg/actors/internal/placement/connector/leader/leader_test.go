@@ -213,3 +213,38 @@ func TestWatcherRestartsAfterConnectContextCancelled(t *testing.T) {
 		assert.Equal(c, connectivity.Shutdown, second.GetState())
 	}, time.Second*5, time.Millisecond*10)
 }
+
+// TestWatcherClosesOnlyItsOwnConnection covers a cancelled watcher racing a
+// newer Connect: the cleanup must not close a connection it was not started
+// for.
+func TestWatcherClosesOnlyItsOwnConnection(t *testing.T) {
+	t.Parallel()
+
+	ldr := leadership.New()
+	ldr.Set("127.0.0.1:1")
+	l := newTest(ldr)
+
+	newConn := func() *grpc.ClientConn {
+		conn, err := grpc.NewClient("127.0.0.1:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		t.Cleanup(func() { conn.Close() })
+		return conn
+	}
+	connA, connB := newConn(), newConn()
+
+	l.lock.Lock()
+	l.conn = connB
+	l.addr = "127.0.0.1:1"
+	l.watchStarted = true
+	l.lock.Unlock()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	l.watchLeader(ctx, connA)
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	assert.Same(t, connB, l.conn, "a newer connection must survive the old watcher's cleanup")
+	assert.False(t, l.watchStarted)
+	assert.NotEqual(t, connectivity.Shutdown, connB.GetState())
+}

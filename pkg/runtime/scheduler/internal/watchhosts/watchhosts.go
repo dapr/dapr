@@ -131,6 +131,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		for {
 			if err != nil {
 				closeCon()
+				w.leadership.SetUnreachable()
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}

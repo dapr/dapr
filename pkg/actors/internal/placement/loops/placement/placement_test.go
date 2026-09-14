@@ -235,6 +235,22 @@ func TestStartupWait(t *testing.T) {
 		assert.True(t, p.alt.SchedulerPlacement)
 	})
 
+	t.Run("a scheduler which broadcast then died adopts the placement service", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("")
+		p := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second*2)
+		t.Cleanup(cancel)
+		go func() {
+			time.Sleep(time.Millisecond * 150)
+			ldr.SetUnreachable()
+		}()
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Nil(t, p.fallback)
+		assert.Equal(t, "placement", p.connector.Address())
+	})
+
 	t.Run("a reachable leaderless scheduler keeps waiting", func(t *testing.T) {
 		t.Parallel()
 		ldr := leadership.New()

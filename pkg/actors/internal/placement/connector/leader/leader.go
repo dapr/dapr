@@ -110,7 +110,7 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 		l.addr = addr
 		if !l.watchStarted {
 			l.watchStarted = true
-			go l.watchLeader(ctx)
+			go l.watchLeader(ctx, conn)
 		}
 		l.lock.Unlock()
 
@@ -123,7 +123,7 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 // watchLeader closes the current connection whenever the placement leader
 // moves to another host. A leaderless broadcast closes nothing: a scheduler
 // which really loses leadership closes the stream itself.
-func (l *leader) watchLeader(ctx context.Context) {
+func (l *leader) watchLeader(ctx context.Context, watched *grpc.ClientConn) {
 	for {
 		// Read and compare under the lock Connect stores under, so a stale
 		// read cannot close a connection to the current leader.
@@ -139,7 +139,7 @@ func (l *leader) watchLeader(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			l.lock.Lock()
-			if l.conn != nil {
+			if l.conn != nil && l.conn == watched {
 				l.conn.Close()
 				l.conn = nil
 			}

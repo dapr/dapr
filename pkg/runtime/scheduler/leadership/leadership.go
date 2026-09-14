@@ -60,12 +60,13 @@ func (l *Leadership) SetUnsupported() {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	if l.unsupported {
+	if l.unsupported && l.reachable {
 		return
 	}
 
 	l.leader = ""
 	l.unsupported = true
+	l.reachable = true
 	close(l.changed)
 	l.changed = make(chan struct{})
 }
@@ -79,8 +80,21 @@ func (l *Leadership) Leader() (string, bool, <-chan struct{}) {
 	return l.leader, l.unsupported, l.changed
 }
 
-// Reachable reports whether a WatchHosts broadcast has ever been observed, so
-// a leaderless scheduler which is up can be told apart from an unreachable one.
+// SetUnreachable records that the WatchHosts stream was lost. The next
+// broadcast sets it reachable again.
+func (l *Leadership) SetUnreachable() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if !l.reachable {
+		return
+	}
+	l.reachable = false
+	close(l.changed)
+	l.changed = make(chan struct{})
+}
+
+// Reachable reports whether a WatchHosts stream is currently delivering
+// broadcasts.
 func (l *Leadership) Reachable() bool {
 	l.lock.Lock()
 	defer l.lock.Unlock()
