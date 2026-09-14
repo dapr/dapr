@@ -40,7 +40,7 @@ type crossapp struct {
 }
 
 func (x *crossapp) Setup(t *testing.T) []framework.Option {
-	x.workflow = workflow.New(t, workflow.WithDaprds(2))
+	x.workflow = workflow.New(t, workflow.WithDaprds(2), workflow.WithSigning(false))
 	return []framework.Option{framework.WithProcesses(x.workflow)}
 }
 

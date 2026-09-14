@@ -41,7 +41,7 @@ type failed struct {
 }
 
 func (f *failed) Setup(t *testing.T) []framework.Option {
-	f.workflow = workflow.New(t)
+	f.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{framework.WithProcesses(f.workflow)}
 }
 

@@ -75,6 +75,8 @@ type Options struct {
 	// LOCK -> UPDATE -> UNLOCK round.
 	DisseminationTimeout time.Duration
 
+	PlacementStartupTimeout time.Duration
+
 	// SchedulerPlacementEnabled means a scheduler address is configured.
 	// Whether placement is actually served by it is the control plane's
 	// decision, read from the WatchHosts advertisement on startup. Actors
@@ -130,6 +132,7 @@ type actors struct {
 	stateTTLEnabled           bool
 	maxRequestBodySize        int
 	disseminationTimeout      time.Duration
+	placementStartupTimeout   time.Duration
 	schedulerPlacementEnabled bool
 
 	reminders       reminders.Interface
@@ -195,6 +198,7 @@ func New(opts Options) Interface {
 		maxRequestBodySize:        opts.MaxRequestBodySize,
 		mode:                      opts.Mode,
 		disseminationTimeout:      opts.DisseminationTimeout,
+		placementStartupTimeout:   opts.PlacementStartupTimeout,
 		schedulerPlacementEnabled: opts.SchedulerPlacementEnabled,
 		reentrancyStore:           reentrancystore.New(),
 	}
@@ -231,19 +235,20 @@ func (a *actors) Init(opts InitOptions) error {
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
-		AppID:                a.appID,
-		Addresses:            a.placementAddresses,
-		Security:             a.security,
-		Table:                a.table,
-		Namespace:            a.namespace,
-		Hostname:             opts.Hostname,
-		Port:                 a.port,
-		Healthz:              a.healthz,
-		Mode:                 a.mode,
-		Scheduler:            opts.SchedulerReloader,
-		DisseminationTimeout: a.disseminationTimeout,
-		SchedulerPlacement:   a.schedulerPlacementEnabled,
-		SchedulerLeadership:  opts.SchedulerLeadership,
+		AppID:                   a.appID,
+		Addresses:               a.placementAddresses,
+		Security:                a.security,
+		Table:                   a.table,
+		Namespace:               a.namespace,
+		Hostname:                opts.Hostname,
+		Port:                    a.port,
+		Healthz:                 a.healthz,
+		Mode:                    a.mode,
+		Scheduler:               opts.SchedulerReloader,
+		DisseminationTimeout:    a.disseminationTimeout,
+		PlacementStartupTimeout: a.placementStartupTimeout,
+		SchedulerPlacement:      a.schedulerPlacementEnabled,
+		SchedulerLeadership:     opts.SchedulerLeadership,
 	})
 	if err != nil {
 		return err

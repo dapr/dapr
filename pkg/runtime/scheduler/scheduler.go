@@ -47,6 +47,11 @@ type Options struct {
 	Security         security.Handler
 	Healthz          healthz.Healthz
 	SchedulerStreams uint
+
+	// ActorAddress is the daprd internal gRPC host:port reported on
+	// WatchJobs streams, so schedulers route actor reminder triggers to
+	// the placement owner host.
+	ActorAddress string
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -64,6 +69,7 @@ func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
 		Namespace:    opts.Namespace,
 		AppID:        opts.AppID,
+		ActorAddress: opts.ActorAddress,
 		WorkflowSpec: opts.WorkflowSpec,
 		Actors:       opts.Actors,
 		Channels:     opts.Channels,

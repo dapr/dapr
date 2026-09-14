@@ -131,6 +131,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		for {
 			if err != nil {
 				closeCon()
+				w.leadership.SetUnreachable()
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
@@ -180,9 +181,12 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 
 	log.Infof("Received scheduler hosts addresses: %v (placement leader %q)", gotAddrs, leader)
 
-	// Reloading on an identical list would cycle every scheduler stream,
-	// and that churn re-broadcasts back into this loop.
-	if !slices.Equal(gotAddrs, w.lastAddrs) {
+	// Reloading on an identical set would cycle every scheduler stream, and
+	// that churn re-broadcasts back into this loop. Broadcast order is not
+	// stable across membership changes, so compare sorted.
+	sorted := slices.Clone(gotAddrs)
+	slices.Sort(sorted)
+	if !slices.Equal(sorted, w.lastAddrs) {
 		if err := w.clients.Reload(ctx, gotAddrs); err != nil {
 			return err
 		}
@@ -190,7 +194,7 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 		w.loop.Enqueue(&loops.ReloadClients{
 			Addresses: gotAddrs,
 		})
-		w.lastAddrs = gotAddrs
+		w.lastAddrs = sorted
 	}
 
 	if w.leadership != nil {

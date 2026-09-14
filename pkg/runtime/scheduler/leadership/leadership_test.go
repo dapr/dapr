@@ -82,3 +82,32 @@ func TestSetUnsupported(t *testing.T) {
 	assert.Empty(t, leader)
 	assert.False(t, unsupported)
 }
+
+func TestReachable(t *testing.T) {
+	t.Parallel()
+
+	l := New()
+	assert.False(t, l.Reachable())
+
+	l.SetUnsupported()
+	assert.True(t, l.Reachable(), "an unsupported response is still a received broadcast")
+
+	l.Set("")
+	assert.True(t, l.Reachable(), "a broadcast, even leaderless, means the scheduler is reachable")
+
+	_, _, ch := l.Leader()
+	l.SetUnreachable()
+	assert.False(t, l.Reachable(), "a dropped WatchHosts stream clears reachability")
+	assert.True(t, closed(ch), "losing the stream must signal waiters")
+
+	l.SetUnreachable()
+	_, _, ch = l.Leader()
+	assert.False(t, closed(ch), "repeating unreachable is not a change")
+
+	l.Set("")
+	assert.True(t, l.Reachable(), "a broadcast after reconnecting restores it")
+
+	l.SetUnreachable()
+	l.SetUnsupported()
+	assert.True(t, l.Reachable(), "an unsupported broadcast after a dropped stream restores it")
+}

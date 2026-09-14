@@ -68,7 +68,7 @@ func (a *cleanup) Setup(t *testing.T) []framework.Option {
 		if a.workflow.HasPlacement() {
 			dopts = append(dopts, daprd.WithPlacementAddresses(a.workflow.Placement().Address()))
 		}
-		return daprd.New(t, append(dopts, fp...)...)
+		return daprd.New(t, append(dopts, append(fp, a.workflow.JoinOptions(t)...)...)...)
 	}
 	for i := range a.joiners {
 		a.joiners[i] = newDaprd()

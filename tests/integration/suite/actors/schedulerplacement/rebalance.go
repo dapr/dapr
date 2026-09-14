@@ -123,6 +123,15 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*20, time.Millisecond*10)
 	}
 
+	invokeOnce := func(c *assert.CollectT, actorID string) bool {
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: "myactortype",
+			ActorId:   actorID,
+			Method:    "foo",
+		})
+		return assert.NoError(c, err)
+	}
+
 	ids := make([]string, 50)
 	for i := range ids {
 		ids[i] = "actor-" + strconv.Itoa(i)
@@ -143,7 +152,9 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 		hosts := make(map[int]struct{})
 		for i := range 30 {
 			id := "probe-" + strconv.Itoa(i)
-			invoke(t, id)
+			if !invokeOnce(c, id) {
+				return
+			}
 			r.lock.Lock()
 			hosts[r.servedOn[id]] = struct{}{}
 			r.lock.Unlock()

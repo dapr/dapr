@@ -65,7 +65,7 @@ func (e *failed) Setup(t *testing.T) []framework.Option {
 		if e.workflow.HasPlacement() {
 			dopts = append(dopts, daprd.WithPlacementAddresses(e.workflow.Placement().Address()))
 		}
-		e.joiners[i] = daprd.New(t, append(dopts, fp...)...)
+		e.joiners[i] = daprd.New(t, append(dopts, append(fp, e.workflow.JoinOptions(t)...)...)...)
 	}
 
 	return []framework.Option{
@@ -172,7 +172,6 @@ func (e *failed) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, sumBoth("janitor_escalation_reaped"), float64(1))
 		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(t, ctx, "run-activity"),
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*50)

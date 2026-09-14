@@ -63,7 +63,13 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUpdate:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
-			d.closeStreamV2(fmt.Errorf("received UPDATE for unknown round seq %d", seq))
+			if _, done := d.v2Completed[seq]; !done {
+				d.closeStreamV2(fmt.Errorf("received UPDATE for unknown round seq %d", seq))
+				return nil
+			}
+			d.streamLoop.Enqueue(&loops.StreamSend{
+				Ack: &loops.Ack{Op: loops.OrderUpdate, Version: seq},
+			})
 			return nil
 		}
 
@@ -95,11 +101,18 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 	case loops.OrderUnlock:
 		r, ok := d.v2Rounds[seq]
 		if !ok {
-			d.closeStreamV2(fmt.Errorf("received UNLOCK for unknown round seq %d", seq))
+			if _, done := d.v2Completed[seq]; !done {
+				d.closeStreamV2(fmt.Errorf("received UNLOCK for unknown round seq %d", seq))
+				return nil
+			}
+			d.streamLoop.Enqueue(&loops.StreamSend{
+				Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
+			})
 			return nil
 		}
 
 		delete(d.v2Rounds, seq)
+		d.v2Completed[seq] = struct{}{}
 		d.timeoutQ.Dequeue(seq)
 
 		// Release the union of the declared scope and every type whose table
@@ -124,9 +137,14 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 			Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
 		})
 
-		// The sidecar is ready only once it has a placement table for every
-		// actor type it locally hosts.
-		if d.inflight.HasTables(d.actorTable.Types()) {
+		ready := true
+		for _, t := range d.actorTable.Types() {
+			if !d.inflight.HasTables([]string{t}) && d.inflight.IsBlocked(t) {
+				ready = false
+				break
+			}
+		}
+		if ready {
 			d.healthTarget.Ready()
 			d.ready.Store(true)
 		}

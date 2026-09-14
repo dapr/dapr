@@ -26,6 +26,7 @@ type Leadership struct {
 	lock        sync.Mutex
 	leader      string
 	unsupported bool
+	reachable   bool
 	changed     chan struct{}
 }
 
@@ -42,12 +43,13 @@ func (l *Leadership) Set(leader string) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	if l.leader == leader && !l.unsupported {
+	if l.leader == leader && !l.unsupported && l.reachable {
 		return
 	}
 
 	l.leader = leader
 	l.unsupported = false
+	l.reachable = true
 	close(l.changed)
 	l.changed = make(chan struct{})
 }
@@ -58,12 +60,13 @@ func (l *Leadership) SetUnsupported() {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	if l.unsupported {
+	if l.unsupported && l.reachable {
 		return
 	}
 
 	l.leader = ""
 	l.unsupported = true
+	l.reachable = true
 	close(l.changed)
 	l.changed = make(chan struct{})
 }
@@ -75,4 +78,25 @@ func (l *Leadership) Leader() (string, bool, <-chan struct{}) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	return l.leader, l.unsupported, l.changed
+}
+
+// SetUnreachable records that the WatchHosts stream was lost. The next
+// broadcast sets it reachable again.
+func (l *Leadership) SetUnreachable() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if !l.reachable {
+		return
+	}
+	l.reachable = false
+	close(l.changed)
+	l.changed = make(chan struct{})
+}
+
+// Reachable reports whether a WatchHosts stream is currently delivering
+// broadcasts.
+func (l *Leadership) Reachable() bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return l.reachable
 }

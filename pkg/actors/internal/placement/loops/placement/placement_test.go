@@ -27,10 +27,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	leaderconnector "github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	healthzfake "github.com/dapr/dapr/pkg/healthz/fake"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
 
@@ -136,52 +139,127 @@ func TestSwapAlt(t *testing.T) {
 	assert.True(t, p.alt.SchedulerPlacement)
 }
 
-// TestHandleCloseStreamRefusalProbesAlt asserts a FailedPrecondition close,
-// how a stood-down authority refuses, swaps to the kept alternative before
-// reconnecting.
-func TestHandleCloseStreamRefusalProbesAlt(t *testing.T) {
+// TestAdoptionRequiresAdvertisedLeader asserts an unreachable placement
+// service moves the sidecar onto the scheduler only when a scheduler
+// placement leader is advertised, and a FailedPrecondition close alone
+// never swaps the authority.
+func TestAdoptionRequiresAdvertisedLeader(t *testing.T) {
 	t.Parallel()
 
-	ready := &atomic.Bool{}
-	ready.Store(true)
-	p := &placement{
-		id:         "test-id",
-		namespace:  "default",
-		ready:      ready,
-		htarget:    healthzfake.New(),
-		dissLoop:   loopfake.New[loops.EventDiss](),
-		actorTable: tablefake.New(),
-		inflight:   inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
-		idx:        1,
-		connector:  &fakeConnector{addr: "placement"},
-		alt: &Fallback{
-			Connector:          &fakeConnector{addr: "scheduler"},
-			SchedulerPlacement: true,
-		},
+	newPlacement := func(ldr *leadership.Leadership) *placement {
+		ready := &atomic.Bool{}
+		ready.Store(true)
+		return &placement{
+			id:         "test-id",
+			namespace:  "default",
+			ready:      ready,
+			htarget:    healthzfake.New(),
+			dissLoop:   loopfake.New[loops.EventDiss](),
+			actorTable: tablefake.New(),
+			inflight:   inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
+			idx:        1,
+			leadership: ldr,
+			connector:  &fakeConnector{addr: "placement"},
+			alt: &Fallback{
+				Connector:          &fakeConnector{addr: "scheduler"},
+				SchedulerPlacement: true,
+			},
+		}
 	}
 
-	// The context outlives the close handling just long enough for the swap,
-	// then ends the reconnect loop.
-	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
-	t.Cleanup(cancel)
-	err := p.handleCloseStream(ctx, &loops.ConnCloseStream{
-		IDx:   1,
-		Error: status.Error(codes.FailedPrecondition, "standing down"),
+	t.Run("no advertised leader keeps the placement service", func(t *testing.T) {
+		t.Parallel()
+		p := newPlacement(leadership.New())
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
+		t.Cleanup(cancel)
+		err := p.handleCloseStream(ctx, &loops.ConnCloseStream{
+			IDx:   1,
+			Error: status.Error(codes.FailedPrecondition, "node is not a leader"),
+		})
+		require.Error(t, err)
+		assert.Equal(t, "placement", p.connector.Address(),
+			"leadership churn must not move the sidecar off its authority")
 	})
-	require.Error(t, err)
-	assert.Equal(t, "scheduler", p.connector.Address(),
-		"a refused stream must probe the other authority next")
 
-	// A non-refusal close does not swap the connector. The canceled
-	// context stops the handling before the reconnect loop probes.
-	p.idx = 2
-	p.dissLoop = loopfake.New[loops.EventDiss]()
-	ctx2, cancel2 := context.WithCancel(t.Context())
-	cancel2()
-	err = p.handleCloseStream(ctx2, &loops.ConnCloseStream{
-		IDx:   2,
-		Error: errors.New("connection reset"),
+	t.Run("advertised leader adopts the scheduler on connect failure", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("127.0.0.1:1")
+		p := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*250)
+		t.Cleanup(cancel)
+		err := p.handleCloseStream(ctx, &loops.ConnCloseStream{
+			IDx:   1,
+			Error: errors.New("connection refused"),
+		})
+		require.Error(t, err)
+		assert.Equal(t, "scheduler", p.connector.Address(),
+			"an advertised scheduler placement leader is the handover signal")
 	})
-	require.Error(t, err)
-	assert.Equal(t, "scheduler", p.connector.Address())
+}
+
+// TestStartupWaitAdoptsFallback covers a scheduler which never answers with
+// a placement service configured: the bounded startup wait expires and the
+// placement service is adopted, keeping the scheduler as the alternative.
+func TestStartupWait(t *testing.T) {
+	t.Parallel()
+
+	newPlacement := func(ldr *leadership.Leadership) *placement {
+		return &placement{
+			id:          "test-id",
+			namespace:   "default",
+			ready:       &atomic.Bool{},
+			htarget:     healthzfake.New(),
+			actorTable:  tablefake.New(),
+			inflight:    inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
+			startupWait: time.Millisecond * 50,
+			leadership:  ldr,
+			connector:   leaderconnector.New(leaderconnector.Options{Leadership: ldr}),
+			streamFactory: func(context.Context, *grpc.ClientConn) (transport.Transport, error) {
+				return nil, errors.New("no stream")
+			},
+			schedulerPlacement: true,
+			fallback:           &Fallback{Connector: &fakeConnector{addr: "placement"}},
+		}
+	}
+
+	t.Run("an unreachable scheduler adopts the placement service", func(t *testing.T) {
+		t.Parallel()
+		p := newPlacement(leadership.New())
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Nil(t, p.fallback)
+		assert.Equal(t, "placement", p.connector.Address())
+		require.NotNil(t, p.alt)
+		assert.True(t, p.alt.SchedulerPlacement)
+	})
+
+	t.Run("a scheduler which broadcast then died adopts the placement service", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("")
+		p := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second*2)
+		t.Cleanup(cancel)
+		go func() {
+			time.Sleep(time.Millisecond * 150)
+			ldr.SetUnreachable()
+		}()
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Nil(t, p.fallback)
+		assert.Equal(t, "placement", p.connector.Address())
+	})
+
+	t.Run("a reachable leaderless scheduler keeps waiting", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("")
+		p := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*300)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.NotNil(t, p.fallback, "a reachable scheduler must not defect to the placement service")
+		assert.Empty(t, p.connector.Address())
+	})
 }
