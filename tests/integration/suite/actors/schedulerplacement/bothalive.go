@@ -138,7 +138,7 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		"no scheduler may advertise a placement leader while the placement service is present")
 
 	// Removing the placement service hands actor placement to the
-	// scheduler cluster.
+	// placement enabled scheduler cluster.
 	b.place.Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, advertised())
