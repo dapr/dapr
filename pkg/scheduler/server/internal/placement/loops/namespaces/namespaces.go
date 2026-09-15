@@ -30,10 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement/loops/connections"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.scheduler.server.placement.namespaces")
 
 type Options struct {
 	Authorizer         *authorizer.Authorizer
@@ -83,6 +80,8 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) err
 		n.handleCloseStream(e)
 	case *loops.ConnCloseNamespace:
 		n.handleCloseNamespace(e)
+	case *loops.ConnLoopFailed:
+		return fmt.Errorf("placement connections loop for namespace %s failed: %w", e.Namespace, e.Error)
 	case *loops.ReportedTypes:
 		n.route(e.Host.GetNamespace(), e)
 	case *loops.Ack:
@@ -116,7 +115,7 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 
 		n.wg.Go(func() {
 			if err := cl.Run(ctx); err != nil && ctx.Err() == nil {
-				log.Errorf("Error running placement connections loop for namespace %s: %v", ns, err)
+				n.loop.Enqueue(&loops.ConnLoopFailed{Namespace: ns, Error: err})
 			}
 		})
 

@@ -45,6 +45,7 @@ func newTestDisseminatorV2(t *testing.T) *disseminator {
 	diss, _, _ := newTestDisseminator(t)
 	diss.schedulerPlacement = true
 	diss.v2Rounds = make(map[uint64]*v2Round)
+	diss.v2Completed = make(map[uint64]struct{})
 
 	return diss
 }
@@ -127,17 +128,43 @@ func TestHandleOrderV2_ConcurrentDisjointRounds(t *testing.T) {
 	assert.Len(t, diss.v2Rounds, 1)
 }
 
-func TestHandleOrderV2_UnknownSeqClosesStream(t *testing.T) {
-	diss := newTestDisseminatorV2(t)
+func TestHandleOrderV2_UnknownSeq(t *testing.T) {
+	t.Run("a seq that never completed here closes the stream", func(t *testing.T) {
+		diss := newTestDisseminatorV2(t)
 
-	var streamClosed bool
-	diss.streamLoop = loopfake.New[loops.EventStream]().
-		WithClose(func(loops.EventStream) { streamClosed = true })
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) { streamClosed = true })
 
-	require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
-		Order: &loops.Order{Op: loops.OrderUpdate, Version: 99, Partial: true},
-	}))
-	assert.True(t, streamClosed)
+		require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: loops.OrderUpdate, Version: 99, Partial: true},
+		}))
+		assert.True(t, streamClosed)
+	})
+
+	t.Run("a completed round's re-sent phases are acked and ignored", func(t *testing.T) {
+		diss := newTestDisseminatorV2(t)
+		acks := collectAcks(diss)
+
+		require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: loops.OrderLock, Version: 3, Partial: true},
+		}))
+		require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: loops.OrderUnlock, Version: 3, Partial: true},
+		}))
+
+		require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: loops.OrderUpdate, Version: 3, Partial: true},
+		}))
+		require.NoError(t, diss.handleOrderV2(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: loops.OrderUnlock, Version: 3, Partial: true},
+		}))
+
+		require.Len(t, *acks, 4)
+		assert.Equal(t, loops.OrderUpdate, (*acks)[2].Op)
+		assert.Equal(t, loops.OrderUnlock, (*acks)[3].Op)
+		assert.Empty(t, diss.v2Rounds)
+	})
 }
 
 func TestHandleOrderV2_MergeErrorClosesStream(t *testing.T) {

@@ -129,7 +129,7 @@ func (p *placement) Run(ctx context.Context) error {
 		p.nsLoop.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()
-			p.nsLoop.Close(&loops.Shutdown{Error: ctx.Err()})
+			p.nsLoop.Close(new(loops.Shutdown))
 			return ctx.Err()
 		},
 	).Run(ctx)

@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,15 @@ func SchedulerPlacementFromEnv() bool {
 	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_SCHEDULER_PLACEMENT"))
 }
 
+// SigningFromEnv reports whether the suite is running with
+// DAPR_INTEGRATION_WORKFLOW_SIGNING set truthy. WorkflowHistorySigning
+// requires mTLS (daprd fatals otherwise), so signing mode forces a Sentry
+// per workflow, exactly as WithMTLS does, unless a test overrides it with
+// WithSigning.
+func SigningFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_SIGNING"))
+}
+
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
@@ -81,9 +91,11 @@ type Workflow struct {
 	sched        *scheduler.Scheduler
 	ownsSched    bool
 	sentry       *sentry.Sentry
+	ownsSentry   bool
 	daprds       []*daprd.Daprd
 	clustered    bool
 	fastPath     bool
+	signing      bool
 
 	schedulerPlacement bool
 }
@@ -125,18 +137,43 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		schedulerPlacement = *opts.schedulerPlacement
 	}
 
+	if opts.sentryInstance != nil {
+		opts.mtls = true
+	}
+	// mTLS implies signing unless a test opts out explicitly; opting out
+	// disables the feature only and leaves the requested mTLS in place.
+	signing := SigningFromEnv() || opts.mtls
+	if opts.signing != nil {
+		signing = *opts.signing
+	}
+	if signing {
+		opts.mtls = true
+	}
+	// A caller-supplied scheduler cannot be given Sentry credentials
+	// retroactively; under mTLS the caller must also supply the Sentry it
+	// built the scheduler (and any proxy) against, or opt out of signing.
+	// Fail loudly instead of timing out on TLS handshakes.
+	if opts.mtls && opts.schedulerInstance != nil && opts.sentryInstance == nil {
+		require.Fail(t, "WithSchedulerInstance under mTLS/signing requires WithSentryInstance (build the scheduler and proxy against that Sentry) or workflow.WithSigning(false)")
+	}
+
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
 	)
 
 	var sen *sentry.Sentry
+	ownsSentry := false
 	var placementOpts []placement.Option
 	placementOpts = append(placementOpts, opts.placementOptions...)
 	var schedulerOpts []scheduler.Option
 	schedulerOpts = append(schedulerOpts, opts.schedulerOptions...)
 	if opts.mtls {
-		sen = sentry.New(t)
+		sen = opts.sentryInstance
+		if sen == nil {
+			sen = sentry.New(t)
+			ownsSentry = true
+		}
 		placementOpts = append(placementOpts, placement.WithSentry(t, sen))
 		// Scheduler ID must match the TLS cert DNS names issued by Sentry.
 		schedulerOpts = append(schedulerOpts,
@@ -201,7 +238,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts = append(dopts, baseDopts...)
 
 		features := baseFeatures
-		if sen != nil && (opts.signing || opts.mtls) && !signingDisabled[i] {
+		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}
 		if len(features) > 0 {
@@ -242,9 +279,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		sched:        sched,
 		ownsSched:    ownsSched,
 		sentry:       sen,
+		ownsSentry:   ownsSentry,
 		daprds:       daprds,
 		clustered:    clustered,
 		fastPath:     fastPath,
+		signing:      signing,
 
 		schedulerPlacement: schedulerPlacement,
 	}
@@ -258,7 +297,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	w.db.Run(t, ctx)
-	if w.sentry != nil {
+	if w.sentry != nil && w.ownsSentry {
 		w.sentry.Run(t, ctx)
 	}
 	if w.place != nil {
@@ -282,7 +321,7 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	if w.place != nil {
 		w.place.Cleanup(t)
 	}
-	if w.sentry != nil {
+	if w.sentry != nil && w.ownsSentry {
 		w.sentry.Cleanup(t)
 	}
 	w.db.Cleanup(t)
@@ -407,17 +446,23 @@ func baseFeatureList(clustered, fastPath bool) []string {
 	return features
 }
 
-// FeatureOptions returns the feature manifest option for extra daprds a test
-// adds to this harness's cluster. Only cluster-wide features are covered:
-// WorkflowHistorySigning is per-daprd and needs the harness's sentry wiring
-// besides the flag. daprd's config merge makes the last spec.features list
-// win, so all features must land in one manifest.
-func (w *Workflow) FeatureOptions(t *testing.T) []daprd.Option {
+// JoinOptions returns the options an extra daprd needs to join this
+// harness's cluster in the same modes: the feature flags and, under mTLS,
+// the Sentry wiring.
+func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
+	t.Helper()
 	features := baseFeatureList(w.clustered, w.fastPath)
-	if len(features) == 0 {
-		return nil
+	var opts []daprd.Option
+	if w.sentry != nil {
+		opts = append(opts, daprd.WithSentry(t, w.sentry))
 	}
-	return []daprd.Option{daprd.WithFeatureEnabled(t, features...)}
+	if w.signing {
+		features = append(features, "WorkflowHistorySigning")
+	}
+	if len(features) > 0 {
+		opts = append(opts, daprd.WithFeatureEnabled(t, features...))
+	}
+	return opts
 }
 
 // ClusteredDeployment reports whether every daprd in this workflow runs with
@@ -438,6 +483,14 @@ func (w *Workflow) ClusteredDeployment() bool {
 // assertions which differ between the two modes.
 func (w *Workflow) FastPath() bool {
 	return w.fastPath
+}
+
+// Signing reports whether this workflow runs with mTLS active and the
+// WorkflowHistorySigning feature flag enabled on its daprds (except any
+// excluded via WithSigningDisabledN). Tests use this to branch assertions
+// which differ when history signing is active.
+func (w *Workflow) Signing() bool {
+	return w.signing
 }
 
 // ActorTypesCount returns the number of actor types a daprd in this workflow
@@ -473,6 +526,29 @@ func (w *Workflow) Scheduler() *scheduler.Scheduler {
 
 func (w *Workflow) Sentry() *sentry.Sentry {
 	return w.sentry
+}
+
+// HasPlacement reports whether a standalone placement service runs, rather
+// than placement served by the scheduler.
+func (w *Workflow) HasPlacement() bool {
+	return w.place != nil
+}
+
+// PlacementVersion returns a counter which advances whenever the active
+// placement authority completes a dissemination: the default namespace table
+// version of the placement service, or the scheduler's dissemination count.
+// Only successive values compare, the units differ per authority.
+func (w *Workflow) PlacementVersion(t *testing.T, ctx context.Context) uint64 {
+	if w.place != nil {
+		return w.place.PlacementTables(t, ctx).Tables["default"].Version
+	}
+	var disseminations float64
+	for k, v := range w.sched.Metrics(t, ctx).All() {
+		if strings.HasPrefix(k, "dapr_scheduler_placement_disseminations_total") {
+			disseminations += v
+		}
+	}
+	return uint64(disseminations)
 }
 
 func (w *Workflow) Placement() *placement.Placement {

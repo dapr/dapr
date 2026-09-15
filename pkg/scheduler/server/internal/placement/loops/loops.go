@@ -90,6 +90,14 @@ type ConnCloseNamespace struct {
 	Namespace string
 }
 
+// ConnLoopFailed is sent when a namespace's connections loop failed, taking
+// its streams' dissemination with it.
+type ConnLoopFailed struct {
+	*nsbase
+	Namespace string
+	Error     error
+}
+
 // Shutdown shuts down a loop and everything below it.
 type Shutdown struct {
 	*nsbase

@@ -34,6 +34,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler.loops.connector")
 type Options struct {
 	Namespace    string
 	AppID        string
+	ActorAddress string
 	WorkflowSpec *config.WorkflowSpec
 
 	Actors   actors.Interface
@@ -63,13 +64,14 @@ type connector struct {
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	return loop.New[loops.EventConn](1024).NewLoop(&connector{
-		namespace:          opts.Namespace,
-		appID:              opts.AppID,
-		workflowSpec:       opts.WorkflowSpec,
-		actors:             opts.Actors,
-		channels:           opts.Channels,
-		wfEngine:           opts.WFEngine,
-		placementAddresses: opts.PlacementAddresses,
+		namespace:           opts.Namespace,
+		appID:               opts.AppID,
+		workflowSpec:        opts.WorkflowSpec,
+		actors:              opts.Actors,
+		channels:            opts.Channels,
+		wfEngine:            opts.WFEngine,
+		currentActorAddress: opts.ActorAddress,
+		placementAddresses:  opts.PlacementAddresses,
 	})
 }
 

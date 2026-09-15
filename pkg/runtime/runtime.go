@@ -252,10 +252,7 @@ func newDaprRuntime(ctx context.Context,
 		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
-	// Whether the scheduler serves actor placement is the control plane's
-	// decision, advertised on WatchHosts. This sidecar only needs a
-	// scheduler to ask.
-	schedulerPlacement := runtimeConfig.SchedulerEnabled()
+	schedulerPlacement := runtimeConfig.SchedulerPlacementEnabled()
 
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
@@ -272,6 +269,7 @@ func newDaprRuntime(ctx context.Context,
 		MaxRequestBodySize:        runtimeConfig.maxRequestBodySize,
 		Mode:                      runtimeConfig.mode,
 		DisseminationTimeout:      runtimeConfig.actorsDisseminationTimeout,
+		PlacementStartupTimeout:   runtimeConfig.actorsPlacementStartupTimeout,
 		SchedulerPlacementEnabled: schedulerPlacement,
 	})
 	inProcessExec := inprocess.NewExecutor()
@@ -375,9 +373,15 @@ func newDaprRuntime(ctx context.Context,
 		}
 	}
 
+	actorHost, err := actorHostAddress(runtimeConfig.internalGRPCListenAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:          namespace,
 		AppID:              runtimeConfig.id,
+		ActorAddress:       net.JoinHostPort(actorHost, strconv.Itoa(runtimeConfig.internalGRPCPort)),
 		Channels:           channels,
 		Actors:             actors,
 		Addresses:          runtimeConfig.schedulerAddress,
@@ -1307,13 +1311,9 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		log.Info("actors: state store is not configured - actor state and workflow operations will be unavailable until an actor state store component is loaded")
 	}
 
-	// Override host address if the internal gRPC listen address is localhost.
-	hostAddress := a.hostAddress
-	if utils.Contains(
-		[]string{"127.0.0.1", "localhost", "[::1]"},
-		a.runtimeConfig.internalGRPCListenAddress,
-	) {
-		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	hostAddress, err := actorHostAddress(a.runtimeConfig.internalGRPCListenAddress)
+	if err != nil {
+		return err
 	}
 
 	// Report the actor host:port on WatchJobs streams, byte identical to the
@@ -1540,4 +1540,18 @@ func (a *DaprRuntime) stopTrace(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func actorHostAddress(internalGRPCListenAddress string) (string, error) {
+	host, err := utils.GetHostAddress()
+	if err != nil {
+		return "", err
+	}
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		internalGRPCListenAddress,
+	) {
+		host = internalGRPCListenAddress
+	}
+	return host, nil
 }

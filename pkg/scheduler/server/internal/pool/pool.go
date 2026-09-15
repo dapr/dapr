@@ -43,6 +43,9 @@ type Options struct {
 	// OnPlacementAddressesChange is called when the set of placement
 	// addresses reported by connected sidecars gains or loses an address.
 	OnPlacementAddressesChange func()
+	// PlacementEnabled gates the incapable sidecars: on a scheduler
+	// not serving placement every sidecar counts as incapable
+	PlacementEnabled bool
 }
 
 // maxAddressesPerReport bounds a client-supplied report, so one client
@@ -71,6 +74,7 @@ type Pool struct {
 	addrLock                   sync.Mutex
 	addrs                      map[string]int
 	onPlacementAddressesChange func()
+	placementEnabled           bool
 }
 
 func New(opts Options) *Pool {
@@ -80,14 +84,16 @@ func New(opts Options) *Pool {
 		onPlacementCapabilityChange: opts.OnSchedulerPlacementCapabilityChange,
 		addrs:                       make(map[string]int),
 		onPlacementAddressesChange:  opts.OnPlacementAddressesChange,
+		placementEnabled:            opts.PlacementEnabled,
 	}
 }
 
 func (p *Pool) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	p.nsLoop = namespaces.New(namespaces.Options{
-		Cron:       p.cron,
-		CancelPool: cancel,
+		Cron:             p.cron,
+		CancelPool:       cancel,
+		PlacementEnabled: p.placementEnabled,
 	})
 
 	close(p.readyCh)
@@ -143,7 +149,7 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 	incapableNow := p.incapable
 	p.capLock.Unlock()
 
-	if !capable {
+	if !capable && p.placementEnabled {
 		monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
 	}
 
@@ -160,7 +166,7 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 		incapableNow := p.incapable
 		p.capLock.Unlock()
 
-		if !capable {
+		if !capable && p.placementEnabled {
 			monitoring.RecordPlacementIncapableSidecars(int64(incapableNow))
 		}
 

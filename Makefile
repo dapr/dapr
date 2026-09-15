@@ -105,7 +105,11 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
+	# Use the binary produced by compile-build-tools only when explicitly
+	# requested (CI sets USE_BUILD_TOOLS_BIN=true right after compiling);
+	# `go run` always reflects source changes so it stays the default for
+	# local use, at the cost of re-linking the tool per invocation
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) $(if $(filter true,$(USE_BUILD_TOOLS_BIN)),./$(BUILD_TOOLS_BIN),go run .)
 endif
 
 # Default docker container and e2e test target.

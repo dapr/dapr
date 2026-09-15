@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,23 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
+	if len(opts.features) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+		for _, f := range slices.Compact(slices.Sorted(slices.Values(opts.features))) {
+			sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+		}
+		f := filepath.Join(t.TempDir(), "features.yaml")
+		require.NoError(t, os.WriteFile(f, []byte(sb.String()), 0o600))
+		opts.configs = append(opts.configs, f)
+	}
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
@@ -157,6 +175,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.actorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
+	}
+	if opts.placementStartupTimeout != nil {
+		args = append(args, "--actors-placement-startup-timeout="+opts.placementStartupTimeout.String())
 	}
 	if opts.hotReloadReconcileInterval != nil {
 		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
@@ -565,6 +586,18 @@ func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
 }
 
+func (d *Daprd) ActorRemindersURL(actorType, actorID string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders", d.HTTPAddress(), actorType, actorID)
+}
+
+func (d *Daprd) ActorTimerURL(actorType, actorID, name string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers/%s", d.HTTPAddress(), actorType, actorID, name)
+}
+
+func (d *Daprd) ActorTimersURL(actorType, actorID string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers", d.HTTPAddress(), actorType, actorID)
+}
+
 func (d *Daprd) Kill(t *testing.T) {
 	t.Helper()
 	d.exec.Kill(t)
@@ -600,6 +633,17 @@ func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
 func (d *Daprd) SignalHUP(t *testing.T) {
 	t.Helper()
 	d.exec.SignalHUP(t)
+}
+
+// ActiveActorCount returns the number of live actors of actorType reported by
+// the actor runtime, and whether the type is hosted at all.
+func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
+	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+		if a.Type == actorType {
+			return a.Count, true
+		}
+	}
+	return 0, false
 }
 
 // WaitUntilActorTypeHosted blocks until the actor runtime reports actorType

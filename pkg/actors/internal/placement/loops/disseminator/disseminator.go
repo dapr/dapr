@@ -96,6 +96,9 @@ type disseminator struct {
 
 	// v2Rounds are the in-flight v2 dissemination rounds, keyed by seq.
 	v2Rounds map[uint64]*v2Round
+
+	// v2Completed are the seqs of rounds completed on this stream.
+	v2Completed map[uint64]struct{}
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -112,6 +115,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.roundChangedTypes = make(map[string]struct{})
 	diss.schedulerPlacement = opts.SchedulerPlacement
 	diss.v2Rounds = make(map[uint64]*v2Round)
+	diss.v2Completed = make(map[uint64]struct{})
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 

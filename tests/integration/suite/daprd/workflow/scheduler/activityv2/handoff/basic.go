@@ -62,7 +62,7 @@ func (a *basic) Setup(t *testing.T) []framework.Option {
 			daprd.WithResourceFiles(a.workflow.DB().GetComponent(t)),
 			daprd.WithPlacementAddresses(a.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(a.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}, append(fp, a.workflow.JoinOptions(t)...)...)...)
 	}
 	for i := range a.joiners {
 		a.joiners[i] = newDaprd()
