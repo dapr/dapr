@@ -176,13 +176,13 @@ func (m *Messages) callStateMessage(ctx context.Context, msg proto.Message, hist
 	if _, err = m.Router.Call(ctx, req); err != nil {
 		// ErrInstanceNotFound means the parent deliberately dropped the
 		// completion (purged, tombstoned, or an unmatched straggler after
-		// ContinueAsNew), and PermissionDenied that its access policy will
-		// never admit this app's events: terminal either way, since retrying
-		// redelivers forever and a late redelivery can hit a reused task id
-		// and be misread as tampering.
+		// ContinueAsNew): terminal, since retrying redelivers forever and a
+		// late redelivery can hit a reused task id and be misread as
+		// tampering. A PermissionDenied stays retryable: an access policy
+		// can be reloaded, and the completion must not be lost meanwhile.
 		if historyEvent != nil &&
 			(historyEvent.GetChildWorkflowInstanceCompleted() != nil || historyEvent.GetChildWorkflowInstanceFailed() != nil) &&
-			(IsInstanceNotFound(err) || IsPermissionDenied(err)) {
+			IsInstanceNotFound(err) {
 			log.Warnf("Workflow actor '%s': parent workflow '%s' dropped this child's completion event; not retrying: %v", m.ActorID, target, err)
 			return nil
 		}

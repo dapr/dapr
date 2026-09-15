@@ -34,6 +34,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler.loops.connector")
 type Options struct {
 	Namespace    string
 	AppID        string
+	ActorAddress string
 	WorkflowSpec *config.WorkflowSpec
 
 	Actors   actors.Interface
@@ -49,22 +50,24 @@ type connector struct {
 	channels     *channels.Channels
 	wfEngine     wfengine.Interface
 
-	currentAppRunning bool
-	currentActorTypes []string
-	clients           []schedulerv1pb.SchedulerClient
-	closeConns        []context.CancelFunc
+	currentAppRunning   bool
+	currentActorTypes   []string
+	currentActorAddress string
+	clients             []schedulerv1pb.SchedulerClient
+	closeConns          []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	return loop.New[loops.EventConn](1024).NewLoop(&connector{
-		namespace:    opts.Namespace,
-		appID:        opts.AppID,
-		workflowSpec: opts.WorkflowSpec,
-		actors:       opts.Actors,
-		channels:     opts.Channels,
-		wfEngine:     opts.WFEngine,
+		namespace:           opts.Namespace,
+		appID:               opts.AppID,
+		workflowSpec:        opts.WorkflowSpec,
+		actors:              opts.Actors,
+		channels:            opts.Channels,
+		wfEngine:            opts.WFEngine,
+		currentActorAddress: opts.ActorAddress,
 	})
 }
 
@@ -141,9 +144,10 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 		Channels:     c.channels,
 		WFEngine:     c.wfEngine,
 
-		AppTarget:  c.currentAppRunning,
-		ActorTypes: c.currentActorTypes,
-		Clients:    c.clients,
+		AppTarget:    c.currentAppRunning,
+		ActorTypes:   c.currentActorTypes,
+		ActorAddress: c.currentActorAddress,
+		Clients:      c.clients,
 	})
 
 	ctx, cancel := context.WithCancel(ctx)

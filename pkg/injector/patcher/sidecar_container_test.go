@@ -901,6 +901,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("actors placement startup timeout", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--actors-placement-startup-timeout")
+			},
+		},
+		{
+			name: "add an actors placement startup timeout",
+			annotations: map[string]string{
+				annotations.KeyActorsPlacementStartupTimeout: "45s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--actors-placement-startup-timeout 45s")
+			},
+		},
+	}))
+
 	t.Run("app binding options timeout", testSuiteGenerator([]testCase{
 		{
 			name:        "default to empty",

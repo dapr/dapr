@@ -42,7 +42,7 @@ type terminal struct {
 }
 
 func (u *terminal) Setup(t *testing.T) []framework.Option {
-	u.workflow = workflow.New(t)
+	u.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{
 		framework.WithProcesses(u.workflow),
 	}

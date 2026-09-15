@@ -25,6 +25,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -118,6 +119,7 @@ func newDriveHarness(t *testing.T) *driveHarness {
 		driveCtx:          driveCtx,
 		driveCancel:       driveCancel,
 		rootCtx:           t.Context(),
+		detached:          detached.New(t.Context()),
 	}
 	return h
 }
@@ -183,7 +185,7 @@ func Test_driveActivity_escalatesAfterRetries(t *testing.T) {
 		return len(h.sched.snapshotCreates()) == 1
 	}, time.Second*10, time.Millisecond*10, "a failed drive must escalate to the durable reminder")
 	h.fact.driveWG.Wait()
-	h.fact.escWG.Wait()
+	h.fact.detached.Wait()
 
 	assert.Len(t, h.snapshotCalls(), localDriveMaxAttempts, "the drive retries at the reminder failure-policy cadence before escalating")
 
@@ -208,7 +210,7 @@ func Test_driveActivity_escalatesImmediatelyOnCancel(t *testing.T) {
 		return len(h.sched.snapshotCreates()) == 1
 	}, time.Second*5, time.Millisecond*10, "a cancelled drive escalates without local retries: the reminder create is host-agnostic")
 	h.fact.driveWG.Wait()
-	h.fact.escWG.Wait()
+	h.fact.detached.Wait()
 
 	assert.Len(t, h.snapshotCalls(), 1, "driveCtx cancellation must not be retried locally")
 }
@@ -220,10 +222,11 @@ func Test_escalateActivity_skippedOnShutdown(t *testing.T) {
 	rootCtx, rootCancel := context.WithCancel(t.Context())
 	rootCancel()
 	h.fact.rootCtx = rootCtx
+	h.fact.detached = detached.New(rootCtx)
 
 	name := testActivityName
 	h.fact.escalateActivity("wf::3", testInvocation(), time.Now().Add(-time.Second), &name)
-	h.fact.escWG.Wait()
+	h.fact.detached.Wait()
 
 	assert.Empty(t, h.sched.snapshotCreates(), "process shutdown must not spawn escalations; the janitor re-dispatches on the next owner")
 }

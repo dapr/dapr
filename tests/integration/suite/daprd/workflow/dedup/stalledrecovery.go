@@ -49,7 +49,10 @@ type stalledrecovery struct {
 }
 
 func (s *stalledrecovery) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.New(t)
+	s.workflow = workflow.New(t,
+		// Signing mode opt-out: the crafted unsigned history event would be rejected by signing verification.
+		workflow.WithSigning(false),
+	)
 	s.blockCh = make(chan struct{})
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),

@@ -168,7 +168,5 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, childID))
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Zero(c, p.workflow.Scheduler().JobKeyCount(t, ctx, "parent-notify"))
-	}, time.Second*20, time.Millisecond*10)
+	p.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n == 0 })
 }
