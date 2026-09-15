@@ -244,7 +244,6 @@ func (s *Server) Run(ctx context.Context) error {
 	cronCtx, cronCancel := context.WithCancel(context.WithoutCancel(ctx))
 	runners := []concurrency.Runner{
 		s.runServer,
-		s.placement.Run,
 		func(ctx context.Context) error {
 			defer cronCancel()
 			return s.placement.Run(ctx)

@@ -41,8 +41,9 @@ func init() {
 }
 
 // bothalive runs the placement service next to a scheduler cluster serving
-// placement: the sidecar follows the advertisement through a leader loss
-// and the placement service never sees a host.
+// placement: while the placement service is present the schedulers withhold
+// their leader and the placement service serves actors. Removing it hands
+// placement to the scheduler cluster without a restart.
 type bothalive struct {
 	cluster *cluster.Cluster
 	place   *placement.Placement
@@ -108,48 +109,42 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		}
 		return runtimes
 	}
-
-	invoke()
-
-	// The advertised placement leader dies: invocations recover on the new
-	// leader without the sidecar defecting to the placement service.
-	var leaderAddr string
-	sclient := b.cluster.Client(t, ctx)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream, err := sclient.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	advertised := func() bool {
+		stream, err := b.cluster.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if err != nil {
-			return
+			return false
 		}
 		//nolint:errcheck
 		defer stream.CloseSend()
 		resp, err := stream.Recv()
 		if err != nil {
-			return
+			return false
 		}
 		for _, host := range resp.GetHosts() {
 			if host.GetLeader() {
-				leaderAddr = host.GetAddress()
+				return true
 			}
 		}
-		assert.NotEmpty(c, leaderAddr)
-	}, time.Second*20, time.Millisecond*50)
-
-	leaderN := -1
-	for n, addr := range b.cluster.Addresses() {
-		if addr == leaderAddr {
-			leaderN = n
-		}
+		return false
 	}
-	require.NotEqual(t, -1, leaderN)
-	b.cluster.SchedulerN(t, leaderN).Cleanup(t)
+
+	// The placement service is present, so it serves the actors and the
+	// schedulers withhold their placement leader.
+	invoke()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
+	}, time.Second*10, time.Millisecond*50)
+	require.False(t, advertised(),
+		"no scheduler may advertise a placement leader while the placement service is present")
+
+	// Removing the placement service hands actor placement to the
+	// scheduler cluster.
+	b.place.Cleanup(t)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, advertised())
+	}, time.Second*30, time.Millisecond*100)
 
 	invokedBefore := b.invoked.Load()
 	invoke()
 	assert.Greater(t, b.invoked.Load(), invokedBefore)
-
-	// The split brain guard: through startup and the leader loss, the
-	// placement service never saw a host.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Zero(c, placementRuntimes(c))
-	}, time.Second*10, time.Millisecond*50)
 }
