@@ -95,7 +95,7 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	_, err = cl.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
-	startVersion := e.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	startVersion := e.workflow.PlacementVersion(t, ctx)
 
 	failedCh := make(chan struct{})
 	e.proxy.ArmFailures(proxy.MethodScheduleJob, 1_000_000, codes.Unavailable, failedCh)
@@ -113,12 +113,15 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "injected ScheduleJob failure never fired")
 	}
 
-	extra := daprd.New(t, append([]daprd.Option{
+	extraDopts := []daprd.Option{
 		daprd.WithAppID(e.appID),
-		daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 		daprd.WithSchedulerAddressesReset(e.proxy.Address()),
 		daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-	}, e.workflow.JoinOptions(t)...)...)
+	}
+	if e.workflow.HasPlacement() {
+		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(e.workflow.Placement().Address()))
+	}
+	extra := daprd.New(t, append(extraDopts, e.workflow.JoinOptions(t)...)...)
 	extra.Run(t, ctx)
 	t.Cleanup(func() { extra.Cleanup(t) })
 	extra.WaitUntilRunning(t, ctx)
@@ -129,11 +132,8 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, extraClient.StartWorkItemListener(ctx, registry))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := e.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-		if !assert.NotNil(c, table) {
-			return
-		}
-		assert.Greater(c, table.Version, startVersion, "placement table version must advance for the new daprd")
+		assert.Greater(c, e.workflow.PlacementVersion(t, ctx), startVersion,
+			"the placement authority must disseminate for the new daprd")
 	}, 15*time.Second, 10*time.Millisecond)
 
 	select {
