@@ -21,21 +21,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func newExecHarness() (*factory, chan *backend.ActivityWorkItem) {
+func newExecHarness(t *testing.T) (*factory, chan *backend.ActivityWorkItem) {
+	t.Helper()
 	scheduled := make(chan *backend.ActivityWorkItem, 2)
 	f := &factory{
 		appID:             "testapp",
 		actorType:         "dapr.internal.default.testapp.activity",
 		workflowActorType: "dapr.internal.default.testapp.workflow",
 		router:            routerfake.New(),
+		inflight:          new(inflight.Map),
 		signing:           &signing.Signing{Namespace: "default"},
+		rootCtx:           t.Context(),
+		detached:          detached.New(t.Context()),
+		// New always configures a positive grace, and the follower staleness
+		// re-check needs one to tick on.
+		staleClaimAfter: time.Hour,
 		scheduler: func(_ context.Context, wi *backend.ActivityWorkItem) error {
 			scheduled <- wi
 			return nil
@@ -44,23 +54,52 @@ func newExecHarness() (*factory, chan *backend.ActivityWorkItem) {
 	return f, scheduled
 }
 
+// testReminder is the reminder fire executeActivity is handed in tests: a
+// scheduler-fired one (SkipRetries false), so it is gated when the harness
+// runs the fast path.
+func testReminder() *actorapi.Reminder {
+	return &actorapi.Reminder{Name: activityReminderName}
+}
+
+// recvWorkItem takes the next WorkItem the harness scheduler was handed.
+func recvWorkItem(t *testing.T, scheduled chan *backend.ActivityWorkItem) *backend.ActivityWorkItem {
+	t.Helper()
+	select {
+	case wi := <-scheduled:
+		return wi
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the WorkItem dispatch")
+		return nil
+	}
+}
+
+// completeWorkItem plays the SDK's part: attach a TaskCompleted result and
+// fire the callback channel the dispatch carried.
+func completeWorkItem(t *testing.T, wi *backend.ActivityWorkItem) {
+	t.Helper()
+	wi.Result = &protos.HistoryEvent{
+		EventId: -1,
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 3},
+		},
+	}
+	callback, ok := wi.Properties[todo.CallbackChannelProperty].(chan bool)
+	require.True(t, ok)
+	callback <- true
+}
+
 func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 	t.Parallel()
-	f, scheduled := newExecHarness()
+	f, scheduled := newExecHarness(t)
 
 	a := f.GetOrCreate("wf::3").(*activity)
 
 	ownerErr := make(chan error, 1)
 	go func() {
-		ownerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, false)
+		ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
 	}()
 
-	var wi *backend.ActivityWorkItem
-	select {
-	case wi = <-scheduled:
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for the WorkItem dispatch")
-	}
+	wi := recvWorkItem(t, scheduled)
 
 	// The owner is parked on the SDK callback (the app roundtrip). The actor
 	// lock must be free: Execute dispatches and duplicate reminder fires must
@@ -74,18 +113,10 @@ func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 	// WorkItem.
 	followerErr := make(chan error, 1)
 	go func() {
-		followerErr <- a.executeActivity(t.Context(), activityReminderName, testInvocation(), false, false)
+		followerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
 	}()
 
-	wi.Result = &protos.HistoryEvent{
-		EventId: -1,
-		EventType: &protos.HistoryEvent_TaskCompleted{
-			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 3},
-		},
-	}
-	callback, ok := wi.Properties[todo.CallbackChannelProperty].(chan bool)
-	require.True(t, ok)
-	callback <- true
+	completeWorkItem(t, wi)
 
 	select {
 	case err := <-ownerErr:
@@ -109,7 +140,7 @@ func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 
 func Test_claim(t *testing.T) {
 	t.Parallel()
-	f, _ := newExecHarness()
+	f, _ := newExecHarness(t)
 
 	a := f.GetOrCreate("wf::3").(*activity)
 
@@ -149,7 +180,7 @@ func Test_claimStaleEviction(t *testing.T) {
 	t.Parallel()
 
 	newHarness := func(held func(string, int32) bool, grace time.Duration) *activity {
-		f, _ := newExecHarness()
+		f, _ := newExecHarness(t)
 		f.executionHeld = held
 		f.staleClaimAfter = grace
 		return f.GetOrCreate("wf::3").(*activity)
