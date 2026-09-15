@@ -132,25 +132,31 @@ func TestTrackAddresses(t *testing.T) {
 	assert.ElementsMatch(t, []string{"10.0.0.1:50005", "10.0.0.2:50005"}, p.PlacementAddresses())
 	assert.Equal(t, int64(2), calls.Load())
 
-	// An oversized report is dropped whole, as it is client supplied.
+	// An oversized report is truncated, not dropped.
+	bctx, bcancel := context.WithCancel(t.Context())
 	big := make([]string, 0, maxAddressesPerReport+1)
 	for i := range maxAddressesPerReport + 1 {
 		big = append(big, fmt.Sprintf("10.1.0.%d:50005", i))
 	}
-	p.trackAddresses(t.Context(), big)
-	assert.Len(t, p.PlacementAddresses(), 2)
-	assert.Equal(t, int64(2), calls.Load())
+	p.trackAddresses(bctx, big)
+	assert.Len(t, p.PlacementAddresses(), 2+maxAddressesPerReport)
+	assert.NotContains(t, p.PlacementAddresses(), fmt.Sprintf("10.1.0.%d:50005", maxAddressesPerReport))
+	assert.Equal(t, int64(3), calls.Load())
+	bcancel()
+	assert.Eventually(t, func() bool {
+		return len(p.PlacementAddresses()) == 2 && calls.Load() == 4
+	}, time.Second*5, time.Millisecond)
 
 	// The shared address outlives the first sidecar, the other one leaves
 	// with it. AfterFunc fires asynchronously.
 	cancel2()
 	assert.Eventually(t, func() bool {
 		addrs := p.PlacementAddresses()
-		return len(addrs) == 1 && addrs[0] == "10.0.0.1:50005" && calls.Load() == 3
+		return len(addrs) == 1 && addrs[0] == "10.0.0.1:50005" && calls.Load() == 5
 	}, time.Second*5, time.Millisecond)
 
 	cancel1()
 	assert.Eventually(t, func() bool {
-		return len(p.PlacementAddresses()) == 0 && calls.Load() == 4
+		return len(p.PlacementAddresses()) == 0 && calls.Load() == 6
 	}, time.Second*5, time.Millisecond)
 }

@@ -184,8 +184,8 @@ func (p *Pool) trackAddresses(ctx context.Context, reported []string) {
 		return
 	}
 	if len(reported) > maxAddressesPerReport {
-		log.Warnf("Ignoring a report of %d placement addresses, more than the %d a sidecar is configured with", len(reported), maxAddressesPerReport)
-		return
+		log.Warnf("Probing only the first %d of %d reported placement addresses", maxAddressesPerReport, len(reported))
+		reported = reported[:maxAddressesPerReport]
 	}
 
 	addrs := make([]string, 0, len(reported))

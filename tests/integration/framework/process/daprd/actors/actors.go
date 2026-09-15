@@ -73,7 +73,7 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	// Tests which pick a topology, or drive the placement service, keep
 	// their choice.
 	if SchedulerPlacementFromEnv() &&
-		!opts.placementService && opts.placement == nil && !opts.schedulerPlacement {
+		!opts.placementService && opts.placement == nil && opts.scheduler == nil && !opts.schedulerPlacement {
 		opts.schedulerPlacement = true
 	}
 

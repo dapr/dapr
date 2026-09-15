@@ -42,12 +42,15 @@ func (h *harnessoptout) Setup(t *testing.T) []framework.Option {
 		workflow.WithMTLS(t),
 		workflow.WithSigning(false),
 	)
-	h.joiner = daprd.New(t, append([]daprd.Option{
+	dopts := []daprd.Option{
 		daprd.WithAppID(h.workflow.Dapr().AppID()),
 		daprd.WithResourceFiles(h.workflow.DB().GetComponent(t)),
-		daprd.WithPlacementAddresses(h.workflow.Placement().Address()),
 		daprd.WithSchedulerAddresses(h.workflow.Scheduler().Address()),
-	}, h.workflow.JoinOptions(t)...)...)
+	}
+	if h.workflow.HasPlacement() {
+		dopts = append(dopts, daprd.WithPlacementAddresses(h.workflow.Placement().Address()))
+	}
+	h.joiner = daprd.New(t, append(dopts, h.workflow.JoinOptions(t)...)...)
 	return []framework.Option{
 		framework.WithProcesses(h.workflow, h.joiner),
 	}

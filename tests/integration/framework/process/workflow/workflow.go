@@ -468,14 +468,14 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
+func (w *Workflow) ClusteredDeployment() bool {
+	return w.clustered
+}
+
 // SchedulerPlacement reports whether the scheduler serves actor placement
 // for this harness, in which case Placement returns nil.
 func (w *Workflow) SchedulerPlacement() bool {
 	return w.schedulerPlacement
-}
-
-func (w *Workflow) ClusteredDeployment() bool {
-	return w.clustered
 }
 
 // FastPath reports whether every daprd in this workflow runs with the

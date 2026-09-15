@@ -32,8 +32,11 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/status"
 
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -297,12 +300,23 @@ func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spi
 	for {
 		state := conn.GetState()
 		if state == connectivity.Ready {
-			return true
+			break
 		}
 		if !conn.WaitForStateChange(dctx, state) {
 			return false
 		}
 	}
+
+	// A reachable server must also speak the placement protocol. Closing
+	// the stream before any report registers nothing.
+	stream, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(dctx)
+	if err != nil {
+		return status.Code(err) != codes.Unimplemented
+	}
+	//nolint:errcheck
+	stream.CloseSend()
+	_, err = stream.Recv()
+	return status.Code(err) != codes.Unimplemented
 }
 
 // SetPlacementAddresses registers the source of the placement addresses the

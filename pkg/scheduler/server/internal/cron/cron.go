@@ -184,10 +184,6 @@ func (c *cron) Run(ctx context.Context) error {
 	var hoff handoff.Interface
 	if c.handoff != nil {
 		hoff = c.handoff
-		c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
-		c.handoff.SetOnChange(func() {
-			leaderLoop.Enqueue(nil)
-		})
 	}
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
@@ -206,6 +202,15 @@ func (c *cron) Run(ctx context.Context) error {
 		placement:       c.placement,
 		handoff:         hoff,
 	})
+
+	// The handoff is already running: its callbacks register only once the
+	// loop they enqueue to exists.
+	if c.handoff != nil {
+		c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
+		c.handoff.SetOnChange(func() {
+			leaderLoop.Enqueue(nil)
+		})
+	}
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,

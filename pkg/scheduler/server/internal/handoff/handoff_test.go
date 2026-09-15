@@ -15,10 +15,16 @@ package handoff
 
 import (
 	"context"
+	"net"
 	"testing"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 func TestKubernetesPresence(t *testing.T) {
@@ -172,4 +178,40 @@ func TestOnChange(t *testing.T) {
 	h.SetKubernetesPresence(false)
 	h.SetLocalCapabilities(true, false)
 	assert.Equal(t, 3, fired, "an unchanged presence does not fire")
+}
+
+func TestProbeAddressRequiresPlacementProtocol(t *testing.T) {
+	t.Parallel()
+
+	newServer := func(t *testing.T, placement bool) string {
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		srv := grpc.NewServer()
+		if placement {
+			v1pb.RegisterPlacementServer(srv, &fakePlacementServer{})
+		}
+		go srv.Serve(lis)
+		t.Cleanup(srv.Stop)
+		return lis.Addr().String()
+	}
+
+	h := New(Options{Security: fake.New()})
+	id, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "dapr-placement")
+	require.NoError(t, err)
+
+	assert.True(t, h.probeAddress(t.Context(), newServer(t, true), id))
+	assert.False(t, h.probeAddress(t.Context(), newServer(t, false), id),
+		"a gRPC server which does not speak the placement protocol is not a placement service")
+}
+
+type fakePlacementServer struct {
+	v1pb.UnimplementedPlacementServer
+}
+
+func (f *fakePlacementServer) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) error {
+	for {
+		if _, err := stream.Recv(); err != nil {
+			return nil
+		}
+	}
 }
