@@ -235,9 +235,7 @@ func (a *Actors) PlacementTables(t *testing.T, ctx context.Context) *placement.T
 	}
 
 	state, err := a.schedulerTables(ctx)
-	if err != nil {
-		return new(placement.TableState)
-	}
+	require.NoError(t, err)
 	return state
 }
 
