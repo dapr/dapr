@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync/atomic"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -219,4 +220,18 @@ func (f *fakePlacementServer) ReportDaprStatus(stream v1pb.Placement_ReportDaprS
 			return err
 		}
 	}
+}
+
+func TestReadyFiresOnChange(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{Security: fake.New()})
+	var fired atomic.Int64
+	h.SetOnChange(func() { fired.Add(1) })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.Error(t, h.Run(ctx))
+	assert.True(t, h.Ready())
+	assert.Positive(t, fired.Load())
 }

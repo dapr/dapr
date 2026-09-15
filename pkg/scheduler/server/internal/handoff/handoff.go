@@ -123,6 +123,7 @@ func (h *Handoff) Run(ctx context.Context) error {
 
 	h.refreshDetection(ctx)
 	h.completeReady()
+	h.fireOnChange()
 
 	for {
 		select {
