@@ -540,7 +540,10 @@ func (w *Workflow) HasPlacement() bool {
 // Only successive values compare, the units differ per authority.
 func (w *Workflow) PlacementVersion(t *testing.T, ctx context.Context) uint64 {
 	if w.place != nil {
-		return w.place.PlacementTables(t, ctx).Tables["default"].Version
+		if table, ok := w.place.PlacementTables(t, ctx).Tables["default"]; ok {
+			return table.Version
+		}
+		return 0
 	}
 	var disseminations float64
 	for k, v := range w.sched.Metrics(t, ctx).All() {
