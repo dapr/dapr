@@ -136,6 +136,10 @@ spec:
         env:
         - name: DAPR_TRUST_ANCHORS_FILE
           value: /var/run/secrets/dapr.io/tls/ca.crt
+        - name: DAPR_TRUST_ANCHORS_CONFIGMAP_NAME
+          value: {{ .Values.global.trustDistribution.configMapName | toYaml }}
+        - name: DAPR_TRUST_DISTRIBUTION_ENABLED
+          value: {{ if or .Values.global.rbac.namespaced (not .Values.global.trustDistribution.enabled) }}"false"{{ else }}"true"{{ end }}
         - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
           value: {{ .Values.global.mtls.controlPlaneTrustDomain | toYaml }}
         - name: DAPR_SENTRY_ADDRESS

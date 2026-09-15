@@ -26,6 +26,13 @@ global:
   tolerations: []
   rbac:
     namespaced: false
+  # Distribute the trust anchors as a ConfigMap into every namespace so daprd
+  # sidecars hot reload trust anchor changes from a mounted file. Forced off
+  # when rbac.namespaced is true (needs cluster wide namespace and configmap
+  # permissions).
+  trustDistribution:
+    enabled: true
+    configMapName: dapr-root-ca.crt
   ha:
     enabled: false
     topologyKey: "topology.kubernetes.io/zone"

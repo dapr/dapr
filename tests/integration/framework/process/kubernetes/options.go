@@ -15,9 +15,11 @@ package kubernetes
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -27,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer/protobuf"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -166,6 +169,94 @@ func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency
 
 func WithConfigMapGet(t *testing.T, configmap *corev1.ConfigMap) Option {
 	return handleGetResource(t, "/api/v1", "configmaps", configmap.Namespace, configmap.Name, configmap)
+}
+
+// WithClusterConfigMapStore serves the cluster wide ConfigMap list/watch from
+// the given store, and supports namespaced ConfigMap GET, CREATE and UPDATE
+// against it. Watchers observe store mutations through the periodic watch
+// rotation re-list.
+func WithClusterConfigMapStore(t *testing.T, store *store.Store) Option {
+	return func(o *options) {
+		handleClusterListResourceFromStore(t, "/api/v1/configmaps", store)(o)
+
+		writeObj := func(w http.ResponseWriter, code int, obj any) {
+			objB, err := json.Marshal(obj)
+			if err != nil {
+				t.Errorf("failed to marshal object: %s", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(code)
+			w.Write(objB)
+		}
+
+		notFound := func(w http.ResponseWriter) {
+			writeObj(w, http.StatusNotFound, &metav1.Status{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
+				Status:   metav1.StatusFailure,
+				Reason:   metav1.StatusReasonNotFound,
+				Code:     http.StatusNotFound,
+			})
+		}
+
+		// controller-runtime clients encode built-in types as Kubernetes
+		// protobuf, so negotiate the request body content type.
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		protoSerializer := protobuf.NewSerializer(scheme, scheme)
+
+		decodeConfigMap := func(w http.ResponseWriter, r *http.Request) *corev1.ConfigMap {
+			body, err := io.ReadAll(r.Body)
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusBadRequest)
+				return nil
+			}
+
+			var cm corev1.ConfigMap
+			if strings.Contains(r.Header.Get("Content-Type"), "protobuf") {
+				_, _, err = protoSerializer.Decode(body, nil, &cm)
+			} else {
+				err = json.Unmarshal(body, &cm)
+			}
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusBadRequest)
+				return nil
+			}
+
+			cm.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"}
+			cm.Namespace = r.PathValue("namespace")
+			return &cm
+		}
+
+		o.handlers["GET /api/v1/namespaces/{namespace}/configmaps/{name}"] = func(w http.ResponseWriter, r *http.Request) {
+			obj, ok := store.Get(r.PathValue("namespace"), r.PathValue("name"))
+			if !ok {
+				notFound(w)
+				return
+			}
+			writeObj(w, http.StatusOK, obj)
+		}
+
+		o.handlers["POST /api/v1/namespaces/{namespace}/configmaps"] = func(w http.ResponseWriter, r *http.Request) {
+			cm := decodeConfigMap(w, r)
+			if cm == nil {
+				return
+			}
+			store.Add(cm)
+			writeObj(w, http.StatusCreated, cm)
+		}
+
+		o.handlers["PUT /api/v1/namespaces/{namespace}/configmaps/{name}"] = func(w http.ResponseWriter, r *http.Request) {
+			cm := decodeConfigMap(w, r)
+			if cm == nil {
+				return
+			}
+			cm.Name = r.PathValue("name")
+			store.Add(cm)
+			writeObj(w, http.StatusOK, cm)
+		}
+	}
 }
 
 func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentryPort int) Option {

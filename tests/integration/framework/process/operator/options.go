@@ -33,6 +33,7 @@ type options struct {
 	disableLeaderElection bool
 	trustAnchorsFile      *string
 	cacheSyncPeriod       *time.Duration
+	trustDistribution     bool
 }
 
 // Option is a function that configures the process.
@@ -103,5 +104,14 @@ func WithNamespace(namespace string) Option {
 func WithCacheSyncPeriod(d time.Duration) Option {
 	return func(o *options) {
 		o.cacheSyncPeriod = &d
+	}
+}
+
+// WithTrustDistribution enables the trust distribution controller, which
+// requires the mock Kubernetes API to serve cluster wide Namespace and
+// ConfigMap list/watch. Disabled by default in the framework.
+func WithTrustDistribution(enabled bool) Option {
+	return func(o *options) {
+		o.trustDistribution = enabled
 	}
 }

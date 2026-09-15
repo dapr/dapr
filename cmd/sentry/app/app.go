@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dapr/dapr/cmd/sentry/options"
@@ -77,6 +78,10 @@ func Run() {
 		log.Debugf("Using user provided issuer key path: %s", opts.X509.IssuerKeyFilename)
 		issuerKeyPath = opts.X509.IssuerKeyFilename
 	}
+	// Pending issuer pair written during CA renewal, kept beside the active
+	// pair (same directories, so the filesystem watch set is unchanged).
+	nextIssuerCertPath := nextFilename(issuerCertPath)
+	nextIssuerKeyPath := nextFilename(issuerKeyPath)
 	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.RootCAFilename)
 	if filepath.IsAbs(opts.X509.RootCAFilename) {
 		log.Debugf("Using user provided root cert path: %s", opts.X509.RootCAFilename)
@@ -130,7 +135,13 @@ func Run() {
 
 	cfg.IssuerCertPath = issuerCertPath
 	cfg.IssuerKeyPath = issuerKeyPath
+	cfg.NextIssuerCertPath = nextIssuerCertPath
+	cfg.NextIssuerKeyPath = nextIssuerKeyPath
 	cfg.RootCertPath = rootCertPath
+	cfg.CATTL = opts.X509.CATTL
+	cfg.CARenewalEnabled = opts.X509.CARenewalEnabled
+	cfg.CARenewalThreshold = opts.X509.CARenewalThreshold
+	cfg.TrustAnchorPropagationGrace = opts.X509.TrustAnchorPropagationGrace
 	cfg.JWT.SigningKeyPath = jwtKeyPath
 	cfg.JWT.Enabled = opts.JWT.Enabled
 	cfg.JWT.JWKSPath = jwksPath
@@ -249,4 +260,12 @@ func Run() {
 		log.Fatal(err)
 	}
 	log.Info("Sentry shut down gracefully")
+}
+
+// nextFilename derives the path of a pending "next" credential from its
+// active counterpart by inserting ".next" before the file extension, e.g.
+// "issuer.crt" becomes "issuer.next.crt".
+func nextFilename(path string) string {
+	ext := filepath.Ext(path)
+	return strings.TrimSuffix(path, ext) + ".next" + ext
 }

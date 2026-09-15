@@ -51,6 +51,8 @@ type SidecarConfig struct {
 	SidecarDropALLCapabilities  bool
 	DisableTokenVolume          bool
 	CurrentTrustAnchors         []byte
+	TrustAnchorsConfigMapName   string
+	TrustDistributionEnabled    bool `default:"true"`
 	ControlPlaneNamespace       string
 	ControlPlaneTrustDomain     string
 	KubeClusterDomain           string

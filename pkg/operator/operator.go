@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/dapr/pkg/operator/trustdistribution"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
@@ -76,6 +77,8 @@ type Options struct {
 	ArgoRolloutServiceReconcilerEnabled bool
 	WatchdogCanPatchPodLabels           bool
 	TrustAnchorsFile                    string
+	TrustDistributionEnabled            bool
+	TrustAnchorsConfigMapName           string
 	APIPort                             int
 	APIListenAddress                    string
 	WebhookServerPort                   int
@@ -169,7 +172,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		},
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector, cacheSyncPeriod),
+		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector, opts.TrustAnchorsConfigMapName, cacheSyncPeriod),
 		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
@@ -219,6 +222,23 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		if err := daprHandler.Init(ctx); err != nil {
 			return nil, fmt.Errorf("unable to initialize handler: %w", err)
 		}
+	}
+
+	if opts.TrustDistributionEnabled {
+		trustDist := trustdistribution.New(trustdistribution.Options{
+			Client:        mgrClient,
+			Reader:        mgr.GetAPIReader(),
+			Security:      secProvider,
+			ConfigMapName: opts.TrustAnchorsConfigMapName,
+		})
+		if err := trustDist.SetupWithManager(mgr); err != nil {
+			return nil, fmt.Errorf("unable to setup trust distribution controller: %w", err)
+		}
+		if err := mgr.Add(trustDist); err != nil {
+			return nil, fmt.Errorf("unable to add trust distribution runner: %w", err)
+		}
+	} else {
+		log.Info("Trust distribution is not enabled")
 	}
 
 	return &operator{

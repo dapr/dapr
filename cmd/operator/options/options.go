@@ -50,6 +50,8 @@ type Options struct {
 	watchdogIntervalStr                string
 	WatchdogCanPatchPodLabels          bool
 	TrustAnchorsFile                   string
+	TrustDistributionEnabled           bool
+	TrustAnchorsConfigMapName          string
 	Logger                             logger.Options
 	Metrics                            *metrics.FlagOptions
 	APIPort                            int
@@ -81,6 +83,8 @@ func New() *Options {
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	flag.BoolVar(&opts.TrustDistributionEnabled, "trust-distribution", true, "Distribute the trust anchors as a ConfigMap into every namespace. Requires cluster wide namespace and configmap permissions")
+	flag.StringVar(&opts.TrustAnchorsConfigMapName, "trust-anchors-configmap-name", securityConsts.TrustAnchorsConfigMapName, "Name of the per-namespace ConfigMap holding the distributed trust anchors")
 
 	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
 	flag.StringVar(&opts.APIListenAddress, "listen-address", "", "The listening address for the operator API server")
