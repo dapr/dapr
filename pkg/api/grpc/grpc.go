@@ -176,6 +176,30 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
+func baggageFromContext(ctx context.Context) string {
+	baggage := otelbaggage.FromContext(ctx)
+	if baggage.Len() > 0 {
+		return baggage.String()
+	}
+
+	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	baggageValues := md.Get(diagConsts.BaggageHeader)
+	if len(baggageValues) == 0 {
+		return ""
+	}
+
+	baggageString := strings.Join(baggageValues, ",")
+	_, err := otelbaggage.Parse(baggageString)
+	if err != nil {
+		return ""
+	}
+	return baggageString
+}
+
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 	if validationErr != nil {
@@ -191,7 +215,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 	span := diagUtils.SpanFromContext(ctx)
 	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-	baggage := otelbaggage.FromContext(ctx).String()
+	baggage := baggageFromContext(ctx)
 	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -449,7 +473,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
-				Baggage:         otelbaggage.FromContext(ctx).String(),
+				Baggage:         baggageFromContext(ctx),
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -475,13 +499,13 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 		}
 	}
 	if rawPayload {
-		baggage := otelbaggage.FromContext(ctx)
-		if baggage.Len() > 0 {
+		baggage := baggageFromContext(ctx)
+		if baggage != "" {
 			for i := range entries {
 				if entries[i].Metadata == nil {
 					entries[i].Metadata = map[string]string{}
 				}
-				entries[i].Metadata[diagConsts.BaggageHeader] = baggage.String()
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
 			}
 		}
 	}
