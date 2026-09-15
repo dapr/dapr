@@ -57,12 +57,15 @@ func (d *driveretry) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
 	newDaprd := func() *daprd.Daprd {
-		return daprd.New(t, append([]daprd.Option{
+		dopts := []daprd.Option{
 			daprd.WithAppID(d.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
-			daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(d.workflow.Scheduler().Address()),
-		}, append(fp, d.workflow.JoinOptions(t)...)...)...)
+		}
+		if d.workflow.HasPlacement() {
+			dopts = append(dopts, daprd.WithPlacementAddresses(d.workflow.Placement().Address()))
+		}
+		return daprd.New(t, append(dopts, append(fp, d.workflow.JoinOptions(t)...)...)...)
 	}
 	for i := range d.joiners {
 		d.joiners[i] = newDaprd()
@@ -130,7 +133,7 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 	start(batch)
 
 	running := []*daprd.Daprd{d.workflow.Dapr()}
-	version := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	version := d.workflow.PlacementVersion(t, ctx)
 	join := func(j *daprd.Daprd) {
 		t.Helper()
 		j.Run(t, ctx)
@@ -144,14 +147,10 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 		joinerClient := client.NewTaskHubGrpcClient(j.GRPCConn(t, ctx), backend.DefaultLogger())
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 
-		version++
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-			if !assert.NotNil(c, table) {
-				return
-			}
-			assert.GreaterOrEqual(c, table.Version, version)
+			assert.Greater(c, d.workflow.PlacementVersion(t, ctx), version)
 		}, time.Second*15, time.Millisecond*10)
+		version = d.workflow.PlacementVersion(t, ctx)
 	}
 
 	for _, joiner := range d.joiners {
