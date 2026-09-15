@@ -352,6 +352,15 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
 	default:
 	}
+
+	pool.capable = false
+	place.hasStreams = false
+	require.NoError(t, l.Handle(t.Context(),
+		[]*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}))
+	hosts = <-ch
+	require.True(t, hosts[0].GetLeader(),
+		"an advertised leader must survive losing every capability signal")
+	require.True(t, l.advertised)
 }
 
 // TestLeadershipMalformedTableNotReplayed asserts a table which fails to
