@@ -47,7 +47,6 @@ func (tc *tablecorrect) Setup(t *testing.T) []framework.Option {
 	)
 
 	tc.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("typeA", "typeB"),
 		dactors.WithPlacement(tc.place),
 	)

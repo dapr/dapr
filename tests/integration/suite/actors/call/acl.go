@@ -47,7 +47,6 @@ type actorACL struct {
 
 func (a *actorACL) Setup(t *testing.T) []framework.Option {
 	a.app = actors.New(t,
-		actors.WithPlacementService(),
 		actors.WithActorTypes("mytype"),
 		actors.WithActorTypeHandler("mytype", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			w.Write([]byte("actor:" + r.URL.Path))

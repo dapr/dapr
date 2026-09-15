@@ -48,7 +48,6 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
 	)
 
 	w.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("myactor"),
 		dactors.WithPlacement(w.place),
 		dactors.WithActorTypeHandler("myactor", func(w http.ResponseWriter, r *http.Request) {

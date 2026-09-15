@@ -47,7 +47,6 @@ func (d *disseminationcluster) Setup(t *testing.T) []framework.Option {
 	d.appID = uuid.New().String()
 
 	d.workflow = workflow.New(t,
-		workflow.WithPlacementService(),
 		workflow.WithClusteredDeployment(true),
 		workflow.WithPlacementOptions(placement.WithDisseminateTimeout(time.Second*7)),
 		workflow.WithDaprdOptions(0,

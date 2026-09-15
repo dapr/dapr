@@ -36,7 +36,6 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.actors = dactors.New(t,
-		dactors.WithPlacementService(),
 		dactors.WithActorTypes("mytype"),
 	)
 
