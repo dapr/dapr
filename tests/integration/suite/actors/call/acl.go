@@ -71,7 +71,9 @@ func (a *actorACL) Setup(t *testing.T) []framework.Option {
 
 func (a *actorACL) Run(t *testing.T, ctx context.Context) {
 	a.app.WaitUntilRunning(t, ctx)
-	a.app.Placement().WaitUntilRunning(t, ctx)
+	if place := a.app.Placement(); place != nil {
+		place.WaitUntilRunning(t, ctx)
+	}
 
 	grpcClient := a.app.GRPCClient(t, ctx)
 	httpClient := client.HTTP(t)

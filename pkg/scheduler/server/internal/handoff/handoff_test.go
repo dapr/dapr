@@ -15,6 +15,8 @@ package handoff
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net"
 	"testing"
 
@@ -211,7 +213,10 @@ type fakePlacementServer struct {
 func (f *fakePlacementServer) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) error {
 	for {
 		if _, err := stream.Recv(); err != nil {
-			return nil
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
 		}
 	}
 }

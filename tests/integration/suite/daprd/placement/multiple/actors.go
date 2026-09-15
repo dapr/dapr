@@ -90,7 +90,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	var version1 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
@@ -113,7 +113,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	}
 	var version2 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
@@ -128,7 +128,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		"def",
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
