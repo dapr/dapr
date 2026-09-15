@@ -89,6 +89,19 @@ func (s *triggerstall) Setup(t *testing.T) []framework.Option {
 	}
 }
 
+// diagnosticCtx bounds the leadership read that reports why this test
+// failed. The test context is stripped of its cancellation because it may
+// already be done on that path, and bounded because the quorum this read
+// needs is exactly what has just been lost: the etcd client retries a read
+// with no deadline forever, and a test that never returns takes every test
+// after it down with the package.
+func diagnosticCtx(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*10)
+	t.Cleanup(cancel)
+	return dctx
+}
+
 func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 	s.scheduler1.WaitUntilRunning(t, ctx)
 	s.scheduler2.WaitUntilRunning(t, ctx)
@@ -193,11 +206,11 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "all watch streams died; no trigger can ever arrive", "%v", errs)
 	case <-time.After(3 * time.Minute):
 		t.Logf("Leadership keys: %v",
-			s.scheduler1.ListAllKeys(t, context.Background(), "dapr/leadership"))
+			s.scheduler1.ListAllKeys(t, diagnosticCtx(t, ctx), "dapr/leadership"))
 		require.Fail(t, "No triggers after quorum change within bound")
 	case <-ctx.Done():
 		t.Logf("Leadership keys: %v",
-			s.scheduler1.ListAllKeys(t, context.Background(), "dapr/leadership"))
+			s.scheduler1.ListAllKeys(t, diagnosticCtx(t, ctx), "dapr/leadership"))
 		require.Fail(t, "No triggers after quorum change before context deadline")
 	}
 
