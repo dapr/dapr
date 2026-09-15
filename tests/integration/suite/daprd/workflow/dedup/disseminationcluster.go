@@ -101,11 +101,11 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 	if d.workflow.HasPlacement() {
 		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(d.workflow.Placement().Address()))
 	}
-	extraOpts := append(extraDopts, d.workflow.JoinOptions(t)...)
+	extraDopts = append(extraDopts, d.workflow.JoinOptions(t)...)
 
 	for range 2 {
 		startVersion := d.workflow.PlacementVersion(t, ctx)
-		extra := daprd.New(t, extraOpts...)
+		extra := daprd.New(t, extraDopts...)
 		extra.Run(t, ctx)
 		extra.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { extra.Cleanup(t) })
