@@ -20,9 +20,6 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 )
 
-// pubsub.solace.amqp is superseded by pubsub.amqp, which speaks the same
-// protocol without the Solace addressing defaults. It stays registered so that
-// existing configurations keep loading, and it is documented as deprecated.
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(amqp.NewSolaceAMQPPubsub, "solace.amqp")
+	pubsubLoader.DefaultRegistry.RegisterComponent(amqp.NewAMQPPubsub, "amqp")
 }
