@@ -22,7 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
@@ -342,6 +344,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if rs.GetContinuedAsNew() {
 		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
 		state.Generation += 1
+		o.pinGenerationExecutionID(state, rs)
 		// The engine carries the propagation chain across CAN by updating
 		// wi.IncomingHistory. Persist any change so the new generation sees
 		// the chain on its next run.
@@ -1093,4 +1096,33 @@ func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfeng
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 	}
 	return todo.RunCompletedTrue, nil
+}
+
+// pinGenerationExecutionID gives the generation the engine just started a
+// deterministic execution ID. The engine mints a random one per execution of
+// the turn, and a turn is at-least-once: it dispatches the new generation's
+// child creations before it commits, so a commit that fails and a reminder
+// that re-runs the turn mint a second ID for the same generation. The children
+// then reject the retried create as a collision with another execution of the
+// parent, and the parent fails the task. Derived from the previous
+// generation's ID and the new generation number, the re-run mints the same ID,
+// and the retry becomes the duplicate the create path already ignores. A purge
+// and recreate starts a new chain, since its first generation carries a fresh
+// ID.
+func (o *orchestrator) pinGenerationExecutionID(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
+	seed := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue()
+	if seed == "" {
+		seed = o.actorID
+	}
+	id := uuid.NewSHA1(uuid.NameSpaceOID, fmt.Appendf(nil, "%s/%d", seed, state.Generation)).String()
+	for _, e := range rs.GetNewEvents() {
+		if es := e.GetExecutionStarted(); es.GetWorkflowInstance() != nil {
+			es.WorkflowInstance.ExecutionId = wrapperspb.String(id)
+		}
+	}
+	for _, msg := range rs.GetPendingMessages() {
+		if pi := msg.GetHistoryEvent().GetExecutionStarted().GetParentInstance(); pi.GetWorkflowInstance() != nil {
+			pi.WorkflowInstance.ExecutionId = wrapperspb.String(id)
+		}
+	}
 }

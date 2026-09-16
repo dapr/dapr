@@ -160,6 +160,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
+		sqlite.WithMetadata("busyTimeout", "10s"),
 	)
 
 	var sen *sentry.Sentry
