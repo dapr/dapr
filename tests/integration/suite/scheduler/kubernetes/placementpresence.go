@@ -26,8 +26,10 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -46,6 +48,7 @@ type placementpresence struct {
 	scheduler *scheduler.Scheduler
 	kubeapi   *kubernetes.Kubernetes
 	pods      *store.Store
+	log       *logline.LogLine
 }
 
 func (p *placementpresence) Setup(t *testing.T) []framework.Option {
@@ -77,16 +80,20 @@ func (p *placementpresence) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
+	p.log = logline.New(t, logline.WithStdoutLineContains(
+		"actor placement stays with the placement service and this scheduler withholds its placement leader",
+	))
 	p.scheduler = scheduler.New(t,
 		scheduler.WithSentry(p.sentry),
 		scheduler.WithKubeconfig(p.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
 		scheduler.WithID("dapr-scheduler-server-0"),
 		scheduler.WithPlacementEnabled(true),
+		scheduler.WithExecOptions(exec.WithStdout(p.log.Stdout())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(p.sentry, p.kubeapi, p.scheduler),
+		framework.WithProcesses(p.log, p.sentry, p.kubeapi, p.scheduler),
 	}
 }
 
@@ -136,4 +143,6 @@ func (p *placementpresence) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
 	}, time.Second*30, time.Millisecond*100)
+
+	p.log.EventuallyFoundAll(t)
 }

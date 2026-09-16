@@ -45,7 +45,7 @@ type presence struct {
 
 func (p *presence) Setup(t *testing.T) []framework.Option {
 	p.log = logline.New(t, logline.WithStdoutLineContains(
-		"A placement service is present and is the actor placement authority",
+		"actor placement stays with the placement service and this scheduler withholds its placement leader",
 	))
 	p.sched = scheduler.New(t,
 		scheduler.WithPlacementEnabled(true),

@@ -163,7 +163,7 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 
 	if placementPresent && !h.placementPresentLogged {
 		h.placementPresentLogged = true
-		log.Info("A placement service is present and is the actor placement authority, so the scheduler placement leader is withheld. Undeploying the placement service completes the cutover.")
+		log.Info("A placement service is deployed, so actor placement stays with the placement service and this scheduler withholds its placement leader. Undeploying the placement service moves actor placement to the scheduler.")
 	} else if !placementPresent {
 		h.placementPresentLogged = false
 	}
