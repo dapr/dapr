@@ -133,9 +133,9 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 	start(batch)
 
 	running := []*daprd.Daprd{d.workflow.Dapr()}
-	version := d.workflow.PlacementVersion(t, ctx)
 	join := func(j *daprd.Daprd) {
 		t.Helper()
+		version := d.workflow.PlacementVersion(t, ctx)
 		j.Run(t, ctx)
 		t.Cleanup(func() { j.Cleanup(t) })
 		j.WaitUntilRunning(t, ctx)
@@ -150,7 +150,6 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Greater(c, d.workflow.PlacementVersion(t, ctx), version)
 		}, time.Second*15, time.Millisecond*10)
-		version = d.workflow.PlacementVersion(t, ctx)
 	}
 
 	for _, joiner := range d.joiners {
