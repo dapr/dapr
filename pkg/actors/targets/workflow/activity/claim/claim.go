@@ -91,9 +91,9 @@ type Options struct {
 type Guards struct {
 	opts Options
 
+	// active dedups the guards: one heartbeat goroutine per task key.
 	lock   sync.Mutex
 	active map[string]struct{}
-	wg     sync.WaitGroup
 
 	// observed tracks, per actor, when this reader first saw the record's
 	// current heartbeat value; see observeStale.
