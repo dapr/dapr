@@ -344,7 +344,7 @@ jobs:
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               https://api.github.com/repos/dapr/dapr/releases/latest \
-              | jq -r '.tag_name // empty')"
+              | jq -r '.tag_name // empty')" || tag=""
             if [ -n "$tag" ]; then
               break
             fi
