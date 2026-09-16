@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -46,7 +47,11 @@ type strandedactivity struct {
 }
 
 func (s *strandedactivity) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.NewClustered(t, 2)
+	// Under the fast path the disconnect can cancel the local drive while the
+	// execution claim is still live, and that path skips the durable-reminder
+	// escalation (activity/drive.go), leaving the orchestrator janitor as the
+	// only re-driver. Its default 20s period exceeds the bound below.
+	s.workflow = workflow.NewClustered(t, 2, daprd.WithWorkflowJanitorPeriod(t, 2*time.Second))
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),
 	}
