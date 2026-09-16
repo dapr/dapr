@@ -49,6 +49,7 @@ const BackendEtcd = etcdcron.BackendEtcd
 type PlacementLeader interface {
 	SetLeader(leader bool)
 	HasPlacementStreams() bool
+	SetOnStreamsChange(fn func())
 }
 
 type Options struct {
@@ -203,6 +204,14 @@ func (c *cron) Run(ctx context.Context) error {
 		handoff:         hoff,
 	})
 
+	// A placement stream connecting or closing recomputes the gate and the
+	// advertisement latch right away, not on the next unrelated event.
+	if c.placement != nil {
+		c.placement.SetOnStreamsChange(func() {
+			leaderLoop.Enqueue(nil)
+		})
+	}
+
 	// The handoff is already running: its callbacks register only once the
 	// loop they enqueue to exists.
 	if c.handoff != nil {
@@ -210,6 +219,9 @@ func (c *cron) Run(ctx context.Context) error {
 		c.handoff.SetOnChange(func() {
 			leaderLoop.Enqueue(nil)
 		})
+		// The handoff may have completed its first detection before the
+		// callback existed, so pick up whatever state it already reached.
+		leaderLoop.Enqueue(nil)
 	}
 
 	return concurrency.NewRunnerManager(

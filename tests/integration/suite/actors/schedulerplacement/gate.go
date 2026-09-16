@@ -28,7 +28,9 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -46,6 +48,7 @@ type gate struct {
 	daprd *daprd.Daprd
 	sched *scheduler.Scheduler
 	place *placement.Placement
+	log   *logline.LogLine
 
 	invoked atomic.Int64
 }
@@ -64,7 +67,13 @@ func (g *gate) Setup(t *testing.T) []framework.Option {
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	g.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
+	g.log = logline.New(t, logline.WithStdoutLineContains(
+		"A sidecar running an older Dapr version is connected while actor placement is served by the scheduler",
+	))
+	g.sched = scheduler.New(t,
+		scheduler.WithPlacementEnabled(true),
+		scheduler.WithExecOptions(exec.WithStdout(g.log.Stdout())),
+	)
 	g.place = placement.New(t)
 
 	g.daprd = daprd.New(t,
@@ -77,7 +86,7 @@ func (g *gate) Setup(t *testing.T) []framework.Option {
 	// daprd is run manually so the incapable sidecar's stream is established
 	// first
 	return []framework.Option{
-		framework.WithProcesses(g.sched, g.place, srv),
+		framework.WithProcesses(g.log, g.sched, g.place, srv),
 	}
 }
 
@@ -246,4 +255,6 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 		assert.NoError(c, ierr)
 	}, time.Second*10, time.Millisecond*10)
 	assert.Greater(t, g.invoked.Load(), invokedAfterCutover)
+
+	g.log.EventuallyFoundAll(t)
 }

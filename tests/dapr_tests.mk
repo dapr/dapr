@@ -354,6 +354,9 @@ test-deps:
 #   exact delivery counts
 # Names must be plain directory names: they are joined into a grep -E
 # alternation in test-e2e-all, so regex metacharacters would mis-match.
+# placementcutover is excluded from both passes there too: it moves the
+# cluster's placement authority, so only the scheduler placement tail runs
+# it, and its tests fatal when run without DAPR_E2E_PLACEMENT_CUTOVER.
 DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
 
 # Compile the e2e test binaries without running them, so that a later
@@ -374,7 +377,7 @@ test-e2e-all: check-e2e-env test-deps
 	# Note: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
 	ret=0; \
-	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) | tr ' ' '|'))$$") || ret=$$?; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) placementcutover | tr ' ' '|'))$$") || ret=$$?; \
 	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.xml --format standard-quiet -- -timeout 20m -p 1 -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(DAPR_E2E_SERIAL_PACKAGES)) || ret=$$?; \
 	exit $$ret
      ifneq ($(DAPR_E2E_SKIP_SCHEDULER_PLACEMENT),true)

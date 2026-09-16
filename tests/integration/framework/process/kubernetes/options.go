@@ -124,6 +124,10 @@ func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option
 	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
 }
 
+func WithNamespacedPodListFromStore(t *testing.T, ns string, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/namespaces/"+ns+"/pods", store)
+}
+
 func WithClusterServiceList(t *testing.T, services *corev1.ServiceList) Option {
 	return handleClusterListResource(t, "/api/v1/services", services)
 }

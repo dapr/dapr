@@ -23,6 +23,8 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -38,14 +40,21 @@ func init() {
 type presence struct {
 	sched *scheduler.Scheduler
 	place *placement.Placement
+	log   *logline.LogLine
 }
 
 func (p *presence) Setup(t *testing.T) []framework.Option {
-	p.sched = scheduler.New(t, scheduler.WithPlacementEnabled(true))
+	p.log = logline.New(t, logline.WithStdoutLineContains(
+		"A placement service is present and is the actor placement authority",
+	))
+	p.sched = scheduler.New(t,
+		scheduler.WithPlacementEnabled(true),
+		scheduler.WithExecOptions(exec.WithStdout(p.log.Stdout())),
+	)
 	p.place = placement.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(p.sched, p.place),
+		framework.WithProcesses(p.log, p.sched, p.place),
 	}
 }
 
@@ -105,4 +114,6 @@ func (p *presence) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
 	}, time.Second*30, time.Millisecond*50)
+
+	p.log.EventuallyFoundAll(t)
 }

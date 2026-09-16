@@ -109,23 +109,22 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		}
 		return runtimes
 	}
-	advertised := func() bool {
-		stream, err := b.cluster.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	hosts := func(n int) (leader, capable bool) {
+		stream, err := b.cluster.ClientN(t, ctx, n).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if err != nil {
-			return false
+			return false, false
 		}
 		//nolint:errcheck
 		defer stream.CloseSend()
 		resp, err := stream.Recv()
 		if err != nil {
-			return false
+			return false, false
 		}
 		for _, host := range resp.GetHosts() {
-			if host.GetLeader() {
-				return true
-			}
+			leader = leader || host.GetLeader()
+			capable = capable || host.GetSchedulerPlacementEnabled()
 		}
-		return false
+		return leader, capable
 	}
 
 	// The placement service is present, so it serves the actors and the
@@ -134,15 +133,23 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
 	}, time.Second*10, time.Millisecond*50)
-	require.False(t, advertised(),
-		"no scheduler may advertise a placement leader while the placement service is present")
+	for n := range 3 {
+		leader, capable := hosts(n)
+		require.False(t, leader,
+			"no scheduler may advertise a placement leader while the placement service is present")
+		require.False(t, capable,
+			"every scheduler must mask the capability bit while the placement service is present")
+	}
 
 	// Removing the placement service hands actor placement to the
 	// placement enabled scheduler cluster.
 	b.place.Cleanup(t)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, advertised())
-	}, time.Second*30, time.Millisecond*100)
+	for n := range 3 {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			leader, _ := hosts(n)
+			assert.True(c, leader)
+		}, time.Second*30, time.Millisecond*100)
+	}
 
 	invokedBefore := b.invoked.Load()
 	invoke()

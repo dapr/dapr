@@ -45,6 +45,11 @@ const (
 	// detection refresh spends probing in total.
 	probeConcurrency = 4
 	probeBudget      = time.Second * 5
+	// absenceConfirmations is how many consecutive sightless refreshes turn
+	// a detected placement service absent: a single one can be a probe
+	// running out of time or a placement service restarting, so it must not
+	// move the authority.
+	absenceConfirmations = 3
 )
 
 type Options struct {
@@ -74,6 +79,7 @@ type Interface interface {
 type Handoff struct {
 	dnsName    string
 	lookupHost func(context.Context, string) ([]string, error)
+	probe      func(context.Context, string, spiffeid.ID) bool
 	sec        security.Handler
 	onChange   atomic.Pointer[func()]
 
@@ -81,8 +87,10 @@ type Handoff struct {
 	// podPresent is set while the kubernetes controller's informer sees a
 	// placement pod.
 	podPresent bool
-	// detected is set while the detection sights a placement service.
+	// detected is set while the detection sights a placement service, and
+	// misses counts the consecutive sightless refreshes since.
 	detected bool
+	misses   int
 	// reqGen counts detection requests and doneGen the requests answered by
 	// a completed refresh: while they differ, a just-reported placement
 	// address is unprobed and treated as a present placement service.
@@ -107,39 +115,54 @@ type Handoff struct {
 }
 
 func New(opts Options) *Handoff {
-	return &Handoff{
+	h := &Handoff{
 		dnsName:    opts.PlacementDNSName,
 		lookupHost: net.DefaultResolver.LookupHost,
 		sec:        opts.Security,
 		ready:      make(chan struct{}),
 		detectCh:   make(chan struct{}, 1),
 	}
+	h.probe = h.probeAddress
+	return h
 }
 
 // Run drives the placement detection until the context ends.
 func (h *Handoff) Run(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
-
 	h.refreshDetection(ctx)
 	h.completeReady()
 	h.fireOnChange()
 
 	for {
+		// While an absence awaits confirmation, refresh quickly so the
+		// cutover is not delayed by a full interval per confirmation.
+		interval := time.Second * 10
+		if h.confirmingAbsence() {
+			interval = time.Second
+		}
+		timer := time.NewTimer(interval)
+
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			h.completeReady()
 			return ctx.Err()
 
-		case <-ticker.C:
+		case <-timer.C:
 			h.refreshDetection(ctx)
 
 		case <-h.detectCh:
 			// Probing right away keeps the withhold decision ahead of the
 			// first sidecar acting on the advertisement.
+			timer.Stop()
 			h.refreshDetection(ctx)
 		}
 	}
+}
+
+func (h *Handoff) confirmingAbsence() bool {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+	return h.misses > 0
 }
 
 func (h *Handoff) completeReady() {
@@ -181,9 +204,19 @@ func (h *Handoff) SetKubernetesPresence(present bool) {
 		h.advertised = false
 	}
 	h.lock.Unlock()
-	if changed {
-		h.fireOnChange()
+	if !changed {
+		return
 	}
+	if !present {
+		// The pods are gone: start confirming the DNS and probe absence now
+		// rather than on the next idle tick, so the cutover completes in a
+		// few confirmation intervals.
+		select {
+		case h.detectCh <- struct{}{}:
+		default:
+		}
+	}
+	h.fireOnChange()
 }
 
 // SetLocalCapabilities records which sidecar capabilities are connected to
@@ -204,17 +237,28 @@ func (h *Handoff) refreshDetection(ctx context.Context) {
 	gen := h.reqGen
 	h.lock.RUnlock()
 
-	resolved := h.resolveDNS(ctx)
-	probed := h.probeReportedAddresses(ctx)
+	sighted := h.resolveDNS(ctx) || h.probeReportedAddresses(ctx)
 
 	h.lock.Lock()
-	changed := h.detected != (resolved || probed) || h.doneGen != gen
-	if !h.detected && (resolved || probed) {
-		// A reappearing placement service resets the advertisement latch, so
-		// the next cutover waits for a capable sidecar again.
-		h.advertised = false
+	prev := h.detected
+	if sighted {
+		h.misses = 0
+		if !h.detected {
+			// A reappearing placement service resets the advertisement latch,
+			// so the next cutover waits for a capable sidecar again.
+			h.advertised = false
+		}
+		h.detected = true
+	} else if h.detected {
+		// A sighting flips presence immediately, absence only after
+		// consecutive confirmations.
+		h.misses++
+		if h.misses >= absenceConfirmations {
+			h.detected = false
+			h.misses = 0
+		}
 	}
-	h.detected = resolved || probed
+	changed := h.detected != prev || h.doneGen != gen
 	h.doneGen = gen
 	h.lock.Unlock()
 	if changed {
@@ -268,7 +312,7 @@ func (h *Handoff) probeReportedAddresses(ctx context.Context) bool {
 				return
 			}
 			defer func() { <-sem }()
-			if h.probeAddress(pctx, addr, placementID) {
+			if h.probe(pctx, addr, placementID) {
 				select {
 				case found <- struct{}{}:
 				default:
@@ -312,12 +356,25 @@ func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spi
 	// the stream before any report registers nothing.
 	stream, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(dctx)
 	if err != nil {
-		return status.Code(err) != codes.Unimplemented
+		return isPlacementService(err)
 	}
 	//nolint:errcheck
 	stream.CloseSend()
 	_, err = stream.Recv()
-	return status.Code(err) != codes.Unimplemented
+	return isPlacementService(err)
+}
+
+// isPlacementService reports whether the protocol check's answer marks the
+// peer as a placement service. Unimplemented is a definite no, and running out of time
+// is no answer at all, so neither is a sighting. Any other answer from an
+// identity-verified peer is.
+func isPlacementService(err error) bool {
+	switch status.Code(err) {
+	case codes.Unimplemented, codes.Canceled, codes.DeadlineExceeded:
+		return false
+	default:
+		return true
+	}
 }
 
 // SetPlacementAddresses registers the source of the placement addresses the
@@ -353,11 +410,14 @@ func (h *Handoff) LatchAdvertised() {
 
 // PlacementPresent reports whether a placement service exists: the
 // kubernetes informer sees a placement pod, the detection sights one, or a
-// detection of just-reported placement addresses is still in flight.
+// detection of just-reported placement addresses is still in flight. The
+// in-flight presumption only withholds an advertisement not yet made: a
+// sidecar reconnect re-reports its addresses, and that must not withdraw a
+// standing advertisement, only a confirmed sighting does.
 func (h *Handoff) PlacementPresent() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	return h.podPresent || h.detected || h.reqGen != h.doneGen
+	return h.podPresent || h.detected || (h.reqGen != h.doneGen && !h.advertised)
 }
 
 func (h *Handoff) Advertised() bool {

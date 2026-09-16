@@ -44,6 +44,13 @@ func placementPod(name, namespace string, labeled bool) *corev1.Pod {
 	return pod
 }
 
+func terminatingPod(pod *corev1.Pod) *corev1.Pod {
+	now := metav1.Now()
+	pod.DeletionTimestamp = &now
+	pod.Finalizers = []string{"dapr.io/test"}
+	return pod
+}
+
 func Test_PlacementPodsReconcile(t *testing.T) {
 	t.Parallel()
 
@@ -65,6 +72,10 @@ func Test_PlacementPodsReconcile(t *testing.T) {
 		"labeled pod in another namespace": {
 			pods:       []*corev1.Pod{placementPod("dapr-placement-server-0", "other-ns", true)},
 			expPresent: false,
+		},
+		"terminating labeled pod still counts": {
+			pods:       []*corev1.Pod{terminatingPod(placementPod("dapr-placement-server-0", "dapr-system", true))},
+			expPresent: true,
 		},
 	}
 

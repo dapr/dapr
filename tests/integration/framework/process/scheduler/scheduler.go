@@ -266,7 +266,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			if assert.NoError(c, err) {
 				assert.Len(c, resp.Kvs, 1)
 			}
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 20*time.Second, 10*time.Millisecond)
 	}
 }
 

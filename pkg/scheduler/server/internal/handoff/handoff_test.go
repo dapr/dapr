@@ -20,6 +20,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -87,8 +88,10 @@ func TestDetectionResetsAdvertised(t *testing.T) {
 	assert.True(t, h.Advertised(), "an unchanged sighting keeps the latch")
 
 	resolved = false
-	h.refreshDetection(t.Context())
-	assert.True(t, h.Advertised(), "an absence keeps the latch")
+	for range absenceConfirmations {
+		h.refreshDetection(t.Context())
+		assert.True(t, h.Advertised(), "an absence keeps the latch")
+	}
 
 	resolved = true
 	h.refreshDetection(t.Context())
@@ -116,9 +119,29 @@ func TestDetectionSighting(t *testing.T) {
 	h.refreshDetection(t.Context())
 	assert.True(t, h.PlacementPresent())
 
+	// One sightless refresh can be a probe running out of time or a
+	// placement restart: absence needs consecutive confirmations.
 	resolved = false
+	for range absenceConfirmations - 1 {
+		h.refreshDetection(t.Context())
+		assert.True(t, h.PlacementPresent())
+		assert.True(t, h.confirmingAbsence())
+	}
 	h.refreshDetection(t.Context())
 	assert.False(t, h.PlacementPresent())
+	assert.False(t, h.confirmingAbsence())
+
+	// A sighting mid-confirmation keeps presence with no confirmation
+	// pending.
+	resolved = true
+	h.refreshDetection(t.Context())
+	require.True(t, h.PlacementPresent())
+	resolved = false
+	h.refreshDetection(t.Context())
+	resolved = true
+	h.refreshDetection(t.Context())
+	assert.True(t, h.PlacementPresent())
+	assert.False(t, h.confirmingAbsence())
 }
 
 func TestPendingDetectionIsPresence(t *testing.T) {
@@ -130,6 +153,43 @@ func TestPendingDetectionIsPresence(t *testing.T) {
 	// service until the refresh completes.
 	h.RequestDetection()
 	assert.True(t, h.PlacementPresent())
+
+	h.refreshDetection(t.Context())
+	assert.False(t, h.PlacementPresent())
+}
+
+func TestKubernetesAbsenceRequestsRefresh(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+
+	h.SetKubernetesPresence(true)
+	select {
+	case <-h.detectCh:
+		t.Fatal("presence must not request a refresh")
+	default:
+	}
+
+	// The pods vanishing starts the absence confirmations right away rather
+	// than on the next idle tick.
+	h.SetKubernetesPresence(false)
+	select {
+	case <-h.detectCh:
+	default:
+		t.Fatal("absence must request a refresh")
+	}
+}
+
+func TestPendingDetectionKeepsAdvertisement(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+	h.LatchAdvertised()
+
+	// A reconnecting sidecar re-reports its addresses: the in-flight
+	// presumption must not withdraw the standing advertisement.
+	h.RequestDetection()
+	assert.False(t, h.PlacementPresent())
 
 	h.refreshDetection(t.Context())
 	assert.False(t, h.PlacementPresent())
@@ -205,6 +265,25 @@ func TestProbeAddressRequiresPlacementProtocol(t *testing.T) {
 	assert.True(t, h.probeAddress(t.Context(), newServer(t, true), id))
 	assert.False(t, h.probeAddress(t.Context(), newServer(t, false), id),
 		"a gRPC server which does not speak the placement protocol is not a placement service")
+
+	// A protocol check running out of time is no answer, not a sighting.
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := grpc.NewServer()
+	v1pb.RegisterPlacementServer(srv, &hangingPlacementServer{})
+	go srv.Serve(lis)
+	t.Cleanup(srv.Stop)
+	assert.False(t, h.probeAddress(t.Context(), lis.Addr().String(), id),
+		"a hanging protocol check is not a sighting")
+}
+
+type hangingPlacementServer struct {
+	v1pb.UnimplementedPlacementServer
+}
+
+func (h *hangingPlacementServer) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) error {
+	<-stream.Context().Done()
+	return stream.Context().Err()
 }
 
 type fakePlacementServer struct {
@@ -234,4 +313,93 @@ func TestReadyFiresOnChange(t *testing.T) {
 	require.Error(t, h.Run(ctx))
 	assert.True(t, h.Ready())
 	assert.Positive(t, fired.Load())
+}
+
+func TestProbeReportedAddresses(t *testing.T) {
+	t.Parallel()
+
+	// unresponsive accepts connections but never answers, so a probe of the
+	// address runs until its deadline.
+	unresponsive := func(t *testing.T) string {
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		t.Cleanup(func() { lis.Close() })
+		go func() {
+			for {
+				conn, aerr := lis.Accept()
+				if aerr != nil {
+					return
+				}
+				go func() {
+					//nolint:errcheck
+					io.Copy(io.Discard, conn)
+					conn.Close()
+				}()
+			}
+		}()
+		return lis.Addr().String()
+	}
+
+	t.Run("unresponsive addresses stay absent within the budget", func(t *testing.T) {
+		h := New(Options{Security: fake.New()})
+		addrs := make([]string, probeConcurrency*2)
+		for i := range addrs {
+			addrs[i] = unresponsive(t)
+		}
+		h.SetPlacementAddresses(func() []string { return addrs })
+
+		start := time.Now()
+		assert.False(t, h.probeReportedAddresses(t.Context()))
+		assert.Less(t, time.Since(start), probeBudget+time.Second*2)
+	})
+
+	t.Run("in-flight probes never exceed the concurrency cap", func(t *testing.T) {
+		h := New(Options{Security: fake.New()})
+		var inflight, peak, calls atomic.Int64
+		h.probe = func(context.Context, string, spiffeid.ID) bool {
+			cur := inflight.Add(1)
+			for {
+				old := peak.Load()
+				if cur <= old || peak.CompareAndSwap(old, cur) {
+					break
+				}
+			}
+			defer inflight.Add(-1)
+			calls.Add(1)
+			time.Sleep(time.Millisecond * 20)
+			return false
+		}
+
+		addrs := make([]string, probeConcurrency*3)
+		for i := range addrs {
+			addrs[i] = "127.0.0.1:1"
+		}
+		h.SetPlacementAddresses(func() []string { return addrs })
+
+		assert.False(t, h.probeReportedAddresses(t.Context()))
+		assert.Equal(t, int64(len(addrs)), calls.Load())
+		assert.LessOrEqual(t, peak.Load(), int64(probeConcurrency))
+	})
+
+	t.Run("one placement service among unresponsive addresses is found before the budget", func(t *testing.T) {
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		srv := grpc.NewServer()
+		v1pb.RegisterPlacementServer(srv, &fakePlacementServer{})
+		go srv.Serve(lis)
+		t.Cleanup(srv.Stop)
+
+		h := New(Options{Security: fake.New()})
+		addrs := []string{unresponsive(t), unresponsive(t), unresponsive(t), lis.Addr().String()}
+		h.SetPlacementAddresses(func() []string { return addrs })
+
+		start := time.Now()
+		assert.True(t, h.probeReportedAddresses(t.Context()))
+		assert.Less(t, time.Since(start), probeBudget)
+	})
+
+	t.Run("nil source is absent", func(t *testing.T) {
+		h := New(Options{Security: fake.New()})
+		assert.False(t, h.probeReportedAddresses(t.Context()))
+	})
 }

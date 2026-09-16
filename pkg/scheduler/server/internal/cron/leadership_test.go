@@ -88,7 +88,8 @@ type fakePlacementLeader struct {
 	hasStreams bool
 }
 
-func (f *fakePlacementLeader) SetLeader(leader bool) { f.leader = &leader }
+func (f *fakePlacementLeader) SetLeader(leader bool)     { f.leader = &leader }
+func (f *fakePlacementLeader) SetOnStreamsChange(func()) {}
 func (f *fakePlacementLeader) HasPlacementStreams() bool {
 	return f.hasStreams
 }

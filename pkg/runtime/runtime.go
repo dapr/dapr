@@ -367,8 +367,8 @@ func newDaprRuntime(ctx context.Context,
 	var reportedPlacementAddresses []string
 	if addrs, ok := strings.CutPrefix(runtimeConfig.actorsService, "placement:"); ok {
 		for addr := range strings.SplitSeq(addrs, ",") {
-			if strings.TrimSpace(addr) != "" {
-				reportedPlacementAddresses = append(reportedPlacementAddresses, addr)
+			if saddr := strings.TrimSpace(addr); saddr != "" {
+				reportedPlacementAddresses = append(reportedPlacementAddresses, saddr)
 			}
 		}
 	}
