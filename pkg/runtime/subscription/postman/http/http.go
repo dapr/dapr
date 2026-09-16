@@ -260,20 +260,13 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
 			}
 
-			var span trace.Span
-
-			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+			_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
 			if span != nil {
 				spans[n] = span
 				n++
 			}
 		} else if iTraceID != nil {
 			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
-		}
-		if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
-			if parsedBaggage, err := baggage.Parse(baggageString); err == nil {
-				ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
-			}
 		}
 	}
 
