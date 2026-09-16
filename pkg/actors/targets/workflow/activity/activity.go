@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -91,12 +92,24 @@ func (a *activity) ID() string {
 	return a.actorID
 }
 
-// workflowID returns the parent instance ID encoded in the actor ID. Instance
-// IDs may themselves contain the separator; the task ID after the last one
-// never does.
-func (a *activity) workflowID() (string, error) {
-	if i := strings.LastIndex(a.actorID, common.ActivityIDSeparator); i >= 0 {
-		return a.actorID[:i], nil
+// workflowID returns the parent instance ID encoded in the actor ID. Both
+// "<instanceID>::<taskID>::<generation>" and "<instanceID>::<taskID>" are
+// accepted. Instance IDs may themselves contain the separator, so the trailing
+// components are checked against the invocation's task ID to pick the shape.
+// An unrecognised shape is cut at the last separator rather than rejected,
+// since a rejected reminder retries forever. An instance ID ending in "::<N>"
+// whose activity is task N is ambiguous and is read as the three part shape.
+func (a *activity) workflowID(taskID int32) (string, error) {
+	sep := common.ActivityIDSeparator
+	last := strings.LastIndex(a.actorID, sep)
+	if last < 0 {
+		return "", fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
 	}
-	return "", fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
+	if prev := strings.LastIndex(a.actorID[:last], sep); prev >= 0 {
+		if _, err := strconv.ParseUint(a.actorID[last+len(sep):], 10, 64); err == nil &&
+			a.actorID[prev+len(sep):last] == strconv.Itoa(int(taskID)) {
+			return a.actorID[:prev], nil
+		}
+	}
+	return a.actorID[:last], nil
 }

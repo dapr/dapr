@@ -46,7 +46,7 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 	}
 	activityName := ts.GetName()
 
-	workflowID, err := a.workflowID()
+	workflowID, err := a.workflowID(taskEvent.GetEventId())
 	if err != nil {
 		return err
 	}

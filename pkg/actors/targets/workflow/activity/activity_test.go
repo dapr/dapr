@@ -18,21 +18,43 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
 
+// Test_workflowID freezes every activity actor ID shape a released version of Dapr has
+// written. The table is append-only: a row may only be removed once the
+// release that wrote it is outside the version skew window.
 func Test_workflowID(t *testing.T) {
-	for actorID, want := range map[string]string{
-		common.ActivityActorID("abc", 5):        "abc",
-		common.ActivityActorID("collide::0", 3): "collide::0",
-		common.ActivityActorID("a::b::c", 0):    "a::b::c",
-	} {
-		got, err := (&activity{actorID: actorID}).workflowID()
-		require.NoError(t, err)
-		assert.Equal(t, want, got, actorID)
+	tests := []struct {
+		actorID string
+		taskID  int32
+		want    string
+	}{
+		// v1.15.0 to v1.18.x: <instanceID>::<taskID>::<generation>
+		{"wf::5::0", 5, "wf"},
+		{"wf::0::0", 0, "wf"},
+		{"colon::id::4::1", 4, "colon::id"},
+		{"trailing::::5::0", 5, "trailing::"},
+		{"job::3::7::0", 7, "job::3"},
+		{"wf::2::184467440737095516", 2, "wf"},
+
+		// v1.19 and later: <instanceID>::<taskID>
+		{"wf::5", 5, "wf"},
+		{"a::b::5", 5, "a::b"},
+		{"a::b::c::5", 5, "a::b::c"},
+		{"job::7::3", 3, "job::7"},
+		{"trailing::::5", 5, "trailing::"},
+
+		// Documented residual: a v1.19 ID whose instance ends in "::<taskID>"
+		// is indistinguishable from a legacy ID and takes the legacy reading.
+		{"job::3::3", 3, "job"},
 	}
 
-	_, err := (&activity{actorID: "noseparator"}).workflowID()
+	for _, tt := range tests {
+		got, err := (&activity{actorID: tt.actorID}).workflowID(tt.taskID)
+		require.NoError(t, err, tt.actorID)
+		assert.Equal(t, tt.want, got, tt.actorID)
+	}
+
+	_, err := (&activity{actorID: "noseparator"}).workflowID(0)
 	require.Error(t, err)
 }

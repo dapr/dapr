@@ -64,11 +64,11 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// eviction re-executes; acking it would also swallow the escalation that
 	// creates the durable reminder.
 	if a.fastPath && metaFlagged(req, todo.MetadataActivityJanitorRedispatch) {
-		workflowID, err := a.workflowID()
+		taskEvent := invocation.GetHistoryEvent()
+		workflowID, err := a.workflowID(taskEvent.GetEventId())
 		if err != nil {
 			return nil, err
 		}
-		taskEvent := invocation.GetHistoryEvent()
 		key := inflight.Key(a.actorID, taskEvent)
 		if call, ok := a.inflight.Peek(key); ok && !a.staleClaim(call, workflowID, taskEvent.GetEventId()) {
 			return nil, nil
@@ -113,7 +113,7 @@ func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string,
 		return &invocation, taskScheduledName(invocation.GetHistoryEvent()), nil
 	}
 
-	// TODO: remove this legacy fallback in v1.19, once the floor version is
+	// TODO: remove this legacy fallback in v1.20, once the floor version is
 	// past the rollout.
 	var legacy backend.HistoryEvent
 	if legacyErr := proto.Unmarshal(data, &legacy); legacyErr != nil {

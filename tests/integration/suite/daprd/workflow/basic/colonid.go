@@ -65,7 +65,7 @@ func (c *colonid) Run(t *testing.T, ctx context.Context) {
 	})
 	cl := c.workflow.BackendClient(t, ctx)
 
-	for _, id := range []api.InstanceID{"colon::id", "a::b::c", "trailing::"} {
+	for _, id := range []api.InstanceID{"colon::id", "a::b::c", "trailing::", "collide::7"} {
 		_, err := cl.ScheduleNewWorkflow(ctx, "withactivity", api.WithInstanceID(id))
 		require.NoError(t, err)
 		meta, err := cl.WaitForWorkflowCompletion(ctx, id)
