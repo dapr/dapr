@@ -124,8 +124,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
+	o.primeCachedState(state, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
 }
@@ -140,8 +139,7 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 	}
 
 	o.state = failed
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, failed.CustomStatus, failed.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(failed))
+	o.primeCachedState(failed, o.getExecutionStartedEvent(failed))
 
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
@@ -180,6 +178,9 @@ func (o *orchestrator) notifyStreams() {
 	}
 }
 
+// commitTimeout bounds a state commit that has outlived its caller's context.
+const commitTimeout = 30 * time.Second
+
 // signAndSaveState signs any newly added history events and then persists the
 // state. This is the single entry point for all state persistence; callers
 // must never call saveInternalState directly.
@@ -192,10 +193,6 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 		o.invalidateCachedState()
 		return err
 	}
-	// A durable commit is the progress signal the wake-escalation and
-	// janitor-redispatch hysteresis keys on. Unlike lastActive it is never
-	// stamped by mere lock traffic or by the janitor fire itself.
-	o.lastProgress.Store(time.Now().UnixNano())
 	return nil
 }
 
@@ -203,6 +200,16 @@ func (o *orchestrator) invalidateCachedState() {
 	o.state = nil
 	o.rstate = nil
 	o.ometa = nil
+}
+
+// primeCachedState rebuilds the cached runtime-state and metadata views from
+// state. startEvent supplies the ExecutionStartedEvent the metadata falls back
+// to when the runtime state carries none of its own. The inverse is
+// invalidateCachedState. Callers set o.state themselves: a caller priming the
+// views for a state that is not yet durable must not cache it.
+func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *protos.ExecutionStartedEvent) {
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.ometa = o.ometaFromState(o.rstate, startEvent)
 }
 
 // confirmCachedState re-reads the metadata row before a message is acked off
@@ -239,7 +246,17 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
-	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+	// The commit must not be abandoned because the caller's context died. A
+	// turn dispatches its activities BEFORE it saves, so a host-level cancel
+	// (worker disconnect, placement churn, HaltAll) landing between the two
+	// would leave the side effects done and the history unwritten, which
+	// replays as a non-deterministic workflow. Safe because the Multi is
+	// ETag-conditional on the metadata row: a peer that took this actor and
+	// wrote first still wins, with an ETagMismatch handled below.
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commitTimeout)
+	defer cancel()
+
+	if err = o.actorState.TransactionalStateOperation(cctx, true, req, false); err != nil {
 		// ETagMismatch means a peer host wrote to this workflow's metadata
 		// row underneath us between our load and this save. The whole Multi
 		// rolled back atomically, so the durable state still reflects the
@@ -316,8 +333,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// Update cached state
 	o.state = state
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
+	o.primeCachedState(state, o.getExecutionStartedEvent(state))
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}

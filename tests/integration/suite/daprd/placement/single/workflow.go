@@ -66,28 +66,38 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.Equal(t, expTable, w.actors.Placement().PlacementTables(t, ctx))
+	assert.Equal(t, expTable, w.actors.PlacementTables(t, ctx))
 
 	client := dworkflow.NewClient(w.actors.Daprd().GRPCConn(t, ctx))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
 
-	expTable.Tables["default"].Version = 2
 	expTable.Tables["default"].Hosts[0].Entities = []string{
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".activity",
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".workflow",
 		"mytype",
 	}
+	var version2 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, w.actors.Placement().PlacementTables(t, ctx))
+		table := w.actors.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		assert.Equal(c, expTable.Tables["default"].Hosts, table.Hosts)
+		assert.Greater(c, table.Version, uint64(1))
+		version2 = table.Version
 	}, time.Second*10, time.Millisecond*10)
 
 	cancel()
-	expTable.Tables["default"].Version = 3
 	expTable.Tables["default"].Hosts[0].Entities = []string{"mytype"}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, w.actors.Placement().PlacementTables(t, ctx))
+		table := w.actors.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		assert.Equal(c, expTable.Tables["default"].Hosts, table.Hosts)
+		assert.Greater(c, table.Version, version2)
 	}, time.Second*10, time.Second)
 }

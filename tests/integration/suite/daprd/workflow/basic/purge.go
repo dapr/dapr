@@ -120,6 +120,14 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), metadata.GetRuntimeStatus().String())
 
+		// A child notifies its parent before committing its own terminal
+		// state, so the root completing does not mean the children have;
+		// a recursive purge rejects a child that is still running.
+		for _, child := range []api.InstanceID{id + "_L1", id + "_L1_L2"} {
+			_, err = backendClient.WaitForWorkflowCompletion(ctx, child)
+			require.NoError(t, err)
+		}
+
 		// Purge the root orchestration
 		p.purgeWorkflow(t, ctx, string(id))
 

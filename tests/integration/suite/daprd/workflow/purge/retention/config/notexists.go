@@ -79,7 +79,13 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 	// they are reserved for the workflow runtime.
 	dueTime := time.Now().Add(3 * time.Second).Format(time.RFC3339)
 	appID := n.workflow.Dapr().AppID()
-	_, err := n.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+	var schedClient schedulerv1pb.SchedulerClient
+	if n.workflow.Signing() {
+		schedClient = n.workflow.Scheduler().ClientMTLS(t, ctx, n.workflow.Dapr().AppID())
+	} else {
+		schedClient = n.workflow.Scheduler().Client(t, ctx)
+	}
+	_, err := schedClient.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "anyterminal-dxnUithe",
 		Job:  &schedulerv1pb.Job{DueTime: &dueTime},
 		Metadata: &schedulerv1pb.JobMetadata{

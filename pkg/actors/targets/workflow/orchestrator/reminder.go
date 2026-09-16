@@ -25,6 +25,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -79,27 +81,34 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, name string,
 }
 
 // assertStartReminder creates (or overwrites by name) the deterministic start
-// wake-up reminder for the ExecutionStarted event. The name is derived from
-// the event's build-time timestamp (start-es-<unixnano>), so retries of the
-// same server-side create collapse onto a single scheduler entry. A CLIENT
-// retry of the same logical create regenerates the event timestamp, so
-// callers re-driving a saved-but-never-run instance MUST pass the SAVED inbox
-// event, not the incoming request's.
+// reminder for a pending start and, under the fast path, drives a due-now
+// start locally. The durable reminder is then a dormant backstop: due one
+// redrive grace out so it cannot fire beside the local drive, yet recovers a
+// start whose only worker vanished mid-turn within the grace; it is elided
+// once the first turn commits (deleteStartReminder). A backstop that outlives
+// a lost delete fires into an empty inbox and acks as a no-op.
 //
-// The Create retry stays bounded on the caller's context, which blocks the
-// client call. The inbox row is already committed, so a failed create is also
-// handed to a detached retry (see armDetachedOnCreateError) before the error
-// is returned.
+// The name derives from the SAVED inbox event's timestamp
+// (start-es-<unixnano>) so retries collapse onto one scheduler entry: callers
+// re-driving a saved-but-never-run instance MUST pass the saved event, not the
+// incoming request's (a client retry regenerates the timestamp). The inbox row
+// is already committed, so a failed create is also handed to a detached retry
+// (see armDetachedOnCreateError) before the error is returned.
 func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *backend.HistoryEvent) error {
 	start := pendingstart.DueTime(startEvent)
 	workflowName := startEvent.GetExecutionStarted().GetName()
 	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
-	if err := o.createWorkflowReminder(ctx, reminderName, nil, start, o.appID, &workflowName); err != nil {
+
+	due := start
+	if o.fastPath && !start.After(time.Now()) {
+		due = time.Now().Add(pendingstart.RedriveGrace())
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, nil, due, o.appID, &workflowName); err != nil {
 		o.armDetachedOnCreateError(reminderName, start, workflowName, startStillPending(reminderName), err)
 		return err
 	}
 
-	o.localDrive(reminderName, start, workflowName)
+	o.localDrive(reminderName, start)
 	return nil
 }
 
@@ -116,12 +125,18 @@ const janitorReminderName = "new-event-janitor"
 // with the activity target's stale-claim grace (see common.JanitorPeriod).
 var janitorPeriod = common.JanitorPeriod
 
+// detachedReminderTimeout bounds a reminder create or delete that runs on the
+// actor's root context rather than a turn context (the parent-notify
+// reminder, the reap of an escalated run-activity reminder). Generous: the
+// operations are idempotent and each has a durable fallback.
+const detachedReminderTimeout = 30 * time.Second
+
 // driveNewEvent is the single dispatch point for waking the workflow after a
 // durable inbox save. With the WorkflowsFastPath preview off it is
 // exactly today's durable per-event reminder path. With it on, the per-event
 // reminder (and its job upsert + delete commit pair) is elided: the turn is
-// driven locally, backstopped by the per-instance janitor reminder plus
-// on-failure escalation to the durable reminder (see wake.go).
+// driven locally, backstopped by the per-instance janitor reminder (see
+// wake.go).
 //
 // Durability first: if the janitor cannot be ensured, fall back to the
 // durable per-event reminder path.
@@ -135,12 +150,8 @@ func (o *orchestrator) driveNewEvent(ctx context.Context, e *backend.HistoryEven
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 
-	dueTime := e.GetTimestamp().AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].GetTimestamp().AsTime()
-	}
-	wfName := o.getExecutionStartedEvent(state).GetName()
-	o.localDrive(events.EventReminderName(reminderPrefixNewEvent, e), dueTime, wfName)
+	dueTime := newEventDueTime(e, state)
+	o.localDrive(events.EventReminderName(reminderPrefixNewEvent, e), dueTime)
 	return nil
 }
 
@@ -184,6 +195,22 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 	return nil
 }
 
+// deleteReminderTolerant deletes a reminder and reports whether the delete
+// landed. NotFound is the expected outcome for every caller (the entry may
+// never have been created, or a sweep may already have removed it) and is
+// silent; any other failure is logged at debug against what, since each
+// caller has a benign fallback (the reminder fires as a no-op, or
+// self-deletes). what names the reminder and that fallback.
+func (o *orchestrator) deleteReminderTolerant(ctx context.Context, req *actorapi.DeleteReminderRequest, what string) bool {
+	if err := o.reminders.Delete(ctx, req); err != nil {
+		if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
+			log.Debugf("Workflow actor '%s': failed to delete %s: %v", o.actorID, what, err)
+		}
+		return false
+	}
+	return true
+}
+
 // deleteJanitor removes the janitor reminder. NotFound is tolerated: the
 // janitor may never have been asserted (fast path never taken this
 // residency), or an older binary may already have swept it via
@@ -193,24 +220,26 @@ func (o *orchestrator) deleteJanitor(ctx context.Context) {
 	// every fallback (the fastPath completion-path delete, terminal
 	// self-delete, purge sweep) tolerates the reminder still existing.
 	o.janitorAsserted.Store(false)
-	if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
+	o.deleteReminderTolerant(ctx, &actorapi.DeleteReminderRequest{
 		Name:      janitorReminderName,
 		ActorType: o.actorTypeBuilder.Workflow(o.appID),
 		ActorID:   o.actorID,
-	}); err != nil {
-		if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
-			log.Debugf("Workflow actor '%s': failed to delete janitor reminder (it will self-delete on its next fire): %v", o.actorID, err)
-		}
+	}, "janitor reminder (it will self-delete on its next fire)")
+}
+
+// newEventDueTime is the due time a new-event wake carries for e: the first
+// history event's timestamp once the instance has history, else e's own.
+func newEventDueTime(e *backend.HistoryEvent, state *wfenginestate.State) time.Time {
+	if len(state.History) > 0 {
+		return state.History[0].GetTimestamp().AsTime()
 	}
+	return e.GetTimestamp().AsTime()
 }
 
 // assertNewEventReminder creates (or overwrites by name) the deterministic
 // new-event wake-up reminder for the workflow actor that holds e in its inbox.
 func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
-	dueTime := e.Timestamp.AsTime()
-	if len(state.History) > 0 {
-		dueTime = state.History[0].Timestamp.AsTime()
-	}
+	dueTime := newEventDueTime(e, state)
 	wfName := o.getExecutionStartedEvent(state).GetName()
 	reminderName := events.EventReminderName(reminderPrefixNewEvent, e)
 	// Retry the Create forever (bounded by the actor context): the inbox event
@@ -225,7 +254,31 @@ func (o *orchestrator) assertNewEventReminder(ctx context.Context, e *backend.Hi
 		return err
 	}
 
-	o.localDrive(reminderName, dueTime, wfName)
+	o.localDrive(reminderName, dueTime)
+	return nil
+}
+
+// failTaskViaReminder delivers a locally-authored task failure to this
+// workflow's own inbox via a randomly named activity-result reminder. The
+// reminder fires in a fresh execution cycle after the current run completes,
+// so the event is added to the inbox without conflicting with the run loop's
+// ClearInbox/save. failedEvent carries only its EventType; the synthetic
+// event id, timestamp and source router are stamped here. The local source
+// app id is what lets the inbox attestation check recognise the failure as
+// locally authored (see isLocalSyntheticFailure).
+func (o *orchestrator) failTaskViaReminder(ctx context.Context, failedEvent *protos.HistoryEvent) error {
+	failedEvent.EventId = -1
+	failedEvent.Timestamp = timestamppb.New(time.Now())
+	failedEvent.Router = &protos.TaskRouter{SourceAppID: o.appID}
+
+	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
+	if err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+
 	return nil
 }
 
@@ -303,24 +356,19 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 	return nil
 }
 
-// deleteStartReminder removes the pending start one-shot from the scheduler
-// once the turn that consumed the ExecutionStarted event has durably
-// committed.
+// deleteStartReminder elides the pending start backstop once the first turn
+// has durably committed, detached and best-effort.
 func (o *orchestrator) deleteStartReminder(startEvent *backend.HistoryEvent) {
 	name := events.EventReminderName(reminderPrefixStart, startEvent)
 
 	o.detached.Go(func(rootCtx context.Context) {
-		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
+		ctx, cancel := context.WithTimeout(rootCtx, detachedReminderTimeout)
 		defer cancel()
 
-		if err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
+		o.deleteReminderTolerant(ctx, &actorapi.DeleteReminderRequest{
 			Name:      name,
 			ActorType: o.actorTypeBuilder.Workflow(o.appID),
 			ActorID:   o.actorID,
-		}); err != nil {
-			if s, ok := grpcstatus.FromError(err); !ok || s.Code() != codes.NotFound {
-				log.Debugf("Workflow actor '%s': failed to delete pending start reminder '%s' (it will fire as a no-op): %v", o.actorID, name, err)
-			}
-		}
+		}, fmt.Sprintf("pending start reminder '%s' (it will fire as a no-op)", name))
 	})
 }

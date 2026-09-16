@@ -238,8 +238,8 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 			// re-driving. At a placement handoff that assumption breaks both
 			// ways at once: the sender dies with its pod before re-delivering,
 			// and the arming drive of the folding turn is lost (a wakeCtx
-			// cancellation window, or a failed drive whose escalation was
-			// suppressed). The completion is then captive in memory with no
+			// cancellation window, or a drive that exhausted its retries).
+			// The completion is then captive in memory with no
 			// driver at all, and this fire is the only thing that ever runs on
 			// the instance. Drive a turn: runWorkflow folds pending
 			// completions into its commit even with an empty inbox, restoring
@@ -249,7 +249,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
 				return o.runWorkflowFromReminder(ctx, reminder)
 			}
-			if unresolved := unresolvedScheduledTasks(state, o.foldEvents()); len(unresolved) > 0 {
+			if unresolved := unresolvedScheduledTasks(state, foldedEvents(o.foldPending)); len(unresolved) > 0 {
 				o.redispatchActivities(ctx, state, unresolved)
 			}
 		}

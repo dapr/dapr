@@ -55,6 +55,10 @@ func (a *ActorTypeBuilder) Activity(appID string) string {
 // actor types are registered by the same hosts, so equal IDs resolve to equal
 // hosts across actor types, co-locating the rendezvous with the activity
 // actor and its pending-task waiter.
+// ActivityIDSeparator splits an activity actor ID into its parent workflow
+// instance ID and task ID.
+const ActivityIDSeparator = "::"
+
 func ActivityActorID(workflowID string, taskID int32) string {
-	return workflowID + "::" + strconv.Itoa(int(taskID))
+	return workflowID + ActivityIDSeparator + strconv.Itoa(int(taskID))
 }
