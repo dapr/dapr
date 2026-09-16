@@ -58,6 +58,21 @@ is the `fastpath` leg of the same matrix job. The mode variables compose: all
 harness-driven feature flags land in the single feature manifest the
 framework builds per daprd.
 
+Setting `DAPR_INTEGRATION_WORKFLOW_SIGNING=true` runs the suite with
+workflow history signing: because `WorkflowHistorySigning` requires mTLS,
+this mode forces a Sentry per workflow exactly as `workflow.WithMTLS` does.
+Override per test with `workflow.WithSigning(bool)` (tests that supply their
+own plaintext scheduler or inject unsigned history must opt out) and branch
+assertions on `workflow.Signing()`; it is the `signing` leg of the matrix
+job.
+
+The matrix job has one boolean axis per mode and runs every combination
+except all-off (the default integration job), seven legs in total: the env
+vars compose because all harness-driven feature flags share one feature
+manifest per daprd (`daprd.WithFeatureEnabled` calls accumulate into it). A
+test that starts extra daprds to join the harness cluster must pass
+`workflow.JoinOptions(t)` so they run in the same modes.
+
 ## Adding a new test
 
 To add a new test scenario, either create a new subject directory in

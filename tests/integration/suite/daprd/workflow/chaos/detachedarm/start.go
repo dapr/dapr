@@ -85,7 +85,7 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	s.workflow.BackendClient(t, ctx)
 	gclient := s.workflow.GRPCClient(t, ctx)
 
-	startVersion := s.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	startVersion := s.workflow.PlacementVersion(t, ctx)
 
 	// Scheduler outage: every ScheduleJob fails with a transient code, which
 	// the create retries with backoff, and every GetJob fails too, so the
@@ -120,12 +120,15 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	// A second daprd for the same app changes the workflow actor type's hash
 	// ring: dissemination cancels the in-flight claim context the create is
 	// running under.
-	extra := daprd.New(t, append([]daprd.Option{
+	extraDopts := []daprd.Option{
 		daprd.WithAppID(s.appID),
-		daprd.WithPlacementAddresses(s.workflow.Placement().Address()),
 		daprd.WithSchedulerAddressesReset(s.proxy.Address()),
 		daprd.WithResourceFiles(s.workflow.DB().GetComponent(t)),
-	}, s.workflow.JoinOptions(t)...)...)
+	}
+	if s.workflow.HasPlacement() {
+		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(s.workflow.Placement().Address()))
+	}
+	extra := daprd.New(t, append(extraDopts, s.workflow.JoinOptions(t)...)...)
 	extra.Run(t, ctx)
 	t.Cleanup(func() { extra.Cleanup(t) })
 	extra.WaitUntilRunning(t, ctx)
@@ -136,11 +139,8 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, extraClient.StartWorkItemListener(ctx, registry))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-		if !assert.NotNil(c, table) {
-			return
-		}
-		assert.Greater(c, table.Version, startVersion, "placement table version must advance for the new daprd")
+		assert.Greater(c, s.workflow.PlacementVersion(t, ctx), startVersion,
+			"the placement authority must disseminate for the new daprd")
 	}, 15*time.Second, 10*time.Millisecond)
 
 	// The claim cancel abandons the create and its retries cannot register
