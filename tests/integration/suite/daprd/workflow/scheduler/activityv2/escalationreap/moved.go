@@ -55,12 +55,15 @@ func (m *moved) Setup(t *testing.T) []framework.Option {
 		daprd.WithWorkflowClaimRetention(t, time.Millisecond*200),
 	}
 	m.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
-	m.joiner = daprd.New(t, append([]daprd.Option{
+	dopts := []daprd.Option{
 		daprd.WithAppID(m.workflow.Dapr().AppID()),
 		daprd.WithResourceFiles(m.workflow.DB().GetComponent(t)),
-		daprd.WithPlacementAddresses(m.workflow.Placement().Address()),
 		daprd.WithSchedulerAddresses(m.workflow.Scheduler().Address()),
-	}, append(fp, m.workflow.JoinOptions(t)...)...)...)
+	}
+	if m.workflow.HasPlacement() {
+		dopts = append(dopts, daprd.WithPlacementAddresses(m.workflow.Placement().Address()))
+	}
+	m.joiner = daprd.New(t, append(dopts, append(fp, m.workflow.JoinOptions(t)...)...)...)
 
 	return []framework.Option{
 		framework.WithProcesses(m.workflow),
