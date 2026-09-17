@@ -520,7 +520,7 @@ func TestDeliverBulkNonStringTraceID(t *testing.T) {
 
 	bscData := todo.BulkSubscribeCallData{
 		BulkResponses:   &bulkResponses,
-		BulkSubDiag:     &bulkSubDiag,
+		BulkSubDiag:     bulkSubDiag,
 		EntryIdIndexMap: &entryIdIndexMap,
 		PsName:          "testpubsub",
 		Topic:           "topic1",
