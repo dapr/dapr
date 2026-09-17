@@ -325,12 +325,9 @@ func (f *factory) spawnClaimGuards(ctx context.Context, actorID string) {
 	if !f.fastPath {
 		return
 	}
-	prefix := actorID + common.ActivityIDSeparator
+	prefix := inflight.KeyPrefix(actorID)
 	f.inflight.Range(func(key string, call *inflight.Call) bool {
-		if key != actorID && !strings.HasPrefix(key, prefix) {
-			return true
-		}
-		if call.Settled() {
+		if !strings.HasPrefix(key, prefix) || call.Settled() {
 			return true
 		}
 		f.claims.Spawn(ctx, f.rootCtx, actorID, key, call)
