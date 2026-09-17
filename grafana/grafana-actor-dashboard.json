@@ -1159,90 +1159,6 @@
     },
     {
       "datasource": "Dapr",
-      "description": "Calls waiting on the per-actor lock. Actors are single-threaded per ID, so a rising queue for one type means saturation of that type rather than of the pod.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 53
-      },
-      "id": 180,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(dapr_runtime_actor_pending_actor_calls{namespace=\"$namespace\", actor_type=~\"$dapr_actor_type\"}) by (actor_type)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{actor_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Pending actor calls by type",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Dapr",
       "description": "Every replica change of an actor-hosting application disseminates a new placement table and rebalances actors. A burst of dropped timers usually follows.",
       "fieldConfig": {
         "defaults": {
@@ -1292,8 +1208,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 0,
         "y": 53
       },
       "id": 181,
@@ -1376,8 +1292,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 53
       },
       "id": 182,
@@ -1452,22 +1368,26 @@
         "useTags": false
       },
       {
-        "allValue": null,
+        "allValue": ".*",
         "current": {
-          "selected": false,
-          "text": "StateActor",
-          "value": "StateActor"
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": "Dapr",
-        "definition": "label_values(dapr_runtime_actor_pending_actor_calls,actor_type)",
+        "definition": "label_values(actor_type)",
         "error": null,
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "ACTOR TYPE",
         "multi": true,
         "name": "dapr_actor_type",
         "options": [],
-        "query": "label_values(dapr_runtime_actor_pending_actor_calls,actor_type)",
+        "query": "label_values(actor_type)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
