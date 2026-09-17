@@ -59,7 +59,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
-	base := fmt.Sprintf("http://%s/v1.0-alpha1/binarystore/mystore", b.daprd.HTTPAddress())
+	base := fmt.Sprintf("http://%s/v1.0-alpha1/state/binarystore/mystore", b.daprd.HTTPAddress())
 	httpClient := client.HTTP(t)
 
 	t.Run("PUT then GET round-trips bytes", func(t *testing.T) {
@@ -132,7 +132,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("component not found returns 400", func(t *testing.T) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0-alpha1/binarystore/nope/x.bin", b.daprd.HTTPAddress()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0-alpha1/state/binarystore/nope/x.bin", b.daprd.HTTPAddress()), nil)
 		require.NoError(t, err)
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)

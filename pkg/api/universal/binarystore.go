@@ -60,12 +60,10 @@ func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, file
 		Overwrite: overwrite,
 	}
 
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore),
-	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, component.Set(ctx, req)
-	})
+	// The request body is a one-shot stream and cannot be rewound for retries.
+	// Invoke the component directly so a partially-consumed reader cannot be
+	// replayed and produce a truncated or empty file on retry.
+	err = component.Set(ctx, req)
 	if err != nil {
 		return mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreSet)
 	}
