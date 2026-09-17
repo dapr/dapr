@@ -384,29 +384,6 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		}
 	}
 
-	var span trace.Span
-
-	iTraceID := cloudEvent[contribpubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[contribpubsub.TraceIDField]
-	}
-
-	if iTraceID != nil {
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := "pubsub/" + msg.Topic
-
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
-			// span is nil if tracing is disabled (sampling rate is 0)
-			if span != nil {
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-			}
-		} else {
-			log.Warnf("ignored non-string traceid value: %v", iTraceID)
-		}
-	}
-
 	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
 	if extensionsErr != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
@@ -415,7 +392,51 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 
 	envelope.Extensions = extensions
 
+	// The span is started only once every error path has been cleared, so the
+	// caller is never handed back an error alongside a span it cannot end.
+	sc := ParentSpanContextFromCloudEvent(cloudEvent, log)
+	// no ops if tracing is off; a zero parent produces a new root span.
+	ctx, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, tracingSpec)
+	// span is nil if tracing is disabled (sampling rate is 0)
+	if span != nil {
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	}
+
 	return ctx, envelope, span, nil
+}
+
+// ParentSpanContextFromCloudEvent returns the parent span context carried by an
+// inbound CloudEvent, to be passed to diag.StartInternalCallbackSpan.
+//
+// It returns the zero trace.SpanContext when the CloudEvent carries no trace
+// context, or carries one that cannot be used. That is not an error:
+// StartInternalCallbackSpan starts a new root span from a zero parent, so a
+// message published outside Dapr - or re-queued from a dead letter queue, which
+// drops the trace context the broker was carrying - is still traced, rather than
+// being delivered with no span at all.
+func ParentSpanContextFromCloudEvent(cloudEvent map[string]any, log logger.Logger) trace.SpanContext {
+	iTraceID := cloudEvent[contribpubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[contribpubsub.TraceIDField]
+	}
+
+	if iTraceID == nil {
+		return trace.SpanContext{}
+	}
+
+	traceID, ok := iTraceID.(string)
+	if !ok {
+		log.Debugf("ignoring non-string trace context of type %T on pub/sub event %v; a new root span is started if tracing is enabled", iTraceID, cloudEvent[contribpubsub.IDField])
+		return trace.SpanContext{}
+	}
+
+	sc, ok := diag.SpanContextFromW3CString(traceID)
+	if !ok {
+		log.Debugf("ignoring unparseable trace context %q on pub/sub event %v; a new root span is started if tracing is enabled", traceID, cloudEvent[contribpubsub.IDField])
+		return trace.SpanContext{}
+	}
+
+	return sc
 }
 
 func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
