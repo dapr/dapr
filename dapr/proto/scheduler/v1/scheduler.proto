@@ -326,9 +326,6 @@ message Host {
   // placement (started with placement enabled). Used to elect the placement
   // leader among capable hosts only, keeping mixed-version clusters safe.
   bool scheduler_placement_enabled = 3;
-
-  reserved 4;
-  reserved "placement_cutover_pending";
 }
 
 // DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.
