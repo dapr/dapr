@@ -627,4 +627,4 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 // normalizeOperation was removed — the ACL no longer normalizes at
 // runtime. Normalization is the responsibility of the service invocation
 // entry points (NormalizeMethod). The behavior previously tested here is
-// covered by pkg/method.TestNormalizeMethod.
+// covered by pkg/method.TestNormalizeMethod.: handle invalid percent escapes in operation normalization)
