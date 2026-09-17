@@ -192,10 +192,7 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 // the provided writer, enforcing sequence numbers and rejecting options in
 // non-leading messages.
 func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequest, inWriter *io.PipeWriter) error {
-	var (
-		readSeq   uint64
-		expectSeq uint64
-	)
+	var expectSeq uint64
 
 	for {
 		if ctx.Err() != nil {
@@ -205,13 +202,12 @@ func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr
 		// Process the payload carried by the message currently held in reqProto
 		// (this may be set from the first message).
 		if payload := reqProto.GetPayload(); payload != nil {
-			rSeq, err := messaging.ReadChunk(payload, inWriter)
+			if payload.GetSeq() != expectSeq {
+				return inWriter.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", payload.GetSeq(), expectSeq))
+			}
+			_, err := messaging.ReadChunk(payload, inWriter)
 			if err != nil {
 				return inWriter.CloseWithError(err)
-			}
-			readSeq = rSeq
-			if readSeq != expectSeq {
-				return inWriter.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", readSeq, expectSeq))
 			}
 			expectSeq++
 		}

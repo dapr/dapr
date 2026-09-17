@@ -34,7 +34,7 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPut},
-			Route:   "binarystore/{name}/{fileName}",
+			Route:   "state/binarystore/{name}/{fileName}",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreSet(true),
@@ -44,7 +44,7 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodPost},
-			Route:   "binarystore/{name}/{fileName}",
+			Route:   "state/binarystore/{name}/{fileName}",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreSet(false),
@@ -54,7 +54,7 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodGet},
-			Route:   "binarystore/{name}/{fileName}",
+			Route:   "state/binarystore/{name}/{fileName}",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreGet(),
@@ -64,7 +64,7 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodDelete},
-			Route:   "binarystore/{name}/{fileName}",
+			Route:   "state/binarystore/{name}/{fileName}",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreDelete(),
