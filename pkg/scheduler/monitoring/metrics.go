@@ -66,6 +66,14 @@ var (
 		"scheduler/concurrency_throttled_total",
 		"Total number of triggers that were throttled by global concurrency limits.",
 		stats.UnitDimensionless)
+	workflowActivityBacklogGauge = stats.Int64(
+		"scheduler/workflow_activity_backlog",
+		"Current number of pull-dispatched workflow activities waiting for a free sidecar slot on this scheduler instance, by namespace, app_id and activity_name.",
+		stats.UnitDimensionless)
+	workflowActivityInflightGauge = stats.Int64(
+		"scheduler/workflow_activity_inflight",
+		"Current number of pull-dispatched workflow activities this scheduler instance handed to a sidecar and that have not finished, by namespace, app_id and activity_name.",
+		stats.UnitDimensionless)
 	jobsDeletedTotal = stats.Int64(
 		"scheduler/jobs_deleted_total",
 		"The total number of deleted jobs.",
@@ -112,6 +120,8 @@ var (
 	tagReason         = tag.MustNewKey("reason")
 	tagNamespace      = tag.MustNewKey("namespace")
 	tagActorType      = tag.MustNewKey("actor_type")
+	tagAppID          = tag.MustNewKey("app_id")
+	tagActivityName   = tag.MustNewKey("activity_name")
 )
 
 var (
@@ -319,6 +329,31 @@ func RecordConcurrencyThrottled(key string) {
 	)
 }
 
+// RecordWorkflowActivityBacklog records the number of pull-dispatched
+// activities of one name waiting for a free sidecar slot on this scheduler
+// instance.
+func RecordWorkflowActivityBacklog(namespace, appID, activityName string, count int64) {
+	recordWorkflowActivity(workflowActivityBacklogGauge, namespace, appID, activityName, count)
+}
+
+// RecordWorkflowActivityInflight records the number of pull-dispatched
+// activities of one name this scheduler instance handed to a sidecar and that
+// have not finished.
+func RecordWorkflowActivityInflight(namespace, appID, activityName string, count int64) {
+	recordWorkflowActivity(workflowActivityInflightGauge, namespace, appID, activityName, count)
+}
+
+func recordWorkflowActivity(gauge *stats.Int64Measure, namespace, appID, activityName string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(gauge.Name(),
+			tagNamespace, namespace,
+			tagAppID, appID,
+			tagActivityName, activityName,
+		),
+		gauge.M(count),
+	)
+}
+
 var (
 	tagDeletedJob     = utils.WithTags(jobsDeletedTotal.Name(), tagType, "job")
 	tagDeletedActor   = utils.WithTags(jobsDeletedTotal.Name(), tagType, "actor")
@@ -401,6 +436,8 @@ func InitMetrics() error {
 		utils.NewMeasureView(concurrencyInflightGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyPendingGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
+		utils.NewMeasureView(workflowActivityBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
+		utils.NewMeasureView(workflowActivityInflightGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
 		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),

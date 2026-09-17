@@ -15,6 +15,7 @@ package loops
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -47,6 +48,13 @@ type TriggerRequest struct {
 	*streambase
 	Job      *internalsv1pb.JobEvent
 	ResultFn func(api.TriggerResponseResult)
+
+	// Repark and Orphan are set on a pull-dispatched trigger. The stream calls
+	// Repark instead of ResultFn when the sidecar answers NO_CAPACITY, and
+	// Orphan instead of resolving the trigger UNDELIVERABLE when the stream
+	// closes with it in flight, so the sidecar can reattach to it.
+	Repark func()
+	Orphan func()
 }
 
 // StreamShutdown is the event for shutting down the scheduler stream.
@@ -85,6 +93,44 @@ type ConnCloseNamespace struct {
 type ConcurrencyRelease struct {
 	*connbase
 	GateKeys []string
+}
+
+// PullSlotsUpdate carries the free pull slots a sidecar reported on a stream.
+type PullSlotsUpdate struct {
+	*nsbase
+	*connbase
+	Namespace string
+	Sidecar   string
+	ActorType string
+	Free      uint32
+}
+
+// PullResult carries the result of a pull-dispatched reminder that a sidecar
+// identified by reference because the stream that delivered it closed.
+type PullResult struct {
+	*nsbase
+	*connbase
+	Namespace string
+	Sidecar   string
+	Reminder  *schedulerv1pb.ActorReminderRef
+	Status    schedulerv1pb.WatchJobsRequestResultStatus
+}
+
+// ConnRun runs Fn on the connections loop. Used by the hooks the loop
+// installs on the triggers it dispatches.
+type ConnRun struct {
+	*connbase
+	Fn func()
+}
+
+// SidecarID identifies the sidecar behind a stream by its actor address, so
+// its several streams to a scheduler share pull state. A stream without an
+// actor address is its own sidecar.
+func SidecarID(streamIDx uint64, actorAddress string) string {
+	if actorAddress != "" {
+		return actorAddress
+	}
+	return "idx:" + strconv.FormatUint(streamIDx, 10)
 }
 
 // SchedulerInfoUpdate propagates the current scheduler cluster size and this

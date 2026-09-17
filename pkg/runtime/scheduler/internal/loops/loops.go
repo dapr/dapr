@@ -34,12 +34,18 @@ type EventConn interface{ isEventConn() }
 type ReloadClients struct {
 	*hostbase
 	Addresses []string
+	// SupportsPullSlots is true when every scheduler host advertises
+	// Host.supports_pull_slots.
+	SupportsPullSlots bool
 }
 
 type Connect struct {
 	*connbase
 	Clients    []schedulerv1pb.SchedulerClient
 	CloseConns []context.CancelFunc
+	// Addresses holds the scheduler address of each client.
+	Addresses         []string
+	SupportsPullSlots bool
 }
 
 type Disconnect struct {
