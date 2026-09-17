@@ -223,8 +223,8 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, streams, float64(1))
 	}, time.Second*10, time.Millisecond*10)
 
-	// The latch holds: a late old sidecar must not revoke the
-	// advertisement and drop every placement stream.
+	// The advertisement holds: a late old sidecar must not revoke it
+	// and drop every placement stream.
 	lateCtx, lateCancel := context.WithCancel(ctx)
 	t.Cleanup(lateCancel)
 	lateTriggered := g.sched.WatchJobsSuccess(t, lateCtx, &schedulerv1pb.WatchJobsRequestInitial{

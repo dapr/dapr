@@ -63,9 +63,8 @@ func TestTrackIncapable(t *testing.T) {
 	}, time.Second*5, time.Millisecond)
 }
 
-// TestTrackCapable covers the capable-sidecar count, whose transitions also
-// fire OnSchedulerPlacementCapabilityChange so the gate latch is evaluated promptly when the first capable sidecar
-// connects.
+// TestTrackCapable covers the capable-sidecar count, whose transitions fire
+// OnSchedulerPlacementCapabilityChange.
 func TestTrackCapable(t *testing.T) {
 	t.Parallel()
 

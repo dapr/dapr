@@ -254,7 +254,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	require.False(t, bothServing.Load(),
 		"no sample across the rollback may show both authorities serving")
 
-	// The rollback reset the advertisement latch: a second cutover with
+	// The rollback cleared advertised: a second cutover with
 	// only an incapable sidecar attached must wait for a capable one.
 	for _, d := range r.daprds {
 		d.Cleanup(t)
@@ -286,7 +286,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		return false
 	}
 	require.Never(t, leader, time.Second*10, time.Millisecond*10,
-		"an incapable sidecar alone must not reopen the advertisement latch")
+		"an incapable sidecar alone must not restore the leader")
 
 	capCtx, capCancel := context.WithCancel(ctx)
 	t.Cleanup(capCancel)

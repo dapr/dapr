@@ -205,7 +205,7 @@ func (c *cron) Run(ctx context.Context) error {
 	})
 
 	// A placement stream connecting or closing recomputes the gate and the
-	// advertisement latch right away, not on the next unrelated event.
+	// advertisement right away, not on the next unrelated event.
 	if c.placement != nil {
 		c.placement.SetOnStreamsChange(func() {
 			leaderLoop.Enqueue(nil)

@@ -73,7 +73,7 @@ type Interface interface {
 	Advertised() bool
 	AnySchedulerPlacementIncapableSidecars() bool
 	AnySchedulerPlacementCapableSidecars() bool
-	LatchAdvertised()
+	SetAdvertised()
 }
 
 type Handoff struct {
@@ -96,8 +96,8 @@ type Handoff struct {
 	// address is unprobed and treated as a present placement service.
 	reqGen  uint64
 	doneGen uint64
-	// advertised latches the advertisement so a brief capable dip does not
-	// withdraw it. A reappearing placement service resets it.
+	// advertised is set once a placement leader was broadcast. A
+	// reappearing placement service clears it.
 	advertised bool
 	incapable  bool
 	capable    bool
@@ -193,9 +193,7 @@ func (h *Handoff) fireOnChange() {
 }
 
 // SetKubernetesPresence records whether the kubernetes controller's informer
-// sees a placement pod. A reappearing placement service resets the
-// advertisement latch, so the next cutover waits for a capable sidecar
-// again.
+// sees a placement pod.
 func (h *Handoff) SetKubernetesPresence(present bool) {
 	h.lock.Lock()
 	changed := h.podPresent != present
@@ -244,8 +242,8 @@ func (h *Handoff) refreshDetection(ctx context.Context) {
 	if sighted {
 		h.misses = 0
 		if !h.detected {
-			// A reappearing placement service resets the advertisement latch,
-			// so the next cutover waits for a capable sidecar again.
+			// A reappearing placement service clears advertised, so the next
+			// cutover waits for a capable sidecar again.
 			h.advertised = false
 		}
 		h.detected = true
@@ -395,20 +393,16 @@ func (h *Handoff) RequestDetection() {
 	h.fireOnChange()
 }
 
-// LatchAdvertised records that the advertisement was made with a capable
-// sidecar connected.
-func (h *Handoff) LatchAdvertised() {
+// SetAdvertised records that a placement leader was broadcast.
+func (h *Handoff) SetAdvertised() {
 	h.lock.Lock()
 	h.advertised = true
 	h.lock.Unlock()
 }
 
-// PlacementPresent reports whether a placement service exists: the
-// kubernetes informer sees a placement pod, the detection sights one, or a
-// detection of just-reported placement addresses is still in flight. The
-// in-flight presumption only withholds an advertisement not yet made: a
-// sidecar reconnect re-reports its addresses, and that must not withdraw a
-// standing advertisement, only a confirmed sighting does.
+// PlacementPresent reports whether a placement service exists: the informer
+// sees a pod, the detection sights one, or a just-reported address is
+// unprobed before any leader was broadcast.
 func (h *Handoff) PlacementPresent() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()

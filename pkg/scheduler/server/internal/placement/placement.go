@@ -160,8 +160,7 @@ func (p *placement) HasPlacementStreams() bool {
 }
 
 // SetOnStreamsChange registers the callback fired when the placement stream
-// count changes, so leadership recomputes the gate and the advertisement
-// latch on a stream connecting rather than on the next unrelated event.
+// count changes.
 func (p *placement) SetOnStreamsChange(fn func()) {
 	p.onStreamsChange.Store(&fn)
 }

@@ -49,7 +49,7 @@ func TestPresenceResetsAdvertised(t *testing.T) {
 	t.Parallel()
 
 	h := New(Options{})
-	h.LatchAdvertised()
+	h.SetAdvertised()
 	require.True(t, h.Advertised())
 
 	// A reappearing placement service means the next cutover waits for a
@@ -57,12 +57,12 @@ func TestPresenceResetsAdvertised(t *testing.T) {
 	h.SetKubernetesPresence(true)
 	assert.False(t, h.Advertised())
 
-	h.LatchAdvertised()
+	h.SetAdvertised()
 	h.SetKubernetesPresence(true)
-	assert.True(t, h.Advertised(), "an unchanged presence keeps the latch")
+	assert.True(t, h.Advertised(), "an unchanged presence keeps advertised")
 
 	h.SetKubernetesPresence(false)
-	assert.True(t, h.Advertised(), "an absence keeps the latch")
+	assert.True(t, h.Advertised(), "an absence keeps advertised")
 
 	h.SetKubernetesPresence(true)
 	assert.False(t, h.Advertised())
@@ -81,16 +81,16 @@ func TestDetectionResetsAdvertised(t *testing.T) {
 	}
 
 	h.refreshDetection(t.Context())
-	h.LatchAdvertised()
+	h.SetAdvertised()
 	require.True(t, h.Advertised())
 
 	h.refreshDetection(t.Context())
-	assert.True(t, h.Advertised(), "an unchanged sighting keeps the latch")
+	assert.True(t, h.Advertised(), "an unchanged sighting keeps advertised")
 
 	resolved = false
 	for range absenceConfirmations {
 		h.refreshDetection(t.Context())
-		assert.True(t, h.Advertised(), "an absence keeps the latch")
+		assert.True(t, h.Advertised(), "an absence keeps advertised")
 	}
 
 	resolved = true
@@ -184,7 +184,7 @@ func TestPendingDetectionKeepsAdvertisement(t *testing.T) {
 	t.Parallel()
 
 	h := New(Options{})
-	h.LatchAdvertised()
+	h.SetAdvertised()
 
 	// A reconnecting sidecar re-reports its addresses: the in-flight
 	// presumption must not withdraw the standing advertisement.

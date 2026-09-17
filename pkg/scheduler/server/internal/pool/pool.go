@@ -61,7 +61,7 @@ type Pool struct {
 	readyCh chan struct{}
 
 	// incapable/capable count connected sidecars by whether they reported
-	// supports_scheduler_placement, for gating and latching the placement
+	// supports_scheduler_placement, for gating the placement
 	// advertisement.
 	capLock                     sync.Mutex
 	incapable                   int

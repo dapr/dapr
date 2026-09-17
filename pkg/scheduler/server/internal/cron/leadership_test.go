@@ -400,7 +400,7 @@ type fakeHandoff struct {
 	capable    bool
 	notReady   bool
 
-	latched int
+	advertisedCalls int
 }
 
 func (f *fakeHandoff) Ready() bool                                  { return !f.notReady }
@@ -408,7 +408,7 @@ func (f *fakeHandoff) PlacementPresent() bool                       { return f.p
 func (f *fakeHandoff) Advertised() bool                             { return f.advertised }
 func (f *fakeHandoff) AnySchedulerPlacementIncapableSidecars() bool { return f.incapable }
 func (f *fakeHandoff) AnySchedulerPlacementCapableSidecars() bool   { return f.capable }
-func (f *fakeHandoff) LatchAdvertised()                             { f.latched++ }
+func (f *fakeHandoff) SetAdvertised()                               { f.advertisedCalls++ }
 
 func TestLeadershipPlacementPresence(t *testing.T) {
 	t.Parallel()
@@ -450,10 +450,10 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		require.Len(t, hosts, 2)
 		assert.False(t, hosts[0].GetLeader())
 		assert.False(t, hosts[0].GetSchedulerPlacementEnabled())
-		assert.Zero(t, hoff.latched, "a withheld advertisement must not latch")
+		assert.Zero(t, hoff.advertisedCalls, "a withheld advertisement must not set advertised")
 	})
 
-	t.Run("absent placement advertises and latches", func(t *testing.T) {
+	t.Run("absent placement advertises", func(t *testing.T) {
 		t.Parallel()
 		hoff := &fakeHandoff{capable: true}
 		l, ch := newLeadership(hoff)
@@ -465,7 +465,7 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		require.Len(t, hosts, 2)
 		assert.True(t, hosts[0].GetLeader())
 		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
-		assert.Equal(t, 1, hoff.latched)
+		assert.Equal(t, 1, hoff.advertisedCalls)
 	})
 
 	t.Run("reappearing placement withholds an advertised leader", func(t *testing.T) {
@@ -496,13 +496,13 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		require.Len(t, hosts, 1)
 		assert.False(t, hosts[0].GetLeader())
 		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
-		assert.Zero(t, hoff.latched)
+		assert.Zero(t, hoff.advertisedCalls)
 	})
 
-	t.Run("replicated advertised latch survives losing every capable sidecar", func(t *testing.T) {
+	t.Run("replicated advertised survives losing every capable sidecar", func(t *testing.T) {
 		t.Parallel()
-		// No capable sidecar, no placement stream: only the latch keeps the
-		// leader advertised.
+		// No capable sidecar, no placement stream: only advertised keeps
+		// the leader broadcast.
 		hoff := &fakeHandoff{advertised: true, incapable: true}
 		l, ch := newLeadership(hoff)
 		l.placement = new(fakePlacementLeader)

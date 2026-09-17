@@ -56,9 +56,8 @@ type leadership struct {
 	// goroutine only.
 	lastCronTable []*schedulerv1pb.Host
 
-	// advertised latches once placement was advertised to a capable
-	// sidecar, so a stale old sidecar joining later cannot drop every
-	// placement stream. Fallback when handoff is nil.
+	// advertised is set once a leader was broadcast to a capable sidecar.
+	// Fallback when handoff is nil.
 	advertised bool
 
 	incapableWarned        bool
@@ -150,12 +149,11 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	if awaitingLeadership {
 		leaderAddr = ""
 	}
-	// The latch waits for a sidecar to take a placement stream, so a
-	// broadcast racing another scheduler's gate entry stays revocable.
-	if leaderAddr != "" && gateCapable && !advertised &&
-		h.placement != nil && h.placement.HasPlacementStreams() {
+	// Once any scheduler broadcasts a leader it keeps broadcasting one
+	// through sidecar reconnects.
+	if leaderAddr != "" && gateCapable && !advertised {
 		if h.handoff != nil {
-			h.handoff.LatchAdvertised()
+			h.handoff.SetAdvertised()
 		} else {
 			h.advertised = true
 		}
