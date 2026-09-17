@@ -57,6 +57,9 @@ type Scheduler struct {
 	ports      *ports.Ports
 	httpClient *http.Client
 
+	clientLock sync.Mutex
+	client     schedulerv1pb.SchedulerClient
+
 	port        int
 	healthzPort int
 	metricsPort int
@@ -334,8 +337,17 @@ func (s *Scheduler) DataDir() string {
 	return s.dataDir
 }
 
+// Client returns a cached client so pollers can call it from assertion
+// goroutines: only the first call, on the test goroutine, dials and
+// registers cleanup.
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	t.Helper()
+
+	s.clientLock.Lock()
+	defer s.clientLock.Unlock()
+	if s.client != nil {
+		return s.client
+	}
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
@@ -344,9 +356,15 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	t.Cleanup(func() {
+		s.clientLock.Lock()
+		s.client = nil
+		s.clientLock.Unlock()
+		require.NoError(t, conn.Close())
+	})
 
-	return schedulerv1pb.NewSchedulerClient(conn)
+	s.client = schedulerv1pb.NewSchedulerClient(conn)
+	return s.client
 }
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {

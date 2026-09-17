@@ -135,14 +135,14 @@ func (p *placementpresence) Run(t *testing.T, ctx context.Context) {
 		return false
 	}
 
-	require.Never(t, leader, time.Second*10, time.Millisecond*250,
+	require.Never(t, leader, time.Second*10, time.Millisecond*10,
 		"the informer sees a placement pod, so the leader must be withheld")
 
 	// Deleting the placement pod hands placement to the scheduler.
 	p.pods.Set()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 
 	p.log.EventuallyFoundAll(t)
 }

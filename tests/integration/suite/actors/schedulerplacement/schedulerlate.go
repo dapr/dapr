@@ -92,7 +92,7 @@ func (s *schedulerlate) Run(t *testing.T, ctx context.Context) {
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*30, time.Millisecond*10)
+	}, time.Second*15, time.Millisecond*10)
 
 	// The scheduler arrives late into a cluster the placement service
 	// already serves.
@@ -117,7 +117,7 @@ func (s *schedulerlate) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second*15, time.Millisecond*250,
+	}, time.Second*15, time.Millisecond*10,
 		"a scheduler booting into a live placement service must not advertise")
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -128,7 +128,7 @@ func (s *schedulerlate) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, runtimes, float64(1))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	invokedBefore := s.invoked.Load()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

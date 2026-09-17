@@ -94,7 +94,7 @@ func (r *reconnectflap) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			assert.NoError(c, err)
-		}, time.Second*30, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 	}
 
 	first := newDaprd()
@@ -126,7 +126,7 @@ func (r *reconnectflap) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		l, ok := leader()
 		assert.True(c, ok && l)
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	// The sampler watches the advertisement across the restart.
 	var sawWithdrawn atomic.Bool

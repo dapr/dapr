@@ -86,7 +86,7 @@ func (n *noflag) Run(t *testing.T, ctx context.Context) {
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*30, time.Millisecond*10)
+	}, time.Second*15, time.Millisecond*10)
 
 	n.place.Cleanup(t)
 
@@ -109,7 +109,7 @@ func (n *noflag) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second*15, time.Millisecond*250,
+	}, time.Second*15, time.Millisecond*10,
 		"an unflagged scheduler must not advertise a placement leader")
 
 	sctx, cancel := context.WithTimeout(ctx, time.Second*2)

@@ -191,7 +191,7 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second*3, time.Millisecond*250,
+	}, time.Second*3, time.Millisecond*10,
 		"no placement leader may be advertised while a reported placement service still serves")
 
 	// The placement service is torn down: with nothing serving placement the
@@ -221,7 +221,7 @@ func (g *gate) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, streams, float64(1))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	// The latch holds: a late old sidecar must not revoke the
 	// advertisement and drop every placement stream.

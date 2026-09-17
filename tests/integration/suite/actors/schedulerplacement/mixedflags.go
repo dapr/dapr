@@ -102,7 +102,7 @@ func (m *mixedflags) Run(t *testing.T, ctx context.Context) {
 				assert.False(c, leader)
 				assert.False(c, capable)
 			}
-		}, time.Second*10, time.Millisecond*50)
+		}, time.Second*10, time.Millisecond*10)
 	}
 
 	require.Never(t, func() bool {
@@ -112,7 +112,7 @@ func (m *mixedflags) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second*10, time.Millisecond*250,
+	}, time.Second*10, time.Millisecond*10,
 		"no scheduler may advertise a placement leader while the placement service runs, whichever schedulers carry the flag")
 
 	// Removing the placement service hands placement to the flagged
@@ -122,6 +122,6 @@ func (m *mixedflags) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			leader, _, ok := hosts(n)
 			assert.True(c, ok && leader)
-		}, time.Second*15, time.Millisecond*100)
+		}, time.Second*15, time.Millisecond*10)
 	}
 }

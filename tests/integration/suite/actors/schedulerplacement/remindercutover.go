@@ -106,7 +106,7 @@ func (r *remindercutover) Run(t *testing.T, ctx context.Context) {
 	// The reminder fires through the placement service first.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Positive(c, r.fired.Load())
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	r.place.Cleanup(t)
 
@@ -118,11 +118,11 @@ func (r *remindercutover) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, streams, float64(3))
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 
 	// Fires keep landing once the scheduler table owns the actor.
 	afterCutover := r.fired.Load()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Greater(c, r.fired.Load(), afterCutover+2)
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 }

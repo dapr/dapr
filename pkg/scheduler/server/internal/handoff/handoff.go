@@ -135,7 +135,7 @@ func (h *Handoff) Run(ctx context.Context) error {
 	for {
 		// While an absence awaits confirmation, refresh quickly so the
 		// cutover is not delayed by a full interval per confirmation.
-		interval := time.Second * 10
+		interval := time.Second * 5
 		if h.confirmingAbsence() {
 			interval = time.Second
 		}

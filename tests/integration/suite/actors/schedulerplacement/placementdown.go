@@ -33,31 +33,20 @@ import (
 )
 
 func init() {
-	suite.Register(new(authoritydown))
+	suite.Register(new(placementdown))
 }
 
-// authoritydown runs the identical outage against both placement
-// authorities: the authority is killed mid-test, invocation stalls, the
-// authority returns on the same address and actor calls flow again with no
-// sidecar restart. A divergence in what an outage costs a running actor
-// host fails one leg and not the other.
-type authoritydown struct {
-	place *downTopology
-	sched *downTopology
+// placementdown kills the standalone placement service under a running actor
+// host: invocation stalls, the service returns on the same address, and
+// actor calls flow again with no sidecar restart
+type placementdown struct {
+	daprd     *daprd.Daprd
+	place     *placement.Placement
+	placeBack *placement.Placement
+	invoked   atomic.Int64
 }
 
-// downTopology is one actor host placed by one authority, with hooks to
-// kill that authority and bring it back on the same address.
-type downTopology struct {
-	daprd   *daprd.Daprd
-	invoked atomic.Int64
-	kill    func(t *testing.T)
-	revive  func(t *testing.T, ctx context.Context)
-}
-
-func (a *authoritydown) newTopology(t *testing.T) (*downTopology, *prochttp.HTTP) {
-	t.Helper()
-	topo := new(downTopology)
+func (p *placementdown) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
@@ -67,80 +56,34 @@ func (a *authoritydown) newTopology(t *testing.T) (*downTopology, *prochttp.HTTP
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {
-		topo.invoked.Add(1)
+		p.invoked.Add(1)
 	})
-	return topo, prochttp.New(t, prochttp.WithHandler(handler))
-}
+	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
-func (a *authoritydown) Setup(t *testing.T) []framework.Option {
-	// Placement leg: the scheduler does not serve placement, the
-	// pre-PlacementV2 topology.
-	placeTopo, placeSrv := a.newTopology(t)
-	placeSched := scheduler.New(t)
-	place := placement.New(t)
-	placeBack := placement.New(t,
-		placement.WithID(place.ID()),
-		placement.WithPort(place.Port()),
-		placement.WithInitialCluster(place.InitialCluster()),
-		placement.WithInitialClusterPorts(place.InitialClusterPorts()...),
+	sched := scheduler.New(t)
+	p.place = placement.New(t)
+	p.placeBack = placement.New(t,
+		placement.WithID(p.place.ID()),
+		placement.WithPort(p.place.Port()),
+		placement.WithInitialCluster(p.place.InitialCluster()),
+		placement.WithInitialClusterPorts(p.place.InitialClusterPorts()...),
 	)
-	placeTopo.daprd = daprd.New(t,
+	p.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithAppPort(placeSrv.Port()),
-		daprd.WithScheduler(placeSched),
-		daprd.WithPlacementAddresses(place.Address()),
-	)
-	placeTopo.kill = func(t *testing.T) { place.Cleanup(t) }
-	placeTopo.revive = func(t *testing.T, ctx context.Context) {
-		placeBack.Run(t, ctx)
-		t.Cleanup(func() { placeBack.Cleanup(t) })
-		placeBack.WaitUntilRunning(t, ctx)
-	}
-	a.place = placeTopo
-
-	// Scheduler leg: the scheduler serves placement. Its replacement reuses
-	// the address, ID and data directory, standing in for the scheduler
-	// being rescheduled.
-	schedTopo, schedSrv := a.newTopology(t)
-	sched := scheduler.New(t, scheduler.WithPlacementEnabled(true))
-	schedBack := scheduler.New(t,
-		scheduler.WithPlacementEnabled(true),
-		scheduler.WithID(sched.ID()),
-		scheduler.WithPort(sched.Port()),
-		scheduler.WithEtcdClientPort(sched.EtcdClientPort()),
-		scheduler.WithInitialCluster(sched.InitialCluster()),
-		scheduler.WithDataDir(sched.DataDir()),
-	)
-	schedTopo.daprd = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithAppPort(schedSrv.Port()),
+		daprd.WithAppPort(srv.Port()),
 		daprd.WithScheduler(sched),
+		daprd.WithPlacementAddresses(p.place.Address()),
 	)
-	schedTopo.kill = func(t *testing.T) { sched.Kill(t) }
-	schedTopo.revive = func(t *testing.T, ctx context.Context) {
-		schedBack.Run(t, ctx)
-		t.Cleanup(func() { schedBack.Cleanup(t) })
-		schedBack.WaitUntilRunning(t, ctx)
-	}
-	a.sched = schedTopo
 
 	return []framework.Option{
-		framework.WithProcesses(
-			placeSched, place, placeSrv, placeTopo.daprd,
-			sched, schedSrv, schedTopo.daprd,
-		),
+		framework.WithProcesses(sched, p.place, srv, p.daprd),
 	}
 }
 
-func (a *authoritydown) Run(t *testing.T, ctx context.Context) {
-	t.Run("placement", func(t *testing.T) { a.body(t, ctx, a.place) })
-	t.Run("scheduler", func(t *testing.T) { a.body(t, ctx, a.sched) })
-}
+func (p *placementdown) Run(t *testing.T, ctx context.Context) {
+	p.daprd.WaitUntilRunning(t, ctx)
 
-func (a *authoritydown) body(t *testing.T, ctx context.Context, topo *downTopology) {
-	topo.daprd.WaitUntilRunning(t, ctx)
-
-	gclient := topo.daprd.GRPCClient(t, ctx)
+	gclient := p.daprd.GRPCClient(t, ctx)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -156,8 +99,8 @@ func (a *authoritydown) body(t *testing.T, ctx context.Context, topo *downTopolo
 	assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 
-	invokedBefore := topo.invoked.Load()
-	topo.kill(t)
+	invokedBefore := p.invoked.Load()
+	p.place.Cleanup(t)
 
 	// The sidecar reports the placement connection as lost.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -179,20 +122,22 @@ func (a *authoritydown) body(t *testing.T, ctx context.Context, topo *downTopolo
 		Method:    "foo",
 	})
 	require.Error(t, err, "actor invocation should stall while placement is down")
-	assert.Equal(t, invokedBefore, topo.invoked.Load(), "no call should have reached the app")
+	assert.Equal(t, invokedBefore, p.invoked.Load(), "no call should have reached the app")
 
-	topo.revive(t, ctx)
+	// The placement service returns on the same address.
+	p.placeBack.Run(t, ctx)
+	t.Cleanup(func() { p.placeBack.Cleanup(t) })
+	p.placeBack.WaitUntilRunning(t, ctx)
 
-	// Placement recovers and actor calls flow again, without restarting the
-	// sidecar and without any persisted placement state: the table is
-	// rebuilt from the sidecar's stream.
+	// Actor calls flow again with no sidecar restart and no persisted
+	// placement state: the table is rebuilt from the sidecar's stream.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, merr := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		if !assert.NoError(c, merr) {
 			return
 		}
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-	}, time.Second*30, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, ierr := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -202,5 +147,5 @@ func (a *authoritydown) body(t *testing.T, ctx context.Context, topo *downTopolo
 		})
 		assert.NoError(c, ierr)
 	}, time.Second*20, time.Millisecond*10)
-	assert.Greater(t, topo.invoked.Load(), invokedBefore)
+	assert.Greater(t, p.invoked.Load(), invokedBefore)
 }

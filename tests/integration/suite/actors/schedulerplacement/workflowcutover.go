@@ -119,7 +119,7 @@ func (w *workflowcutover) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.True(c, api.WorkflowMetadataIsRunning(meta))
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	w.place.Cleanup(t)
 
@@ -131,7 +131,7 @@ func (w *workflowcutover) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, streams, float64(2))
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 
 	require.NoError(t, clients[0].RaiseEvent(ctx, id, "go", api.WithEventPayload("after")))
 

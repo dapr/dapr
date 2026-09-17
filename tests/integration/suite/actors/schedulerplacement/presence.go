@@ -108,12 +108,12 @@ func (p *presence) Run(t *testing.T, ctx context.Context) {
 			assert.False(c, host.GetSchedulerPlacementEnabled())
 			assert.False(c, host.GetLeader())
 		}
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	p.place.Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	p.log.EventuallyFoundAll(t)
 }

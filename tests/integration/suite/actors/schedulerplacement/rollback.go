@@ -124,7 +124,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 			leader = leader || host.GetLeader()
 		}
 		assert.True(c, leader)
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	gclient := r.daprds[0].GRPCClient(t, ctx)
 
@@ -165,7 +165,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.GreaterOrEqual(c, streams, float64(1))
 		assert.Equal(c, 1, int(leader))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	invokedBefore := r.invoked.Load()
 
@@ -228,7 +228,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.Zero(c, streams)
 		assert.Zero(c, leader)
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	invokeAll()
 	assert.Greater(t, r.invoked.Load(), invokedBefore)
@@ -247,7 +247,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.Positive(c, active)
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	pollCancel()
 	<-pollDone
@@ -285,7 +285,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 		}
 		return false
 	}
-	require.Never(t, leader, time.Second*10, time.Millisecond*250,
+	require.Never(t, leader, time.Second*10, time.Millisecond*10,
 		"an incapable sidecar alone must not reopen the advertisement latch")
 
 	capCtx, capCancel := context.WithCancel(ctx)
@@ -297,7 +297,7 @@ func (r *rollback) Run(t *testing.T, ctx context.Context) {
 	})
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 }
 
 type quietT struct{}

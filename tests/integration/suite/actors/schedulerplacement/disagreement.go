@@ -101,7 +101,7 @@ func (d *disagreement) Run(t *testing.T, ctx context.Context) {
 			assert.False(c, leader)
 			assert.False(c, capable)
 		}
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	// The schedulers disagree about presence, yet none may advertise:
 	// scheduler-0 withholds for the placement service, the others for want
@@ -113,6 +113,6 @@ func (d *disagreement) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second*10, time.Millisecond*250,
+	}, time.Second*10, time.Millisecond*10,
 		"no scheduler may advertise a placement leader while the placement service runs")
 }

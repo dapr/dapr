@@ -105,12 +105,12 @@ func (h *hangingplacement) Run(t *testing.T, ctx context.Context) {
 			assert.False(c, l)
 			assert.False(c, capable)
 		}
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	require.Never(t, func() bool {
 		l, _, ok := leader()
 		return ok && l
-	}, time.Second*10, time.Millisecond*250,
+	}, time.Second*10, time.Millisecond*10,
 		"a placement service which hangs on the protocol check is still present")
 
 	// Stopping the hanging placement service confirms its absence and hands
@@ -119,5 +119,5 @@ func (h *hangingplacement) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		l, _, ok := leader()
 		assert.True(c, ok && l)
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 }

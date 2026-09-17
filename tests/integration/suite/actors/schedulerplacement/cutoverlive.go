@@ -184,7 +184,7 @@ func (c *cutoverlive) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(a, streams, float64(3))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	// A sidecar restarting after the cutover drops and re-reports its
 	// configured placement addresses: presence must not flap the authority
@@ -207,7 +207,7 @@ func (c *cutoverlive) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return l == 0
-	}, time.Second*5, time.Millisecond*250,
+	}, time.Second*5, time.Millisecond*10,
 		"a sidecar restart must not flap the authority back to placement")
 	invokeAll()
 }

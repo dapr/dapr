@@ -199,7 +199,7 @@ func (a *cutoversingleactivation) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, streams, float64(3))
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 
 	for _, id := range ids {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {

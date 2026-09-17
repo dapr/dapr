@@ -86,7 +86,7 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		all := g.schedulers[1].Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(all["dapr_scheduler_placement_incapable_sidecars"]))
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	schedulerPlacementEnabled := func(sched *scheduler.Scheduler) bool {
 		stream, err := sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
@@ -109,7 +109,7 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 	for _, sched := range g.schedulers {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, schedulerPlacementEnabled(sched), "an old sidecar must not hide the scheduler placement capability")
-		}, time.Second*20, time.Millisecond*50)
+		}, time.Second*20, time.Millisecond*10)
 	}
 
 	// A capable sidecar on scheduler 0 makes it advertise the leader, old
@@ -142,7 +142,7 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leaderOn(g.schedulers[0]),
 			"an old sidecar elsewhere must not withhold the advertisement")
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	// The other schedulers have no capable sidecar of their own yet, so
 	// they stay leaderless. Once one connects to each, every scheduler
@@ -158,6 +158,6 @@ func (g *gateha) Run(t *testing.T, ctx context.Context) {
 	for _, sched := range g.schedulers {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, leaderOn(sched))
-		}, time.Second*20, time.Millisecond*50)
+		}, time.Second*20, time.Millisecond*10)
 	}
 }

@@ -98,7 +98,7 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			assert.NoError(c, err)
-		}, time.Second*30, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 	}
 	placementRuntimes := func(c *assert.CollectT) float64 {
 		var runtimes float64
@@ -132,7 +132,7 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 	invoke()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 	for n := range 3 {
 		leader, capable := hosts(n)
 		require.False(t, leader,
@@ -148,7 +148,7 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			leader, _ := hosts(n)
 			assert.True(c, leader)
-		}, time.Second*30, time.Millisecond*100)
+		}, time.Second*15, time.Millisecond*10)
 	}
 
 	invokedBefore := b.invoked.Load()
