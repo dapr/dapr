@@ -266,15 +266,16 @@ func TestProbeAddressRequiresPlacementProtocol(t *testing.T) {
 	assert.False(t, h.probeAddress(t.Context(), newServer(t, false), id),
 		"a gRPC server which does not speak the placement protocol is not a placement service")
 
-	// A protocol check running out of time is no answer, not a sighting.
+	// A reachable peer which hangs on the protocol check already proved the
+	// placement identity, so it counts as a sighting.
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	srv := grpc.NewServer()
 	v1pb.RegisterPlacementServer(srv, &hangingPlacementServer{})
 	go srv.Serve(lis)
 	t.Cleanup(srv.Stop)
-	assert.False(t, h.probeAddress(t.Context(), lis.Addr().String(), id),
-		"a hanging protocol check is not a sighting")
+	assert.True(t, h.probeAddress(t.Context(), lis.Addr().String(), id),
+		"a slow placement service is still a placement service")
 }
 
 type hangingPlacementServer struct {

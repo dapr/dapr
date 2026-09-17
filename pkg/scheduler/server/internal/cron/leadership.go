@@ -161,7 +161,7 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		}
 	}
 
-	if placementPresent && !h.placementPresentLogged {
+	if placementPresent && electedAddr != "" && !h.placementPresentLogged {
 		h.placementPresentLogged = true
 		log.Info("A placement service is deployed, so actor placement stays with the placement service and this scheduler withholds its placement leader. Undeploying the placement service moves actor placement to the scheduler.")
 	} else if !placementPresent {

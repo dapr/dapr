@@ -117,10 +117,6 @@ func (c *connector) handleReconnect(ctx context.Context, e *loops.Reconnect) {
 		c.currentActorTypes = *e.ActorTypes
 	}
 
-	if e.ActorAddress != nil {
-		c.currentActorAddress = *e.ActorAddress
-	}
-
 	c.maybeClientConnect(ctx)
 }
 

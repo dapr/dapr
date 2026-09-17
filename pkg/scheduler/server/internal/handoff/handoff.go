@@ -365,16 +365,11 @@ func (h *Handoff) probeAddress(ctx context.Context, addr string, placementID spi
 }
 
 // isPlacementService reports whether the protocol check's answer marks the
-// peer as a placement service. Unimplemented is a definite no, and running out of time
-// is no answer at all, so neither is a sighting. Any other answer from an
-// identity-verified peer is.
+// peer as a placement service. The peer already proved the placement
+// identity on the handshake, so only Unimplemented means no: a slow answer
+// is still a placement service.
 func isPlacementService(err error) bool {
-	switch status.Code(err) {
-	case codes.Unimplemented, codes.Canceled, codes.DeadlineExceeded:
-		return false
-	default:
-		return true
-	}
+	return status.Code(err) != codes.Unimplemented
 }
 
 // SetPlacementAddresses registers the source of the placement addresses the

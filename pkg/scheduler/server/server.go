@@ -166,23 +166,23 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
-	// The handoff orchestrates the placement authority handover, so only a
-	// scheduler which serves placement runs it. Its state is derived from
-	// live connections, so it runs on every backend.
-	var hoff *handoff.Handoff
-	if opts.PlacementEnabled {
-		// In kubernetes a placement service too old to announce itself is
-		// still detected through its service name resolving.
-		var placementDNSName string
-		if opts.Mode == modes.KubernetesMode {
-			placementDNSName = "dapr-placement-server"
-		}
+	// Every scheduler runs the placement detection, whether or not it serves
+	// placement itself: during a rolling update of the placement flag a
+	// scheduler without it still elects the placement leader among its
+	// flagged peers, so it must withhold that election while a placement
+	// service is present.
 
-		hoff = handoff.New(handoff.Options{
-			PlacementDNSName: placementDNSName,
-			Security:         opts.Security,
-		})
+	// In kubernetes a placement service too old to announce itself is
+	// still detected through its service name resolving.
+	var placementDNSName string
+	if opts.Mode == modes.KubernetesMode {
+		placementDNSName = "dapr-placement-server"
 	}
+
+	hoff := handoff.New(handoff.Options{
+		PlacementDNSName: placementDNSName,
+		Security:         opts.Security,
+	})
 
 	place := placement.New(placement.Options{
 		Enabled:            opts.PlacementEnabled,
@@ -209,9 +209,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
-		if hoff != nil {
-			opts.Controller.SetPresenceSink(hoff)
-		}
+		opts.Controller.SetPresenceSink(hoff)
 	}
 
 	return &Server{
@@ -265,9 +263,7 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 	}
 
-	if s.handoff != nil {
-		runners = append(runners, s.handoff.Run)
-	}
+	runners = append(runners, s.handoff.Run)
 
 	if s.etcd != nil {
 		runners = append(runners, s.etcd.Run)

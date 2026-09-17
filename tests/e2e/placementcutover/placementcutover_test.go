@@ -193,6 +193,7 @@ func schedulerPlacementStreams(client *kube.KubeClient) (float64, error) {
 	}
 
 	var total float64
+	var scraped int
 	for _, pod := range pods.Items {
 		fw := kube.NewPodPortForwarder(client, daprNamespace())
 		ports, ferr := fw.Connect(pod.Name, schedulerMetricsPort)
@@ -205,6 +206,7 @@ func schedulerPlacementStreams(client *kube.KubeClient) (float64, error) {
 		if gerr != nil || status != 200 {
 			continue
 		}
+		scraped++
 		for line := range strings.SplitSeq(string(body), "\n") {
 			if !strings.HasPrefix(line, "dapr_scheduler_placement_streams_connected") {
 				continue
@@ -214,6 +216,9 @@ func schedulerPlacementStreams(client *kube.KubeClient) (float64, error) {
 				total += v
 			}
 		}
+	}
+	if scraped == 0 {
+		return 0, fmt.Errorf("failed to scrape any of the %d scheduler pods", len(pods.Items))
 	}
 	return total, nil
 }

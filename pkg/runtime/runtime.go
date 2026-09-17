@@ -1316,11 +1316,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		return err
 	}
 
-	// Report the actor host:port on WatchJobs streams, byte identical to the
-	// address reported on the placement stream, so schedulers can route
-	// actor reminder triggers directly to the placement owner host.
-	a.jobsManager.SetActorAddress(net.JoinHostPort(hostAddress, strconv.Itoa(a.runtimeConfig.internalGRPCPort)))
-
 	if err := a.actors.Init(actors.InitOptions{
 		Hostname:            hostAddress,
 		GRPC:                a.grpc,

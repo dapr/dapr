@@ -152,15 +152,6 @@ func (s *Scheduler) StopApp() {
 	})
 }
 
-// SetActorAddress sets the daprd internal gRPC host:port reported on
-// WatchJobs streams, enabling schedulers to route actor reminder triggers
-// directly to the placement owner host.
-func (s *Scheduler) SetActorAddress(address string) {
-	s.connector.Enqueue(&loops.Reconnect{
-		ActorAddress: &address,
-	})
-}
-
 func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
 	slices.Sort(actorTypes)
 
