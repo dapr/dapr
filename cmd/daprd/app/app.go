@@ -36,6 +36,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -228,6 +229,12 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 			})
 			if rerr != nil {
 				return rerr
+			}
+
+			// The security provider initializes mTLS before the runtime (and its
+			// metrics) exist, so the metric can only be recorded once both are up.
+			if opts.EnableMTLS || modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+				diagnostics.DefaultMonitoring.MTLSInitCompleted()
 			}
 
 			return rt.Run(ctx)
