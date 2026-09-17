@@ -403,7 +403,7 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	}
 }
 
-// SecretInvoked records the metrics for a secret event.
+// ConversationInvoked records the metrics for a conversation event.
 func (c *componentMetrics) ConversationInvoked(ctx context.Context, component string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithOptions(
