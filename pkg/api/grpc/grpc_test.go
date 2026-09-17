@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -2592,6 +2593,28 @@ func TestPublishTopic(t *testing.T) {
 			Topic:      "err-not-allowed",
 		})
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
+}
+
+func TestBaggageFromContext(t *testing.T) {
+	t.Run("incoming metadata", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "key1=value1,key2=value2"))
+		assert.Equal(t, "key1=value1,key2=value2", baggageFromContext(ctx))
+	})
+
+	t.Run("context takes precedence", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "metadata=value"))
+		member, err := baggage.NewMember("context", "value")
+		require.NoError(t, err)
+		bag, err := baggage.New(member)
+		require.NoError(t, err)
+		ctx = baggage.ContextWithBaggage(ctx, bag)
+		assert.Equal(t, "context=value", baggageFromContext(ctx))
+	})
+
+	t.Run("invalid metadata", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "invalid value"))
+		assert.Empty(t, baggageFromContext(ctx))
 	})
 }
 

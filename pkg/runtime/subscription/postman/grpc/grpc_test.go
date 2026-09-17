@@ -22,18 +22,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	googlegrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
+	"github.com/dapr/dapr/pkg/runtime/subscription/todo"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
 )
 
@@ -111,6 +116,129 @@ func TestErrorPublishedNonCloudEvent(t *testing.T) {
 			assert.Equal(t, tc.ExpectError, err != nil, "expected error: %v, got: %v", tc.ExpectError, err)
 		})
 	}
+}
+
+func TestDeliverRestoresTraceStateAndBaggage(t *testing.T) {
+	t.Parallel()
+
+	traceState, err := trace.ParseTraceState("vendor=value")
+	require.NoError(t, err)
+
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic1",
+		"pubsub", "", []byte("message"), "00-00112233445566778899aabbccddeeff-0011223344556677-01", traceState.String())
+	cloudEvent[diagConsts.BaggageHeader] = "key=value"
+
+	testPubSubMessage := &pubsub.SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic1",
+		Data:       []byte("message"),
+		Path:       "topic1",
+	}
+
+	var capturedCtx context.Context
+	mockClientConn := channelt.MockClientConn{
+		InvokeFn: func(ctx context.Context, method string, args any, reply any, opts ...googlegrpc.CallOption) error {
+			capturedCtx = ctx
+			response, ok := reply.(*runtimev1pb.TopicEventResponse)
+			require.True(t, ok, "expected TopicEventResponse type")
+			response.Status = runtimev1pb.TopicEventResponse_SUCCESS
+			return nil
+		},
+	}
+
+	channel := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{})
+	channel.SetAppClientConn(&mockClientConn)
+	g := New(Options{
+		Channel: channel,
+		Tracing: &config.TracingSpec{SamplingRate: "1"},
+	})
+
+	require.NoError(t, g.Deliver(t.Context(), testPubSubMessage))
+
+	md, ok := grpcMetadata.FromOutgoingContext(capturedCtx)
+	require.True(t, ok)
+	assert.Equal(t, []string{traceState.String()}, md.Get(diagConsts.TracestateHeader))
+	assert.Equal(t, []string{"key=value"}, md.Get(diagConsts.BaggageHeader))
+}
+
+func TestDeliverBulkDoesNotPropagateEntryContext(t *testing.T) {
+	t.Parallel()
+
+	const (
+		firstEntryID  = "entry-1"
+		secondEntryID = "entry-2"
+	)
+	ctx := grpcMetadata.NewOutgoingContext(t.Context(), grpcMetadata.Pairs(
+		diagConsts.BaggageHeader, "parent=value",
+		"parent-key", "parent-value",
+	))
+	var capturedCtx context.Context
+	mockClientConn := channelt.MockClientConn{
+		InvokeFn: func(ctx context.Context, method string, args any, reply any, opts ...googlegrpc.CallOption) error {
+			capturedCtx = ctx
+			response, ok := reply.(*runtimev1pb.TopicEventBulkResponse)
+			require.True(t, ok, "expected TopicEventBulkResponse type")
+			response.Statuses = []*runtimev1pb.TopicEventBulkResponseEntry{
+				{EntryId: firstEntryID, Status: runtimev1pb.TopicEventResponse_SUCCESS},
+				{EntryId: secondEntryID, Status: runtimev1pb.TopicEventResponse_SUCCESS},
+			}
+			return nil
+		},
+	}
+	channel := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{})
+	channel.SetAppClientConn(&mockClientConn)
+	g := New(Options{Channel: channel, Tracing: &config.TracingSpec{SamplingRate: "1"}})
+
+	entries := []contribpubsub.BulkMessageEntry{
+		{EntryId: firstEntryID, Event: []byte("first"), ContentType: "text/plain"},
+		{EntryId: secondEntryID, Event: []byte("second"), ContentType: "text/plain"},
+	}
+	psm := todo.BulkSubscribedMessage{
+		PubSubMessages: []todo.Message{
+			{
+				CloudEvent: map[string]any{
+					contribpubsub.TraceParentField: "00-00112233445566778899aabbccddeeff-0011223344556677-01",
+					contribpubsub.TraceStateField:  "first=value",
+					diagConsts.BaggageHeader:       "first=value",
+				},
+				Entry: &entries[0],
+			},
+			{
+				CloudEvent: map[string]any{
+					contribpubsub.TraceParentField: "00-112233445566778899aabbccddeeff00-1122334455667788-01",
+					contribpubsub.TraceStateField:  "second=value",
+					diagConsts.BaggageHeader:       "second=value",
+				},
+				Entry: &entries[1],
+			},
+		},
+		Topic:  "topic1",
+		Pubsub: "testpubsub",
+		Path:   "topic1",
+		Length: 2,
+	}
+	entryIDIndexMap := map[string]int{firstEntryID: 0, secondEntryID: 1}
+	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 0, 2)
+	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
+	bscData := todo.BulkSubscribeCallData{
+		BulkResponses:   &bulkResponses,
+		BulkSubDiag:     &bulkSubDiag,
+		EntryIdIndexMap: &entryIDIndexMap,
+		PsName:          psm.Pubsub,
+		Topic:           psm.Topic,
+	}
+
+	require.NoError(t, g.DeliverBulk(ctx, &postman.DeliverBulkRequest{
+		BulkSubCallData: &bscData,
+		BulkSubMsg:      &psm,
+		BulkResponses:   &bulkResponses,
+	}))
+	metadata, ok := grpcMetadata.FromOutgoingContext(capturedCtx)
+	require.True(t, ok)
+	assert.Equal(t, []string{"parent-value"}, metadata.Get("parent-key"))
+	assert.Equal(t, []string{"parent=value"}, metadata.Get(diagConsts.BaggageHeader))
+	assert.Empty(t, metadata.Get(diagConsts.TraceparentHeader))
+	assert.Empty(t, metadata.Get(diagConsts.TracestateHeader))
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {

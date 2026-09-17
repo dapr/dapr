@@ -25,10 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -155,6 +159,145 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		assert.Equal(t, runtimePubsub.ErrMessageDropped, h.Deliver(t.Context(), testPubSubMessage))
 	})
+}
+
+func TestDeliverRestoresTraceState(t *testing.T) {
+	traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("0011223344556677")
+	require.NoError(t, err)
+	traceState, err := trace.ParseTraceState("vendor=value")
+	require.NoError(t, err)
+
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
+		"pubsub", "", []byte("message"), "00-00112233445566778899aabbccddeeff-0011223344556677-01", traceState.String())
+	message := &runtimePubsub.SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic",
+		Data:       []byte("message"),
+		Path:       "topic",
+	}
+
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(`{"status":"SUCCESS"}`)
+	defer response.Close()
+	mockAppChannel := new(channelt.MockAppChannel)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		spanContext := trace.SpanContextFromContext(ctx)
+		return spanContext.TraceID() == traceID && spanContext.SpanID() == spanID &&
+			spanContext.TraceState().String() == traceState.String()
+	}), mock.Anything).Return(response, nil)
+
+	h := New(Options{
+		Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+		Tracing:  &config.TracingSpec{SamplingRate: "1"},
+	})
+
+	require.NoError(t, h.Deliver(t.Context(), message))
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+}
+
+func TestDeliverRestoresBaggage(t *testing.T) {
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
+		"pubsub", "", []byte("message"), "", "")
+	cloudEvent[diagConsts.BaggageHeader] = "key=value"
+	message := &runtimePubsub.SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic",
+		Data:       []byte("message"),
+		Path:       "topic",
+	}
+
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(`{"status":"SUCCESS"}`)
+	defer response.Close()
+	mockAppChannel := new(channelt.MockAppChannel)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		return baggage.FromContext(ctx).String() == "key=value"
+	}), mock.Anything).Return(response, nil)
+
+	h := New(Options{Channels: new(channels.Channels).WithAppChannel(mockAppChannel)})
+	require.NoError(t, h.Deliver(t.Context(), message))
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+}
+
+func TestDeliverBulkDoesNotPropagateEntryContext(t *testing.T) {
+	parentTraceID, err := trace.TraceIDFromHex("ffeeddccbbaa99887766554433221100")
+	require.NoError(t, err)
+	parentSpanID, err := trace.SpanIDFromHex("7766554433221100")
+	require.NoError(t, err)
+	parentSpanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: parentTraceID,
+		SpanID:  parentSpanID,
+	})
+	parentBaggage, err := baggage.Parse("parent=value")
+	require.NoError(t, err)
+	ctx := trace.ContextWithSpanContext(t.Context(), parentSpanContext)
+	ctx = baggage.ContextWithBaggage(ctx, parentBaggage)
+
+	const (
+		firstEntryID  = "entry-1"
+		secondEntryID = "entry-2"
+	)
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(
+		`{"statuses":[{"entryId":"entry-1","status":"SUCCESS"},{"entryId":"entry-2","status":"SUCCESS"}]}`,
+	)
+	defer response.Close()
+	mockAppChannel := new(channelt.MockAppChannel)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		spanContext := trace.SpanContextFromContext(ctx)
+		return spanContext.TraceID() == parentTraceID && spanContext.SpanID() == parentSpanID &&
+			baggage.FromContext(ctx).String() == parentBaggage.String()
+	}), mock.Anything).Return(response, nil)
+
+	entries := []contribpubsub.BulkMessageEntry{
+		{EntryId: firstEntryID, Event: []byte("first"), ContentType: "text/plain"},
+		{EntryId: secondEntryID, Event: []byte("second"), ContentType: "text/plain"},
+	}
+	psm := todo.BulkSubscribedMessage{
+		PubSubMessages: []todo.Message{
+			{
+				CloudEvent: map[string]any{
+					contribpubsub.TraceParentField: "00-00112233445566778899aabbccddeeff-0011223344556677-01",
+					diagConsts.BaggageHeader:       "first=value",
+				},
+				RawData: &runtimePubsub.BulkSubscribeMessageItem{EntryId: firstEntryID},
+				Entry:   &entries[0],
+			},
+			{
+				CloudEvent: map[string]any{
+					contribpubsub.TraceParentField: "00-112233445566778899aabbccddeeff00-1122334455667788-01",
+					diagConsts.BaggageHeader:       "second=value",
+				},
+				RawData: &runtimePubsub.BulkSubscribeMessageItem{EntryId: secondEntryID},
+				Entry:   &entries[1],
+			},
+		},
+		Topic:  "topic1",
+		Pubsub: "testpubsub",
+		Path:   "topic1",
+		Length: 2,
+	}
+	entryIDIndexMap := map[string]int{firstEntryID: 0, secondEntryID: 1}
+	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 0, 2)
+	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
+	bscData := todo.BulkSubscribeCallData{
+		BulkResponses:   &bulkResponses,
+		BulkSubDiag:     &bulkSubDiag,
+		EntryIdIndexMap: &entryIDIndexMap,
+		PsName:          psm.Pubsub,
+		Topic:           psm.Topic,
+	}
+	bsrr := todo.BulkSubscribeResiliencyRes{Envelope: map[string]any{}}
+	h := New(Options{
+		Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+		Tracing:  &config.TracingSpec{SamplingRate: "1"},
+	})
+
+	require.NoError(t, h.DeliverBulk(ctx, &postman.DeliverBulkRequest{
+		BulkSubCallData:      &bscData,
+		BulkSubMsg:           &psm,
+		BulkSubResiliencyRes: &bsrr,
+	}))
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {
