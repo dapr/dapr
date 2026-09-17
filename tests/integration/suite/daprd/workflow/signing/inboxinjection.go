@@ -170,7 +170,7 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 			return
 		}
 
-		if !assert.Equal(c, dworkflow.StatusFailed, meta.RuntimeStatus) {
+		if !assert.Equal(c, dworkflow.StatusCanceled, meta.RuntimeStatus) {
 			return
 		}
 

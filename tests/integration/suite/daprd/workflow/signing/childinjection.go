@@ -169,7 +169,7 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 		if !assert.NotNil(c, meta) {
 			return
 		}
-		if !assert.Equal(c, dworkflow.StatusFailed, meta.RuntimeStatus) {
+		if !assert.Equal(c, dworkflow.StatusCanceled, meta.RuntimeStatus) {
 			return
 		}
 		if !assert.NotNil(c, meta.FailureDetails) {

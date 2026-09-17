@@ -127,11 +127,11 @@ func (s *tamperedevent) Run(t *testing.T, ctx context.Context) {
 	// path runs first; tamper detection trumps the event delivery.
 	require.NoError(t, client1.RaiseEvent(ctx, api.InstanceID(childID), "continue", api.WithEventPayload("real-event")))
 
-	// Tampered child workflow must surface as FAILED.
+	// Tampered child workflow must surface as CANCELED.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := client1.FetchWorkflowMetadata(ctx, api.InstanceID(childID))
 		assert.NoError(c, err)
-		assert.Equal(c, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus(),
+		assert.Equal(c, api.RUNTIME_STATUS_CANCELED, meta.GetRuntimeStatus(),
 			"tampered propagated-history must tombstone the child workflow")
 	}, 20*time.Second, 10*time.Millisecond)
 }
