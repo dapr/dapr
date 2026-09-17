@@ -50,10 +50,15 @@ var (
 		"sentry/issuercert/expiry_timestamp",
 		"The unix timestamp, in seconds, when issuer/root cert will expire.",
 		stats.UnitDimensionless)
+	rootCARotationTotal = stats.Int64(
+		"sentry/rootcert/rotation_total",
+		"The number of root CA rotation phase transitions.",
+		stats.UnitDimensionless)
 
 	// Metrics Tags.
-	failedReasonKey = tag.MustNewKey("reason")
-	noKeys          = []tag.Key{}
+	failedReasonKey  = tag.MustNewKey("reason")
+	rotationPhaseKey = tag.MustNewKey("phase")
+	noKeys           = []tag.Key{}
 )
 
 // CertSignRequestReceived counts when CSR received.
@@ -89,6 +94,14 @@ func IssuerCertChanged() {
 	stats.Record(context.Background(), issuerCertChangedTotal.M(1))
 }
 
+// RootCARotationPhaseChanged records a root CA rotation phase transition.
+func RootCARotationPhaseChanged(phase string) {
+	stats.RecordWithTags(
+		context.Background(),
+		diagUtils.WithTags(rootCARotationTotal.Name(), rotationPhaseKey, phase),
+		rootCARotationTotal.M(1))
+}
+
 // InitMetrics initializes metrics.
 func InitMetrics() error {
 	return view.Register(
@@ -98,5 +111,6 @@ func InitMetrics() error {
 		diagUtils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
 		diagUtils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
 		diagUtils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(rootCARotationTotal, []tag.Key{rotationPhaseKey}, view.Count()),
 	)
 }
