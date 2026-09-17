@@ -207,8 +207,13 @@ spec:
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
 	}
 
+	execPath := opts.execPath
+	if execPath == "" {
+		execPath = binary.EnvValue("daprd")
+	}
+
 	return &Daprd{
-		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		exec:             exec.New(t, execPath, args, opts.execOpts...),
 		ports:            fp,
 		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
