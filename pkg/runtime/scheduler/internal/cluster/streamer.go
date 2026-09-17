@@ -44,6 +44,13 @@ type streamer struct {
 	channels *channels.Channels
 	wfengine wfengine.Interface
 
+	// pullDispatch reports whether this sidecar offers pull slots. A pull
+	// flagged job only executes locally when it does: the scheduler falls back
+	// to regular routing when no stream offers slots, and that delivery must
+	// then forward to the placement owner like any other reminder instead of
+	// running uncapped on whichever host the fallback picked.
+	pullDispatch bool
+
 	wg       sync.WaitGroup
 	inflight atomic.Int64
 }
@@ -244,11 +251,12 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 	}
 
 	err := s.actors.CallReminder(ctx, &api.Reminder{
-		Name:      job.GetName(),
-		ActorType: actor.GetType(),
-		ActorID:   actor.GetId(),
-		Data:      job.GetData(),
-		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
+		Name:           job.GetName(),
+		ActorType:      actor.GetType(),
+		ActorID:        actor.GetId(),
+		Data:           job.GetData(),
+		SkipLock:       actor.GetType() == s.wfengine.ActivityActorType(),
+		ExecuteLocally: s.pullDispatch && job.GetMetadata().GetPull(),
 	})
 	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
 

@@ -103,6 +103,11 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// ActivityDispatchPull resolves whether an activity name is
+	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
+	// per-name overrides). Nil means never.
+	ActivityDispatchPull func(activityName string) bool
+
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
 
@@ -137,6 +142,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	activityDispatchPull            func(activityName string) bool
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -254,6 +260,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		activityDispatchPull:            opts.ActivityDispatchPull,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -319,6 +326,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		DispatchPull:                    abe.activityDispatchPull,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}

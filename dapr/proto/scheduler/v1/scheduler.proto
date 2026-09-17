@@ -111,6 +111,14 @@ message JobMetadata {
   // value in addition to any type-level gate. For workflow activities this is
   // the activity name, for workflows this is the workflow name.
   optional string concurrency_key = 4;
+
+  // pull requests pull dispatch for an actor reminder trigger: the scheduler
+  // delivers it to any connected stream hosting the actor type that has a free
+  // per-stream slot (see ConcurrencyLimitStream), and the receiving sidecar
+  // executes it locally instead of forwarding to the placement owner. Streams
+  // that declared no per-stream limit are not eligible; when none is eligible
+  // the trigger falls back to the regular actor routing.
+  optional bool pull = 5;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -178,6 +186,12 @@ message ConcurrencyLimit {
     // actor applies the limit to actor reminder triggers with a matching
     // actor type.
     ConcurrencyLimitActor actor = 3;
+
+    // stream applies max_concurrent to this stream only, as the number of
+    // pull-dispatched actor reminder triggers of the given actor type that may
+    // be in flight on this stream at once. It is not divided across scheduler
+    // replicas and it does not gate non-pull triggers.
+    ConcurrencyLimitStream stream = 4;
   }
 }
 
@@ -187,6 +201,14 @@ message ConcurrencyLimitActor {
   // type is the actor type the limit applies to (e.g., the workflow or
   // activity actor type).
   string type = 1;
+}
+
+// ConcurrencyLimitStream declares the per-stream slot count for pull-dispatched
+// actor reminder triggers of a given actor type.
+message ConcurrencyLimitStream {
+  // actor_type is the actor type the slots apply to (e.g., the activity actor
+  // type).
+  string actor_type = 1;
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job

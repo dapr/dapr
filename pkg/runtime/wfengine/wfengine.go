@@ -152,6 +152,13 @@ func New(opts Options) (Interface, error) {
 		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
 		fastPath = false
 	}
+	// Pull dispatch executes activities on whichever host the scheduler
+	// selects, so the fast path's local drives and janitor re-dispatches (which
+	// target the placement owner) would race the scheduler's delivery.
+	if fastPath && opts.Spec.HasPullActivityDispatch() {
+		log.Info("WorkflowsFastPath is enabled but pull activity dispatch is configured; disabling the fast path so activities are dispatched through the scheduler")
+		fastPath = false
+	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend, err := backendactors.New(backendactors.Options{
@@ -169,6 +176,7 @@ func New(opts Options) (Interface, error) {
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		WorkflowsFastPath:               fastPath,
+		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
 	})
 	if err != nil {
 		return nil, err

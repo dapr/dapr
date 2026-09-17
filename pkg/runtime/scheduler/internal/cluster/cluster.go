@@ -141,6 +141,8 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			channels: c.channels,
 			actors:   router,
 			wfengine: c.wfengine,
+
+			pullDispatch: c.workflowSpec.HasPullActivityDispatch(),
 		}
 		runners[i] = connectors[i].run
 	}
@@ -191,6 +193,18 @@ func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
 			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: activityActor},
 			Name:          l.Name,
 			MaxConcurrent: *l.MaxConcurrent,
+		})
+	}
+
+	// Pull-dispatched activities are delivered into per-stream slots; the
+	// per-sidecar activity cap is the slot count this stream offers. Config
+	// validation guarantees the cap is set whenever pull is configured.
+	if v := c.workflowSpec.GetMaxConcurrentActivityInvocations(); v != nil && c.workflowSpec.HasPullActivityDispatch() {
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Target: &schedulerv1pb.ConcurrencyLimit_Stream{Stream: &schedulerv1pb.ConcurrencyLimitStream{
+				ActorType: activityActor.GetType(),
+			}},
+			MaxConcurrent: *v,
 		})
 	}
 
