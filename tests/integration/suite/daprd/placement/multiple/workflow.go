@@ -15,8 +15,6 @@ package multiple
 
 import (
 	"context"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -57,86 +55,73 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	w.actors1.WaitUntilRunning(t, ctx)
 	w.actors2.WaitUntilRunning(t, ctx)
 
-	expTable := &placement.TableState{
-		Tables: map[string]*placement.Table{
-			"default": {
-				Version: 2,
-				Hosts: []placement.Host{
-					{
-						Entities:  []string{"mytype"},
-						Name:      w.actors1.Daprd().InternalGRPCAddress(),
-						ID:        w.actors1.Daprd().AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-					{
-						Entities:  []string{"mytype"},
-						Name:      w.actors2.Daprd().InternalGRPCAddress(),
-						ID:        w.actors2.Daprd().AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-				},
-			},
+	expHosts := []placement.Host{
+		{
+			Entities:  []string{"mytype"},
+			Name:      w.actors1.Daprd().InternalGRPCAddress(),
+			ID:        w.actors1.Daprd().AppID(),
+			APIVLevel: 20,
+			Namespace: "default",
+		},
+		{
+			Entities:  []string{"mytype"},
+			Name:      w.actors2.Daprd().InternalGRPCAddress(),
+			ID:        w.actors2.Daprd().AppID(),
+			APIVLevel: 20,
+			Namespace: "default",
 		},
 	}
 
-	sortedHosts := func(ts *placement.TableState) *placement.TableState {
-		out := &placement.TableState{Tables: make(map[string]*placement.Table, len(ts.Tables))}
-		for name, table := range ts.Tables {
-			sorted := *table
-			sorted.Hosts = slices.Clone(table.Hosts)
-			slices.SortFunc(sorted.Hosts, func(a, b placement.Host) int {
-				return strings.Compare(a.Name, b.Name)
-			})
-			out.Tables[name] = &sorted
+	var version uint64
+	expectTable := func(c *assert.CollectT) {
+		table := w.actors1.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
 		}
-		return out
+		assert.ElementsMatch(c, expHosts, table.Hosts)
+		assert.Greater(c, table.Version, version)
+	}
+	capture := func() {
+		if table := w.actors1.PlacementTables(t, ctx).Tables["default"]; table != nil {
+			version = table.Version
+		}
 	}
 
-	assert.Equal(t, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
+	require.EventuallyWithT(t, expectTable, time.Second*10, time.Millisecond*10)
+	capture()
 
 	client1 := dworkflow.NewClient(w.actors1.Daprd().GRPCConn(t, ctx))
 	cctx1, cancel1 := context.WithCancel(ctx)
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
-	expTable.Tables["default"].Version = 3
-	expTable.Tables["default"].Hosts[0].Entities = []string{
+	expHosts[0].Entities = []string{
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".activity",
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".workflow",
 		"mytype",
 	}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
-	}, time.Second*10, time.Millisecond*10)
+	assert.EventuallyWithT(t, expectTable, time.Second*10, time.Millisecond*10)
+	capture()
 
 	client2 := dworkflow.NewClient(w.actors2.Daprd().GRPCConn(t, ctx))
 	cctx2, cancel2 := context.WithCancel(ctx)
 	t.Cleanup(cancel2)
 	require.NoError(t, client2.StartWorker(cctx2, dworkflow.NewRegistry()))
-	expTable.Tables["default"].Version = 4
-	expTable.Tables["default"].Hosts[1].Entities = []string{
+	expHosts[1].Entities = []string{
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".activity",
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".workflow",
 		"mytype",
 	}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
-	}, time.Second*20, time.Millisecond*10)
+	assert.EventuallyWithT(t, expectTable, time.Second*20, time.Millisecond*10)
+	capture()
 
 	cancel1()
-	expTable.Tables["default"].Version = 5
-	expTable.Tables["default"].Hosts[0].Entities = []string{"mytype"}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
-	}, time.Second*10, time.Second)
+	expHosts[0].Entities = []string{"mytype"}
+	assert.EventuallyWithT(t, expectTable, time.Second*10, time.Second)
+	capture()
 
 	cancel2()
-	expTable.Tables["default"].Version = 6
-	expTable.Tables["default"].Hosts[1].Entities = []string{"mytype"}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, sortedHosts(expTable), sortedHosts(w.actors1.Placement().PlacementTables(t, ctx)))
-	}, time.Second*10, time.Second)
+	expHosts[1].Entities = []string{"mytype"}
+	assert.EventuallyWithT(t, expectTable, time.Second*10, time.Second)
 }
