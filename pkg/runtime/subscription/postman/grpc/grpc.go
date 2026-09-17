@@ -72,20 +72,32 @@ func New(opts Options) postman.Interface {
 func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
-	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
-	if err != nil {
-		return err
-	}
-
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
-	ctx = g.channel.AddAppTokenToContext(ctx)
-
+	// The app client is acquired before the delivery span is started, so that
+	// failing to get one cannot return an error alongside a span that nothing
+	// goes on to end.
 	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
 	defer teardown(false)
+
 	clientV1 := rtv1.NewAppCallbackClient(conn)
+
+	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		// Nothing between here and the app call returns early, so this is a
+		// guarantee for future edits rather than a fix for a path that leaks
+		// today. Ending a span twice is a no-op, so the path that has a
+		// response still sets the status first.
+		defer span.End()
+	}
+
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	start := time.Now()
 	res, err := clientV1.OnTopicEvent(ctx, envelope)
@@ -190,29 +202,18 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	n := 0
 
 	for _, pubSubMsg := range psm.PubSubMessages {
-		cloudEvent := pubSubMsg.CloudEvent
+		// A zero parent starts a new root span, so an entry delivered without
+		// inbound trace context is still traced.
+		sc := pubsub.ParentSpanContextFromCloudEvent(pubSubMsg.CloudEvent, log)
 
-		iTraceID := cloudEvent[contribpubsub.TraceParentField]
-		if iTraceID == nil {
-			iTraceID = cloudEvent[contribpubsub.TraceIDField]
-		}
+		// no ops if trace is off
+		var span trace.Span
 
-		if iTraceID != nil {
-			if traceID, ok := iTraceID.(string); ok {
-				sc, _ := diag.SpanContextFromW3CString(traceID)
-
-				// no ops if trace is off
-				var span trace.Span
-
-				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
-				if span != nil {
-					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-					spans[n] = span
-					n++
-				}
-			} else {
-				log.Warnf("ignored non-string traceid value: %v", iTraceID)
-			}
+		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
+		if span != nil {
+			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			spans[n] = span
+			n++
 		}
 	}
 

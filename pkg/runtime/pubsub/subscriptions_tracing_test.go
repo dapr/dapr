@@ -15,19 +15,18 @@ package pubsub
 
 import (
 	"context"
-	"slices"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	grpcMetadata "google.golang.org/grpc/metadata"
+
+	"go.opentelemetry.io/otel/trace"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 )
 
 const (
@@ -36,36 +35,6 @@ const (
 	testTracingContType = "text/plain"
 	testTracingData     = "hello"
 )
-
-// spanRecorder records the name of every span that is started, whether or not
-// that span is ever ended. A span that is started and never ended never reaches
-// an exporter, so OnStart is the only place a leaked span can be observed.
-type spanRecorder struct {
-	lock    sync.Mutex
-	started []string
-}
-
-func (s *spanRecorder) OnStart(_ context.Context, span sdktrace.ReadWriteSpan) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.started = append(s.started, span.Name())
-}
-
-func (s *spanRecorder) OnEnd(sdktrace.ReadOnlySpan)      {}
-func (s *spanRecorder) Shutdown(context.Context) error   { return nil }
-func (s *spanRecorder) ForceFlush(context.Context) error { return nil }
-
-func (s *spanRecorder) reset() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.started = nil
-}
-
-func (s *spanRecorder) names() []string {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	return slices.Clone(s.started)
-}
 
 func outgoingTraceParent(t *testing.T, ctx context.Context) string {
 	t.Helper()
@@ -80,11 +49,10 @@ func outgoingTraceParent(t *testing.T, ctx context.Context) string {
 }
 
 func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
-	recorder := new(spanRecorder)
 	// The diagnostics package resolves its tracer from the global provider the
-	// first time a delegate is set, so the provider is installed once for the
+	// first time a delegate is set, so the recorder is installed once for the
 	// whole test rather than per subtest.
-	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	recorder := testtrace.NewSpanRecorder()
 
 	tracingOn := &config.TracingSpec{SamplingRate: "1"}
 	tracingOff := &config.TracingSpec{SamplingRate: "0"}
@@ -111,7 +79,7 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 	}
 
 	t.Run("cloud event without trace context starts a new root span and injects a traceparent", func(t *testing.T) {
-		recorder.reset()
+		recorder.Reset()
 
 		ctx, envelope, span, err := GRPCEnvelopeFromSubscriptionMessage(t.Context(), newMessage(newCloudEvent()), log, tracingOn)
 		require.NoError(t, err)
@@ -119,8 +87,12 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 		require.NotNil(t, span)
 		defer span.End()
 
-		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.names())
+		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.Names())
 		assert.True(t, span.SpanContext().IsValid())
+
+		recorded, ok := recorder.BySpanID(span.SpanContext().SpanID())
+		require.True(t, ok)
+		assert.False(t, recorded.Parent.IsValid(), "a message with no inbound trace context must start a new root span")
 
 		injected, ok := diag.SpanContextFromW3CString(outgoingTraceParent(t, ctx))
 		require.True(t, ok, "the injected traceparent must be parseable")
@@ -129,7 +101,7 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 	})
 
 	t.Run("cloud event with a traceparent continues the inbound trace", func(t *testing.T) {
-		recorder.reset()
+		recorder.Reset()
 
 		cloudEvent := newCloudEvent()
 		cloudEvent[contribpubsub.TraceParentField] = testTraceParent
@@ -140,12 +112,16 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 		require.NotNil(t, span)
 		defer span.End()
 
-		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.names())
+		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.Names())
 
 		parent, ok := diag.SpanContextFromW3CString(testTraceParent)
 		require.True(t, ok)
 		assert.Equal(t, parent.TraceID(), span.SpanContext().TraceID())
 		assert.NotEqual(t, parent.SpanID(), span.SpanContext().SpanID())
+
+		recorded, ok := recorder.BySpanID(span.SpanContext().SpanID())
+		require.True(t, ok)
+		assert.Equal(t, parent.SpanID(), recorded.Parent.SpanID(), "the inbound traceparent must be the span's parent")
 
 		injected, ok := diag.SpanContextFromW3CString(outgoingTraceParent(t, ctx))
 		require.True(t, ok)
@@ -153,7 +129,7 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 	})
 
 	t.Run("cloud event with an unparseable traceparent still starts a span", func(t *testing.T) {
-		recorder.reset()
+		recorder.Reset()
 
 		cloudEvent := newCloudEvent()
 		cloudEvent[contribpubsub.TraceParentField] = "not-a-traceparent"
@@ -164,8 +140,12 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 		require.NotNil(t, span)
 		defer span.End()
 
-		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.names())
+		assert.Equal(t, []string{"pubsub/" + testTracingTopic}, recorder.Names())
 		assert.True(t, span.SpanContext().IsValid())
+
+		recorded, ok := recorder.BySpanID(span.SpanContext().SpanID())
+		require.True(t, ok)
+		assert.False(t, recorded.Parent.IsValid(), "an unusable traceparent must not be adopted as a parent")
 
 		injected, ok := diag.SpanContextFromW3CString(outgoingTraceParent(t, ctx))
 		require.True(t, ok)
@@ -173,20 +153,20 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 	})
 
 	t.Run("tracing disabled returns no span and injects nothing", func(t *testing.T) {
-		recorder.reset()
+		recorder.Reset()
 
 		ctx, envelope, span, err := GRPCEnvelopeFromSubscriptionMessage(t.Context(), newMessage(newCloudEvent()), log, tracingOff)
 		require.NoError(t, err)
 		require.NotNil(t, envelope)
 		assert.Nil(t, span)
-		assert.Empty(t, recorder.names())
+		assert.Empty(t, recorder.Names())
 
 		_, ok := grpcMetadata.FromOutgoingContext(ctx)
 		assert.False(t, ok, "no trace metadata should be added when tracing is disabled")
 	})
 
 	t.Run("failing to extract extensions leaves no unended span behind", func(t *testing.T) {
-		recorder.reset()
+		recorder.Reset()
 
 		cloudEvent := newCloudEvent()
 		// Channels cannot be marshalled to JSON, so extension extraction fails.
@@ -196,6 +176,59 @@ func TestGRPCEnvelopeFromSubscriptionMessage(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, envelope)
 		assert.Nil(t, span)
-		assert.Empty(t, recorder.names(), "a path that returns an error must not start a span the caller cannot end")
+		assert.Empty(t, recorder.Names(), "a path that returns an error must not start a span the caller cannot end")
 	})
+}
+
+func TestParentSpanContextFromCloudEvent(t *testing.T) {
+	parent, ok := diag.SpanContextFromW3CString(testTraceParent)
+	require.True(t, ok)
+
+	tests := map[string]struct {
+		cloudEvent map[string]any
+		expect     trace.SpanContext
+	}{
+		"no trace context at all": {
+			cloudEvent: map[string]any{contribpubsub.IDField: "1"},
+			expect:     trace.SpanContext{},
+		},
+		"traceparent": {
+			cloudEvent: map[string]any{contribpubsub.TraceParentField: testTraceParent},
+			expect:     parent,
+		},
+		"legacy traceid only": {
+			cloudEvent: map[string]any{contribpubsub.TraceIDField: testTraceParent},
+			expect:     parent,
+		},
+		"traceparent wins over the legacy traceid": {
+			cloudEvent: map[string]any{
+				contribpubsub.TraceParentField: testTraceParent,
+				contribpubsub.TraceIDField:     "00-00000000000000000000000000000001-0000000000000001-01",
+			},
+			expect: parent,
+		},
+		"unparseable traceparent": {
+			cloudEvent: map[string]any{contribpubsub.TraceParentField: "not-a-traceparent"},
+			expect:     trace.SpanContext{},
+		},
+		"empty traceparent": {
+			cloudEvent: map[string]any{contribpubsub.TraceParentField: ""},
+			expect:     trace.SpanContext{},
+		},
+		"non-string traceparent": {
+			cloudEvent: map[string]any{contribpubsub.TraceParentField: float64(12345)},
+			expect:     trace.SpanContext{},
+		},
+		"nil cloud event": {
+			cloudEvent: nil,
+			expect:     trace.SpanContext{},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			sc := ParentSpanContextFromCloudEvent(test.cloudEvent, log)
+			assert.Equal(t, test.expect, sc)
+		})
+	}
 }
