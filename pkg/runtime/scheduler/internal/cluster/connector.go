@@ -30,6 +30,9 @@ type connector struct {
 	channels *channels.Channels
 	actors   router.Interface
 	wfengine wfengine.Interface
+
+	// pullDispatch is handed to each streamer; see streamer.pullDispatch.
+	pullDispatch bool
 }
 
 // run starts the scheduler connector, retrying on failures so that a single
@@ -88,6 +91,8 @@ func (c *connector) run(ctx context.Context) error {
 			channels: c.channels,
 			actors:   c.actors,
 			wfengine: c.wfengine,
+
+			pullDispatch: c.pullDispatch,
 		}).run(ctx)
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")

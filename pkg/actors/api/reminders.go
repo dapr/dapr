@@ -50,6 +50,11 @@ type CreateReminderRequest struct {
 	// at the scheduler level. For activities this is the activity name, for
 	// workflows this is the workflow name.
 	ConcurrencyKey *string `json:"-"`
+
+	// Pull asks the scheduler to deliver the reminder to any sidecar hosting
+	// the actor type that has a free per-stream slot, to be executed there
+	// rather than on the placement owner. Used by pull-dispatched activities.
+	Pull bool `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

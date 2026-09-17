@@ -92,6 +92,50 @@ func Test_handleJob_ErrReminderCanceled_remoteGRPC(t *testing.T) {
 	}
 }
 
+func Test_handleJob_pullMetadataExecutesLocally(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		pull         *bool
+		pullDispatch bool
+		want         bool
+	}{
+		"pull job on a sidecar offering slots executes locally": {pull: new(true), pullDispatch: true, want: true},
+		"pull job on a sidecar without slots forwards":          {pull: new(true), pullDispatch: false, want: false},
+		"pull false forwards":                                   {pull: new(false), pullDispatch: true, want: false},
+		"pull unset forwards":                                   {pull: nil, pullDispatch: true, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var got *actorapi.Reminder
+			actors := routerfake.New().WithCallReminderFn(
+				func(_ context.Context, rem *actorapi.Reminder) error {
+					got = rem
+					return nil
+				},
+			)
+			s := &streamer{actors: actors, wfengine: wfenginefake.New(), pullDispatch: tc.pullDispatch}
+
+			job := &schedulerv1pb.WatchJobsResponse{
+				Name: "run-activity",
+				Metadata: &schedulerv1pb.JobMetadata{
+					Pull: tc.pull,
+					Target: &schedulerv1pb.JobTargetMetadata{
+						Type: &schedulerv1pb.JobTargetMetadata_Actor{
+							Actor: &schedulerv1pb.TargetActorReminder{Type: "dapr.internal.default.myapp.activity", Id: "wf::1::0"},
+						},
+					},
+				},
+			}
+
+			assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, s.handleJob(t.Context(), job))
+			require.NotNil(t, got)
+			assert.Equal(t, tc.want, got.ExecuteLocally)
+		})
+	}
+}
+
 func Test_handleJob_ErrReminderCanceled_localSentinel(t *testing.T) {
 	t.Parallel()
 

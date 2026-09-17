@@ -242,6 +242,44 @@ func (c *captureScheduler) List(context.Context, *actorapi.ListRemindersRequest)
 	return nil, nil
 }
 
+// Test_createActivityReminder_pullFlag pins that the run-activity reminder
+// carries the pull flag exactly when the configured dispatch mode resolves to
+// pull for the activity name, and never without a resolver or a name.
+func Test_createActivityReminder_pullFlag(t *testing.T) {
+	t.Parallel()
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "Transcode"},
+			},
+		},
+	}
+	name := "Transcode"
+	other := "SendEmail"
+
+	create := func(t *testing.T, resolver func(string) bool, activityName *string) *actorapi.CreateReminderRequest {
+		t.Helper()
+		sched := &captureScheduler{}
+		f := &factory{
+			actorType:    "dapr.internal.default.testapp.activity",
+			reminders:    sched,
+			dispatchPull: resolver,
+		}
+		require.NoError(t, f.createActivityReminder(t.Context(), "wf::1::0", invocation, time.Now(), activityName))
+		sched.mu.Lock()
+		defer sched.mu.Unlock()
+		require.Len(t, sched.creates, 1)
+		return sched.creates[0]
+	}
+
+	assert.False(t, create(t, nil, &name).Pull, "no resolver means hashed dispatch")
+	assert.False(t, create(t, func(string) bool { return true }, nil).Pull, "no activity name cannot resolve a mode")
+	assert.True(t, create(t, func(n string) bool { return n == name }, &name).Pull)
+	assert.False(t, create(t, func(n string) bool { return n == name }, &other).Pull)
+}
+
 // Test_reminderRetryPoliciesAreJittered pins the retry failure policy on the
 // activity and activity-result reminder create paths: retry forever with a
 // jittered interval drawn from [RetryBackoffBase, RetryBackoffCap), not a

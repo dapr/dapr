@@ -47,7 +47,12 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 		dueTime = now
 	}
 
-	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", f.actorType, actorID, activityReminderName, dueTime)
+	var pull bool
+	if f.dispatchPull != nil && activityName != nil {
+		pull = f.dispatchPull(*activityName)
+	}
+
+	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s pull=%t", f.actorType, actorID, activityReminderName, dueTime, pull)
 
 	anydata, err := anypb.New(invocation)
 	if err != nil {
@@ -65,6 +70,7 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 		FailurePolicy:  common.RetryForeverPolicy(),
 		Data:           anydata,
 		ConcurrencyKey: activityName,
+		Pull:           pull,
 	})
 }
 

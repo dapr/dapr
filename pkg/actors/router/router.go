@@ -183,6 +183,10 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
+	if req.ExecuteLocally {
+		return r.callLocalReminder(ctx, req)
+	}
+
 	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
@@ -218,6 +222,11 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
+	return r.callLocalReminder(ctx, req)
+}
+
+// callLocalReminder invokes the reminder on this host's actor table.
+func (r *router) callLocalReminder(ctx context.Context, req *api.Reminder) error {
 	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)

@@ -43,6 +43,11 @@ type Reminder struct {
 	IsTimer        bool           `json:"-"`
 	IsRemote       bool           `json:"-"`
 	SkipLock       bool           `json:"-"`
+	// ExecuteLocally invokes the reminder on this host's actor table without a
+	// placement lookup. Set for pull-dispatched deliveries, where the scheduler
+	// has already chosen this host by its free slots and the placement owner is
+	// irrelevant.
+	ExecuteLocally bool `json:"-"`
 	// SkipRetries opts this call out of the router's built-in
 	// actor-not-found retry wrapper (constant 1s backoff): a transient
 	// resolution failure surfaces to the caller immediately. For callers

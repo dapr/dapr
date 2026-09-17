@@ -25,6 +25,8 @@ import (
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/actors/targets"
+	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )
@@ -51,6 +53,41 @@ func TestCallReminderNonLocalTimerDropped(t *testing.T) {
 	})
 	require.ErrorIs(t, err, actorerrors.ErrTimerFireNotLocal)
 	assert.Equal(t, 1, lookups)
+}
+
+func TestCallReminderExecuteLocallySkipsPlacement(t *testing.T) {
+	plc := placementfake.New().WithLookupActor(func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+		t.Fatal("a pull-dispatched reminder must not consult placement")
+		return nil, nil, nil, nil
+	})
+
+	var invoked *api.Reminder
+	target := targetsfake.New("dapr.internal.default.app.activity").(*targetsfake.Fake).WithInvokeReminder(func(_ context.Context, rem *api.Reminder) error {
+		invoked = rem
+		return nil
+	})
+	var created []string
+	tbl := tablefake.New().WithGetOrCreate(func(actorType, actorID string) (targets.Interface, error) {
+		created = append(created, actorType+"/"+actorID)
+		return target, nil
+	})
+
+	r := router.New(router.Options{
+		Placement:  plc,
+		Table:      tbl,
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+	})
+
+	rem := &api.Reminder{
+		ActorType:      "dapr.internal.default.app.activity",
+		ActorID:        "wf::1::0",
+		Name:           "run-activity",
+		SkipLock:       true,
+		ExecuteLocally: true,
+	}
+	require.NoError(t, r.CallReminder(t.Context(), rem))
+	assert.Equal(t, []string{"dapr.internal.default.app.activity/wf::1::0"}, created)
+	assert.Same(t, rem, invoked)
 }
 
 func TestCallReminderNonLocalRemoteReminderErrors(t *testing.T) {

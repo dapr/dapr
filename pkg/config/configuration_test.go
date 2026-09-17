@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
@@ -970,7 +972,7 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 	require.True(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 
 	// Entries the scheduler ignores must not disable the fast path.
@@ -981,9 +983,137 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name}},
 	}).HasSchedulerConcurrencyLimits(), "nil max is not enforced")
 	require.False(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
 	}).HasSchedulerConcurrencyLimits(), "non-positive max is not enforced")
 	require.True(t, (&WorkflowSpec{
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: ActivityDispatchModePull}},
+	}).HasSchedulerConcurrencyLimits(), "a dispatch-only entry is not a scheduler-enforced limit")
+}
+
+func TestActivityDispatchPull(t *testing.T) {
+	email := "SendEmail"
+	transcode := "Transcode"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.ActivityDispatchPull(email))
+	require.False(t, nilSpec.HasPullActivityDispatch())
+	require.False(t, (&WorkflowSpec{}).ActivityDispatchPull(email))
+	require.False(t, (&WorkflowSpec{}).HasPullActivityDispatch())
+
+	appPull := &WorkflowSpec{ActivityDispatchMode: ActivityDispatchModePull}
+	require.True(t, appPull.ActivityDispatchPull(email))
+	require.True(t, appPull.HasPullActivityDispatch())
+
+	appPullOptOut := &WorkflowSpec{
+		ActivityDispatchMode:      ActivityDispatchModePull,
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: ActivityDispatchModeHashed}},
+	}
+	require.False(t, appPullOptOut.ActivityDispatchPull(email), "per-name hashed overrides app-wide pull")
+	require.True(t, appPullOptOut.ActivityDispatchPull(transcode))
+	require.True(t, appPullOptOut.HasPullActivityDispatch())
+
+	perName := &WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{
+			{Name: &email, MaxConcurrent: new(int32(5))},
+			{Name: &transcode, DispatchMode: ActivityDispatchModePull},
+		},
+	}
+	require.False(t, perName.ActivityDispatchPull(email), "an entry without dispatchMode inherits the app default")
+	require.True(t, perName.ActivityDispatchPull(transcode))
+	require.False(t, perName.ActivityDispatchPull("other"))
+	require.True(t, perName.HasPullActivityDispatch())
+}
+
+func TestValidateWorkflowSpec(t *testing.T) {
+	name := "SendEmail"
+	conf := func(w *WorkflowSpec) *Configuration {
+		c := LoadDefaultConfiguration()
+		c.Spec.WorkflowSpec = w
+		return c
+	}
+
+	require.NoError(t, conf(nil).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{ActivityDispatchMode: ActivityDispatchModeHashed}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 2,
+		ActivityDispatchMode:             ActivityDispatchModePull,
+	}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: ActivityDispatchModePull}},
+	}).validateWorkflowSpec())
+
+	err := conf(&WorkflowSpec{ActivityDispatchMode: "random"}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: "push"}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid dispatchMode "push"`)
+
+	err = conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name}, {Name: &name}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `duplicate activity name "SendEmail"`)
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{DispatchMode: ActivityDispatchModePull}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `dispatchMode "pull" in workflow activityConcurrencyLimits requires a name`)
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{DispatchMode: ActivityDispatchModePull}},
+	}).HasPullActivityDispatch(), "a nameless entry can never match an activity")
+
+	err = conf(&WorkflowSpec{ActivityDispatchMode: ActivityDispatchModePull}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: ActivityDispatchModePull}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 0,
+		ActivityDispatchMode:             ActivityDispatchModePull,
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations", "zero means unset")
+}
+
+func TestLoadStandaloneConfigurationRejectsPullWithoutSlots(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    activityDispatchMode: pull
+`), 0o600))
+	_, err := LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 3
+    activityDispatchMode: pull
+    activityConcurrencyLimits:
+      - name: SendEmail
+        maxConcurrent: 5
+        dispatchMode: hashed
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	require.True(t, c.Spec.WorkflowSpec.ActivityDispatchPull("Transcode"))
+	require.False(t, c.Spec.WorkflowSpec.ActivityDispatchPull("SendEmail"))
+	require.Equal(t, int32(5), *c.Spec.WorkflowSpec.ActivityConcurrencyLimits[0].MaxConcurrent)
 }

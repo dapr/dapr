@@ -590,24 +590,51 @@ spec:
                 properties:
                   activityConcurrencyLimits:
                     description: |-
-                      activityConcurrencyLimits defines per-activity-name concurrency limits
-                      enforced globally across all replicas by the scheduler.
+                      activityConcurrencyLimits defines per-activity-name settings: a
+                      concurrency limit enforced globally across all replicas by the scheduler,
+                      and an optional dispatch mode override.
                     items:
                       description: |-
-                        NamedConcurrencyLimit defines a per-name concurrency limit for a specific
-                        workflow or activity name.
+                        ActivityConcurrencyLimit defines per-name settings for a specific activity
+                        name.
                       properties:
+                        dispatchMode:
+                          description: |-
+                            DispatchMode overrides the application's activityDispatchMode for this
+                            activity name: "hashed" or "pull". Empty inherits the application value.
+                          enum:
+                          - hashed
+                          - pull
+                          type: string
                         maxConcurrent:
                           description: |-
                             MaxConcurrent is the maximum number of concurrent invocations across all
-                            replicas.
+                            replicas. It is not the per-replica slot count used by pull dispatch;
+                            that is maxConcurrentActivityInvocations.
                           format: int32
                           type: integer
                         name:
-                          description: Name is the workflow or activity name to limit.
+                          description: Name is the activity name the entry applies
+                            to.
                           type: string
                       type: object
                     type: array
+                  activityDispatchMode:
+                    description: |-
+                      activityDispatchMode selects how activities of this application are
+                      dispatched to its replicas. "hashed" (the default) runs each activity on
+                      the replica its ID hashes to. "pull" lets the scheduler deliver each
+                      activity to any replica with a free slot, where a replica offers
+                      maxConcurrentActivityInvocations slots; that field is required when any
+                      activity uses pull. Per-name entries in activityConcurrencyLimits override
+                      this value. Changing it requires a sidecar restart. The slots are the
+                      same per-replica execution cap that hashed activities consume, so mixing
+                      both modes in one application through per-name overrides can queue a pull
+                      activity behind hashed work on a replica the scheduler counted as free.
+                    enum:
+                    - hashed
+                    - pull
+                    type: string
                   globalMaxConcurrentActivityInvocations:
                     description: |-
                       globalMaxConcurrentActivityInvocations is the maximum number of concurrent
