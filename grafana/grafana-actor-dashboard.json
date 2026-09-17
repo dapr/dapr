@@ -859,7 +859,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 36
       },
@@ -942,8 +942,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 36
       },
       "id": 176,
@@ -973,90 +973,6 @@
         }
       ],
       "title": "Timers fired",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Dapr",
-      "description": "A timer fired for an actor that is no longer hosted on this instance, so the work did not run. Expect a burst after a rebalance; a sustained rate means actors are moving faster than their timers can complete.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 44
-      },
-      "id": 177,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(dapr_runtime_actor_timers_dropped_total{namespace=\"$namespace\", actor_type=~\"$dapr_actor_type\"}[5m])) by (actor_type)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{actor_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Timers dropped",
       "type": "timeseries"
     },
     {
@@ -1110,9 +1026,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 44
+        "w": 8,
+        "x": 16,
+        "y": 36
       },
       "id": 178,
       "options": {
@@ -1150,7 +1066,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 44
       },
       "id": 179,
       "panels": [],
@@ -1210,7 +1126,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 53
+        "y": 45
       },
       "id": 181,
       "options": {
@@ -1294,7 +1210,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 53
+        "y": 45
       },
       "id": 182,
       "options": {

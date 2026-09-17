@@ -60,7 +60,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 8,
         "x": 0,
         "y": 1
       },
@@ -94,122 +94,6 @@
     },
     {
       "datasource": "Dapr",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 1
-      },
-      "id": 103,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "max(dapr_scheduler_placement_streams_connected)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "streams",
-          "refId": "A"
-        }
-      ],
-      "title": "Placement streams connected",
-      "type": "stat"
-    },
-    {
-      "datasource": "Dapr",
-      "description": "1 when this Scheduler instance holds placement leadership.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 1
-      },
-      "id": 104,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "max(dapr_scheduler_placement_leader)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "leader",
-          "refId": "A"
-        }
-      ],
-      "title": "Placement leader",
-      "type": "stat"
-    },
-    {
-      "datasource": "Dapr",
       "description": "Embedded etcd leadership. 0 on any member means the Scheduler cannot commit writes.",
       "fieldConfig": {
         "defaults": {
@@ -236,8 +120,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 1
       },
       "id": 105,
@@ -270,72 +154,13 @@
     },
     {
       "datasource": "Dapr",
-      "description": "Connected sidecars that cannot use Scheduler-hosted placement, usually because they predate it.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 16,
-        "y": 1
-      },
-      "id": 106,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "max(dapr_scheduler_placement_incapable_sidecars)",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "incapable",
-          "refId": "A"
-        }
-      ],
-      "title": "Incapable sidecars",
-      "type": "stat"
-    },
-    {
-      "datasource": "Dapr",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -355,8 +180,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 8,
+        "x": 16,
         "y": 1
       },
       "id": 107,
@@ -990,203 +815,6 @@
         "x": 0,
         "y": 31
       },
-      "id": 116,
-      "panels": [],
-      "title": "Placement dissemination",
-      "type": "row"
-    },
-    {
-      "datasource": "Dapr",
-      "description": "Each replica change of an actor-hosting app triggers a dissemination. A high sustained rate usually means deployment or autoscaler churn.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 117,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(dapr_scheduler_placement_disseminations_total[5m]))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "disseminations",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(dapr_scheduler_placement_table_updates_total[5m]))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "table updates",
-          "refId": "B"
-        }
-      ],
-      "title": "Disseminations and table updates",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Dapr",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 118,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_scheduler_placement_dissemination_latency_bucket[5m])) by (le))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "p95",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(dapr_scheduler_placement_dissemination_latency_bucket[5m])) by (le))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "p99",
-          "refId": "B"
-        }
-      ],
-      "title": "Dissemination latency (p95 / p99)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "datasource": "Dapr",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 40
-      },
       "id": 119,
       "panels": [],
       "title": "Embedded etcd",
@@ -1245,7 +873,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 32
       },
       "id": 120,
       "options": {
@@ -1346,7 +974,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 41
+        "y": 32
       },
       "id": 121,
       "options": {
@@ -1431,7 +1059,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 49
+        "y": 40
       },
       "id": 122,
       "options": {
@@ -1515,7 +1143,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 49
+        "y": 40
       },
       "id": 123,
       "options": {
@@ -1599,7 +1227,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 49
+        "y": 40
       },
       "id": 124,
       "options": {
@@ -1683,7 +1311,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 48
       },
       "id": 125,
       "options": {
@@ -1783,7 +1411,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 48
       },
       "id": 126,
       "options": {
