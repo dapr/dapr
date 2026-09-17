@@ -128,18 +128,6 @@ func waitPlacementStatefulSet(t *testing.T, present bool) {
 	}, time.Minute*5, time.Second*2)
 }
 
-func invokeActorEventually(t *testing.T, externalURL, actorID string) {
-	t.Helper()
-	url := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, status, err := utils.HTTPPostWithStatus(url, []byte{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, 200, status)
-	}, time.Minute*3, time.Second*2)
-}
-
 type actorLogEntry struct {
 	Action    string `json:"action,omitempty"`
 	ActorType string `json:"actorType,omitempty"`
@@ -150,12 +138,15 @@ type actorLogEntry struct {
 // methodInvocations counts the actor's logged method calls, the actorapp's
 // record of the ID being served. Activation is implicit in dapr's actor
 // protocol, so served calls are the only positive event the app can log.
-func methodInvocations(t *testing.T, externalURL, actorID string) int {
-	t.Helper()
+func methodInvocations(externalURL, actorID string) (int, error) {
 	resp, err := utils.HTTPGet(fmt.Sprintf(actorlogsURLFormat, externalURL))
-	require.NoError(t, err)
+	if err != nil {
+		return 0, err
+	}
 	var entries []actorLogEntry
-	require.NoError(t, json.Unmarshal(resp, &entries))
+	if err := json.Unmarshal(resp, &entries); err != nil {
+		return 0, err
+	}
 
 	count := 0
 	for _, entry := range entries {
@@ -163,7 +154,28 @@ func methodInvocations(t *testing.T, externalURL, actorID string) int {
 			count++
 		}
 	}
-	return count
+	return count, nil
+}
+
+// invokeActorUntilServed invokes the actor until the actorapp's log records
+// a served call past the prior count. The test endpoint forwards daprd's
+// response body under its own 200, so the log is the only success signal.
+func invokeActorUntilServed(t *testing.T, externalURL, actorID string, prior int) int {
+	t.Helper()
+	url := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
+	served := prior
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:errcheck
+		utils.HTTPPostWithStatus(url, []byte{})
+		count, err := methodInvocations(externalURL, actorID)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if assert.Greater(c, count, prior) {
+			served = count
+		}
+	}, time.Minute*3, time.Second*2)
+	return served
 }
 
 // schedulerPlacementStreams sums dapr_scheduler_placement_streams_connected
@@ -244,9 +256,7 @@ func TestPlacementToScheduler(t *testing.T) {
 	waitPlacementStatefulSet(t, true)
 	client := kubeClient(t)
 	const actorID = "cutover-continuity"
-	invokeActorEventually(t, externalURL, actorID)
-	servedBefore := methodInvocations(t, externalURL, actorID)
-	require.Positive(t, servedBefore)
+	servedBefore := invokeActorUntilServed(t, externalURL, actorID, 0)
 	podsBefore := appPods(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		streams, serr := schedulerPlacementStreams(client)
@@ -261,15 +271,13 @@ func TestPlacementToScheduler(t *testing.T) {
 
 	// The same actor keeps working, and the sidecar's placement stream
 	// moved to the scheduler: the authority moved, it was not left behind.
-	invokeActorEventually(t, externalURL, actorID)
+	invokeActorUntilServed(t, externalURL, actorID, servedBefore)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		streams, serr := schedulerPlacementStreams(client)
 		if assert.NoError(c, serr) {
 			assert.Positive(c, streams)
 		}
 	}, time.Minute*3, time.Second*2)
-	require.Greater(t, methodInvocations(t, externalURL, actorID), servedBefore,
-		"the same actor must be served across the cutover")
 
 	// The same pods, never restarted: the running sidecars adopted the new
 	// authority live.
@@ -290,9 +298,7 @@ func TestSchedulerToPlacement(t *testing.T) {
 	waitPlacementStatefulSet(t, false)
 	client := kubeClient(t)
 	const actorID = "rollback-continuity"
-	invokeActorEventually(t, externalURL, actorID)
-	servedBefore := methodInvocations(t, externalURL, actorID)
-	require.Positive(t, servedBefore)
+	servedBefore := invokeActorUntilServed(t, externalURL, actorID, 0)
 	podsBefore := appPods(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		streams, serr := schedulerPlacementStreams(client)
@@ -306,15 +312,13 @@ func TestSchedulerToPlacement(t *testing.T) {
 
 	// The same actor keeps working, and the sidecar defected back: no
 	// scheduler placement stream remains.
-	invokeActorEventually(t, externalURL, actorID)
+	invokeActorUntilServed(t, externalURL, actorID, servedBefore)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		streams, serr := schedulerPlacementStreams(client)
 		if assert.NoError(c, serr) {
 			assert.Zero(c, streams)
 		}
 	}, time.Minute*3, time.Second*2)
-	require.Greater(t, methodInvocations(t, externalURL, actorID), servedBefore,
-		"the same actor must be served across the rollback")
 
 	require.Equal(t, podsBefore, appPods(t))
 }
