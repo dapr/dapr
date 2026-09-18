@@ -70,6 +70,7 @@ func (u *unreachable) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithSchedulerAddresses(deadAddr),
 		daprd.WithPlacementAddresses(u.place.Address()),
+		daprd.WithActorsPlacementStartupTimeout(time.Second*2),
 	)
 
 	return []framework.Option{
@@ -90,6 +91,6 @@ func (u *unreachable) Run(t *testing.T, ctx context.Context) {
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*60, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 	assert.Positive(t, u.invoked.Load())
 }

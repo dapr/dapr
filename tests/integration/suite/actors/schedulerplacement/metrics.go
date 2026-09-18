@@ -113,5 +113,5 @@ func (m *placementmetrics) Run(t *testing.T, ctx context.Context) {
 		// actor type's table update.
 		assert.GreaterOrEqual(c, metric(all, "dapr_scheduler_placement_disseminations_total"), float64(1))
 		assert.GreaterOrEqual(c, metric(all, "dapr_scheduler_placement_table_updates_total"), float64(1))
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }
