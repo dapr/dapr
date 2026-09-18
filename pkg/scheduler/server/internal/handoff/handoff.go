@@ -70,6 +70,9 @@ type Interface interface {
 	// once for a placement service.
 	Ready() bool
 	PlacementPresent() bool
+	// PlacementConfirmed reports presence established by observation only,
+	// excluding the unprobed-address presumption PlacementPresent makes.
+	PlacementConfirmed() bool
 	Advertised() bool
 	AnySchedulerPlacementIncapableSidecars() bool
 	AnySchedulerPlacementCapableSidecars() bool
@@ -91,11 +94,12 @@ type Handoff struct {
 	// misses counts the consecutive sightless refreshes since.
 	detected bool
 	misses   int
-	// reqGen counts detection requests and doneGen the requests answered by
-	// a completed refresh: while they differ, a just-reported placement
-	// address is unprobed and treated as a present placement service.
-	reqGen  uint64
-	doneGen uint64
+	// reqGen counts refresh requests and doneGen the last request a
+	// finished probe answered. pendingAdd is set while a new address
+	// awaits its first probe.
+	reqGen     uint64
+	doneGen    uint64
+	pendingAdd bool
 	// advertised is set once a placement leader was broadcast. A
 	// reappearing placement service clears it.
 	advertised bool
@@ -232,7 +236,7 @@ func (h *Handoff) SetLocalCapabilities(incapable, capable bool) {
 // placement identity.
 func (h *Handoff) refreshDetection(ctx context.Context) {
 	h.lock.RLock()
-	gen := h.reqGen
+	startGen := h.reqGen
 	h.lock.RUnlock()
 
 	sighted := h.resolveDNS(ctx) || h.probeReportedAddresses(ctx)
@@ -256,8 +260,11 @@ func (h *Handoff) refreshDetection(ctx context.Context) {
 			h.misses = 0
 		}
 	}
-	changed := h.detected != prev || h.doneGen != gen
-	h.doneGen = gen
+	changed := h.detected != prev || h.doneGen != startGen
+	h.doneGen = startGen
+	if h.doneGen == h.reqGen {
+		h.pendingAdd = false
+	}
 	h.lock.Unlock()
 	if changed {
 		h.fireOnChange()
@@ -380,11 +387,12 @@ func (h *Handoff) SetPlacementAddresses(fn func() []string) {
 }
 
 // RequestDetection refreshes the placement detection right away, as the
-// reported placement addresses changed. A placement service is treated as
-// present until the refresh completes. Non-blocking.
-func (h *Handoff) RequestDetection() {
+// reported placement addresses changed. added reports whether an address
+// not tracked before appeared. Non-blocking.
+func (h *Handoff) RequestDetection(added bool) {
 	h.lock.Lock()
 	h.reqGen++
+	h.pendingAdd = h.pendingAdd || added
 	h.lock.Unlock()
 	select {
 	case h.detectCh <- struct{}{}:
@@ -401,12 +409,20 @@ func (h *Handoff) SetAdvertised() {
 }
 
 // PlacementPresent reports whether a placement service exists: the informer
-// sees a pod, the detection sights one, or a just-reported address is
+// sees a pod, the detection sights one, or a newly reported address is
 // unprobed before any leader was broadcast.
 func (h *Handoff) PlacementPresent() bool {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
-	return h.podPresent || h.detected || (h.reqGen != h.doneGen && !h.advertised)
+	return h.podPresent || h.detected || (h.reqGen != h.doneGen && !h.advertised && h.pendingAdd)
+}
+
+// PlacementConfirmed reports whether a placement service was observed: the
+// informer sees a pod or the detection sighted one.
+func (h *Handoff) PlacementConfirmed() bool {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+	return h.podPresent || h.detected
 }
 
 func (h *Handoff) Advertised() bool {

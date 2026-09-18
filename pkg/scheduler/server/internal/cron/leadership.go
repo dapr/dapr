@@ -47,18 +47,15 @@ type leadership struct {
 	pool            connectionPool
 	placement       PlacementLeader
 
-	// handoff, when non-nil, is the etcd-replicated handoff state shared by
-	// every scheduler, with this scheduler's local view as the fallback.
+	// handoff is this scheduler's own view of the placement handoff facts.
+	// Each scheduler computes it independently with no shared state, so
+	// schedulers can disagree about presence.
 	handoff handoff.Interface
 
 	// lastCronTable is the last leadership table from cron, unstamped, so a
 	// nil-event replay recomputes stamps from the original values. Loop
 	// goroutine only.
 	lastCronTable []*schedulerv1pb.Host
-
-	// advertised is set once a leader was broadcast to a capable sidecar.
-	// Fallback when handoff is nil.
-	advertised bool
 
 	incapableWarned        bool
 	placementPresentLogged bool
@@ -100,18 +97,12 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// The leader bit is stamped here at broadcast time, never in the
 	// go-etcd-cron ReplicaData, since the elector treats stored replica data
 	// changing under a live lease as fatal.
-	gateIncapable := h.pool.HasSchedulerPlacementIncapableSidecars()
-	gateCapable := h.pool.HasSchedulerPlacementCapableSidecars()
-	advertised := h.advertised
-	placementPresent := false
-	ready := true
-	if h.handoff != nil {
-		gateIncapable = h.handoff.AnySchedulerPlacementIncapableSidecars()
-		gateCapable = h.handoff.AnySchedulerPlacementCapableSidecars()
-		advertised = h.handoff.Advertised()
-		placementPresent = h.handoff.PlacementPresent()
-		ready = h.handoff.Ready()
-	}
+	gateIncapable := h.handoff.AnySchedulerPlacementIncapableSidecars()
+	gateCapable := h.handoff.AnySchedulerPlacementCapableSidecars()
+	advertised := h.handoff.Advertised()
+	placementPresent := h.handoff.PlacementPresent()
+	placementConfirmed := h.handoff.PlacementConfirmed()
+	ready := h.handoff.Ready()
 	// Only sidecars that take placement from the scheduler open placement
 	// streams, so a live stream keeps the gate capable while that sidecar's
 	// jobs streams reconnect for a target type change.
@@ -152,17 +143,13 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// Once any scheduler broadcasts a leader it keeps broadcasting one
 	// through sidecar reconnects.
 	if leaderAddr != "" && gateCapable && !advertised {
-		if h.handoff != nil {
-			h.handoff.SetAdvertised()
-		} else {
-			h.advertised = true
-		}
+		h.handoff.SetAdvertised()
 	}
 
-	if placementPresent && electedAddr != "" && !h.placementPresentLogged {
+	if placementConfirmed && electedAddr != "" && !h.placementPresentLogged {
 		h.placementPresentLogged = true
 		log.Info("A placement service is deployed, so actor placement stays with the placement service and this scheduler withholds its placement leader. Undeploying the placement service moves actor placement to the scheduler.")
-	} else if !placementPresent {
+	} else if !placementConfirmed {
 		h.placementPresentLogged = false
 	}
 

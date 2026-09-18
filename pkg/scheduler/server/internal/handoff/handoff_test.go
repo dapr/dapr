@@ -151,7 +151,60 @@ func TestPendingDetectionIsPresence(t *testing.T) {
 
 	// A just-reported placement address is treated as a present placement
 	// service until the refresh completes.
-	h.RequestDetection()
+	h.RequestDetection(true)
+	assert.True(t, h.PlacementPresent())
+	assert.False(t, h.PlacementConfirmed(), "a presumption is not an observation")
+
+	h.refreshDetection(t.Context())
+	assert.False(t, h.PlacementPresent())
+}
+
+func TestPendingRemovalIsNotPresence(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+
+	// A removal can never reveal a placement service, so the in-flight
+	// refresh must not withhold the leader.
+	h.RequestDetection(false)
+	assert.NotEqual(t, h.reqGen, h.doneGen, "a removal still refreshes")
+	assert.False(t, h.PlacementPresent())
+
+	h.refreshDetection(t.Context())
+	assert.False(t, h.PlacementPresent())
+}
+
+func TestPendingAddSurvivesRemoval(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+
+	// A removal arriving while an addition is still unprobed keeps the
+	// presumption until the refresh answering both completes.
+	h.RequestDetection(true)
+	h.RequestDetection(false)
+	assert.True(t, h.PlacementPresent())
+
+	h.refreshDetection(t.Context())
+	assert.False(t, h.PlacementPresent())
+
+	// Once answered, a later removal alone presumes nothing.
+	h.RequestDetection(false)
+	assert.False(t, h.PlacementPresent())
+}
+
+func TestPendingAddOutlivesStaleRefresh(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{})
+
+	// A refresh already in flight when the addition arrives does not answer
+	// it: the presumption holds until a refresh started after the request.
+	startGen := h.reqGen
+	h.RequestDetection(true)
+	h.lock.Lock()
+	h.doneGen = startGen // the stale refresh completes against the old generation
+	h.lock.Unlock()
 	assert.True(t, h.PlacementPresent())
 
 	h.refreshDetection(t.Context())
@@ -188,7 +241,7 @@ func TestPendingDetectionKeepsAdvertisement(t *testing.T) {
 
 	// A reconnecting sidecar re-reports its addresses: the in-flight
 	// presumption must not withdraw the standing advertisement.
-	h.RequestDetection()
+	h.RequestDetection(true)
 	assert.False(t, h.PlacementPresent())
 
 	h.refreshDetection(t.Context())

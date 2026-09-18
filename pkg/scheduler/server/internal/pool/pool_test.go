@@ -112,9 +112,16 @@ func TestTrackIncapableNilCallback(t *testing.T) {
 func TestTrackAddresses(t *testing.T) {
 	t.Parallel()
 
-	var calls atomic.Int64
+	var calls, adds, removes atomic.Int64
 	p := New(Options{
-		OnPlacementAddressesChange: func() { calls.Add(1) },
+		OnPlacementAddressesChange: func(added bool) {
+			calls.Add(1)
+			if added {
+				adds.Add(1)
+			} else {
+				removes.Add(1)
+			}
+		},
 	})
 
 	ctx1, cancel1 := context.WithCancel(t.Context())
@@ -141,10 +148,14 @@ func TestTrackAddresses(t *testing.T) {
 	assert.Len(t, p.PlacementAddresses(), 2+maxAddressesPerReport)
 	assert.NotContains(t, p.PlacementAddresses(), fmt.Sprintf("10.1.0.%d:50005", maxAddressesPerReport))
 	assert.Equal(t, int64(3), calls.Load())
+	assert.Equal(t, int64(3), adds.Load(), "every new address reports an addition")
+	assert.Equal(t, int64(0), removes.Load())
 	bcancel()
 	assert.Eventually(t, func() bool {
 		return len(p.PlacementAddresses()) == 2 && calls.Load() == 4
 	}, time.Second*5, time.Millisecond)
+	assert.Equal(t, int64(3), adds.Load())
+	assert.Equal(t, int64(1), removes.Load(), "the last reporter leaving reports a removal, not an addition")
 
 	// The shared address outlives the first sidecar, the other one leaves
 	// with it. AfterFunc fires asynchronously.

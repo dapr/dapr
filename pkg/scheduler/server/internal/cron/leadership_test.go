@@ -118,6 +118,7 @@ func TestLeadershipHandle(t *testing.T) {
 			ownAddress:      "a:1",
 			pool:            pool,
 			placement:       place,
+			handoff:         &fakeHandoff{pool: pool, sticky: true},
 		}, ch
 	}
 
@@ -245,6 +246,7 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 	bc.Subscribe(t.Context(), ch)
 	pool := new(fakePool)
 	place := new(fakePlacementLeader)
+	hoff := &fakeHandoff{pool: pool, sticky: true}
 	l := &leadership{
 		hostBroadcaster: bc,
 		lock:            &lock,
@@ -253,6 +255,7 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 		ownAddress:      "a:1",
 		pool:            pool,
 		placement:       place,
+		handoff:         hoff,
 	}
 
 	// An empty cluster advertises no leader, but keeps the capability bit:
@@ -262,7 +265,7 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 	hosts := <-ch
 	require.False(t, hosts[0].GetLeader())
 	require.True(t, hosts[0].GetSchedulerPlacementEnabled())
-	require.False(t, l.advertised)
+	require.False(t, hoff.advertised)
 
 	// An old sidecar connects first: with no placement service visible it
 	// changes nothing, so the unchanged table is not re-broadcast.
@@ -282,7 +285,7 @@ func TestLeadershipAdvertisementPermanence(t *testing.T) {
 	require.NoError(t, l.Handle(t.Context(), nil))
 	hosts = <-ch
 	require.True(t, hosts[0].GetLeader())
-	require.True(t, l.advertised)
+	require.True(t, hoff.advertised)
 	require.NotNil(t, place.leader)
 	assert.True(t, *place.leader)
 }
@@ -309,6 +312,7 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 	bc.Subscribe(t.Context(), ch)
 	pool := new(fakePool)
 	place := new(fakePlacementLeader)
+	hoff := &fakeHandoff{pool: pool, sticky: true}
 	l := &leadership{
 		hostBroadcaster: bc,
 		lock:            &lock,
@@ -317,13 +321,14 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 		ownAddress:      "a:1",
 		pool:            pool,
 		placement:       place,
+		handoff:         hoff,
 	}
 
 	// Before the first advertisement, no capable sidecar means no leader.
 	require.NoError(t, l.Handle(t.Context(), []*anypb.Any{anyHost(t, "a:1", true)}))
 	hosts := <-ch
 	require.False(t, hosts[0].GetLeader())
-	require.False(t, l.advertised)
+	require.False(t, hoff.advertised)
 
 	// A capable sidecar connects and takes a placement stream: advertised.
 	pool.capable = true
@@ -331,7 +336,7 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 	require.NoError(t, l.Handle(t.Context(), nil))
 	hosts = <-ch
 	require.True(t, hosts[0].GetLeader())
-	require.True(t, l.advertised)
+	require.True(t, hoff.advertised)
 
 	// The sidecar re-establishes its jobs streams: the capable count dips
 	// to zero, and the leader must stay advertised, with the unchanged
@@ -343,7 +348,7 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 		t.Fatalf("an unchanged table must not be re-broadcast: %v", hosts)
 	default:
 	}
-	require.True(t, l.advertised)
+	require.True(t, hoff.advertised)
 
 	// The streams return: still advertised, still no re-broadcast.
 	pool.capable = true
@@ -361,7 +366,7 @@ func TestLeadershipAdvertisementSurvivesCapableDip(t *testing.T) {
 	hosts = <-ch
 	require.True(t, hosts[0].GetLeader(),
 		"an advertised leader must survive losing every capability signal")
-	require.True(t, l.advertised)
+	require.True(t, hoff.advertised)
 }
 
 // TestLeadershipMalformedTableNotReplayed asserts a table which fails to
@@ -381,6 +386,7 @@ func TestLeadershipMalformedTableNotReplayed(t *testing.T) {
 		ownAddress:      "a:1",
 		pool:            new(fakePool),
 		placement:       new(fakePlacementLeader),
+		handoff:         &fakeHandoff{sticky: true},
 	}
 
 	// A payload of the wrong type fails UnmarshalTo.
@@ -393,22 +399,45 @@ func TestLeadershipMalformedTableNotReplayed(t *testing.T) {
 	require.NoError(t, l.Handle(t.Context(), nil))
 }
 
+// fakeHandoff stands in for the handoff. With pool set the capability gates
+// read the fake pool, and with sticky set SetAdvertised records it.
 type fakeHandoff struct {
 	present    bool
+	confirmed  bool
 	advertised bool
 	incapable  bool
 	capable    bool
 	notReady   bool
+	pool       *fakePool
+	sticky     bool
 
 	advertisedCalls int
 }
 
-func (f *fakeHandoff) Ready() bool                                  { return !f.notReady }
-func (f *fakeHandoff) PlacementPresent() bool                       { return f.present }
-func (f *fakeHandoff) Advertised() bool                             { return f.advertised }
-func (f *fakeHandoff) AnySchedulerPlacementIncapableSidecars() bool { return f.incapable }
-func (f *fakeHandoff) AnySchedulerPlacementCapableSidecars() bool   { return f.capable }
-func (f *fakeHandoff) SetAdvertised()                               { f.advertisedCalls++ }
+func (f *fakeHandoff) Ready() bool              { return !f.notReady }
+func (f *fakeHandoff) PlacementPresent() bool   { return f.present }
+func (f *fakeHandoff) PlacementConfirmed() bool { return f.confirmed }
+func (f *fakeHandoff) Advertised() bool         { return f.advertised }
+func (f *fakeHandoff) AnySchedulerPlacementIncapableSidecars() bool {
+	if f.pool != nil {
+		return f.pool.incapable
+	}
+	return f.incapable
+}
+
+func (f *fakeHandoff) AnySchedulerPlacementCapableSidecars() bool {
+	if f.pool != nil {
+		return f.pool.capable
+	}
+	return f.capable
+}
+
+func (f *fakeHandoff) SetAdvertised() {
+	f.advertisedCalls++
+	if f.sticky {
+		f.advertised = true
+	}
+}
 
 func TestLeadershipPlacementPresence(t *testing.T) {
 	t.Parallel()

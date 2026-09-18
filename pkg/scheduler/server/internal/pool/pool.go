@@ -42,7 +42,9 @@ type Options struct {
 
 	// OnPlacementAddressesChange is called when the set of placement
 	// addresses reported by connected sidecars gains or loses an address.
-	OnPlacementAddressesChange func()
+	// added is true when an address not tracked before appeared, false when
+	// the last sidecar reporting an address went away.
+	OnPlacementAddressesChange func(added bool)
 	// PlacementEnabled gates the incapable sidecars: on a scheduler
 	// not serving placement every sidecar counts as incapable
 	PlacementEnabled bool
@@ -73,7 +75,7 @@ type Pool struct {
 	// connected.
 	addrLock                   sync.Mutex
 	addrs                      map[string]int
-	onPlacementAddressesChange func()
+	onPlacementAddressesChange func(added bool)
 	placementEnabled           bool
 }
 
@@ -212,7 +214,7 @@ func (p *Pool) trackAddresses(ctx context.Context, reported []string) {
 	}
 	p.addrLock.Unlock()
 	if changed && p.onPlacementAddressesChange != nil {
-		p.onPlacementAddressesChange()
+		p.onPlacementAddressesChange(true)
 	}
 
 	context.AfterFunc(ctx, func() {
@@ -227,7 +229,7 @@ func (p *Pool) trackAddresses(ctx context.Context, reported []string) {
 		}
 		p.addrLock.Unlock()
 		if changed && p.onPlacementAddressesChange != nil {
-			p.onPlacementAddressesChange()
+			p.onPlacementAddressesChange(false)
 		}
 	})
 }

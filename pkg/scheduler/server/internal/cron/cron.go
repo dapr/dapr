@@ -68,8 +68,7 @@ type Options struct {
 	// current placement leader on every leadership table change.
 	Placement PlacementLeader
 
-	// Handoff, when non-nil, replicates the placement handoff facts through
-	// etcd, with this scheduler's connection pool as the fallback.
+	// Handoff is this scheduler's own view of the placement handoff facts.
 	Handoff *handoff.Handoff
 }
 
@@ -167,25 +166,16 @@ func (c *cron) Run(ctx context.Context) error {
 		// A nil event re-broadcasts the last leadership table with its
 		// placement fields recomputed under the new capability state.
 		OnSchedulerPlacementCapabilityChange: func() {
-			if c.handoff != nil {
-				c.handoff.SetLocalCapabilities(
-					c.connectionPool.HasSchedulerPlacementIncapableSidecars(),
-					c.connectionPool.HasSchedulerPlacementCapableSidecars(),
-				)
-			}
+			c.handoff.SetLocalCapabilities(
+				c.connectionPool.HasSchedulerPlacementIncapableSidecars(),
+				c.connectionPool.HasSchedulerPlacementCapableSidecars(),
+			)
 			leaderLoop.Enqueue(nil)
 		},
-		OnPlacementAddressesChange: func() {
-			if c.handoff != nil {
-				c.handoff.RequestDetection()
-			}
+		OnPlacementAddressesChange: func(added bool) {
+			c.handoff.RequestDetection(added)
 		},
 	})
-
-	var hoff handoff.Interface
-	if c.handoff != nil {
-		hoff = c.handoff
-	}
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
 	// non-blocking, which prevents the go-etcd-cron wleaderCh send from
@@ -201,7 +191,7 @@ func (c *cron) Run(ctx context.Context) error {
 		ownAddress:      c.host.GetAddress(),
 		pool:            c.connectionPool,
 		placement:       c.placement,
-		handoff:         hoff,
+		handoff:         c.handoff,
 	})
 
 	// A placement stream connecting or closing recomputes the gate and the
@@ -214,15 +204,13 @@ func (c *cron) Run(ctx context.Context) error {
 
 	// The handoff is already running: its callbacks register only once the
 	// loop they enqueue to exists.
-	if c.handoff != nil {
-		c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
-		c.handoff.SetOnChange(func() {
-			leaderLoop.Enqueue(nil)
-		})
-		// The handoff may have completed its first detection before the
-		// callback existed, so pick up whatever state it already reached.
+	c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
+	c.handoff.SetOnChange(func() {
 		leaderLoop.Enqueue(nil)
-	}
+	})
+	// The handoff may have completed its first detection before the
+	// callback existed, so pick up whatever state it already reached.
+	leaderLoop.Enqueue(nil)
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
