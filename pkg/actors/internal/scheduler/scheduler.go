@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -139,9 +140,11 @@ func scheduleFromPeriod(period string) (*string, *uint32, error) {
 
 	var repeats *uint32
 	if repetition > 0 {
-		//TODO: fix types
-		//nolint:gosec
-		repeats = new(uint32(repetition))
+		r := uint32(repetition) //nolint:gosec // round-trip checked below
+		if int64(r) != int64(repetition) {
+			return nil, nil, fmt.Errorf("unsupported repetition count: %d exceeds maximum of %d", repetition, math.MaxUint32)
+		}
+		repeats = &r
 	}
 
 	return new("@every " + duration.String()), repeats, nil
