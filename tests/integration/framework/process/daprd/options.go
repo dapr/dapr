@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +37,7 @@ type Option func(*options)
 // options contains the options for running Daprd in integration tests.
 type options struct {
 	execOpts []exec.Option
+	execPath string
 
 	appID                      string
 	namespace                  *string
@@ -57,6 +57,7 @@ type options struct {
 	resourceFiles              []string
 	resourceDirs               []string
 	configs                    []string
+	features                   []string
 	placementAddresses         []string
 	logLevel                   string
 	mode                       string
@@ -68,6 +69,7 @@ type options struct {
 	gracefulShutdownSeconds    *int
 	blockShutdownDuration      *string
 	actorsDisseminateTimeout   *time.Duration
+	placementStartupTimeout    *time.Duration
 	hotReloadReconcileInterval *time.Duration
 	controlPlaneTrustDomain    *string
 	appBindingOptionsTimeout   *time.Duration
@@ -80,6 +82,14 @@ type options struct {
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+// WithExecPath runs this daprd from the given binary instead of the one
+// DAPR_INTEGRATION_DAPRD_PATH points at.
+func WithExecPath(path string) Option {
+	return func(o *options) {
+		o.execPath = path
 	}
 }
 
@@ -230,21 +240,14 @@ func WithConfigs(configs ...string) Option {
 	}
 }
 
-// WithFeatureEnabled configures daprd with a Configuration manifest enabling
-// the given preview features.
+// WithFeatureEnabled enables the given preview features. Calls accumulate
+// into one Configuration manifest, because daprd keeps only the last
+// spec.features list it loads.
 func WithFeatureEnabled(t *testing.T, features ...string) Option {
-	var sb strings.Builder
-	sb.WriteString(`apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: featureconfig
-spec:
-  features:
-`)
-	for _, f := range features {
-		sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+	t.Helper()
+	return func(o *options) {
+		o.features = append(o.features, features...)
 	}
-	return WithConfigManifests(t, sb.String())
 }
 
 func WithConfigManifests(t *testing.T, manifests ...string) Option {
@@ -349,6 +352,12 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.actorsDisseminateTimeout = &timeout
+	}
+}
+
+func WithActorsPlacementStartupTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.placementStartupTimeout = &timeout
 	}
 }
 

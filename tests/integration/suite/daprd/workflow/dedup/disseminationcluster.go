@@ -93,15 +93,19 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "activity body never started")
 	}
 
-	startVersion := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	extraDopts := []daprd.Option{
+		daprd.WithAppID(d.appID),
+		daprd.WithScheduler(d.workflow.Scheduler()),
+		daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
+	}
+	if d.workflow.HasPlacement() {
+		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(d.workflow.Placement().Address()))
+	}
+	extraDopts = append(extraDopts, d.workflow.JoinOptions(t)...)
 
-	for i := range 2 {
-		extra := daprd.New(t, append([]daprd.Option{
-			daprd.WithAppID(d.appID),
-			daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
-			daprd.WithScheduler(d.workflow.Scheduler()),
-			daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
-		}, d.workflow.FeatureOptions(t)...)...)
+	for range 2 {
+		startVersion := d.workflow.PlacementVersion(t, ctx)
+		extra := daprd.New(t, extraDopts...)
 		extra.Run(t, ctx)
 		extra.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { extra.Cleanup(t) })
@@ -121,13 +125,8 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, extraClient.StartWorkItemListener(ctx, registry))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-			if !assert.NotNil(c, table) {
-				return
-			}
-			//nolint:gosec
-			assert.GreaterOrEqual(c, table.Version, startVersion+uint64(i+1),
-				"placement table version must advance for each new daprd")
+			assert.Greater(c, d.workflow.PlacementVersion(t, ctx), startVersion,
+				"the placement authority must disseminate for each new daprd")
 		}, 15*time.Second, 10*time.Millisecond)
 	}
 

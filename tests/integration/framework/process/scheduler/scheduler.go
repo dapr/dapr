@@ -156,6 +156,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.embed != nil {
 		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
 	}
+	if opts.placementEnabled != nil {
+		args = append(args, "--placement-enabled="+strconv.FormatBool(*opts.placementEnabled))
+	}
+	if opts.placementDisseminateTimeout != nil {
+		args = append(args, "--placement-disseminate-timeout="+opts.placementDisseminateTimeout.String())
+	}
+	if opts.placementDisseminateCoalesceWindow != nil {
+		args = append(args, "--placement-disseminate-coalesce-window="+opts.placementDisseminateCoalesceWindow.String())
+	}
 	if opts.clientEndpoints != nil {
 		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
 	}
@@ -427,7 +436,8 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	})
 	require.NoError(t, err)
 
@@ -598,9 +608,11 @@ func (s *Scheduler) JobKeyCount(t *testing.T, ctx context.Context, substr string
 func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
 	t.Helper()
 
+	// Bound by ctx: a dial that outlives the test panics the process.
 	resp, err := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
 	assert.NoError(t, err)
 

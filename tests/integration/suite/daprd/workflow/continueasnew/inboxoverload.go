@@ -53,7 +53,8 @@ type inboxoverload struct {
 }
 
 func (i *inboxoverload) Setup(t *testing.T) []framework.Option {
-	i.workflow = workflow.New(t)
+	// Signing mode opt-out: the test hand-writes unsigned inbox rows into sqlite (rejected by a signing-enabled host) and dials the scheduler with a plaintext client.
+	i.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{
 		framework.WithProcesses(i.workflow),
 	}
