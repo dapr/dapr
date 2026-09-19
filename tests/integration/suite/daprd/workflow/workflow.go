@@ -70,5 +70,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/tracing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/unstartable"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/upgrade"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/versioning"
 )
