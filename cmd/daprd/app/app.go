@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/cmd/daprd/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
+	binarystoreLoader "github.com/dapr/dapr/pkg/components/binarystore"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	conversationLoader "github.com/dapr/dapr/pkg/components/conversation"
@@ -99,6 +100,7 @@ func Run() {
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	conversationLoader.DefaultRegistry.Logger = logContrib
+	binarystoreLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	ctx := signals.Context()
@@ -141,7 +143,8 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 		WithBindings(bindingsLoader.DefaultRegistry).
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
-		WithConversations(conversationLoader.DefaultRegistry)
+		WithConversations(conversationLoader.DefaultRegistry).
+		WithBinaryStores(binarystoreLoader.DefaultRegistry)
 
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
