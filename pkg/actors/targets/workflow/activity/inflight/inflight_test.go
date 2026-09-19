@@ -15,6 +15,7 @@ package inflight_test
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -197,20 +198,27 @@ func TestKeyDiscriminatesSchedulings(t *testing.T) {
 
 	t.Run("task execution ID wins", func(t *testing.T) {
 		e := newEvent("exec-1", timestamppb.New(time.Unix(10, 5)))
-		assert.Equal(t, "wf::0::exec-1", inflight.Key("wf::0", e))
+		assert.Equal(t, "8|wf::0::0::exec-1", inflight.Key("wf::0::0", e))
 	})
 
 	t.Run("empty task execution ID falls back to event timestamp", func(t *testing.T) {
 		e1 := newEvent("", timestamppb.New(time.Unix(10, 5)))
 		e2 := newEvent("", timestamppb.New(time.Unix(10, 6)))
-		k1 := inflight.Key("wf::0", e1)
-		k2 := inflight.Key("wf::0", e2)
+		k1 := inflight.Key("wf::0::0", e1)
+		k2 := inflight.Key("wf::0::0", e2)
 		assert.NotEqual(t, k1, k2, "schedulings at different times must not share an entry")
-		assert.Equal(t, k1, inflight.Key("wf::0", e1), "retries of the same scheduling must share an entry")
+		assert.Equal(t, k1, inflight.Key("wf::0::0", e1), "retries of the same scheduling must share an entry")
 	})
 
 	t.Run("no task execution ID and no timestamp", func(t *testing.T) {
 		e := newEvent("", nil)
-		assert.Equal(t, "wf::0", inflight.Key("wf::0", e))
+		assert.Equal(t, inflight.KeyPrefix("wf::0::0"), inflight.Key("wf::0::0", e))
+	})
+
+	t.Run("prefix matches only its own actor", func(t *testing.T) {
+		e := newEvent("exec-1", timestamppb.New(time.Unix(10, 5)))
+		assert.True(t, strings.HasPrefix(inflight.Key("wf::5::0", e), inflight.KeyPrefix("wf::5::0")))
+		assert.False(t, strings.HasPrefix(inflight.Key("wf::5::0::2::0", e), inflight.KeyPrefix("wf::5::0")),
+			"actor wf::5::0's prefix must not match actor wf::5::0::2::0's keys")
 	})
 }

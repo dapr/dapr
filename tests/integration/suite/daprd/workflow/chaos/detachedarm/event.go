@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -58,15 +59,20 @@ func (e *event) Setup(t *testing.T) []framework.Option {
 	}
 
 	e.appID = uuid.New().String()
-	e.scheduler = scheduler.New(t)
-	e.proxy = proxy.New(t, e.scheduler)
+	sen := sentry.New(t)
+	e.scheduler = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	e.proxy = proxy.New(t, e.scheduler, proxy.WithSentry(t, sen, "default", e.appID))
 	e.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
 		workflow.WithSchedulerInstance(e.scheduler),
 		workflow.WithSchedulerAddress(e.proxy.Address()),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(e.appID)),
 	)
 	return []framework.Option{
-		framework.WithProcesses(e.scheduler, e.proxy, e.workflow),
+		framework.WithProcesses(sen, e.scheduler, e.proxy, e.workflow),
 	}
 }
 
@@ -89,7 +95,7 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	_, err = cl.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
-	startVersion := e.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	startVersion := e.workflow.PlacementVersion(t, ctx)
 
 	failedCh := make(chan struct{})
 	e.proxy.ArmFailures(proxy.MethodScheduleJob, 1_000_000, codes.Unavailable, failedCh)
@@ -107,12 +113,15 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "injected ScheduleJob failure never fired")
 	}
 
-	extra := daprd.New(t, append([]daprd.Option{
+	extraDopts := []daprd.Option{
 		daprd.WithAppID(e.appID),
-		daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 		daprd.WithSchedulerAddressesReset(e.proxy.Address()),
 		daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-	}, e.workflow.FeatureOptions(t)...)...)
+	}
+	if e.workflow.HasPlacement() {
+		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(e.workflow.Placement().Address()))
+	}
+	extra := daprd.New(t, append(extraDopts, e.workflow.JoinOptions(t)...)...)
 	extra.Run(t, ctx)
 	t.Cleanup(func() { extra.Cleanup(t) })
 	extra.WaitUntilRunning(t, ctx)
@@ -123,11 +132,8 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, extraClient.StartWorkItemListener(ctx, registry))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := e.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-		if !assert.NotNil(c, table) {
-			return
-		}
-		assert.Greater(c, table.Version, startVersion, "placement table version must advance for the new daprd")
+		assert.Greater(c, e.workflow.PlacementVersion(t, ctx), startVersion,
+			"the placement authority must disseminate for the new daprd")
 	}, 15*time.Second, 10*time.Millisecond)
 
 	select {

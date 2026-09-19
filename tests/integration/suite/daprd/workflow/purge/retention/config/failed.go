@@ -76,10 +76,16 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	db := f.workflow.DB().GetConnection(t)
 	tableName := f.workflow.DB().TableName()
 
+	// Signing mode stores one signature row per history save plus a sigcert row.
+	runningCount := 8
+	if f.workflow.Signing() {
+		runningCount = 12
+	}
+
 	var count int
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-		assert.Equal(c, 8, count)
+		assert.Equal(c, runningCount, count)
 	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "someEvent"))

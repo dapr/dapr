@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -72,9 +73,18 @@ func (s *savefirst) Setup(t *testing.T) []framework.Option {
 		statestore.WithStateStore(s.store),
 	)
 
-	s.sched = scheduler.New(t)
+	sen := sentry.New(t)
+	s.sched = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
 
 	s.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
+		// Keep the signing feature off: the armed store fault rolls back signed
+		// rows mid-commit and the retried completion would be classified as
+		// tampering instead of retried. mTLS itself is unaffected.
+		workflow.WithSigningDisabledN(0),
 		workflow.WithNoDB(),
 		workflow.WithSchedulerInstance(s.sched),
 		workflow.WithDaprdOptions(0,
@@ -95,7 +105,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.sched, s.ss, s.workflow),
+		framework.WithProcesses(sen, s.sched, s.ss, s.workflow),
 	}
 }
 
