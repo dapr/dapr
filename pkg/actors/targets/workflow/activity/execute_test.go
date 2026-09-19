@@ -92,7 +92,7 @@ func Test_executeActivity_lockFreeDuringExecution(t *testing.T) {
 	t.Parallel()
 	f, scheduled := newExecHarness(t)
 
-	a := f.GetOrCreate("wf::3").(*activity)
+	a := f.GetOrCreate("wf::3::0").(*activity)
 
 	ownerErr := make(chan error, 1)
 	go func() {
@@ -142,7 +142,7 @@ func Test_claim(t *testing.T) {
 	t.Parallel()
 	f, _ := newExecHarness(t)
 
-	a := f.GetOrCreate("wf::3").(*activity)
+	a := f.GetOrCreate("wf::3::0").(*activity)
 
 	unlock, err := a.lock.ContextLock(t.Context())
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func Test_claimStaleEviction(t *testing.T) {
 		f, _ := newExecHarness(t)
 		f.executionHeld = held
 		f.staleClaimAfter = grace
-		return f.GetOrCreate("wf::3").(*activity)
+		return f.GetOrCreate("wf::3::0").(*activity)
 	}
 
 	t.Run("dead claim is evicted and ownership reclaimed", func(t *testing.T) {
