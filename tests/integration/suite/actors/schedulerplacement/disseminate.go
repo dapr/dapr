@@ -256,7 +256,7 @@ func (d *disseminate) timeoutRun(t *testing.T, ctx context.Context) {
 		default:
 			assert.Fail(c, "stream not closed yet")
 		}
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 	assert.Less(t, time.Since(start), time.Second*15)
 
 	// The surviving host is unaffected before, during and after eviction.
@@ -267,7 +267,7 @@ func (d *disseminate) timeoutRun(t *testing.T, ctx context.Context) {
 			ActorType: "t1type", ActorId: "a1", Method: "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 }
 
 // coalesceRun tests --placement-disseminate-coalesce-window: churn during
@@ -323,5 +323,5 @@ func (d *disseminate) coalesceRun(t *testing.T, ctx context.Context) {
 			ActorType: "t1type", ActorId: "a1", Method: "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 }
