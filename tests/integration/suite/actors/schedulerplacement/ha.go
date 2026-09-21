@@ -136,7 +136,7 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.NotEmpty(c, leaderAddr)
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	lowest := ""
 	for _, sched := range h.schedulers {
@@ -188,6 +188,6 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 			ActorType: "myactortype", ActorId: "a1", Method: "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*30, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 	assert.Greater(t, h.invoked.Load(), invokedBefore)
 }
