@@ -120,7 +120,16 @@ func (c *canorphan) Run(t *testing.T, ctx context.Context) {
 	// schedules the same task ID, colliding on the same activity actor.
 	require.NoError(t, client.RaiseEvent(ctx, id, "proceed"))
 
-	time.Sleep(time.Second * 2)
+	// Releasing the orphan only exercises the collision once the new
+	// generation is running and has scheduled the colliding task, so wait for
+	// its input rather than guessing how long the continue-as-new takes.
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
+		meta, merr := client.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
+		if assert.NoError(col, merr) {
+			assert.Equal(col, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
+			assert.JSONEq(col, `"second"`, meta.GetInput().GetValue())
+		}
+	}, time.Second*20, time.Millisecond*10)
 	close(releaseOrphan)
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id)
