@@ -72,6 +72,16 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(headers)
 }
 
+// testPathHandler records the raw request path it was invoked with.
+type testPathHandler struct {
+	gotPath string
+}
+
+func (t *testPathHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.gotPath = r.URL.Path
+	w.WriteHeader(http.StatusOK)
+}
+
 // testQueryStringHandler is used for querystring test.
 type testQueryStringHandler struct {
 	serverURL string
@@ -522,6 +532,33 @@ func TestInvokeMethod(t *testing.T) {
 		body, _ := resp.RawDataFull()
 		assert.Empty(t, string(body))
 	})
+}
+
+func TestInvokeMethodPreservesTrailingSlash(t *testing.T) {
+	th := &testPathHandler{}
+	ctx := t.Context()
+	server := httptest.NewServer(th)
+	defer server.Close()
+
+	c := Channel{
+		baseAddress: server.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+		tracingSpec: &config.TracingSpec{
+			SamplingRate: "0",
+		},
+		middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+	}
+
+	fakeReq := invokev1.NewInvokeMethodRequest("foo/bar/").
+		WithHTTPExtension(http.MethodGet, "")
+	defer fakeReq.Close()
+
+	resp, err := c.InvokeMethod(ctx, fakeReq, "")
+
+	require.NoError(t, err)
+	defer resp.Close()
+	assert.Equal(t, "/foo/bar/", th.gotPath)
 }
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {

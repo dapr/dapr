@@ -100,6 +100,40 @@ func TestNormalizeMethod(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "api/v1/users", got)
 	})
+
+	t.Run("preserves trailing slash", func(t *testing.T) {
+		got, err := NormalizeMethod("api/v1/users/")
+		require.NoError(t, err)
+		assert.Equal(t, "api/v1/users/", got)
+	})
+
+	t.Run("preserves trailing slash after resolving traversal", func(t *testing.T) {
+		got, err := NormalizeMethod("admin/../public/")
+		require.NoError(t, err)
+		assert.Equal(t, "public/", got)
+	})
+}
+
+func TestCleanPreserveTrailingSlash(t *testing.T) {
+	t.Run("no trailing slash unchanged", func(t *testing.T) {
+		assert.Equal(t, "foo/bar", CleanPreserveTrailingSlash("foo/bar"))
+	})
+
+	t.Run("trailing slash preserved", func(t *testing.T) {
+		assert.Equal(t, "foo/bar/", CleanPreserveTrailingSlash("foo/bar/"))
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		assert.Equal(t, "", CleanPreserveTrailingSlash(""))
+	})
+
+	t.Run("root stays root", func(t *testing.T) {
+		assert.Equal(t, "/", CleanPreserveTrailingSlash("/"))
+	})
+
+	t.Run("collapses double slashes and keeps trailing slash", func(t *testing.T) {
+		assert.Equal(t, "foo/bar/", CleanPreserveTrailingSlash("foo//bar/"))
+	})
 }
 
 func TestValidateName(t *testing.T) {

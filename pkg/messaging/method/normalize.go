@@ -56,8 +56,9 @@ func NormalizeMethod(method string) (string, error) {
 		}
 	}
 
-	// Resolve path traversal sequences.
-	cleaned := path.Clean(method)
+	// Resolve path traversal sequences, keeping a trailing slash the caller
+	// sent since the invoked app's route may distinguish "/foo/" from "/foo".
+	cleaned := CleanPreserveTrailingSlash(method)
 
 	// path.Clean on rootless paths can leave leading "../" — strip them.
 	for strings.HasPrefix(cleaned, "../") {
@@ -66,10 +67,21 @@ func NormalizeMethod(method string) (string, error) {
 	if cleaned == ".." {
 		cleaned = ""
 	}
-	// path.Clean converts empty to "."
-	if cleaned == "." {
-		cleaned = ""
-	}
 
 	return cleaned, nil
+}
+
+// CleanPreserveTrailingSlash behaves like path.Clean, except that when the
+// input ends in "/" the cleaned result keeps its trailing slash. path.Clean
+// always strips it, which would silently change a route the invoked app
+// distinguishes (e.g. "/foo/" vs "/foo").
+func CleanPreserveTrailingSlash(p string) string {
+	cleaned := path.Clean(p)
+	if cleaned == "." {
+		return ""
+	}
+	if strings.HasSuffix(p, "/") && !strings.HasSuffix(cleaned, "/") {
+		cleaned += "/"
+	}
+	return cleaned
 }

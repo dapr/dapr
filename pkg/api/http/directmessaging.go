@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"sync/atomic"
 
@@ -34,6 +33,7 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	methodutil "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/sse"
@@ -363,7 +363,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
 	if appID := headers.Get(consts.DaprAppIDHeader); appID != "" {
-		targetID, method = appID, strings.TrimPrefix(cleanPathPreserveTrailingSlash(reqPath), "/")
+		targetID, method = appID, strings.TrimPrefix(methodutil.CleanPreserveTrailingSlash(reqPath), "/")
 		// Delete the header as it should not be passed forward with the request and is only used by the Dapr API
 		headers.Del(consts.DaprAppIDHeader)
 		return targetID, method
@@ -373,7 +373,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && strings.EqualFold(pair[0], consts.DaprAppIDHeader) {
-				return pair[1], strings.TrimPrefix(cleanPathPreserveTrailingSlash(reqPath), "/")
+				return pair[1], strings.TrimPrefix(methodutil.CleanPreserveTrailingSlash(reqPath), "/")
 			}
 		}
 	}
@@ -393,7 +393,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
 			targetID := reqPath[:idx]
-			method := cleanPathPreserveTrailingSlash(reqPath[(idx + len("/method/")):])
+			method := methodutil.CleanPreserveTrailingSlash(reqPath[(idx + len("/method/")):])
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
@@ -402,21 +402,6 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 	}
 
 	return "", ""
-}
-
-// cleanPathPreserveTrailingSlash behaves like path.Clean, except that if the
-// input ends in "/" the cleaned result is given back its trailing slash.
-// path.Clean always strips it, which drops a slash the invoked app's route
-// may depend on (e.g. a route registered as "/foo/" but not "/foo").
-func cleanPathPreserveTrailingSlash(p string) string {
-	cleaned := path.Clean(p)
-	if cleaned == "." {
-		return ""
-	}
-	if strings.HasSuffix(p, "/") && !strings.HasSuffix(cleaned, "/") {
-		cleaned += "/"
-	}
-	return cleaned
 }
 
 // Returns true if a path has the parts as prefix (and a trailing slash), and returns the index of the first byte after the prefix (and after any trailing slashes).
