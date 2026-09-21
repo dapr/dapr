@@ -324,6 +324,21 @@ jobs:
           go-version-file: "go.mod"
       - name: Run workflow suite in the selected modes
         run: make test-integration-parallel ARGS="-focus workflow"
+      - name: Summarise integration test failures
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const script = require('./.github/scripts/integration_test_summary.js')
+            await script({ core })
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration
+          path: |
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.xml
   # The version-skew workflow runs one daprd binary per test, so it cannot see
   # workflow state written by the latest release and read by master. This job
   # starts a workflow on one and finishes it on the other, in both directions.
@@ -380,6 +395,21 @@ jobs:
           echo "DAPR_INTEGRATION_DAPRD_LEGACY_PATH=$(pwd)/daprd" >> $GITHUB_ENV
       - name: Run the workflow upgrade suite
         run: make test-integration-parallel ARGS="-focus 'daprd/workflow/upgrade'"
+      - name: Summarise integration test failures
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const script = require('./.github/scripts/integration_test_summary.js')
+            await script({ core })
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration
+          path: |
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.xml
   # The matrix above runs the workflow suite under the scheduler placement
   # authority. This job carries the same authority across the other suites that
   # use placement, which do not read the workflow mode variables, so it is one
@@ -406,6 +436,21 @@ jobs:
           go-version-file: "go.mod"
       - name: Run the actor, workflow, placement and scheduler suites against both placement authorities
         run: make test-integration-parallel ARGS="-focus 'actors|workflow|placement|scheduler'"
+      - name: Summarise integration test failures
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const script = require('./.github/scripts/integration_test_summary.js')
+            await script({ core })
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration
+          path: |
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
+            ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.xml
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"

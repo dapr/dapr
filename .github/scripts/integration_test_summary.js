@@ -1,4 +1,5 @@
 const fs = require('fs')
+const path = require('path')
 const readline = require('readline')
 
 // Reads the `go test -json` event stream written by gotestsum --jsonfile and
@@ -71,7 +72,18 @@ module.exports = async ({ core }) => {
 
     const os = process.env['GOOS'] || process.platform
     const arch = process.env['GOARCH'] || process.arch
-    const title = `Integration tests (${os}/${arch})`
+
+    // Several jobs run the suite on linux/amd64 and would otherwise all report
+    // under the same heading. Their output prefix is what tells them apart.
+    // basename: the prefix is a path, and some jobs set it to an absolute one.
+    const prefix = path.basename(
+        process.env['TEST_OUTPUT_FILE_PREFIX'] || 'test_report'
+    )
+    const label =
+        prefix === 'test_report'
+            ? `${os}/${arch}`
+            : prefix.replace(/^test_report_?/, '')
+    const title = `Integration tests (${label})`
 
     // A package always fails when one of its tests does, so its failure is only
     // news when no test accounts for it: a build error, a panic during init, or
@@ -94,7 +106,7 @@ module.exports = async ({ core }) => {
     // Surfaced before the per-test table: a package that did not build, or that
     // died outside a test, explains every test that never ran.
     for (const err of packageErrors) {
-        core.error(err, { title: `Integration test failure (${os}/${arch})` })
+        core.error(err, { title: `Integration test failure (${label})` })
     }
 
     for (const { test, elapsed } of leaves) {
