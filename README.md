@@ -61,6 +61,10 @@ Instead of restarting from the beginning, execution picks up exactly where it le
 
 **Common use cases:** AI agents, customer onboarding, order processing, human-approval flows, document processing, and other multi-step business processes.
 
+Dapr supports common [workflow patterns](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-patterns/) out of the box — task chaining, fan-out/fan-in, monitors, external-event / human-in-the-loop approval gates, and child workflows — as well as **multi-application workflows** that orchestrate activities and child workflows across different applications. Workflow authoring is **stable** in the .NET, Java, Python, Go, and JavaScript SDKs.
+
+See the [workflow overview](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-overview/) and [workflow quickstart](https://docs.dapr.io/getting-started/quickstarts/workflow-quickstart/) to get started.
+
 ## Build Reliable AI Agents
 
 AI agents need far more than model inference. To run in production they need state, orchestration, recovery, secure communication, and governance.
