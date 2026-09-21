@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -388,10 +389,23 @@ func TestConcurrency(t *testing.T) {
 	})
 }
 
+// releaseKitLoggers points the dapr loggers away from the log directory, so
+// that t.TempDir can remove it on Windows. RedirectInProcessLogs deliberately
+// leaves them pointing at the file (see its doc); a test is free to do this
+// because it has no worker goroutines still logging to race with.
+func releaseKitLoggers(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		opts := logger.DefaultOptions()
+		require.NoError(t, logger.ApplyOptionsToLoggers(&opts))
+	})
+}
+
 func TestRedirectInProcessLogs(t *testing.T) {
 	t.Run("should send package logs to a file", func(t *testing.T) {
 		dir := t.TempDir()
 		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", dir)
+		releaseKitLoggers(t)
 
 		// Registered before the redirect, the way a package level logger such as
 		// the one in pkg/security is registered at init.
@@ -412,6 +426,7 @@ func TestRedirectInProcessLogs(t *testing.T) {
 	t.Run("should send standard library logs to the same file", func(t *testing.T) {
 		dir := t.TempDir()
 		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", dir)
+		releaseKitLoggers(t)
 
 		path, restore, err := RedirectInProcessLogs()
 		require.NoError(t, err)
@@ -426,22 +441,49 @@ func TestRedirectInProcessLogs(t *testing.T) {
 		assert.Contains(t, string(b), "TLS handshake error")
 	})
 
-	t.Run("should release the file so it can be deleted", func(t *testing.T) {
+	t.Run("should stop standard library output at restore", func(t *testing.T) {
 		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", t.TempDir())
+		releaseKitLoggers(t)
 
 		path, restore, err := RedirectInProcessLogs()
 		require.NoError(t, err)
 
-		stdlog.Printf("something")
+		stdlog.Printf("before restore")
 		restore()
-
-		// Windows refuses to delete a file which is still open, which is what
-		// broke t.TempDir cleanup before restore existed.
-		require.NoError(t, os.Remove(path))
-
-		// Restoring must also stop further output reaching the deleted file.
 		stdlog.Printf("after restore")
-		assert.NoFileExists(t, path)
+
+		b, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(b), "before restore")
+		assert.NotContains(t, string(b), "after restore")
+	})
+
+	t.Run("should not touch the dapr loggers, which a leaked worker may still use", func(t *testing.T) {
+		t.Setenv("DAPR_INTEGRATION_LOGS_DIR", t.TempDir())
+		releaseKitLoggers(t)
+
+		log := logger.NewLogger("test.leaked.worker")
+
+		_, restore, err := RedirectInProcessLogs()
+		require.NoError(t, err)
+
+		// A durabletask worker goroutine can outlive the test that started it
+		// and still be logging when the root test's cleanup runs.
+		var stop atomic.Bool
+		started, done := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(done)
+			log.Info("still going after my test finished")
+			close(started)
+			for !stop.Load() {
+				log.Info("still going after my test finished")
+			}
+		}()
+
+		<-started
+		restore()
+		stop.Store(true)
+		<-done
 	})
 
 	t.Run("should leave logs alone when asked", func(t *testing.T) {

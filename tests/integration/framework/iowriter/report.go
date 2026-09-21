@@ -74,9 +74,9 @@ func Reset() error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
 			continue
 		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
-			return err
-		}
+		// Best effort: the dapr loggers keep in-process.log open for the life
+		// of the process, and Windows will not delete an open file.
+		_ = os.Remove(filepath.Join(dir, entry.Name()))
 	}
 
 	return nil
@@ -107,9 +107,11 @@ const inProcessLog = "in-process.log"
 //
 // Set DAPR_INTEGRATION_INPROCESS_LOGS to leave everything on stderr.
 //
-// The returned function restores the previous destinations and closes the file.
-// Callers must run it: Windows refuses to delete a file which is still open, so
-// leaving the handle around breaks the cleanup of any directory holding it.
+// The returned function points the standard library logger back where it was.
+// It deliberately leaves the dapr loggers pointing at the file: putting them
+// back would mean calling ApplyOptionsToLoggers a second time, which rewrites
+// every registered logger, and a worker goroutine outliving its test can still
+// be logging through one of them by then.
 func RedirectInProcessLogs() (string, func(), error) {
 	if kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_INPROCESS_LOGS")) {
 		return "", func() {}, nil
@@ -139,10 +141,6 @@ func RedirectInProcessLogs() (string, func(), error) {
 
 	return path, func() {
 		log.SetOutput(prev)
-		// Handing the dapr loggers a default options with no output file points
-		// them back at stdout, and closes the file kit opened for them.
-		restore := logger.DefaultOptions()
-		_ = logger.ApplyOptionsToLoggers(&restore)
 		f.Close()
 	}, nil
 }
