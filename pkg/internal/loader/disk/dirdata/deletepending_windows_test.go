@@ -38,9 +38,17 @@ func TestIsDeletePendingWindows(t *testing.T) {
 		path := filepath.Join(dir, "1.yaml")
 		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
 
-		f, err := os.Open(path)
+		// os.Open does not ask for FILE_SHARE_DELETE, so removing the file
+		// underneath it fails with a sharing violation instead of leaving it
+		// delete pending. Only a handle which shares delete, as a watcher's
+		// does, reproduces the state under test.
+		name, err := syscall.UTF16PtrFromString(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		handle, err := syscall.CreateFile(name, syscall.GENERIC_READ,
+			syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
+			nil, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = syscall.CloseHandle(handle) })
 
 		require.NoError(t, os.Remove(path))
 
