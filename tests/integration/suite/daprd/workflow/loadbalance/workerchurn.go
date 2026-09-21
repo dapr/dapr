@@ -72,7 +72,18 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 		reg := w.workflow.RegistryN(i)
 		require.NoError(t, reg.AddWorkflowN("churn", func(ctx *task.WorkflowContext) (any, error) {
 			for j := range steps {
-				if err := ctx.CallActivity("step", task.WithActivityInput(j)).Await(nil); err != nil {
+				// Disconnecting the worker cancels whatever it holds, and the
+				// activity reports that cancellation as a task failure when it
+				// reaches the backend before the stream dies. Churn is meant to
+				// cost a retry, not the instance, so retry rather than fail.
+				if err := ctx.CallActivity("step",
+					task.WithActivityInput(j),
+					task.WithActivityRetryPolicy(&task.RetryPolicy{
+						MaxAttempts:          10,
+						InitialRetryInterval: time.Millisecond * 50,
+						BackoffCoefficient:   1,
+					}),
+				).Await(nil); err != nil {
 					return nil, err
 				}
 			}
