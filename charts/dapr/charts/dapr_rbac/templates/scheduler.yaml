@@ -29,6 +29,9 @@ rules:
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
 ---
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: RoleBinding
