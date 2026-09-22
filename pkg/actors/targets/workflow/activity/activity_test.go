@@ -18,21 +18,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
 
+// The table freezes the actor ID shape every released version writes. Rows
+// are literals so no builder can drift it.
 func Test_workflowID(t *testing.T) {
-	for actorID, want := range map[string]string{
-		common.ActivityActorID("abc", 5):        "abc",
-		common.ActivityActorID("collide::0", 3): "collide::0",
-		common.ActivityActorID("a::b::c", 0):    "a::b::c",
+	for _, tc := range []struct{ actorID, want string }{
+		{"wf::5::0", "wf"},
+		{"wf::0::0", "wf"},
+		{"colon::id::4::1", "colon::id"},
+		{"trailing::::5::0", "trailing::"},
+		{"job::3::7::0", "job::3"},
+		{"job::3::3::0", "job::3"},
+		{"collide::0::0::0", "collide::0"},
+		{"wf::2::184467440737095516", "wf"},
 	} {
-		got, err := (&activity{actorID: actorID}).workflowID()
-		require.NoError(t, err)
-		assert.Equal(t, want, got, actorID)
+		got, err := (&activity{actorID: tc.actorID}).workflowID()
+		require.NoError(t, err, tc.actorID)
+		assert.Equal(t, tc.want, got, tc.actorID)
 	}
 
-	_, err := (&activity{actorID: "noseparator"}).workflowID()
-	require.Error(t, err)
+	for _, actorID := range []string{"noseparator", "wf::5"} {
+		_, err := (&activity{actorID: actorID}).workflowID()
+		require.Error(t, err, actorID)
+	}
 }
