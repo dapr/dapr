@@ -15,6 +15,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -62,9 +63,8 @@ func TestTrackIncapable(t *testing.T) {
 	}, time.Second*5, time.Millisecond)
 }
 
-// TestTrackCapable covers the capable-sidecar count, whose transitions also
-// fire OnSchedulerPlacementCapabilityChange so the gate latch is evaluated promptly when the first capable sidecar
-// connects.
+// TestTrackCapable covers the capable-sidecar count, whose transitions fire
+// OnSchedulerPlacementCapabilityChange.
 func TestTrackCapable(t *testing.T) {
 	t.Parallel()
 
@@ -109,3 +109,64 @@ func TestTrackIncapableNilCallback(t *testing.T) {
 // TestTrackAddresses covers the reported placement addresses: validated and
 // bounded per report, deduplicated across sidecars, and reported only while
 // a sidecar reporting them is connected.
+func TestTrackAddresses(t *testing.T) {
+	t.Parallel()
+
+	var calls, adds, removes atomic.Int64
+	p := New(Options{
+		OnPlacementAddressesChange: func(added bool) {
+			calls.Add(1)
+			if added {
+				adds.Add(1)
+			} else {
+				removes.Add(1)
+			}
+		},
+	})
+
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	ctx2, cancel2 := context.WithCancel(t.Context())
+
+	// Malformed entries and duplicates are dropped, a new address fires
+	// OnPlacementAddressesChange.
+	p.trackAddresses(ctx1, []string{"", "no-port", "10.0.0.1:50005", "10.0.0.1:50005"})
+	assert.ElementsMatch(t, []string{"10.0.0.1:50005"}, p.PlacementAddresses())
+	assert.Equal(t, int64(1), calls.Load())
+
+	// A second sidecar reporting the same address changes nothing.
+	p.trackAddresses(ctx2, []string{"10.0.0.1:50005", "10.0.0.2:50005"})
+	assert.ElementsMatch(t, []string{"10.0.0.1:50005", "10.0.0.2:50005"}, p.PlacementAddresses())
+	assert.Equal(t, int64(2), calls.Load())
+
+	// An oversized report is truncated, not dropped.
+	bctx, bcancel := context.WithCancel(t.Context())
+	big := make([]string, 0, maxAddressesPerReport+1)
+	for i := range maxAddressesPerReport + 1 {
+		big = append(big, fmt.Sprintf("10.1.0.%d:50005", i))
+	}
+	p.trackAddresses(bctx, big)
+	assert.Len(t, p.PlacementAddresses(), 2+maxAddressesPerReport)
+	assert.NotContains(t, p.PlacementAddresses(), fmt.Sprintf("10.1.0.%d:50005", maxAddressesPerReport))
+	assert.Equal(t, int64(3), calls.Load())
+	assert.Equal(t, int64(3), adds.Load(), "every new address reports an addition")
+	assert.Equal(t, int64(0), removes.Load())
+	bcancel()
+	assert.Eventually(t, func() bool {
+		return len(p.PlacementAddresses()) == 2 && calls.Load() == 4
+	}, time.Second*5, time.Millisecond)
+	assert.Equal(t, int64(3), adds.Load())
+	assert.Equal(t, int64(1), removes.Load(), "the last reporter leaving reports a removal, not an addition")
+
+	// The shared address outlives the first sidecar, the other one leaves
+	// with it. AfterFunc fires asynchronously.
+	cancel2()
+	assert.Eventually(t, func() bool {
+		addrs := p.PlacementAddresses()
+		return len(addrs) == 1 && addrs[0] == "10.0.0.1:50005" && calls.Load() == 5
+	}, time.Second*5, time.Millisecond)
+
+	cancel1()
+	assert.Eventually(t, func() bool {
+		return len(p.PlacementAddresses()) == 0 && calls.Load() == 6
+	}, time.Second*5, time.Millisecond)
+}

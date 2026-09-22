@@ -109,7 +109,7 @@ func (m *mixedversion) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, leader())
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	gclient := m.daprd.GRPCClient(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
