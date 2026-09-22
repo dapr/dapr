@@ -33,7 +33,7 @@ import (
 
 // secretComp builds a pubsub component whose metadata carries a secretKeyRef
 // alongside the value the operator already resolved, which is the shape a
-// component reaches the sidecar in on Kubernetes: the secret bytes, base64
+// component reaches the sidecar on Kubernetes: the secret bytes, base64
 // encoded, then JSON marshalled as a string.
 func secretComp(plaintext string) compapi.Component {
 	encoded := strconv.Quote(base64.StdEncoding.EncodeToString([]byte(plaintext)))
