@@ -121,7 +121,7 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_UPDATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, "baz1", s.get(t, ctx, "SEC_1"))
+			assert.Equal(c, "baz1", s.get(c, ctx, "SEC_1"))
 		}, time.Second*5, time.Millisecond*10)
 
 		s.assertNoDecodeError(t)
@@ -183,12 +183,12 @@ func (s *secretref) read(t *testing.T, ctx context.Context, key, expValue string
 func (s *secretref) get(t assert.TestingT, ctx context.Context, key string) string {
 	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/mysecrets/%s", s.daprd.HTTPPort(), url.QueryEscape(key))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
-	if !assert.NoError(t, err) {
+	if !assert.NoError(t, err) { //nolint:testifylint
 		return ""
 	}
 
 	resp, err := s.client.Do(req)
-	if !assert.NoError(t, err) {
+	if !assert.NoError(t, err) { //nolint:testifylint
 		return ""
 	}
 	body, err := io.ReadAll(resp.Body)
