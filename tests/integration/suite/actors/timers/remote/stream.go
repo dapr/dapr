@@ -123,24 +123,40 @@ func (s *stream) Run(t *testing.T, ctx context.Context) {
 		assert.NotEqual(c, err1 == nil, err2 == nil)
 	}, time.Second*10, time.Millisecond*10)
 
+	// ownerOf reports whether the first host owns the actor ID. Exactly one
+	// host may accept the registration and the other must answer
+	// PermissionDenied. A dissemination landing between the two calls aborts
+	// the ownership lookup rather than answering it, which the API reports as
+	// Internal, so retry until both hosts answer definitively.
+	ownerOf := func(id string) bool {
+		t.Helper()
+		var err1, err2 error
+		for range 100 {
+			err1, err2 = register(client1, id), register(client2, id)
+			require.False(t, err1 == nil && err2 == nil, "both hosts accepted the same timer registration")
+			if err1 == nil && status.Code(err2) == grpccodes.PermissionDenied {
+				return true
+			}
+			if err2 == nil && status.Code(err1) == grpccodes.PermissionDenied {
+				return false
+			}
+			time.Sleep(time.Millisecond * 10)
+		}
+		require.Failf(t, "hosts never gave a definitive ownership answer",
+			"host1=%v host2=%v", err1, err2)
+		return false
+	}
+
 	owner1, owner2 := "", ""
 	for i := 0; owner1 == "" || owner2 == ""; i++ {
 		require.Less(t, i, 100, "actor IDs never hashed to both hosts")
 		id := strconv.Itoa(i)
-		err1 := register(client1, id)
-		err2 := register(client2, id)
-		require.False(t, err1 == nil && err2 == nil, "both hosts accepted the same timer registration")
-		require.False(t, err1 != nil && err2 != nil, "both hosts rejected the timer registration")
-		if err1 == nil {
-			require.Equal(t, grpccodes.PermissionDenied, status.Code(err2))
+		if ownerOf(id) {
 			if owner1 == "" {
 				owner1 = id
 			}
-		} else {
-			require.Equal(t, grpccodes.PermissionDenied, status.Code(err1))
-			if owner2 == "" {
-				owner2 = id
-			}
+		} else if owner2 == "" {
+			owner2 = id
 		}
 	}
 
