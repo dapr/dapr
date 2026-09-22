@@ -24,10 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -43,7 +45,12 @@ type workerchurn struct {
 }
 
 func (w *workerchurn) Setup(t *testing.T) []framework.Option {
-	w.workflow = workflow.NewClustered(t, 3)
+	// The churned host is back within milliseconds, so a cancelled activity
+	// re-lands on it rather than moving. Under the fast path that activity has
+	// no durable reminder while its local drive is live, and the disconnect
+	// cancels the drive, so the janitor is what re-dispatches it. Its default
+	// 20s period does not fit the test budget.
+	w.workflow = workflow.NewClustered(t, 3, daprd.WithWorkflowJanitorPeriod(t, 2*time.Second))
 
 	return []framework.Option{
 		framework.WithProcesses(w.workflow),
@@ -61,6 +68,14 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 	)
 
 	var held atomic.Int32
+	// The churned host's activity never returns. Reporting the cancellation
+	// the disconnect raises would make the app call churn an activity failure,
+	// when a worker that goes away mid-activity answers nothing at all and its
+	// work item must be abandoned and re-dispatched. Released at cleanup so
+	// the blocked executions do not outlive the test.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+
 	for i := range daprds {
 		reg := w.workflow.RegistryN(i)
 		require.NoError(t, reg.AddWorkflowN("churn", func(ctx *task.WorkflowContext) (any, error) {
@@ -72,10 +87,10 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		}))
 		if i == churned {
-			require.NoError(t, reg.AddActivityN("step", func(actx task.ActivityContext) (any, error) {
+			require.NoError(t, reg.AddActivityN("step", func(task.ActivityContext) (any, error) {
 				held.Add(1)
-				<-actx.Context().Done()
-				return nil, actx.Context().Err()
+				<-release
+				return nil, nil
 			}))
 			continue
 		}
@@ -98,22 +113,39 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	var threshold int32 = 3
+	allCompleted := func() bool {
+		for _, id := range ids {
+			meta, err := clients[0].FetchWorkflowMetadata(ctx, id)
+			if err != nil || meta.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED {
+				return false
+			}
+		}
+		return true
+	}
+
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col, held.Load(), int32(3))
+	}, 10*time.Second, 10*time.Millisecond)
 	for range 2 {
-		assert.EventuallyWithT(t, func(col *assert.CollectT) {
-			assert.GreaterOrEqual(col, held.Load(), threshold)
-		}, time.Minute, 10*time.Millisecond)
 		worker.Disconnect(t)
 		w.workflow.WaitForNoConnectedWorkersN(t, ctx, churned)
+		before := held.Load()
 		worker = w.workflow.ConnectWorkerN(t, ctx, churned, w.workflow.RegistryN(churned))
 		w.workflow.WaitForConnectedWorkersN(t, ctx, churned, 1)
-		threshold = held.Load() + 3
+		// The churned host must resume executing after the reconnect, unless
+		// nothing is left for it to execute: an instance progresses only while
+		// its current activity hashes elsewhere, so how many still have work on
+		// this host is a lottery, and a fixed increment is not always
+		// satisfiable.
+		assert.EventuallyWithT(t, func(col *assert.CollectT) {
+			assert.True(col, held.Load() > before || allCompleted(),
+				"the churned host must resume executing, or every instance must have completed")
+		}, 10*time.Second, 10*time.Millisecond)
 	}
-	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.GreaterOrEqual(col, held.Load(), threshold)
-	}, time.Minute, 10*time.Millisecond)
 	worker.Disconnect(t)
 	w.workflow.WaitForNoConnectedWorkersN(t, ctx, churned)
 
+	// The instances still pinned to the churned host must be re-placed onto
+	// the two live ones and complete.
 	fworkflow.WaitForAllCompleted(t, ctx, clients[0], ids...)
 }

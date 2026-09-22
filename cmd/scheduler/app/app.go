@@ -92,6 +92,7 @@ func Run() {
 		ctrl, cerr = server.NewController(server.ControllerOptions{
 			KubeConfig: opts.KubeConfig,
 			Healthz:    healthz,
+			Namespace:  security.CurrentNamespace(),
 		})
 		if cerr != nil {
 			log.Fatalf("Fatal error creating scheduler controller: %v", cerr)
