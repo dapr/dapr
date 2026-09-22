@@ -30,6 +30,6 @@ func Test_buildActivityActorID(t *testing.T) {
 	// through ID equality. It must also stay a valid scheduler job name
 	// ('/', '\', '#' and '?' are forbidden), as it is embedded in the
 	// run-activity reminder job name.
-	assert.Equal(t, "abc::5", buildActivityActorID("abc", 5))
+	assert.Equal(t, "abc::5::0", buildActivityActorID("abc", 5))
 	assert.Equal(t, common.ActivityActorID("abc", 5), buildActivityActorID("abc", 5))
 }

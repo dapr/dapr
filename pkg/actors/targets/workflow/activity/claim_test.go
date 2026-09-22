@@ -183,8 +183,8 @@ func haltNothingHosted(t *testing.T, f *factory) {
 func Test_claimGuard_lifecycle(t *testing.T) {
 	t.Parallel()
 
-	const actorID = "wf::3"
-	key := actorID + "::gen1"
+	const actorID = "wf::3::0"
+	key := inflight.KeyPrefix(actorID) + "gen1"
 
 	t.Run("churn halt writes, heartbeats, completes and deletes the record", func(t *testing.T) {
 		t.Parallel()
@@ -372,13 +372,13 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 
 		// A newer scheduling generation of the same actor takes the row
 		// while the old guard sits out its retention.
-		store.set(t, actorID, claim.Record{TaskKey: actorID + "::gen2", HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: inflight.KeyPrefix(actorID) + "gen2", HeartbeatMs: time.Now().UnixMilli()})
 
 		// Watch across the old guard's whole retention window: its delete
 		// leg must never land on the newer generation's row.
 		assert.Never(t, func() bool {
 			rec, ok := store.get(t, actorID)
-			return !ok || rec.TaskKey != actorID+"::gen2"
+			return !ok || rec.TaskKey != inflight.KeyPrefix(actorID)+"gen2"
 		}, time.Second*2, time.Millisecond*25,
 			"the old guard's retention delete must not destroy the newer generation's live claim")
 	})
@@ -421,8 +421,8 @@ func Test_claimGuard_lifecycle(t *testing.T) {
 func Test_checkClaimRecord(t *testing.T) {
 	t.Parallel()
 
-	const actorID = "wf::3"
-	key := actorID + "::gen1"
+	const actorID = "wf::3::0"
+	key := inflight.KeyPrefix(actorID) + "gen1"
 
 	t.Run("missing record proceeds", func(t *testing.T) {
 		t.Parallel()
@@ -435,7 +435,7 @@ func Test_checkClaimRecord(t *testing.T) {
 	t.Run("record for another scheduling proceeds", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID + "::gen0", HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: inflight.KeyPrefix(actorID) + "gen0", HeartbeatMs: time.Now().UnixMilli()})
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
 		require.NoError(t, err)
 		assert.Equal(t, claim.Proceed, outcome)
@@ -467,7 +467,7 @@ func Test_checkClaimRecord(t *testing.T) {
 			State:      store.fake(),
 			StaleAfter: time.Millisecond * 50,
 		})
-		store.set(t, actorID, claim.Record{TaskKey: actorID + "::oldrun", HeartbeatMs: time.Now().Add(-time.Second).UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: inflight.KeyPrefix(actorID) + "oldrun", HeartbeatMs: time.Now().Add(-time.Second).UnixMilli()})
 		// First sighting only opens the observation window; the other
 		// scheduling's record does not block this taskKey.
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
@@ -489,7 +489,7 @@ func Test_checkClaimRecord(t *testing.T) {
 	t.Run("live record from another scheduling is ignored but kept", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID + "::otherrun", HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: inflight.KeyPrefix(actorID) + "otherrun", HeartbeatMs: time.Now().UnixMilli()})
 		outcome, err := f.claims.Check(t.Context(), actorID, key)
 		require.NoError(t, err)
 		assert.Equal(t, claim.Proceed, outcome)
@@ -627,14 +627,13 @@ func Test_checkClaimRecord(t *testing.T) {
 func Test_executeActivity_recoveryGate(t *testing.T) {
 	t.Parallel()
 
-	// testInvocation carries no TaskExecutionId and no timestamp, so the
-	// inflight key for actor wf::3 is the actor ID itself.
-	const actorID = "wf::3"
+	const actorID = "wf::3::0"
+	key := inflight.Key(actorID, testInvocation().GetHistoryEvent())
 
 	t.Run("live record defers with a recoverable error", func(t *testing.T) {
 		t.Parallel()
 		f, store, scheduled := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
 		err := a.executeActivity(t.Context(), testReminder(), testInvocation())
@@ -650,7 +649,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 	t.Run("completed record acks success without executing", func(t *testing.T) {
 		t.Parallel()
 		f, store, scheduled := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli(), Completed: true})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli(), Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
 		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
@@ -669,7 +668,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 			State:      store.fake(),
 			StaleAfter: time.Millisecond * 50,
 		})
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
 
@@ -743,13 +742,14 @@ func redispatch(t *testing.T, f *factory, a *activity) (handled bool, err error)
 func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Parallel()
 
-	const actorID = "wf::3"
+	const actorID = "wf::3::0"
+	key := inflight.Key(actorID, testInvocation().GetHistoryEvent())
 
 	t.Run("local inflight entry acks without arming a drive", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
-		call, owner := f.inflight.Acquire(actorID)
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().UnixMilli()})
+		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
 		t.Cleanup(func() { call.Finish(nil) })
 
@@ -765,9 +765,9 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 		// re-dispatch, or the completed body runs again.
 		t.Parallel()
 		old, _, _ := newClaimHarness(t)
-		call, owner := old.inflight.Acquire(actorID)
+		call, owner := old.inflight.Acquire(key)
 		require.True(t, owner)
-		old.settle(actorID, call, nil)
+		old.settle(key, call, nil)
 
 		fresh, _, scheduled := newClaimHarness(t)
 		fresh.inflight = old.inflight
@@ -780,7 +780,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 			t.Fatal("a cached success must not dispatch a WorkItem")
 		default:
 		}
-		cached, ok := fresh.inflight.Peek(actorID)
+		cached, ok := fresh.inflight.Peek(key)
 		require.True(t, ok)
 		assert.Same(t, call, cached, "the re-dispatch must not claim a fresh entry over the cached one")
 	})
@@ -788,9 +788,9 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Run("settled failed entry re-executes", func(t *testing.T) {
 		t.Parallel()
 		f, _, _ := newClaimHarness(t)
-		call, owner := f.inflight.Acquire(actorID)
+		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
-		f.settle(actorID, call, errors.New("publish failed"))
+		f.settle(key, call, errors.New("publish failed"))
 
 		a := f.GetOrCreate(actorID).(*activity)
 		handled, err := redispatch(t, f, a)
@@ -804,7 +804,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 		// Stale immediately: unsettled, not held, past the (zeroed) grace.
 		f.staleClaimAfter = time.Nanosecond
 		f.executionHeld = func(string, int32) bool { return false }
-		call, owner := f.inflight.Acquire(actorID)
+		call, owner := f.inflight.Acquire(key)
 		require.True(t, owner)
 		t.Cleanup(func() { call.Finish(nil) })
 		time.Sleep(time.Millisecond)
@@ -819,7 +819,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Run("live record defers", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
 		handled, err := redispatch(t, f, a)
@@ -830,7 +830,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Run("completed record acks", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: 0, Completed: true})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: 0, Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
 		handled, err := redispatch(t, f, a)
@@ -848,7 +848,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 		})
 		// A restart inside the retention window leaves this row behind; the
 		// guard cannot delete it again.
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: 12345, Completed: true})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: 12345, Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
 
@@ -884,7 +884,7 @@ func Test_handleInvoke_janitorRedispatchGate(t *testing.T) {
 	t.Run("not gated without the janitor mark", func(t *testing.T) {
 		t.Parallel()
 		f, store, _ := newClaimHarness(t)
-		store.set(t, actorID, claim.Record{TaskKey: actorID, HeartbeatMs: time.Now().UnixMilli()})
+		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().UnixMilli()})
 
 		data, err := proto.Marshal(testInvocation())
 		require.NoError(t, err)
@@ -908,12 +908,12 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 		h := newDriveHarness(t)
 		h.cancelOn1 = true
 
-		key := inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+		key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
 		call, owner := h.fact.inflight.Acquire(key)
 		require.True(t, owner)
 		t.Cleanup(func() { call.Finish(nil) })
 
-		a := h.fact.GetOrCreate("wf::3").(*activity)
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), &name))
 		h.fact.driveScope().Wait()
@@ -927,12 +927,12 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 		h := newDriveHarness(t)
 		h.cancelOn1 = true
 
-		key := inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+		key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
 		call, owner := h.fact.inflight.Acquire(key)
 		require.True(t, owner)
 		call.Finish(errStaleClaimEvicted)
 
-		a := h.fact.GetOrCreate("wf::3").(*activity)
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), &name))
 		assert.Eventually(t, func() bool {

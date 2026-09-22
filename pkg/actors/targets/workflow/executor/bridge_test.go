@@ -28,38 +28,50 @@ func Test_siblingRendezvousKey(t *testing.T) {
 	}{
 		"pre-upgrade activity key": {
 			actorID: "abc/5",
-			want:    "abc::5",
+			want:    "abc::5::0",
 		},
 		"current activity key": {
-			actorID: "abc::5",
+			actorID: "abc::5::0",
 			want:    "abc/5",
 		},
 		"round trip is identity": {
-			actorID: siblingRendezvousKey("abc::5"),
-			want:    "abc::5",
+			actorID: siblingRendezvousKey("abc::5::0"),
+			want:    "abc::5::0",
 		},
 		"workflow instance ID": {
 			actorID: "abc",
 			want:    "",
 		},
+		"workflow instance ID with numeric colon suffix": {
+			actorID: "abc::5",
+			want:    "",
+		},
 		"workflow instance ID with non-numeric colon suffix": {
-			actorID: "abc::def",
+			actorID: "abc::def::0",
+			want:    "",
+		},
+		"non-numeric generation": {
+			actorID: "abc::5::x",
 			want:    "",
 		},
 		"instance ID containing double colon in activity key": {
-			actorID: "a::b::7",
+			actorID: "a::b::7::0",
 			want:    "a::b/7",
 		},
 		"negative task ID": {
-			actorID: "abc::-1",
+			actorID: "abc::-1::0",
 			want:    "abc/-1",
+		},
+		"pre-upgrade key with non-integer task ID": {
+			actorID: "abc/x",
+			want:    "",
 		},
 		"empty": {
 			actorID: "",
 			want:    "",
 		},
 		"leading separator only": {
-			actorID: "::5",
+			actorID: "::5::0",
 			want:    "",
 		},
 	}
