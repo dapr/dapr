@@ -545,4 +545,4 @@ replace (
 
 // TEMPORARY: pulling in binary store building block support from dapr/components-contrib#4559 until it merges.
 // Remove this replace once that PR lands and components-contrib is bumped to a released version.
-replace github.com/dapr/components-contrib => github.com/WhitWaldo/dapr-components-contrib v0.0.0-20260904051634-01eb279600a7
+replace github.com/dapr/components-contrib => github.com/WhitWaldo/dapr-components-contrib v0.0.0-20260922165401-9b858106d10c
