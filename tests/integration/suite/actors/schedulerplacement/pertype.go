@@ -217,5 +217,5 @@ func (p *pertype) Run(t *testing.T, ctx context.Context) {
 			ActorType: "t1type", ActorId: "a1", Method: "foo",
 		})
 		assert.NoError(c, uerr)
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 }

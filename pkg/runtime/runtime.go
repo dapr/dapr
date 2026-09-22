@@ -364,23 +364,33 @@ func newDaprRuntime(ctx context.Context,
 	// Install the wfengine as the processor's internal workflow registrar.
 	processor.SetInProcessWorkflows(wfe)
 
+	var reportedPlacementAddresses []string
+	if addrs, ok := strings.CutPrefix(runtimeConfig.actorsService, "placement:"); ok {
+		for addr := range strings.SplitSeq(addrs, ",") {
+			if saddr := strings.TrimSpace(addr); saddr != "" {
+				reportedPlacementAddresses = append(reportedPlacementAddresses, saddr)
+			}
+		}
+	}
+
 	actorHost, err := actorHostAddress(runtimeConfig.internalGRPCListenAddress)
 	if err != nil {
 		return nil, err
 	}
 
 	jobsManager, err := scheduler.New(scheduler.Options{
-		Namespace:        namespace,
-		AppID:            runtimeConfig.id,
-		ActorAddress:     net.JoinHostPort(actorHost, strconv.Itoa(runtimeConfig.internalGRPCPort)),
-		Channels:         channels,
-		Actors:           actors,
-		Addresses:        runtimeConfig.schedulerAddress,
-		Security:         sec,
-		WFEngine:         wfe,
-		WorkflowSpec:     globalConfig.Spec.WorkflowSpec,
-		Healthz:          runtimeConfig.healthz,
-		SchedulerStreams: runtimeConfig.schedulerStreams,
+		Namespace:          namespace,
+		AppID:              runtimeConfig.id,
+		ActorAddress:       net.JoinHostPort(actorHost, strconv.Itoa(runtimeConfig.internalGRPCPort)),
+		Channels:           channels,
+		Actors:             actors,
+		Addresses:          runtimeConfig.schedulerAddress,
+		Security:           sec,
+		WFEngine:           wfe,
+		WorkflowSpec:       globalConfig.Spec.WorkflowSpec,
+		Healthz:            runtimeConfig.healthz,
+		SchedulerStreams:   runtimeConfig.schedulerStreams,
+		PlacementAddresses: reportedPlacementAddresses,
 	})
 	if err != nil {
 		return nil, err

@@ -70,6 +70,10 @@ type Interface interface {
 	// placement from this scheduler.
 	HasPlacementStreams() bool
 
+	// SetOnStreamsChange registers the callback fired when the placement
+	// stream count changes.
+	SetOnStreamsChange(fn func())
+
 	// ReportActorTypes serves a single daprd placement stream.
 	ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error
 }
@@ -103,9 +107,10 @@ type placement struct {
 	authz  *authorizer.Authorizer
 	nsLoop loop.Interface[loops.EventNamespace]
 
-	leader  atomic.Bool
-	running atomic.Bool
-	streams atomic.Int64
+	leader          atomic.Bool
+	running         atomic.Bool
+	streams         atomic.Int64
+	onStreamsChange atomic.Pointer[func()]
 }
 
 func (p *placement) Run(ctx context.Context) error {
@@ -154,6 +159,18 @@ func (p *placement) HasPlacementStreams() bool {
 	return p.streams.Load() > 0
 }
 
+// SetOnStreamsChange registers the callback fired when the placement stream
+// count changes.
+func (p *placement) SetOnStreamsChange(fn func()) {
+	p.onStreamsChange.Store(&fn)
+}
+
+func (p *placement) fireOnStreamsChange() {
+	if fn := p.onStreamsChange.Load(); fn != nil {
+		(*fn)()
+	}
+}
+
 func (p *placement) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
 	if !p.enabled {
 		return status.Error(codes.Unimplemented, "placement is not enabled on this scheduler")
@@ -185,9 +202,11 @@ func (p *placement) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorT
 
 	monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), 1)
 	p.streams.Add(1)
+	p.fireOnStreamsChange()
 	defer func() {
 		p.streams.Add(-1)
 		monitoring.RecordPlacementStreamsConnected(initial.GetNamespace(), -1)
+		p.fireOnStreamsChange()
 	}()
 
 	p.nsLoop.Enqueue(&loops.ConnAdd{
