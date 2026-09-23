@@ -611,7 +611,13 @@ func TestReporter(t *testing.T) {
 
 			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(errors.New("error"))
 
-			err := proc.Init(t.Context(), pubsubComponent)
+			// IgnoreErrors avoids tripping root.recordFatalInitError, which would
+			// otherwise race startProc's cleanup (this subtest only cares about
+			// the Reporter callback, not fatal-init propagation).
+			failComponent := pubsubComponent
+			failComponent.Spec.IgnoreErrors = true
+
+			err := proc.Init(t.Context(), failComponent)
 			require.Error(t, err)
 
 			select {
@@ -619,12 +625,12 @@ func TestReporter(t *testing.T) {
 				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.GetResourceType())
 				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.GetEventType())
 				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.GetCondition())
-				assert.Equal(t, pubsubComponent.Name, result.GetName())
+				assert.Equal(t, failComponent.Name, result.GetName())
 			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for reporter result")
 			}
 
-			err = proc.Close(t.Context(), pubsubComponent)
+			err = proc.Close(t.Context(), failComponent)
 			require.NoError(t, err)
 		})
 
