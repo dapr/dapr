@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -32,7 +33,6 @@ import (
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -136,7 +136,7 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { a.victim.Cleanup(t) })
 	a.victim.WaitUntilRunning(t, ctx)
 
-	victimClient := client.NewTaskHubGrpcClient(a.victim.GRPCConn(t, ctx), backend.DefaultLogger())
+	victimClient := client.NewTaskHubGrpcClient(a.victim.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, victimClient.StartWorkItemListener(ctx, victimRegistry))
 
 	var ids []string
@@ -166,7 +166,7 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 		t.Cleanup(func() { d.Cleanup(t) })
 		d.WaitUntilRunning(t, ctx)
 
-		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, newSurvivorRegistry()))
 
 		version++
@@ -199,7 +199,7 @@ func (a *deadhost) Run(t *testing.T, ctx context.Context) {
 	a.victim.Kill(t)
 
 	survivor := a.joiners[len(a.joiners)-1]
-	survivorClient := client.NewTaskHubGrpcClient(survivor.GRPCConn(t, ctx), backend.DefaultLogger())
+	survivorClient := client.NewTaskHubGrpcClient(survivor.GRPCConn(t, ctx), logger.New(t))
 	for _, id := range ids {
 		metadata, err := survivorClient.WaitForWorkflowCompletion(ctx, api.InstanceID(id))
 		require.NoError(t, err,
