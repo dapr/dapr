@@ -117,7 +117,7 @@ func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 			// cannot mask (the legacy processComponents runner did this), so a
 			// failure that races with shutdown still propagates out of Run.
 			if !comp.Spec.IgnoreErrors {
-				r.recordFatalInitError(fmt.Errorf("process component %s error: %w", comp.Name, wrapped))
+				r.recordFatalInitError(fmt.Errorf("process component %s (type: %s) error: %w", comp.Name, comp.Spec.Type, wrapped))
 			}
 		} else {
 			log.Infof("Component loaded: %s", comp.LogName())
