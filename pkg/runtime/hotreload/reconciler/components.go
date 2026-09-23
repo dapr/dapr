@@ -134,12 +134,12 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 			// for a previously skipped component.
 			return c.replaySkippedActorStore(ctx)
 		}
-		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
+		err = fmt.Errorf("process component %s (type: %s) error: %s", comp.Name, comp.Spec.Type, err)
 		if comp.Spec.IgnoreErrors {
 			log.Errorf("Ignoring error processing component: %s", err)
 			return nil
 		}
-		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
+		log.Warnf("Error processing component '%s' (type: %s), daprd will exit gracefully: %s", comp.Name, comp.Spec.Type, err)
 		return err
 	}
 }
