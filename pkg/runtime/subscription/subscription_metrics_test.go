@@ -112,11 +112,9 @@ func TestInFlightGaugeTracksConcurrentDeliveries(t *testing.T) {
 	const concurrent = 3
 	var wg sync.WaitGroup
 	for range concurrent {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = comp.deliver(t.Context(), "topic0", []byte(`{"id":"1"}`))
-		}()
+		})
 	}
 
 	require.Eventually(t, func() bool {
