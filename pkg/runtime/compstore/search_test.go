@@ -19,9 +19,10 @@ import (
 	"sync"
 	"testing"
 
-	contribsearch "github.com/dapr/components-contrib/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	contribsearch "github.com/dapr/components-contrib/search"
 )
 
 type fakeSearch struct {

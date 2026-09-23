@@ -18,9 +18,10 @@ import (
 	"sync"
 	"testing"
 
-	contribvector "github.com/dapr/components-contrib/vector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	contribvector "github.com/dapr/components-contrib/vector"
 )
 
 type fakeVector struct {

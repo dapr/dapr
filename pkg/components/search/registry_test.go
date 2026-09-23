@@ -21,11 +21,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	contribsearch "github.com/dapr/components-contrib/search"
 	"github.com/dapr/dapr/pkg/components/search"
 	"github.com/dapr/kit/logger"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type mockSearch struct{}

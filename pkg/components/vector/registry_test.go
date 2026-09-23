@@ -20,11 +20,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	contribvector "github.com/dapr/components-contrib/vector"
 	"github.com/dapr/dapr/pkg/components/vector"
 	"github.com/dapr/kit/logger"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type mockVector struct {
