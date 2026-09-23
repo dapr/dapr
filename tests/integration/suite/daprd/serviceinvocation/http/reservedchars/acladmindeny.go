@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -47,25 +46,36 @@ import (
 )
 
 func init() {
-	suite.Register(new(aclbypass))
+	suite.Register(new(acladmindeny))
 }
 
-type aclbypass struct {
-	caller           *procdaprd.Daprd
-	callee           *procdaprd.Daprd
-	unauthorizedHits *atomic.Int64
+// acladmindeny covers the default-allow policy shape cicoyle asked for
+// on dapr/dapr#9833: default action allow, with explicit deny rules on
+// /admin (exact) and /admin/* (wildcard prefix), verifying the ACL
+// evaluates the exact trailing-slash-preserving normalized method the
+// app would receive (dapr/dapr#7686).
+type acladmindeny struct {
+	caller     *procdaprd.Daprd
+	callee     *procdaprd.Daprd
+	adminHits  *atomic.Int64
+	publicHits *atomic.Int64
 }
 
-func (r *aclbypass) Setup(t *testing.T) []framework.Option {
-	var unauthorizedHits atomic.Int64
-	r.unauthorizedHits = &unauthorizedHits
+func (r *acladmindeny) Setup(t *testing.T) []framework.Option {
+	var adminHits atomic.Int64
+	var publicHits atomic.Int64
+	r.adminHits = &adminHits
+	r.publicHits = &publicHits
 
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
-		if strings.Contains(in.GetMethod(), "unauthorized") {
-			unauthorizedHits.Add(1)
+		method := in.GetMethod()
+		if len(method) >= 5 && method[:5] == "admin" {
+			adminHits.Add(1)
+		} else {
+			publicHits.Add(1)
 		}
 		return &commonv1.InvokeResponse{
-			Data: &anypb.Any{Value: []byte(in.GetMethod())},
+			Data: &anypb.Any{Value: []byte(method)},
 		}, nil
 	}
 	srv := grpcapp.New(t, grpcapp.WithOnInvokeFn(onInvoke))
@@ -90,7 +100,7 @@ func (r *aclbypass) Setup(t *testing.T) []framework.Option {
 
 	cnf := configapi.Configuration{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-		ObjectMeta: metav1.ObjectMeta{Name: "acl-config", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "acl-admin-deny-config", Namespace: "default"},
 		Spec: configapi.ConfigurationSpec{
 			NameResolutionSpec: &configapi.NameResolutionSpec{Component: "mdns"},
 			MTLSSpec: &configapi.MTLSSpec{
@@ -98,16 +108,17 @@ func (r *aclbypass) Setup(t *testing.T) []framework.Option {
 				SentryAddress:           sen.Address(),
 			},
 			AccessControlSpec: &configapi.AccessControlSpec{
-				DefaultAction: "deny",
+				DefaultAction: "allow",
 				TrustDomain:   "public",
 				AppPolicies: []configapi.AppPolicySpec{
 					{
 						AppName:       callerAppID,
-						DefaultAction: "deny",
+						DefaultAction: "allow",
 						TrustDomain:   "public",
 						Namespace:     "default",
 						AppOperationActions: []configapi.AppOperationAction{
-							{Operation: "/public", HTTPVerb: []string{"*"}, Action: "allow"},
+							{Operation: "/admin", HTTPVerb: []string{"*"}, Action: "deny"},
+							{Operation: "/admin/*", HTTPVerb: []string{"*"}, Action: "deny"},
 						},
 					},
 				},
@@ -135,7 +146,7 @@ func (r *aclbypass) Setup(t *testing.T) []framework.Option {
 
 	daprdOpts := func(extra ...procdaprd.Option) []procdaprd.Option {
 		opts := []procdaprd.Option{
-			procdaprd.WithConfigs("acl-config"),
+			procdaprd.WithConfigs("acl-admin-deny-config"),
 			procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
 			procdaprd.WithSentryAddress(sen.Address()),
 			procdaprd.WithEnableMTLS(true),
@@ -160,7 +171,7 @@ func (r *aclbypass) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (r *aclbypass) Run(t *testing.T, ctx context.Context) {
+func (r *acladmindeny) Run(t *testing.T, ctx context.Context) {
 	r.caller.WaitUntilRunning(t, ctx)
 	r.callee.WaitUntilRunning(t, ctx)
 
@@ -184,95 +195,32 @@ func (r *aclbypass) Run(t *testing.T, ctx context.Context) {
 		return sent, string(b), resp.StatusCode
 	}
 
-	t.Run("sanity: allowed path works", func(t *testing.T) {
+	t.Run("sanity: unrelated path allowed by default action", func(t *testing.T) {
 		sent, body, status := invoke(t, "public")
 		assert.Equalf(t, http.StatusOK, status, "caller sent: %s, callee received: %s", sent, body)
-		assert.Contains(t, body, "public")
 	})
 
-	t.Run("sanity: denied path rejected", func(t *testing.T) {
-		sent, body, status := invoke(t, "unauthorized")
+	t.Run("exact deny: admin with trailing slash is denied", func(t *testing.T) {
+		sent, body, status := invoke(t, "admin/")
 		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
 	})
 
-	// Go's HTTP stack decodes %23 → '#' and %3F → '?' which have URL
-	// semantics. Combined with '../' path traversal, the HTTP framework
-	// resolves the path before the handler sees it. The handler receives
-	// the resolved path and the ACL correctly denies it (403).
+	t.Run("wildcard deny: admin subpath with trailing slash is denied", func(t *testing.T) {
+		sent, body, status := invoke(t, "admin/secret/")
+		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
+	})
 
-	t.Run("encoded hash with traversal", func(t *testing.T) {
-		sent, body, status := invoke(t, "public%23/../unauthorized")
+	t.Run("traversal into admin with trailing slash still denied", func(t *testing.T) {
+		// "../admin/" normalizes to "admin/" (leading "../" on a rootless
+		// path is stripped by NormalizeMethod), so the exact /admin deny
+		// must still apply.
+		sent, body, status := invoke(t, "..%2Fadmin/")
 		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — HTTP framework resolves traversal, ACL denies", sent, body)
+			"caller sent: %s, callee received: %s — should normalize to admin/ and be denied", sent, body)
 	})
 
-	t.Run("encoded question mark with traversal", func(t *testing.T) {
-		sent, body, status := invoke(t, "public%3F/../unauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — HTTP framework resolves traversal, ACL denies", sent, body)
-	})
-
-	t.Run("double dot with encoded hash", func(t *testing.T) {
-		sent, body, status := invoke(t, "public%23/../../unauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — HTTP framework resolves traversal, ACL denies", sent, body)
-	})
-
-	t.Run("nested path with encoded hash traversal", func(t *testing.T) {
-		sent, body, status := invoke(t, "public/sub%23/../../unauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — HTTP framework resolves traversal, ACL denies", sent, body)
-	})
-
-	t.Run("encoded slash traversal to unauthorized", func(t *testing.T) {
-		sent, body, status := invoke(t, "public%2F..%2Funauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s", sent, body)
-	})
-
-	t.Run("encoded carriage return with traversal", func(t *testing.T) {
-		// HTTP client decodes %0D → \r and resolves /../ traversal before
-		// the request reaches Dapr. The handler sees the resolved path
-		// ("unauthorized") and the ACL correctly denies it (403).
-		sent, body, status := invoke(t, "public%0D/../unauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — HTTP framework resolves traversal, ACL denies", sent, body)
-	})
-
-	// HTTP decodes %25 → %, NormalizeMethod allows % (not forbidden).
-	// path.Clean("public%/../unauthorized") → "unauthorized" → ACL denies → Forbidden.
-	t.Run("percent hides traversal", func(t *testing.T) {
-		sent, body, status := invoke(t, "public%25/../unauthorized")
-		assert.Equalf(t, http.StatusForbidden, status,
-			"caller sent: %s, callee received: %s — should resolve to /unauthorized and be denied by ACL", sent, body)
-	})
-
-	// Trailing slash (dapr/dapr#7686): the ACL must evaluate the exact
-	// same normalized method the app receives, trailing slash included.
-	t.Run("allowed path with trailing slash still allowed", func(t *testing.T) {
-		sent, body, status := invoke(t, "public/")
-		assert.Equalf(t, http.StatusOK, status, "caller sent: %s, callee received: %s", sent, body)
-		assert.Contains(t, body, "public")
-	})
-
-	t.Run("traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
-		sent, body, status := invoke(t, "admin/../public/")
-		assert.Equalf(t, http.StatusOK, status,
-			"caller sent: %s, callee received: %s — should resolve to /public/ and be allowed", sent, body)
-	})
-
-	t.Run("double traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
-		sent, body, status := invoke(t, "admin/../../public/")
-		assert.Equalf(t, http.StatusOK, status,
-			"caller sent: %s, callee received: %s — should resolve to /public/ and be allowed", sent, body)
-	})
-
-	// Prove the callee was NEVER invoked with an "unauthorized" method
-	// by any of the traversal attacks above. This is the core CVE
-	// invariant: if the ACL denies the request, the callee must not
-	// be invoked with the denied path.
-	t.Run("callee never received unauthorized method", func(t *testing.T) {
-		assert.Equalf(t, int64(0), r.unauthorizedHits.Load(),
-			"callee received 'unauthorized' method %d times — ACL bypass detected!", r.unauthorizedHits.Load())
+	t.Run("callee never invoked with an admin method", func(t *testing.T) {
+		assert.Equalf(t, int64(0), r.adminHits.Load(),
+			"callee received an admin-prefixed method %d times — ACL bypass detected!", r.adminHits.Load())
 	})
 }

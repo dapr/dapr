@@ -267,6 +267,26 @@ func (r *aclbypass) Run(t *testing.T, ctx context.Context) {
 			"should NOT be allowed — %%2F must not be decoded by ACL: callee received: %s", body)
 	})
 
+	// Trailing slash (dapr/dapr#7686): the ACL must evaluate the exact
+	// same normalized method the app receives, trailing slash included.
+	t.Run("allowed path with trailing slash still allowed", func(t *testing.T) {
+		body, code := invoke(t, "/public/")
+		assert.Equal(t, codes.OK, code)
+		assert.Contains(t, body, "public")
+	})
+
+	t.Run("traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
+		body, code := invoke(t, "/admin/../public/")
+		assert.Equalf(t, codes.OK, code,
+			"should resolve to /public/ and be allowed: callee received: %s", body)
+	})
+
+	t.Run("double traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
+		body, code := invoke(t, "/admin/../../public/")
+		assert.Equalf(t, codes.OK, code,
+			"should resolve to /public/ and be allowed: callee received: %s", body)
+	})
+
 	// Prove the callee's /unauthorized handler was NEVER reached by any
 	// of the traversal attacks above. This is the core CVE invariant:
 	// if the ACL denies the request, the callee must not be invoked.
