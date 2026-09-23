@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -96,7 +97,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		version1 = tables.Tables["default"].Version
 	}, time.Second*10, time.Millisecond*10)
 
-	client := dworkflow.NewClient(a.actors[0].Daprd().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(a.actors[0].Daprd().GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
