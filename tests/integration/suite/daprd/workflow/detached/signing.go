@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -85,7 +86,7 @@ func (s *signing) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("Caller", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("Spawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			dworkflow.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			dworkflow.WithDetachedWorkflowInput("payload"),
 		)
@@ -99,7 +100,7 @@ func (s *signing) Run(t *testing.T, ctx context.Context) {
 		return "spawned-saw:" + input, nil
 	})
 
-	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	parentID, err := client.ScheduleWorkflow(ctx, "Caller")

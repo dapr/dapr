@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement/cluster"
@@ -80,7 +81,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	table := leader.PlacementTables(t, ctx)
 	versionBefore := table.Tables["default"].Version
 
-	client1 := dworkflow.NewClient(w.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(w.daprd1.GRPCConn(t, ctx), logger.New(t))
 	cctx1, cancel1 := context.WithCancel(ctx)
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
@@ -110,7 +111,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	versionAfterWf1 := table.Tables["default"].Version
 
-	client2 := dworkflow.NewClient(w.daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(w.daprd2.GRPCConn(t, ctx), logger.New(t))
 	cctx2, cancel2 := context.WithCancel(ctx)
 	t.Cleanup(cancel2)
 	require.NoError(t, client2.StartWorker(cctx2, dworkflow.NewRegistry()))
