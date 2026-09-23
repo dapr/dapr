@@ -86,7 +86,7 @@ func (s *signing) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("Caller", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("Spawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			dworkflow.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			dworkflow.WithDetachedWorkflowInput("payload"),
 		)
