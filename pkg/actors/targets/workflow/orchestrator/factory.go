@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -76,6 +77,11 @@ type Options struct {
 	// activity-reminder elision with janitor re-dispatch (redispatch.go),
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
+
+	// Detached runs work that must outlive an invocation or claim context, on
+	// the runtime lifetime rather than this registration's. Nil creates one
+	// bounded by ctx.
+	Detached *detached.Runner
 }
 
 type factory struct {
@@ -115,11 +121,9 @@ type factory struct {
 	wakeCancel context.CancelFunc
 	wakeWG     sync.WaitGroup
 
-	// Escalation hysteresis schedule. Set once in New, before any drive loop can
-	// read them; fields only so unit tests can compress the schedule per
-	// factory. A nil driveRetryBackoffs selects the default jittered schedule .
+	// In-place drive retry schedule; nil selects the default jittered
+	// schedule. A field only so unit tests can compress it per factory.
 	driveRetryBackoffs []time.Duration
-	driveAliveWindow   time.Duration
 
 	bgWG sync.WaitGroup
 
@@ -133,9 +137,8 @@ type factory struct {
 
 	foldWaitTimeout time.Duration
 
-	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	rootCtx  context.Context
+	detached *detached.Runner
 
 	table sync.Map
 	lock  sync.Mutex
@@ -170,6 +173,11 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	wakeCtx, wakeCancel := context.WithCancel(context.Background())
 
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
 	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
 	foldWaitTimeout := common.EnvDurationOr("DAPR_WORKFLOW_FOLD_WAIT_TIMEOUT", 2*time.Minute)
@@ -200,8 +208,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		deactivateCtx:          ctx,
 		wakeCtx:                wakeCtx,
 		wakeCancel:             wakeCancel,
-		driveAliveWindow:       defaultDriveAliveWindow,
 		rootCtx:                ctx,
+		detached:               det,
 	}
 
 	// The worker pool and reaper are factory-lifetime: they exit when the
@@ -245,10 +253,6 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or.closed.Store(false)
 	or.lastActive.Store(time.Now().UnixNano())
 
-	// Deliberately zero, not now: progress must only ever mean a durable commit
-	// by THIS residency, so a just-activated actor (e.g. the new owner after a
-	// crash) reads as stalled and the janitor recovers it.
-	or.lastProgress.Store(0)
 	or.janitorAsserted.Store(false)
 	or.janitorRedispatched = nil
 	or.driveRunning.Store(false)
@@ -285,9 +289,7 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	}
 
 	// Reset the cache state to force a reload from the state store
-	or.state = nil
-	or.rstate = nil
-	or.ometa = nil
+	or.invalidateCachedState()
 
 	return or
 }

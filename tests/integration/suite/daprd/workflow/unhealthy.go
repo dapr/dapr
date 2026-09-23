@@ -48,6 +48,10 @@ type unhealthy struct {
 }
 
 func (u *unhealthy) Setup(t *testing.T) []framework.Option {
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath runs certified activities via detached local drives instead of scheduler-delivered run-activity reminders, so the app-unhealthy scheduler stream teardown no longer cancels in-flight executions and the awaited log line is never emitted")
+	}
+
 	u.appHealth.Store(true)
 
 	handler := http.NewServeMux()
@@ -121,9 +125,12 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.appHealth.Store(false)
 	assert.Eventually(t, u.sentUnhealthySignal.Load, time.Second*10, time.Millisecond*10)
 
-	close(releaseCh)
-
+	// The halt cancels the parked execution waits directly, so wait for the
+	// cancellation before releasing the handlers; released early, the
+	// activities complete their waits before the cancel fires.
 	u.logline.EventuallyFoundAll(t)
+
+	close(releaseCh)
 
 	for i := range n {
 		assert.GreaterOrEqual(t, 1, strings.Count(

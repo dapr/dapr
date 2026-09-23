@@ -36,18 +36,12 @@ var (
 const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
-	// Local-wake fast path outcomes beyond success/failed: a failed drive
-	// escalated to a durable reminder (or that escalation itself failed,
-	// leaving the janitor as the net), and a janitor fire that found and
-	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated       = "escalated"
-	StatusEscalateFailed  = "escalate_failed"
-	StatusEscalateSkipped = "escalate_skipped_shutdown"
-	// A failed drive against an instance that shows recent life was NOT
-	// escalated to a durable reminder: the janitor covers it within one
-	// period instead of the scheduler re-driving a merely-slow actor.
-	StatusEscalateSuppressed = "escalate_suppressed"
-	StatusJanitorRecovered   = "janitor_recovered"
+	// The activity actor's escalation of a lost local drive to its durable
+	// run-activity reminder.
+	StatusEscalated        = "escalated"
+	StatusEscalateFailed   = "escalate_failed"
+	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusJanitorRecovered = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
@@ -72,6 +66,12 @@ const (
 	// recent progress (fresh durable commit or a running drive loop); the
 	// next period re-checks.
 	StatusJanitorRedispatchSuppressed = "janitor_redispatch_suppressed"
+	// An escalated run-activity reminder was deleted because its task
+	// resolved: the resolving execution predates the escalation and cannot
+	// delete a reminder it never knew existed, so the escalating and
+	// committing turns reap it (see reapEscalatedReminder). Without the
+	// reap, the fire re-runs the body on a cold host.
+	StatusJanitorEscalationReaped = "janitor_escalation_reaped"
 	// An activity arrival found the in-flight claim held by a dead execution
 	// (no engine-held work item after the stale grace) and evicted it so the
 	// arrival re-executes; the rescue event of the janitor-livelock class
@@ -83,6 +83,19 @@ const (
 	// rejected for retry instead of committing a wedged state (the
 	// janitor-livelock stranding source; ~0 in healthy steady state).
 	StatusStaleTurnRejected = "stale_turn_rejected"
+	// An instance whose durable state can never progress (its committed
+	// start was lost) was terminally FAILED instead of silently dropping
+	// its work; ~0 in healthy steady state.
+	StatusUnstartableFailed = "unstartable_failed"
+	// A wake-up reminder create failed after its inbox row was committed and
+	// was handed to a detached retry, or that retry gave up; ~0 in healthy
+	// steady state.
+	StatusArmDetached        = "reminder_arm_detached"
+	StatusArmDetachedFailed  = "reminder_arm_detached_failed"
+	StatusArmDetachedSkipped = "reminder_arm_detached_skipped_shutdown"
+	// A status read re-asserted the start reminder of an overdue pending
+	// start; ~0 in healthy steady state.
+	StatusPendingStartRedriven = "pending_start_redriven"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).
@@ -392,13 +405,13 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed, StatusArmDetached, StatusArmDetachedFailed, StatusPendingStartRedriven} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
 			stats.WithMeasurements(w.localWakeCount.M(0)))
 	}
-	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusClaimEvicted} {
+	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusJanitorEscalationReaped, StatusClaimEvicted} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localActivityCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),

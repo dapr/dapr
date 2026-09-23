@@ -47,14 +47,18 @@ var (
 type Options struct {
 	Cron          api.Interface
 	NamespaceLoop loop.Interface[loops.EventNS]
+
+	// PlacementEnabled reports whether this scheduler serves placement.
+	PlacementEnabled bool
 }
 
 // connections is a control loop that creates and manages stream connections,
 // piping trigger requests.
 type connections struct {
-	cron   api.Interface
-	nsLoop loop.Interface[loops.EventNS]
-	loop   loop.Interface[loops.EventConn]
+	cron             api.Interface
+	nsLoop           loop.Interface[loops.EventNS]
+	loop             loop.Interface[loops.EventConn]
+	placementEnabled bool
 
 	// schedulerCount and schedulerIdx are the latest view of cluster
 	// membership, updated by SchedulerInfoUpdate events. Only accessed from
@@ -76,6 +80,7 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 
 	conns.cron = opts.Cron
 	conns.nsLoop = opts.NamespaceLoop
+	conns.placementEnabled = opts.PlacementEnabled
 	conns.streamIDx = 0
 	conns.schedulerCount = 1
 	conns.schedulerIdx = 0
@@ -147,9 +152,10 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	}
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
-		Loop:       streamLoop,
-		AppID:      appID,
-		ActorTypes: add.Request.GetActorTypes(),
+		Loop:         streamLoop,
+		AppID:        appID,
+		ActorTypes:   add.Request.GetActorTypes(),
+		ActorAddress: add.Request.ActorAddress,
 	})
 
 	c.updateConcurrencyLimits(streamIDx, add.Request)
@@ -446,7 +452,16 @@ func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Inter
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		return c.streamPool.AppID(meta.GetAppId())
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		return c.streamPool.ActorType(t.GetActor().GetType())
+		// Owner routing is only correct when this scheduler serves
+		// placement; the placement service hashes differently.
+		if !c.placementEnabled {
+			return c.streamPool.ActorType(t.GetActor().GetType())
+		}
+		// Route the reminder to the placement owner host for this actor ID
+		// when host addresses are known; round robin otherwise. A non-owner
+		// host forwards to the owner via its own placement table, so a
+		// stale or missing table costs one extra hop, never correctness.
+		return c.streamPool.ActorHost(t.GetActor().GetType(), t.GetActor().GetId())
 	default:
 		return nil, false
 	}

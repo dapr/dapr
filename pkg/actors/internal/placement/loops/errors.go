@@ -34,5 +34,8 @@ func IsTransientLeaderError(err error) bool {
 	if !ok {
 		return false
 	}
-	return st.Code() == codes.FailedPrecondition && strings.Contains(st.Message(), "is not a leader")
+	return st.Code() == codes.FailedPrecondition &&
+		(strings.Contains(st.Message(), "is not a leader") ||
+			strings.Contains(st.Message(), "placement leader") ||
+			strings.Contains(st.Message(), "lost placement leadership"))
 }

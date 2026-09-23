@@ -53,10 +53,10 @@ type orchestrator struct {
 	janitorAsserted atomic.Bool
 	// Drive-loop state (see wake.go localDrive/driveLoop): driveNotify is a
 	// buffered-1 coalescing notification channel, driveRunning guards the
-	// single loop, driveInfo carries the latest wake identity for the loop
-	// and its escalation.
+	// single loop, driveName carries the reminder name of the latest wake.
 	driveNotify  chan struct{}
 	driveRunning atomic.Bool
+	driveName    atomic.Pointer[string]
 
 	// lastActive is the UnixNano of the most recent turn-lock acquisition,
 	// stamped for the factory idle reaper. Also stamped at creation so a fresh
@@ -67,13 +67,6 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
-	// lastProgress is the UnixNano of the most recent durable state commit
-	// (stamped in signAndSaveState). Zero on a fresh activation, so an actor
-	// recreated after a crash reads as stalled and the durable backstops
-	// recover it. INVARIANT: never stamped by the janitor fire or by lock
-	// traffic; it distinguishes "alive and progressing" from "being polled".
-	lastProgress atomic.Int64
-	driveInfo    atomic.Pointer[driveInfo]
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,
@@ -96,9 +89,20 @@ type orchestrator struct {
 	// re-arming the unverifiable local drive (see redispatchActivities).
 	// INVARIANT: only touched by janitor fires, which hold the turn lock.
 	janitorRedispatched map[int32]struct{}
-	lock                *lock.Stallable
-	closed              atomic.Bool
-	wg                  sync.WaitGroup
+
+	// janitorEscalated records, per task ID, the TaskScheduled event whose
+	// re-dispatch escalated to the durable run-activity reminder this
+	// residency, so the turn that commits the task's resolution can reap the
+	// reminder (the resolving execution never knew it existed; see
+	// reapEscalatedCompletions). Same guard and generation scope as
+	// janitorRedispatched.
+	janitorEscalated map[int32]*backend.HistoryEvent
+	// lastStartRedrive is the UnixNano of the most recent overdue pending
+	// start re-drive.
+	lastStartRedrive atomic.Int64
+	lock             *lock.Stallable
+	closed           atomic.Bool
+	wg               sync.WaitGroup
 
 	streamFns map[int64]*streamFn
 	streamIDx int64

@@ -106,7 +106,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, parsedAddEvent)
+		return nil, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -137,7 +137,8 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderCascadeTerminate:
+		reminder.Name == reminderCascadeTerminate,
+		reminder.Name == reminderNameParentNotify:
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
@@ -145,7 +146,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev)
+		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever
@@ -175,7 +176,17 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 		return err
 	}
 
-	if state == nil || runtimestate.IsCompleted(o.rstate) {
+	if state == nil {
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if rst := o.rstate; runtimestate.IsCompleted(rst) {
+		// Settle before self-deleting: the janitor owns recovery of anything
+		// lost after a terminal commit, including across a restart.
+		if serr := o.settleTerminal(ctx, state, rst, true); serr != nil {
+			return fmt.Errorf("janitor terminal path: %w", serr)
+		}
 		o.deleteJanitor(ctx)
 		return nil
 	}
@@ -227,8 +238,8 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 			// re-driving. At a placement handoff that assumption breaks both
 			// ways at once: the sender dies with its pod before re-delivering,
 			// and the arming drive of the folding turn is lost (a wakeCtx
-			// cancellation window, or a failed drive whose escalation was
-			// suppressed). The completion is then captive in memory with no
+			// cancellation window, or a drive that exhausted its retries).
+			// The completion is then captive in memory with no
 			// driver at all, and this fire is the only thing that ever runs on
 			// the instance. Drive a turn: runWorkflow folds pending
 			// completions into its commit even with an empty inbox, restoring
@@ -238,7 +249,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
 				return o.runWorkflowFromReminder(ctx, reminder)
 			}
-			if unresolved := unresolvedScheduledTasks(state, o.foldEvents()); len(unresolved) > 0 {
+			if unresolved := unresolvedScheduledTasks(state, foldedEvents(o.foldPending)); len(unresolved) > 0 {
 				o.redispatchActivities(ctx, state, unresolved)
 			}
 		}

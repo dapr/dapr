@@ -154,12 +154,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		i--
 	}
 
-	newState := wfenginestate.NewState(wfenginestate.Options{
-		AppID:             o.appID,
-		Namespace:         o.namespace,
-		WorkflowActorType: o.actorType,
-		ActivityActorType: o.activityActorType,
-	})
+	newState := wfenginestate.NewState(o.stateOptions())
 
 	newState.FromWorkflowState(&workflowState)
 
@@ -202,7 +197,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs, outgoingChildPropHist),
+		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
 		// Rerun always dispatches with durable reminders: the new instance
 		// has no janitor yet, so the elision cannot be certified here.
 		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err,

@@ -24,6 +24,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -45,7 +47,14 @@ type completion struct {
 }
 
 func (a *completion) Setup(t *testing.T) []framework.Option {
-	a.workflow = workflow.New(t)
+	// Under WorkflowsFastPath recovery after the worker reconnect is driven by
+	// the janitor reminder, so shrink its period below the completion timeout.
+	// The variable is unused in default mode.
+	a.workflow = workflow.New(t,
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
+	)
 	a.completionReached = make(chan struct{}, 1)
 	a.completionReachedAck = make(chan struct{}, 1)
 
@@ -113,13 +122,13 @@ func (a *completion) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 
 	assert.Equal(t, int64(1), a.a1Calls.Load())
+	// The worker disconnect cuts the call carrying a2's completion, not the
+	// result: it is published durably and a2 is not re-executed.
 	assert.Equal(t, int64(1), a.a2Calls.Load())
 	assert.Equal(t, int64(2), a.completionCalls.Load())
 }

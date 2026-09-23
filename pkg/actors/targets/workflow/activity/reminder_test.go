@@ -71,7 +71,7 @@ func Test_ReminderPayload_PreservesPropagation(t *testing.T) {
 		},
 	}
 
-	// Simulate createReminder: marshal the ActivityInvocation
+	// Simulate createActivityReminder: marshal the ActivityInvocation
 	data, err := anypb.New(original)
 	require.NoError(t, err, "marshal to anypb.Any should succeed")
 
@@ -170,7 +170,7 @@ func Test_ReminderData_LegacyHistoryEventPayload(t *testing.T) {
 			TaskScheduled: &protos.TaskScheduledEvent{Name: "staleActivity"},
 		},
 	}
-	// Simulate what pre-propagation createReminder would have written to
+	// Simulate what pre-propagation createActivityReminder would have written to
 	// reminder.Data: anypb.Any wrapping a HistoryEvent (not ActivityInvocation).
 	legacyData, err := anypb.New(legacyEvent)
 	require.NoError(t, err)
@@ -256,9 +256,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 		reminders:         sched,
 	}
 
-	a := newActivity()
-	a.factory = f
-	a.actorID = "activity-1"
+	const actorID = "activity-1"
 
 	invocation := &protos.ActivityInvocation{
 		HistoryEvent: &protos.HistoryEvent{
@@ -268,7 +266,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 
 	result := &backend.HistoryEvent{
 		EventId: -1,
@@ -280,7 +278,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 
 	// Repeated creates so the decorrelation assertion below has enough draws.
 	for range 50 {
-		require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+		require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 	}
 
 	sched.mu.Lock()
@@ -301,4 +299,44 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 
 	// Draws must actually decorrelate across creates.
 	assert.Greater(t, len(seen), 1)
+}
+
+// Test_createReminderClampsPastDueTime: a past dueTime would replay the
+// elapsed backlog as a retry burst on every failed trigger.
+func Test_createReminderClampsPastDueTime(t *testing.T) {
+	t.Parallel()
+
+	sched := &captureScheduler{}
+	f := &factory{
+		actorType: "dapr.internal.default.testapp.activity",
+		reminders: sched,
+	}
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "act"},
+			},
+		},
+	}
+
+	start := time.Now()
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, start.Add(-time.Hour), nil))
+
+	future := start.Add(time.Hour)
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, future, nil))
+
+	sched.mu.Lock()
+	defer sched.mu.Unlock()
+	require.Len(t, sched.creates, 2)
+
+	clamped, err := time.Parse(time.RFC3339Nano, sched.creates[0].DueTime)
+	require.NoError(t, err)
+	assert.False(t, clamped.Before(start), "a past dueTime must be clamped to the create time")
+	assert.False(t, clamped.After(time.Now()))
+
+	kept, err := time.Parse(time.RFC3339Nano, sched.creates[1].DueTime)
+	require.NoError(t, err)
+	assert.True(t, kept.Equal(future), "a future dueTime must be preserved so delays are honoured")
 }

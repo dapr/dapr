@@ -86,11 +86,26 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	appID := r.workflow.DaprN(0).AppID()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		list := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs/actorreminder")
-		if !assert.Len(c, list, 1) {
+		var janitors, results []string
+		for _, key := range list {
+			if strings.Contains(key, "new-event-janitor") {
+				janitors = append(janitors, key)
+			} else {
+				results = append(results, key)
+			}
+		}
+		// Under fast path the running instance also owns its repeating
+		// new-event-janitor reminder alongside the activity-result reminder.
+		if r.workflow.FastPath() {
+			assert.Len(c, janitors, 1)
+		} else {
+			assert.Empty(c, janitors)
+		}
+		if !assert.Len(c, results, 1) {
 			return
 		}
 		exp := "dapr/jobs/actorreminder||default||dapr.internal.default." + appID + ".workflow||" + id + "||"
-		assert.Truef(c, strings.HasPrefix(list[0], exp), "reminder key should have correct prefid, expected prefix: %s, actual key: %s", exp, list[0])
+		assert.Truef(c, strings.HasPrefix(results[0], exp), "reminder key should have correct prefix, expected prefix: %s, actual key: %s", exp, results[0])
 	}, time.Second*10, time.Millisecond*10)
 
 	client1 = dworkflow.NewClient(r.workflow.DaprN(0).GRPCConn(t, ctx))

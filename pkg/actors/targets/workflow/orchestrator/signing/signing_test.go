@@ -292,7 +292,7 @@ func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
 	require.Len(t, st.Signatures, 1)
 	require.Len(t, st.RawSignatures, 1)
 
-	// Build save request — this is what goes to the state store.
+	// Build save request: this is what goes to the state store.
 	req, err := st.GetSaveRequest("test-actor")
 	require.NoError(t, err)
 
@@ -510,4 +510,302 @@ func TestVerifyInboxAttestation_MissingActivityAttestationReturnsError(t *testin
 	err := o.VerifyInboxAttestation(t.Context(), st, e)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing required attestation")
+}
+
+func TestVerifyInboxAttestation_UnknownActivityTaskIDReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	// History holds a scheduling event for a DIFFERENT task id, as after a
+	// ContinueAsNew history reset or a rolled-back save.
+	st := testState(makeTaskScheduledEvent(3, "say", "hello"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: 7,
+		ActivityName:          "say",
+		Input:                 wrapperspb.String("hello"),
+		Output:                wrapperspb.String("world"),
+		TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	e := &backend.HistoryEvent{
+		EventId:   100,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId:   7,
+				Result:            wrapperspb.String("world"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.ErrorIs(t, err, ErrUnknownTaskScheduledID)
+	assert.Empty(t, st.ExternalSigningCertificates)
+}
+
+func TestVerifyInboxAttestation_UnknownChildTaskIDReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	st := testState(makeChildCreatedEvent(2, "child-instance", "in"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: 9,
+		Input:                 wrapperspb.String("in"),
+		Output:                wrapperspb.String("out"),
+		TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	e := &backend.HistoryEvent{
+		EventId:   200,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId:   9,
+				Result:            wrapperspb.String("out"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.ErrorIs(t, err, ErrUnknownTaskScheduledID)
+	assert.Empty(t, st.ExternalSigningCertificates)
+}
+
+func TestVerifyInboxAttestation_StaleChildOnReusedTaskIDReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 9
+	// Current history records a different invocation at the straggler's task
+	// id, as after a ContinueAsNew history reset reused the id.
+	st := testState(makeChildCreatedEvent(taskID, "child-new", "new-input"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		Input:                 wrapperspb.String("old-input"),
+		Output:                wrapperspb.String("out"),
+		TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	e := &backend.HistoryEvent{
+		EventId:   200,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("out"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.ErrorIs(t, err, ErrUnknownTaskScheduledID,
+		"a genuinely attested completion for a superseded invocation must be dropped, not tombstone")
+	assert.Empty(t, st.ExternalSigningCertificates)
+}
+
+func TestVerifyInboxAttestation_StaleChildTamperedSignatureStillTombstones(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 9
+	st := testState(makeChildCreatedEvent(taskID, "child-new", "new-input"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		Input:                 wrapperspb.String("old-input"),
+		Output:                wrapperspb.String("out"),
+		TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	tamperedSig := make([]byte, len(att.GetSignature()))
+	copy(tamperedSig, att.GetSignature())
+	tamperedSig[0] ^= 0xFF
+	att.Signature = tamperedSig
+
+	e := &backend.HistoryEvent{
+		EventId:   200,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("out"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrUnknownTaskScheduledID,
+		"an unverifiable attestation must never be classified as a stale completion")
+	assert.Contains(t, err.Error(), "verification failed")
+}
+
+func TestVerifyInboxAttestation_StaleChildStatusMismatchStillTombstones(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 9
+	st := testState(makeChildCreatedEvent(taskID, "child-instance", "in"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	// Genuine attestation for a FAILED outcome delivered inside a Completed
+	// event: the enclosing event type contradicts the signed terminal status.
+	att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		Input:                 wrapperspb.String("in"),
+		TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_FAILED,
+	})
+	require.NoError(t, err)
+
+	e := &backend.HistoryEvent{
+		EventId:   200,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("out"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrUnknownTaskScheduledID,
+		"a terminal status contradiction is tampering evidence, not a stale completion")
+}
+
+func TestVerifyInboxAttestation_StaleActivityOnReusedTaskIDReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 7
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		ActivityName:          "say",
+		Input:                 wrapperspb.String("old-input"),
+		Output:                wrapperspb.String("world"),
+		TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	newEvent := func() *backend.HistoryEvent {
+		return &backend.HistoryEvent{
+			EventId:   100,
+			Timestamp: timestamppb.New(time.Now()),
+			EventType: &protos.HistoryEvent_TaskCompleted{
+				TaskCompleted: &protos.TaskCompletedEvent{
+					TaskScheduledId:   taskID,
+					Result:            wrapperspb.String("world"),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		}
+	}
+
+	t.Run("same name, different input", func(t *testing.T) {
+		st := testState(makeTaskScheduledEvent(taskID, "say", "new-input"))
+		err := o.VerifyInboxAttestation(t.Context(), st, newEvent())
+		require.ErrorIs(t, err, ErrUnknownTaskScheduledID)
+		assert.Empty(t, st.ExternalSigningCertificates)
+	})
+
+	t.Run("different activity name", func(t *testing.T) {
+		st := testState(makeTaskScheduledEvent(taskID, "compute", "old-input"))
+		err := o.VerifyInboxAttestation(t.Context(), st, newEvent())
+		require.ErrorIs(t, err, ErrUnknownTaskScheduledID)
+		assert.Empty(t, st.ExternalSigningCertificates)
+	})
+}
+
+func TestVerifyInboxAttestation_StaleActivityTamperedSignatureStillTombstones(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 7
+	st := testState(makeTaskScheduledEvent(taskID, "say", "new-input"))
+
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+		ParentInstanceId:      o.ActorID,
+		ParentTaskScheduledId: taskID,
+		ActivityName:          "say",
+		Input:                 wrapperspb.String("old-input"),
+		Output:                wrapperspb.String("world"),
+		TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+
+	tamperedSig := make([]byte, len(att.GetSignature()))
+	copy(tamperedSig, att.GetSignature())
+	tamperedSig[0] ^= 0xFF
+	att.Signature = tamperedSig
+
+	e := &backend.HistoryEvent{
+		EventId:   100,
+		Timestamp: timestamppb.New(time.Now()),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId:   taskID,
+				Result:            wrapperspb.String("world"),
+				Attestation:       att,
+				SignerCertificate: certChain,
+			},
+		},
+	}
+
+	err = o.VerifyInboxAttestation(t.Context(), st, e)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrUnknownTaskScheduledID)
+	assert.Contains(t, err.Error(), "verification failed")
 }

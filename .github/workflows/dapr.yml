@@ -217,7 +217,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
@@ -270,8 +269,7 @@ jobs:
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
   integration-tests-workflow-modes:
-    name: "Integration tests (workflow ${{ matrix.mode }} mode)"
-    needs: lint
+    name: "Integration tests (workflow${{ matrix.clustered && ' clustered' || '' }}${{ matrix.fastpath && ' fastpath' || '' }}${{ matrix.signing && ' signing' || '' }}${{ matrix.scheduler_placement && ' scheduler-placement' || '' }} mode)"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -279,13 +277,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [clustered]
+        # One axis per suite mode; the modes compose because all
+        # harness-driven feature flags share one feature manifest per daprd,
+        # and the placement authority is chosen per harness rather than per
+        # feature. The all-off combination is the default integration job.
+        clustered: [false, true]
+        fastpath: [false, true]
+        signing: [false, true]
+        scheduler_placement: [false, true]
+        exclude:
+          - clustered: false
+            fastpath: false
+            signing: false
+            scheduler_placement: false
     env:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: "https://proxy.golang.org"
-      TEST_OUTPUT_FILE_PREFIX: "test_report_wf_${{ matrix.mode }}"
-      DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.mode == 'clustered' && 'true' || '' }}
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf${{ matrix.clustered && '_clustered' || '' }}${{ matrix.fastpath && '_fastpath' || '' }}${{ matrix.signing && '_signing' || '' }}${{ matrix.scheduler_placement && '_schedplacement' || '' }}"
+      DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.clustered }}
+      DAPR_INTEGRATION_WORKFLOW_FASTPATH: ${{ matrix.fastpath }}
+      DAPR_INTEGRATION_WORKFLOW_SIGNING: ${{ matrix.signing }}
+      DAPR_INTEGRATION_SCHEDULER_PLACEMENT: ${{ matrix.scheduler_placement }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
@@ -294,8 +307,90 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - name: Run workflow suite in ${{ matrix.mode }} mode
+      - name: Run workflow suite in the selected modes
         run: make test-integration-parallel ARGS="-focus workflow"
+  # The version-skew workflow runs one daprd binary per test, so it cannot see
+  # workflow state written by the latest release and read by master. This job
+  # starts a workflow on one and finishes it on the other, in both directions.
+  integration-tests-workflow-upgrade:
+    name: "Integration tests (workflow in-flight upgrade)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 60
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf_upgrade"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Resolve the latest Dapr release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Authenticate the API call (anonymous requests are aggressively rate
+          # limited and would otherwise return an error body with no tag_name).
+          tag=""
+          for i in 1 2 3 4 5; do
+            tag="$(curl -sSf \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/dapr/dapr/releases/latest \
+              | jq -r '.tag_name // empty')" || tag=""
+            if [ -n "$tag" ]; then
+              break
+            fi
+            echo "Attempt $i: could not resolve latest Dapr release tag, retrying..." >&2
+            sleep $((i * 5))
+          done
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve the latest Dapr release tag" >&2
+            exit 1
+          fi
+          echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
+      - name: Download the latest release daprd
+        run: |
+          set -euo pipefail
+          mkdir -p downloads && cd downloads
+          curl -sSfLo daprd_linux_amd64.tar.gz https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/daprd_linux_amd64.tar.gz
+          tar xvf daprd_linux_amd64.tar.gz
+          echo "DAPR_INTEGRATION_DAPRD_LEGACY_PATH=$(pwd)/daprd" >> $GITHUB_ENV
+      - name: Run the workflow upgrade suite
+        run: make test-integration-parallel ARGS="-focus 'daprd/workflow/upgrade'"
+  # The matrix above runs the workflow suite under the scheduler placement
+  # authority. This job carries the same authority across the other suites that
+  # use placement, which do not read the workflow mode variables, so it is one
+  # leg rather than another axis.
+  integration-tests-scheduler-placement:
+    name: "Integration tests (scheduler-placement, extended focus)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 60
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf_scheduler-placement"
+      DAPR_INTEGRATION_SCHEDULER_PLACEMENT: "true"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Run the actor, workflow, placement and scheduler suites against both placement authorities
+        run: make test-integration-parallel ARGS="-focus 'actors|workflow|placement|scheduler'"
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"

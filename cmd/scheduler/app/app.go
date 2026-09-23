@@ -92,6 +92,7 @@ func Run() {
 		ctrl, cerr = server.NewController(server.ControllerOptions{
 			KubeConfig: opts.KubeConfig,
 			Healthz:    healthz,
+			Namespace:  security.CurrentNamespace(),
 		})
 		if cerr != nil {
 			log.Fatalf("Fatal error creating scheduler controller: %v", cerr)
@@ -149,6 +150,10 @@ func Run() {
 					EtcdClientPassword:  opts.EtcdClientPassword,
 
 					Workers: opts.Workers,
+
+					PlacementEnabled:                   opts.PlacementEnabled,
+					PlacementDisseminateTimeout:        opts.PlacementDisseminateTimeout,
+					PlacementDisseminateCoalesceWindow: opts.PlacementDisseminateCoalesceWindow,
 				})
 				if serr != nil {
 					return nil, serr

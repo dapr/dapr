@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
@@ -65,7 +64,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, elide)
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, elide, false)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -80,7 +79,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string, elide bool) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string, elide, redispatch bool) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -90,9 +89,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	// Only wrap in the ActivityInvocation envelope when there is propagated history to carry.
 	var payload proto.Message = e
 	if ph != nil {
-		if o.signer == nil {
-			log.Warnf("Workflow actor '%s': propagating unsigned workflow history to activity '%s::%d' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, ts.GetName(), e.GetEventId())
-		}
+		o.warnUnsignedPropagation(fmt.Sprintf("activity '%s::%d'", ts.GetName(), e.GetEventId()))
 		payload = &protos.ActivityInvocation{
 			HistoryEvent:      e,
 			PropagatedHistory: ph,
@@ -125,6 +122,15 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	if elide {
 		meta[todo.MetadataActivityLocalDrive] = []string{"true"}
 	}
+	if redispatch {
+		meta[todo.MetadataActivityJanitorRedispatch] = []string{"true"}
+	}
+
+	if o.fastPath {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, redispatchCallTimeout)
+		defer cancel()
+	}
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.ExecuteActivityMethod).
@@ -155,22 +161,9 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 // the activity call is rejected by a WorkflowAccessPolicy. Uses a reminder to
 // deliver the event in a fresh execution cycle.
 func (o *orchestrator) failActivityACL(ctx context.Context, e *backend.HistoryEvent) error {
-	failedEvent := &protos.HistoryEvent{
-		EventId:   -1,
-		Timestamp: timestamppb.New(time.Now()),
-		Router:    &protos.TaskRouter{SourceAppID: o.appID},
+	return o.failTaskViaReminder(ctx, &protos.HistoryEvent{
 		EventType: events.NewTaskFailedEventType(e.GetEventId(), messages.ErrorTypeAccessPolicyDenied, messages.ErrorMessageAccessPolicyDenied, false),
-	}
-
-	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
-	if err != nil {
-		return fmt.Errorf("failed to create activity failure reminder: %w", err)
-	}
-	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
-		return fmt.Errorf("failed to create activity failure reminder: %w", err)
-	}
-
-	return nil
+	})
 }
 
 func buildActivityActorID(workflowID string, taskID int32) string {

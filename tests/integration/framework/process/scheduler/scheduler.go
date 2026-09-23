@@ -57,6 +57,9 @@ type Scheduler struct {
 	ports      *ports.Ports
 	httpClient *http.Client
 
+	clientLock sync.Mutex
+	client     schedulerv1pb.SchedulerClient
+
 	port        int
 	healthzPort int
 	metricsPort int
@@ -155,6 +158,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	if opts.embed != nil {
 		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
+	}
+	if opts.placementEnabled != nil {
+		args = append(args, "--placement-enabled="+strconv.FormatBool(*opts.placementEnabled))
+	}
+	if opts.placementDisseminateTimeout != nil {
+		args = append(args, "--placement-disseminate-timeout="+opts.placementDisseminateTimeout.String())
+	}
+	if opts.placementDisseminateCoalesceWindow != nil {
+		args = append(args, "--placement-disseminate-coalesce-window="+opts.placementDisseminateCoalesceWindow.String())
 	}
 	if opts.clientEndpoints != nil {
 		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
@@ -257,7 +269,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			if assert.NoError(c, err) {
 				assert.Len(c, resp.Kvs, 1)
 			}
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 20*time.Second, 10*time.Millisecond)
 	}
 }
 
@@ -325,8 +337,17 @@ func (s *Scheduler) DataDir() string {
 	return s.dataDir
 }
 
+// Client returns a cached client so pollers can call it from assertion
+// goroutines: only the first call, on the test goroutine, dials and
+// registers cleanup.
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	t.Helper()
+
+	s.clientLock.Lock()
+	defer s.clientLock.Unlock()
+	if s.client != nil {
+		return s.client
+	}
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
@@ -335,9 +356,15 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	t.Cleanup(func() {
+		s.clientLock.Lock()
+		s.client = nil
+		s.clientLock.Unlock()
+		require.NoError(t, conn.Close())
+	})
 
-	return schedulerv1pb.NewSchedulerClient(conn)
+	s.client = schedulerv1pb.NewSchedulerClient(conn)
+	return s.client
 }
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
@@ -427,7 +454,8 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	})
 	require.NoError(t, err)
 
@@ -598,11 +626,31 @@ func (s *Scheduler) JobKeyCount(t *testing.T, ctx context.Context, substr string
 func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
 	t.Helper()
 
+	// Bound by ctx: a dial that outlives the test panics the process.
 	resp, err := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
 	assert.NoError(t, err)
 
 	return resp
+}
+
+// WaitJobKeyCount polls the number of job keys containing substr until cond
+// holds, failing after 20 seconds. It polls on the calling goroutine so the
+// assertions inside JobKeyCount never run after the test has finished.
+func (s *Scheduler) WaitJobKeyCount(t *testing.T, ctx context.Context, substr string, cond func(int) bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		n := s.JobKeyCount(t, ctx, substr)
+		if cond(n) {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Failf(t, "job key count condition not met", "%d jobs containing %q", n, substr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

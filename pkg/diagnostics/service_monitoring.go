@@ -65,6 +65,7 @@ type serviceMetrics struct {
 	actorReminderFiredTotal      *stats.Int64Measure
 	actorTimers                  *stats.Int64Measure
 	actorTimerFiredTotal         *stats.Int64Measure
+	actorTimerDroppedTotal       *stats.Int64Measure
 
 	// Access Control Lists for Service Invocation metrics
 	appPolicyActionAllowed    *stats.Int64Measure
@@ -171,6 +172,10 @@ func newServiceMetrics() *serviceMetrics {
 			"runtime/actor/timers_fired_total",
 			"The number of actor timers fired requests.",
 			stats.UnitDimensionless),
+		actorTimerDroppedTotal: stats.Int64(
+			"runtime/actor/timers_dropped_total",
+			"The number of actor timer fires dropped because the actor is no longer hosted on this instance.",
+			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
 		appPolicyActionAllowed: stats.Int64(
@@ -256,6 +261,7 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorTimerDroppedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
@@ -415,6 +421,18 @@ func (s *serviceMetrics) ActorReminderFired(actorType string, success bool) {
 			stats.WithRecorder(s.meter),
 			stats.WithTags(diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success))...),
 			stats.WithMeasurements(s.actorReminderFiredTotal.M(1)))
+	}
+}
+
+// ActorTimerDropped records metric when an actor timer fire is dropped
+// because the actor is no longer hosted on this instance.
+func (s *serviceMetrics) ActorTimerDropped(actorType string) {
+	if s.enabled {
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorTimerDroppedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorTimerDroppedTotal.M(1)))
 	}
 }
 

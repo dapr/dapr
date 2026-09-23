@@ -20,13 +20,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -44,16 +47,23 @@ type terminatecascade struct {
 }
 
 func (c *terminatecascade) Setup(t *testing.T) []framework.Option {
-	c.scheduler = scheduler.New(t)
-	c.proxy = proxy.New(t, c.scheduler)
+	appID := uuid.New().String()
+	sen := sentry.New(t)
+	c.scheduler = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	c.proxy = proxy.New(t, c.scheduler, proxy.WithSentry(t, sen, "default", appID))
 
 	c.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithSchedulerInstance(c.scheduler),
 		workflow.WithSchedulerAddress(c.proxy.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(c.scheduler, c.proxy, c.workflow),
+		framework.WithProcesses(sen, c.scheduler, c.proxy, c.workflow),
 	}
 }
 
@@ -116,12 +126,14 @@ func (c *terminatecascade) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(co, int64(numChildren), blocked.Load())
 	}, time.Second*30, time.Millisecond*10)
 
+	// Armed before the terminate: the parent creates the children's
+	// cascade-terminate reminders as soon as its own turn runs.
+	failedCh := make(chan struct{}, numChildren)
+	c.proxy.ArmNamedFailures(proxy.MethodScheduleJob, "cascade-terminate", numChildren, codes.Internal, failedCh)
+
 	termCtx, termCancel := context.WithTimeout(ctx, time.Second*20)
 	t.Cleanup(termCancel)
 	require.NoError(t, cl.TerminateWorkflow(termCtx, id))
-
-	failedCh := make(chan struct{}, numChildren)
-	c.proxy.ArmFailures(proxy.MethodScheduleJob, numChildren, codes.Internal, failedCh)
 
 	for range numChildren {
 		select {

@@ -39,7 +39,11 @@ import (
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
+	"github.com/dapr/dapr/pkg/config"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -49,13 +53,15 @@ import (
 // CallReminder invocations in one ordered log. The wake runs on a detached
 // goroutine, so assertions on wake effects must be eventual.
 type wakeHarness struct {
-	lock sync.Mutex
-	ops  []string
+	saved bool
+	lock  sync.Mutex
+	ops   []string
 
 	callReminderErr error
 	deleteErr       error
 	createErrFor    map[string]error
-	reminderGate    chan struct{} // when non-nil, CallReminder blocks on it (or ctx)
+	dues            map[string]string // reminder name -> DueTime of its last create
+	reminderGate    chan struct{}     // when non-nil, CallReminder blocks on it (or ctx)
 
 	attempts atomic.Int64 // CallReminder invocations, successful or not
 	calls    []*actorapi.Reminder
@@ -83,6 +89,10 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 				return err
 			}
 			h.ops = append(h.ops, "create:"+req.Name)
+			if h.dues == nil {
+				h.dues = map[string]string{}
+			}
+			h.dues[req.Name] = req.DueTime
 			return nil
 		}).
 		WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
@@ -96,13 +106,22 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		})
 
 	fakeState := statefake.New().
-		WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			// The metadata row exists once something was saved, as the
+			// post-save etag refresh expects.
+			if h.saved && req.Key == wfenginestate.MetadataKey {
+				etag := "etag"
+				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+			}
 			return &actorapi.StateResponse{}, nil
 		}).
 		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			h.ops = append(h.ops, "save")
+			h.saved = true
 			return nil
 		})
 
@@ -215,7 +234,7 @@ func Test_localWake_firesAfterCreateAndDeletesBackstop(t *testing.T) {
 	h := newWakeHarness(t, instanceID, true)
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// v2: the per-event reminder pair is elided entirely. The janitor is the
 	// durable backstop, the turn is driven locally, and nothing is deleted.
@@ -241,7 +260,7 @@ func Test_localWake_flagOffNoop(t *testing.T) {
 	h := newWakeHarness(t, instanceID, false)
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	time.Sleep(time.Millisecond * 100)
 	assert.Equal(t, []string{"save", "create:new-event-tc-7"}, h.snapshotOps(),
@@ -260,10 +279,8 @@ func Test_localWake_startPath(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			ops := h.snapshotOps()
-			// v2 keeps the durable start reminder (delayed starts and
-			// pending-start recovery need it) and no longer deletes it after
-			// a successful local drive: the stale one-shot self-cleans via
-			// its empty-inbox fire + ack.
+			// The durable start reminder is the dormant backstop of the
+			// local drive; it is elided once the first turn commits.
 			if assert.Len(c, ops, 3) {
 				assert.Equal(c, "save", ops[0])
 				assert.Contains(c, ops[1], "create:start-es-")
@@ -291,111 +308,71 @@ func Test_localWake_startPath(t *testing.T) {
 	})
 }
 
-func Test_localWake_callReminderErrorKeepsBackstop(t *testing.T) {
+func Test_localWake_failureLeavesJanitor(t *testing.T) {
 	const instanceID = "test-wake-err"
 
 	h := newWakeHarness(t, instanceID, true)
-	h.callReminderErr = errors.New("wake failed")
-	h.reminderGate = make(chan struct{})
-	h.primeRunning(t, instanceID, 7)
-
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
-
-	// Park the drive on the gate, then age both life signals so the failure
-	// resolves as stalled: escalation must fire without in-place retries.
-	stale := time.Now().Add(-time.Minute).UnixNano()
-	h.orch.lastActive.Store(stale)
-	h.orch.lastProgress.Store(stale)
-	close(h.reminderGate)
-
-	// v2: a failed drive against a stalled instance ESCALATES to the durable
-	// per-event reminder so recovery is ~1s via the scheduler instead of a
-	// janitor period.
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []string{"save", "create:new-event-janitor", "create:new-event-tc-7"}, h.snapshotOps())
-	}, time.Second*5, time.Millisecond*5,
-		"a failed local drive against a stalled instance must escalate to the durable per-event reminder")
-}
-
-func Test_localWake_failureAliveSuppressesEscalation(t *testing.T) {
-	const instanceID = "test-wake-suppress"
-
-	h := newWakeHarness(t, instanceID, true)
-	// Compress the retry schedule and stretch the alive window so the
-	// retries exhaust quickly while the instance still reads alive.
+	// Compress the retry schedule so the failure resolves quickly.
 	h.fact.driveRetryBackoffs = []time.Duration{time.Millisecond * 5, time.Millisecond * 5, time.Millisecond * 5}
-	h.fact.driveAliveWindow = time.Minute
 	h.callReminderErr = errors.New("wake failed")
 	h.primeRunning(t, instanceID, 7)
 
-	// The save inside addWorkflowEvent stamps lastProgress, so the instance
-	// reads alive for the whole (compressed) retry schedule: the failure
-	// must exhaust the retries and then be handed to the janitor, never
-	// escalated to a durable reminder.
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
+	// A failed drive is retried in place, then handed to the janitor: no
+	// durable per-event reminder is ever created and nothing is deleted.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(4), h.attempts.Load(), "the initial attempt plus every in-place retry must run")
-		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down after suppression")
+		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down after the retries")
 	}, time.Second*5, time.Millisecond*5)
 
 	time.Sleep(time.Millisecond * 100)
 	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps(),
-		"a failed drive against a live instance must not create the durable per-event reminder")
+		"a failed drive must leave the janitor as the only driver")
 }
 
-func Test_localWake_closedActorEscalatesDespiteFreshness(t *testing.T) {
+func Test_localWake_closedActorStopsRetrying(t *testing.T) {
 	const instanceID = "test-wake-closed"
 
 	h := newWakeHarness(t, instanceID, true)
+	h.fact.driveRetryBackoffs = []time.Duration{time.Millisecond * 5, time.Millisecond * 5, time.Millisecond * 5}
 	h.callReminderErr = targeterrors.NewClosed("test")
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// A closed actor is the migration/teardown path: the drive is lost, not
-	// slow, and the host-agnostic durable create must fire immediately even
-	// though lastProgress was stamped by the save moments ago.
+	// slow, so the loop exits without retrying; the janitor drives the turn
+	// on the new owner.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []string{"save", "create:new-event-janitor", "create:new-event-tc-7"}, h.snapshotOps())
-	}, time.Second*5, time.Millisecond*5,
-		"a closed-actor drive failure must escalate without retries or suppression")
+		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down")
+	}, time.Second*5, time.Millisecond*5)
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Equal(t, int64(1), h.attempts.Load(), "a lost drive must not be retried in place")
+	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps())
 }
 
-func Test_hysteresisSignals(t *testing.T) {
-	const instanceID = "test-hysteresis-signals"
+func Test_redispatchSuppressedSignals(t *testing.T) {
+	const instanceID = "test-redispatch-signals"
 
 	h := newWakeHarness(t, instanceID, true)
 	o := h.orch
 
-	// Fresh activation: lastActive is stamped, lastProgress is deliberately
-	// zero, so the actor is alive for escalation purposes but shows no
-	// progress to the janitor gate.
-	assert.True(t, o.aliveWithin(time.Second*3))
-	assert.False(t, o.progressWithin(janitorPeriod()))
 	assert.False(t, o.redispatchSuppressed(),
 		"a fresh activation must never suppress the janitor re-dispatch")
 
-	// A durable commit refreshes progress (the escalation signal), but must
-	// NOT suppress the re-dispatch pass: sibling activities or external
-	// events can keep committing forever while one activity host is dead,
-	// so instance-wide progress proves nothing about a given task.
-	o.lastProgress.Store(time.Now().UnixNano())
-	assert.True(t, o.progressWithin(janitorPeriod()))
+	// A durable commit must NOT suppress the re-dispatch pass: sibling
+	// activities or external events can keep committing forever while one
+	// activity host is dead, so instance-wide progress proves nothing about
+	// a given task.
 	assert.False(t, o.redispatchSuppressed(),
 		"instance progress must not gate task re-dispatch")
 
 	// A running drive loop suppresses regardless of commit age.
-	o.lastProgress.Store(0)
 	o.driveRunning.Store(true)
 	assert.True(t, o.redispatchSuppressed())
 	o.driveRunning.Store(false)
-
-	// Both signals stale: stalled on every axis.
-	stale := time.Now().Add(-time.Minute).UnixNano()
-	o.lastActive.Store(stale)
-	o.lastProgress.Store(stale)
-	assert.False(t, o.aliveWithin(time.Second*3))
 	assert.False(t, o.redispatchSuppressed())
 }
 
@@ -413,8 +390,8 @@ func Test_localWake_janitorOncePerResidency(t *testing.T) {
 		},
 	})
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8), completionSender{}))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors, wakes := 0, 0
@@ -440,7 +417,7 @@ func Test_localWake_janitorCreateFailureFallsBack(t *testing.T) {
 	h.createErrFor = map[string]error{janitorReminderName: errors.New("scheduler down")}
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// Durability first: without a janitor the durable per-event reminder is
 	// created exactly as with the feature off (and the drive still fires).
@@ -484,7 +461,7 @@ func Test_localWake_haltAllDrainsGoroutines(t *testing.T) {
 	h.reminderGate = make(chan struct{})
 	h.primeRunning(t, instanceID, 7)
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7)))
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
 	// The wake goroutine is parked on the gate; HaltAll must cancel it and
 	// return rather than deadlocking.
@@ -498,14 +475,10 @@ func Test_localWake_haltAllDrainsGoroutines(t *testing.T) {
 		t.Fatal("HaltAll did not drain the parked wake goroutine")
 	}
 
-	// The cancelled wake must not delete anything, and must escalate to the
-	// durable per-event reminder (rootCtx-bounded, survives HaltAll).
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Contains(c, h.snapshotOps(), "create:new-event-tc-7")
-	}, time.Second*5, time.Millisecond*5)
-	for _, op := range h.snapshotOps() {
-		assert.NotContains(t, op, "delete:")
-	}
+	// The cancelled wake must neither delete anything nor create a durable
+	// per-event reminder: the janitor drives the turn on the new owner.
+	assert.False(t, h.orch.driveRunning.Load(), "HaltAll must drain the drive loop")
+	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps())
 
 	// The factory keeps serving after HaltAll (placement churn also calls
 	// it): a fresh wake context must be in place.
@@ -531,7 +504,7 @@ func Test_localWake_driveLoopLosslessUnderConcurrency(t *testing.T) {
 	for range 50 {
 		wg.Go(func() {
 			for range 20 {
-				h.orch.localDrive("new-event-tc-7", time.Now().Add(-time.Second), "TestWorkflow")
+				h.orch.localDrive("new-event-tc-7", time.Now().Add(-time.Second))
 			}
 		})
 	}
@@ -557,4 +530,118 @@ func Test_localWake_driveLoopLosslessUnderConcurrency(t *testing.T) {
 	}, time.Second*5, time.Millisecond*5)
 
 	require.NoError(t, h.fact.HaltAll(t.Context()))
+}
+
+// A terminal cached runtime state paired with a pending ExecutionStarted in
+// the durable view is an impossible pairing in any consistent snapshot; the
+// turn must not run from it (the engine would drop the work item and the
+// follow-up save would resurrect the instance as PENDING with no name).
+func Test_runWorkflow_terminalRstateWithPendingStartRecoverable(t *testing.T) {
+	const instanceID = "test-inconsistent-pairing"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+
+	// Rebuild the cached pairing: state holds ONLY a pending start in the
+	// inbox (empty history), while rstate claims the instance completed.
+	wfState := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	wfState.AddToInbox(&protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				Name:             "TestWorkflow",
+				WorkflowInstance: &protos.WorkflowInstance{InstanceId: instanceID},
+			},
+		},
+	})
+	h.orch.state = wfState
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+	}
+
+	completed, runErr := h.orch.runWorkflow(t.Context(), &actorapi.Reminder{Name: "start-es-1"})
+	require.Error(t, runErr)
+	assert.True(t, wferrors.IsRecoverable(runErr), "the guard must hand recovery to the re-fire")
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	assert.Nil(t, h.orch.state, "the stale cache must be invalidated")
+	assert.NotContains(t, h.snapshotOps(), "save",
+		"the inconsistent pairing must not produce any state save")
+}
+
+// The janitor's terminal self-delete is the recovery path for a lost
+// retention create: it must re-assert retention (idempotent, deterministic
+// name) before self-deleting.
+func Test_janitor_terminalReassertsRetention(t *testing.T) {
+	const instanceID = "test-janitor-retention"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+	ttl := time.Hour
+	h.orch.retentionPolicy = &config.WorkflowStateRetentionPolicy{AnyTerminal: &ttl}
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+	}
+
+	require.NoError(t, h.orch.runJanitor(t.Context(), &actorapi.Reminder{Name: janitorReminderName}))
+	ops := h.snapshotOps()
+	assert.Contains(t, ops, "create:retention")
+	assert.Contains(t, ops, "delete:new-event-janitor")
+}
+
+// The durable start reminder of a due-now fast-path start is a dormant
+// backstop: due one redrive grace out, so it cannot fire beside the local
+// drive that owns the turn.
+func Test_startBackstopDueTime(t *testing.T) {
+	const instanceID = "test-start-backstop"
+
+	dueOf := func(t *testing.T, h *wakeHarness) time.Time {
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		for name, due := range h.dues {
+			if strings.HasPrefix(name, "start-es-") {
+				parsed, err := time.Parse(time.RFC3339Nano, due)
+				require.NoError(t, err)
+				return parsed
+			}
+		}
+		require.Fail(t, "no start reminder created")
+		return time.Time{}
+	}
+
+	t.Run("fast path due-now start is backstopped one redrive grace out", func(t *testing.T) {
+		h := newWakeHarness(t, instanceID, true)
+		before := time.Now()
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
+			createRequestBytes(t, startEventFor(instanceID, before, nil))))
+
+		due := dueOf(t, h)
+		assert.False(t, due.Before(before.Add(pendingstart.RedriveGrace()/2)),
+			"backstop due %s must not fire beside the local drive started at %s", due, before)
+	})
+
+	t.Run("fast path delayed start keeps its scheduled time", func(t *testing.T) {
+		h := newWakeHarness(t, instanceID, true)
+		at := time.Now().Add(time.Hour).Truncate(time.Second)
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
+			createRequestBytes(t, startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+				es.ScheduledStartTimestamp = timestamppb.New(at)
+			}))))
+
+		assert.True(t, dueOf(t, h).Equal(at))
+	})
+
+	t.Run("off the fast path the reminder is the driver and is due now", func(t *testing.T) {
+		h := newWakeHarness(t, instanceID, false)
+		before := time.Now()
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
+			createRequestBytes(t, startEventFor(instanceID, before, nil))))
+
+		assert.True(t, dueOf(t, h).Before(before.Add(time.Second)))
+	})
 }
