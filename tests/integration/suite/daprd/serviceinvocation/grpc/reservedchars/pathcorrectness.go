@@ -222,7 +222,10 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 	t.Run("duplicate slashes cleaned but trailing slash preserved", func(t *testing.T) {
 		got, code := invoke(t, "//foo//bar//")
 		assert.Equalf(t, codes.OK, code, "duplicate slashes should be cleaned")
-		assert.Equalf(t, "foo/bar/", got,
+		// The input has a leading "//" too, so path.Clean's output keeps a
+		// single leading slash (this is an absolute-rooted path), on top of
+		// the trailing slash our fix preserves.
+		assert.Equalf(t, "/foo/bar/", got,
 			"duplicate slashes collapsed, but the trailing slash must survive")
 	})
 
