@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -77,7 +78,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, expectTable, time.Second*10, time.Millisecond*10)
 	capture()
 
-	client := dworkflow.NewClient(a.actors.Daprd().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(a.actors.Daprd().GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
