@@ -23,13 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -97,7 +97,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	r.AddWorkflowN("waiter", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.WaitForSingleEvent("never", time.Hour).Await(nil)
 	})
-	taskhubClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	taskhubClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), logger.New(t))
 	taskhubClient.StartWorkItemListener(ctx, r)
 
 	t.Run("successful workflow execution", func(t *testing.T) {
