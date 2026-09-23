@@ -17,12 +17,13 @@ import (
 	"testing"
 	"time"
 
-	compsearch "github.com/dapr/components-contrib/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	compsearch "github.com/dapr/components-contrib/search"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -104,7 +105,7 @@ func TestSearchIndexDocumentsAlpha1(t *testing.T) {
 		assert.Equal(t, int32(codes.FailedPrecondition), resp.GetFailedItems()[0].GetError().GetCode())
 
 		require.Len(t, fake.indexDocumentsReq.Documents, 2)
-		assert.Equal(t, []byte(`{"title":"Pride and Prejudice"}`), fake.indexDocumentsReq.Documents[0].Content)
+		assert.JSONEq(t, `{"title":"Pride and Prejudice"}`, string(fake.indexDocumentsReq.Documents[0].Content))
 		assert.Equal(t, map[string]string{"tenant": "Hertfordshire"}, fake.indexDocumentsReq.Documents[0].Metadata)
 		assert.Equal(t, compsearch.IndexingModeReturnOnAcceptance, fake.indexDocumentsReq.Options.Mode)
 	})
@@ -204,7 +205,7 @@ func TestSearchGetDocumentsAlpha1(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.GetDocuments(), 1)
 	assert.Equal(t, "a", resp.GetDocuments()[0].GetId())
-	assert.Equal(t, []byte(`{"title":"Pride and Prejudice"}`), resp.GetDocuments()[0].GetContent())
+	assert.JSONEq(t, `{"title":"Pride and Prejudice"}`, string(resp.GetDocuments()[0].GetContent()))
 	assert.Equal(t, []string{"a", "missing"}, fake.getDocumentsReq.IDs)
 	assert.True(t, fake.getDocumentsReq.IncludeContent)
 

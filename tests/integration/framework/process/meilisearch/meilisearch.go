@@ -79,7 +79,7 @@ func (m *Meilisearch) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx,
+	cmd := exec.CommandContext(ctx, //nolint:gosec // arguments are constructed internally from test-generated values, not external input
 		"docker", "run", "-d", "--rm",
 		"--name", m.name,
 		"-p", fmt.Sprintf("127.0.0.1:%d:7700", m.port),
@@ -105,7 +105,7 @@ func (m *Meilisearch) Cleanup(t *testing.T) {
 		return
 	}
 
-	if err := exec.Command("docker", "stop", "-t", "1", m.containerID).Run(); err != nil {
+	if err := exec.Command("docker", "stop", "-t", "1", m.containerID).Run(); err != nil { //nolint:gosec // container ID is generated internally, not external input
 		t.Logf("failed to stop Meilisearch container %s: %v", m.containerID, err)
 	}
 }

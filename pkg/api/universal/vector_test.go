@@ -16,14 +16,14 @@ package universal
 import (
 	"testing"
 
-	compsearch "github.com/dapr/components-contrib/search"
-	compvector "github.com/dapr/components-contrib/vector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	compsearch "github.com/dapr/components-contrib/search"
+	compvector "github.com/dapr/components-contrib/vector"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -183,7 +183,7 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 			Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Id: "ignored", Values: []float32{0.1, 0.2}}},
 			Filter:         filter,
 			TopK:           5,
-			ScoreThreshold: proto.Float64(0.6),
+			ScoreThreshold: new(0.6),
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetMatches(), 1)

@@ -145,8 +145,8 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.QueryVectorsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 2), &resp)
-			assert.Equal(c, nethttp.StatusOK, status)
+			queryStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 2), &resp)
+			assert.Equal(c, nethttp.StatusOK, queryStatus)
 			if !assert.NotEmpty(c, resp.GetMatches()) {
 				return
 			}

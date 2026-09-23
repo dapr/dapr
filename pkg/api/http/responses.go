@@ -15,6 +15,7 @@ package http
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -202,8 +203,13 @@ func setResponseMetadataHeaders(w http.ResponseWriter, md map[string]string) {
 // details are carried through unchanged, so callers can read
 // google.rpc.ErrorInfo reasons such as SEARCH_CONTINUATION_EXPIRED.
 func statusErrorResponse(st *status.Status) []byte {
-	codeName, ok := code.Code_name[int32(st.Code())]
-	if !ok {
+	var codeName string
+	if grpcCode := st.Code(); grpcCode <= math.MaxInt32 {
+		if name, ok := code.Code_name[int32(grpcCode)]; ok {
+			codeName = name
+		}
+	}
+	if codeName == "" {
 		codeName = code.Code_UNKNOWN.String()
 	}
 	body := struct {

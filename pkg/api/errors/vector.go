@@ -88,7 +88,7 @@ func (v *VectorStoreError) InvalidRequest(field string, msg string) error {
 
 // MissingField is InvalidRequest for a required field left unset.
 func (v *VectorStoreError) MissingField(field string) error {
-	msg := fmt.Sprintf("missing required field %s", field)
+	msg := "missing required field " + field
 	return v.InvalidRequest(field, msg)
 }
 

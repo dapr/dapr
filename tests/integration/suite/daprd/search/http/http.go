@@ -127,8 +127,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.SearchResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
-			assert.Equal(c, nethttp.StatusOK, status)
+			searchStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
+			assert.Equal(c, nethttp.StatusOK, searchStatus)
 			assert.ElementsMatch(c, []string{"doc-1", "doc-3"}, hitIDs(resp.GetHits()))
 		}, 10*time.Second, 100*time.Millisecond)
 
@@ -160,8 +160,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.SearchResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
-			assert.Equal(c, nethttp.StatusOK, status)
+			searchStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
+			assert.Equal(c, nethttp.StatusOK, searchStatus)
 			assert.Empty(c, resp.GetHits())
 		}, 10*time.Second, 100*time.Millisecond)
 

@@ -98,7 +98,7 @@ func (s *SearchStoreError) InvalidRequest(field string, msg string) error {
 
 // MissingField is InvalidRequest for a required field left unset.
 func (s *SearchStoreError) MissingField(field string) error {
-	msg := fmt.Sprintf("missing required field %s", field)
+	msg := "missing required field " + field
 	return s.InvalidRequest(field, msg)
 }
 

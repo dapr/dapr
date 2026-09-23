@@ -16,9 +16,10 @@ package universal
 import (
 	"context"
 
-	compsearch "github.com/dapr/components-contrib/search"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	compsearch "github.com/dapr/components-contrib/search"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -132,8 +133,8 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 	for _, doc := range req.GetDocuments() {
 		ids = append(ids, doc.GetId())
 	}
-	if err := compsearch.ValidateWriteIDs(ids); err != nil {
-		return nil, searchInvalidRequest(storeName, fieldErrorFrom("documents.id", err))
+	if idErr := compsearch.ValidateWriteIDs(ids); idErr != nil {
+		return nil, searchInvalidRequest(storeName, fieldErrorFrom("documents.id", idErr))
 	}
 
 	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())
@@ -144,8 +145,8 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 	docs := make([]compsearch.Document, 0, len(req.GetDocuments()))
 	var rejected []compsearch.FailedItem
 	for _, doc := range req.GetDocuments() {
-		if err := compsearch.ValidateDocumentContent(doc.GetContent()); err != nil {
-			rejected = append(rejected, compsearch.FailedItem{ID: doc.GetId(), Error: grpcstatus.Convert(err)})
+		if contentErr := compsearch.ValidateDocumentContent(doc.GetContent()); contentErr != nil {
+			rejected = append(rejected, compsearch.FailedItem{ID: doc.GetId(), Error: grpcstatus.Convert(contentErr)})
 			continue
 		}
 		docs = append(docs, compsearch.Document{

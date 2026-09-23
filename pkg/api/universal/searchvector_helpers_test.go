@@ -19,14 +19,15 @@ import (
 	"testing"
 	"time"
 
-	compsearch "github.com/dapr/components-contrib/search"
-	compvector "github.com/dapr/components-contrib/vector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	compsearch "github.com/dapr/components-contrib/search"
+	compvector "github.com/dapr/components-contrib/vector"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"

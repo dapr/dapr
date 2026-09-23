@@ -145,19 +145,19 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		assert.InDelta(t, 1, record.GetMetadata().GetFields()["rank"].GetNumberValue(), 0)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := client.QueryVectorsAlpha1(ctx, queryRequest(collection, []float32{1, 0, 0, 0}, 2))
-			if !assert.NoError(c, err) {
+			queryResp, queryErr := client.QueryVectorsAlpha1(ctx, queryRequest(collection, []float32{1, 0, 0, 0}, 2))
+			if !assert.NoError(c, queryErr) {
 				return
 			}
-			if !assert.NotEmpty(c, resp.GetMatches()) {
+			if !assert.NotEmpty(c, queryResp.GetMatches()) {
 				return
 			}
 			// The response always reports a concrete effective metric.
-			assert.Equal(c, runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE, resp.GetMetric())
-			assert.Equal(c, "vec-1", resp.GetMatches()[0].GetRecord().GetId())
+			assert.Equal(c, runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE, queryResp.GetMetric())
+			assert.Equal(c, "vec-1", queryResp.GetMatches()[0].GetRecord().GetId())
 			// Cosine scores are the unnormalized metric value in [-1, 1] and
 			// higher is better.
-			assert.InDelta(c, 1.0, resp.GetMatches()[0].GetScore(), 0.01)
+			assert.InDelta(c, 1.0, queryResp.GetMatches()[0].GetScore(), 0.01)
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// DeleteVectorsAlpha1 is a write keyed by id and shares the

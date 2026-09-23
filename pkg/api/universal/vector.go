@@ -16,12 +16,13 @@ package universal
 import (
 	"context"
 
-	compsearch "github.com/dapr/components-contrib/search"
-	compvector "github.com/dapr/components-contrib/vector"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	compsearch "github.com/dapr/components-contrib/search"
+	compvector "github.com/dapr/components-contrib/vector"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -142,8 +143,8 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 		ids = append(ids, record.GetId())
 		records = append(records, protoVectorRecordToComponent(record))
 	}
-	if err := compsearch.ValidateWriteIDs(ids); err != nil {
-		return nil, vectorInvalidRequest(storeName, fieldErrorFrom("records.id", err))
+	if idErr := compsearch.ValidateWriteIDs(ids); idErr != nil {
+		return nil, vectorInvalidRequest(storeName, fieldErrorFrom("records.id", idErr))
 	}
 
 	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())

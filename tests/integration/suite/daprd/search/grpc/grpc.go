@@ -122,12 +122,12 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 		assert.NotEqual(t, runtimev1pb.IndexAck_INDEX_ACK_UNSPECIFIED, idxResp.GetAck())
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
-			if !assert.NoError(c, err) {
+			searchResp, searchErr := client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
+			if !assert.NoError(c, searchErr) {
 				return
 			}
-			assert.Len(c, resp.GetHits(), 2)
-			assert.ElementsMatch(c, []string{"doc-1", "doc-3"}, hitIDs(resp.GetHits()))
+			assert.Len(c, searchResp.GetHits(), 2)
+			assert.ElementsMatch(c, []string{"doc-1", "doc-3"}, hitIDs(searchResp.GetHits()))
 		}, 10*time.Second, 100*time.Millisecond)
 
 		resp, err := client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
@@ -170,11 +170,11 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 		assert.NotEqual(t, runtimev1pb.IndexAck_INDEX_ACK_UNSPECIFIED, delResp.GetAck())
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
-			if !assert.NoError(c, err) {
+			searchResp, searchErr := client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
+			if !assert.NoError(c, searchErr) {
 				return
 			}
-			assert.Empty(c, resp.GetHits())
+			assert.Empty(c, searchResp.GetHits())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		_, err = client.DeleteIndexAlpha1(ctx, &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: storeName, Index: index})
