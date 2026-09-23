@@ -76,6 +76,12 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		}
 
 		msg.Metadata[rtpubsub.MetadataKeyPubSub] = s.pubsubName
+
+		// Bulk delivers a batch to the app in one call, so every entry in it is
+		// in flight for the duration of the handler.
+		s.addInFlight(ctx, int64(len(msg.Entries)))
+		defer s.addInFlight(ctx, -int64(len(msg.Entries)))
+
 		bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
 		bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, len(msg.Entries))
 		routePathBulkMessageMap := make(map[string]todo.BulkSubscribedMessage)
