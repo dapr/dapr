@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -113,4 +114,45 @@ func TestInitInline(t *testing.T) {
 		assert.False(t, ok, "component should be removed from the store after Close")
 		mockPubSub.AssertNumberOfCalls(t, "Close", 1)
 	})
+}
+
+func TestCloseInlineSearchAndVector(t *testing.T) {
+	for _, category := range []components.Category{components.CategorySearch, components.CategoryVector} {
+		t.Run(string(category), func(t *testing.T) {
+			for _, shutdown := range []bool{false, true} {
+				name := "not running"
+				if shutdown {
+					name = "after shutdown"
+				}
+				t.Run(name, func(t *testing.T) {
+					proc, _ := newTestProc()
+					proc.running.Store(shutdown)
+					proc.closed.Store(shutdown)
+
+					manager := &closeTrackingManager{inlineManager: proc.inlineManagers[category]}
+					proc.inlineManagers[category] = manager
+					comp := componentsapi.Component{
+						ObjectMeta: metav1.ObjectMeta{Name: "meilisearch"},
+						Spec: componentsapi.ComponentSpec{
+							Type:    string(category) + ".meilisearch",
+							Version: "v1",
+						},
+					}
+
+					require.NoError(t, proc.Close(t.Context(), comp))
+					require.True(t, manager.closed)
+				})
+			}
+		})
+	}
+}
+
+type closeTrackingManager struct {
+	inlineManager
+	closed bool
+}
+
+func (m *closeTrackingManager) Close(comp componentsapi.Component) error {
+	m.closed = true
+	return m.inlineManager.Close(comp)
 }

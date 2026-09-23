@@ -160,8 +160,8 @@ type Processor struct {
 	searchCat *category.Category
 	vectorCat *category.Category
 
-	// inlineManagers is used by Init/Close when Process is not running
-	// (test-only path). The loop path never reads this map.
+	// inlineManagers is used by Init/Close when Process is not running and by
+	// Close after shutdown. The loop path never reads this map.
 	inlineManagers map[components.Category]inlineManager
 
 	running atomic.Bool
