@@ -174,7 +174,10 @@ func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *
 
 	done := make(chan struct{})
 	m.loop.Enqueue(&eventRegister{conn: conn, done: done})
-	<-done
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 
 	log.Debugf("Registered actor callback stream (connID=%d, entities=%v)", conn.ID, cfg.Entities)
 	return conn

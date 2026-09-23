@@ -91,6 +91,8 @@ import (
 
 var log = logger.NewLogger("dapr.runtime")
 
+const componentCloseTimeout = 5 * time.Second
+
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
 	runtimeConfig          *internalConfig
@@ -504,7 +506,9 @@ func newDaprRuntime(ctx context.Context,
 				go func(comp compapi.Component) {
 					log.Infof("Shutting down component %s", comp.LogName())
 
-					errCh <- rt.processor.Close(context.Background(), comp)
+					closeCtx, cancel := context.WithTimeout(context.Background(), componentCloseTimeout)
+					defer cancel()
+					errCh <- rt.processor.Close(closeCtx, comp)
 				}(comp)
 			}
 
