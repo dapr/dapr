@@ -260,11 +260,11 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		if timer != nil {
 			timer.Stop()
 		}
-		if ccancel != nil {
-			ccancel(err)
-		}
 		if err == nil {
 			break
+		}
+		if ccancel != nil {
+			ccancel(err)
 		}
 
 		if ctx.Err() != nil {

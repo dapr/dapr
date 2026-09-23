@@ -718,7 +718,7 @@ func TestStopReadingFromBindingsDoesNotHoldLockDuringDrain(t *testing.T) {
 	lockAcquired := make(chan struct{})
 	go func() {
 		b.lock.Lock()
-		b.lock.Unlock()
+		b.lock.Unlock() //nolint:staticcheck // SA2001: intentional lock-acquisition probe
 		close(lockAcquired)
 	}()
 
