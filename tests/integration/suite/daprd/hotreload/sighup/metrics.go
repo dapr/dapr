@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/log"
@@ -73,15 +74,26 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, 1, int(m.daprd.Metrics(c, ctx).All()[key]))
 	}, 10*time.Second, 10*time.Millisecond)
 
+	// Reset so that the marker waited on below, and the duplicate sample check
+	// at the end, only observe the runtime which replaces this one.
+	m.log.Reset()
 	m.daprd.SignalHUP(t)
+
+	// The runtime being replaced keeps serving until it has finished shutting
+	// down, so wait for the replacement to report itself running rather than
+	// for the endpoint to respond. Requests sent any earlier are served, and
+	// recorded, by the runtime on its way out.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, m.log.Contains("dapr initialized. Status: Running"))
+	}, 10*time.Second, 10*time.Millisecond)
 	m.daprd.WaitUntilRunning(t, ctx)
 
 	m.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/testapp/method/hi")
 	m.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/testapp/method/hi")
 
-	// The restarted runtime records on its own meter, so its count is the only
-	// one exported. A meter left over from the previous runtime would keep
-	// serving its own stale count instead.
+	// The restarted runtime records on its own meter, which is the only one
+	// exporting. A meter left over from the previous runtime would keep
+	// serving its own stale count alongside it.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, 2, int(m.daprd.Metrics(c, ctx).All()[key]))
 	}, 10*time.Second, 10*time.Millisecond)
