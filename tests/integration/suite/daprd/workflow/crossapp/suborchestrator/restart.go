@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -147,8 +147,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.daprd2.WaitUntilRunning(t, ctx)
 
 	// Start workflow listeners for each app
-	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), logger.New(t))
+	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(t.Context(), r.registry1))
 	cctx, ccancel := context.WithCancel(t.Context())
 	t.Cleanup(ccancel)
@@ -192,7 +192,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Restart the listener for app2 & ensure wf completion
-	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
 	close(r.suborchestratorReady)
 
