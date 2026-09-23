@@ -609,7 +609,7 @@ func TestReporter(t *testing.T) {
 				"mockPubSub",
 			)
 
-			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(errors.New("error"))
+			mockPubSub.On("Init", mock.Anything).Return(errors.New("error"))
 
 			// IgnoreErrors avoids tripping root.recordFatalInitError, which would
 			// otherwise race startProc's cleanup (this subtest only cares about
