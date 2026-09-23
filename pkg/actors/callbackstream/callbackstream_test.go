@@ -424,3 +424,37 @@ func TestSend_ConcurrentCallersFanOutToSingleConn(t *testing.T) {
 	}
 	assert.EqualValues(t, callers, delivered.Load())
 }
+
+func TestRegisterReturnsAfterLoopAlreadyClosed(t *testing.T) {
+	mgr := NewManager()
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = mgr.Run(runCtx)
+	}()
+
+	// Close the loop and wait for Run to fully return before registering,
+	// so Enqueue is guaranteed to hit the already-closed path rather than
+	// racing it.
+	cancel()
+	select {
+	case <-runDone:
+	case <-time.After(time.Second):
+		t.Fatal("manager did not shut down")
+	}
+
+	registerDone := make(chan *Connection, 1)
+	registerCtx, registerCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer registerCancel()
+	go func() {
+		registerDone <- mgr.Register(registerCtx, &config.ApplicationConfig{})
+	}()
+
+	select {
+	case <-registerDone:
+	case <-time.After(time.Second):
+		t.Fatal("Register did not return after its context expired against an already-closed loop")
+	}
+}
