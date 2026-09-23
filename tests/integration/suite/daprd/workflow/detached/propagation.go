@@ -68,7 +68,7 @@ func (p *propagation) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.CallActivity("CallerAct").Await(nil); err != nil {
 			return nil, err
 		}
-		_, err := ctx.ScheduleNewWorkflow("Spawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID))
 		return nil, err
 	})
