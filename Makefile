@@ -490,10 +490,14 @@ PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary
 # $(1): the binary name to be archived
+# Well-known googleapis protos (e.g. google/rpc/status.proto) are not bundled
+# with protoc; resolve them from the grpc-gateway module in the module cache.
+GOOGLEAPIS_PROTO_PATH ?= $(shell go list -m -f '{{.Dir}}' github.com/grpc-ecosystem/grpc-gateway)/third_party/googleapis
+
 define genProtoc
 .PHONY: gen-proto-$(1)
 gen-proto-$(1):
-	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) --connect-go_out=. --connect-go_opt=module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
+	$(PROTOC) -I. -I$(GOOGLEAPIS_PROTO_PATH) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) --connect-go_out=. --connect-go_opt=module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
 endef
 
 $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))

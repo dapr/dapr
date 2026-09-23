@@ -64,6 +64,8 @@ const (
 	Pubsub                        ComponentType         = "Pubsub"
 	Crypto                        ComponentType         = "Crypto"
 	Conversation                  ComponentType         = "Conversation"
+	Search                        ComponentType         = "Search"
+	Vector                        ComponentType         = "Vector"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
 	Inbound                       ComponentDirection    = "Inbound"

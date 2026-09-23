@@ -36,6 +36,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resources"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/routes"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/search"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
@@ -43,5 +44,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/vector"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow"
 )
