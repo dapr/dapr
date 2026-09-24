@@ -162,20 +162,23 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 
 	// The orphan's failure carries the previous scheduling's execution id
 	// and reaches the workflow before the second generation's result does:
-	// the second is released only once the workflow actor has taken the
+	// the second is released only once the workflow actor has admitted the
 	// orphan's AddWorkflowEvent under its lock (the earlier one is the
 	// raised event), so the second's completion is serialised behind it.
-	addEventLine := fmt.Appendf(nil, "Workflow actor '%s': invoking method 'AddWorkflowEvent'", id)
-	addEvents := func() int {
+	// The admission is observed through what it logs under the lock, on
+	// either path: the durable inbox add or the drop.
+	admitted := func() int {
 		n := 0
 		for _, l := range c.logline {
-			n += bytes.Count(l.StdoutBuffer(), addEventLine)
+			for _, line := range []string{"adding event to the workflow inbox", "dropping completion (sender"} {
+				n += bytes.Count(l.StdoutBuffer(), fmt.Appendf(nil, "Workflow actor '%s': %s", id, line))
+			}
 		}
 		return n
 	}
-	before := addEvents()
+	before := admitted()
 	close(releaseOrphan)
-	require.Eventually(t, func() bool { return addEvents() > before }, time.Second*20, time.Millisecond*10,
+	require.Eventually(t, func() bool { return admitted() > before }, time.Second*20, time.Millisecond*10,
 		"the orphan's failure must reach the workflow actor")
 	close(releaseSecond)
 
