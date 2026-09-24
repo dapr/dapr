@@ -13,6 +13,13 @@ limitations under the License.
 
 package common
 
+import "errors"
+
 const (
 	ReminderPrefixActivityResult = "activity-result-"
 )
+
+// ErrSchedulingNotDurable is the orchestrator's refusal of an activity
+// completion whose scheduling durable history does not show yet. The sender
+// retries with the result in hand; it matches by suffix across the router.
+var ErrSchedulingNotDurable = errors.New("the task's scheduling is not yet durable")
