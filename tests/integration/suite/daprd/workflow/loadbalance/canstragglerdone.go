@@ -156,7 +156,7 @@ func (c *canstragglerdone) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for the second generation's activity to start")
 	}
 
-	// The orphan's failure carries the previous scheduling's execution id
+	// The orphan's result carries the previous scheduling's execution id
 	// and reaches the workflow before the second generation's result does:
 	// the second is released only once the workflow actor has admitted the
 	// orphan's AddWorkflowEvent under its lock (the earlier one is the
@@ -180,7 +180,7 @@ func (c *canstragglerdone) Run(t *testing.T, ctx context.Context) {
 	before := admitted()
 	close(releaseOrphan)
 	require.Eventually(t, func() bool { return admitted() > before }, time.Second*20, time.Millisecond*10,
-		"the orphan's failure must reach the workflow actor")
+		"the orphan's result must reach the workflow actor")
 	close(releaseSecond)
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id)

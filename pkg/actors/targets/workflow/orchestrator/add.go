@@ -250,10 +250,15 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 // verifyAndAbsorbAttestation verifies any attestation on the incoming event
 // against the signed history and Sentry trust anchors, absorbs the signer
 // certificate into the ext-sigcert table, and strips it from the event.
-// Unmatched completions are dropped; genuine verification failures tombstone
-// the workflow. Both return ErrInstanceNotFound so the sender stops
-// re-delivering. No-op when signing is disabled; locally-authored synthetic
-// failures are exempt (no attestation by design).
+// Genuine verification failures tombstone the workflow and return
+// ErrInstanceNotFound so the sender stops re-delivering. An activity
+// completion the signed history does not match is refused recoverably
+// instead, for the sender to retry with the result in hand: with
+// ErrSchedulingNotDurable while its scheduling may still be committing, with
+// ErrSchedulingSuperseded when the history proves it resolves another
+// scheduling. Other unmatched completions are dropped with
+// ErrInstanceNotFound. No-op when signing is disabled; locally-authored
+// synthetic failures are exempt (no attestation by design).
 func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wfenginestate.State, e *backend.HistoryEvent) error {
 	if o.isLocalSyntheticFailure(e) {
 		return nil

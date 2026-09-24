@@ -147,6 +147,17 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
 		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
+		if isSchedulingSuperseded(err) {
+			// The reminder is the durable retry, and a superseded result
+			// would refire it every second for good. Judge it once more on a
+			// fresh load, then drop it: this fire is already a later,
+			// independent read of the history.
+			o.invalidateCachedState()
+			if err = o.addWorkflowEvent(ctx, &ev, completionSender{}); isSchedulingSuperseded(err) {
+				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its result resolves a superseded scheduling: %v", o.actorID, reminder.Name, err)
+				return nil
+			}
+		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever
@@ -304,4 +315,8 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		log.Errorf("Workflow actor '%s': execution failed with an error: %v", o.actorID, err)
 		return err
 	}
+}
+
+func isSchedulingSuperseded(err error) bool {
+	return err != nil && strings.HasSuffix(err.Error(), common.ErrSchedulingSuperseded.Error())
 }
