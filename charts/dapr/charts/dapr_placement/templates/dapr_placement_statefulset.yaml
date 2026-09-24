@@ -285,6 +285,9 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
+{{- with include "dapr.topologySpreadConstraints" (dict "constraints" .Values.global.topologySpreadConstraints "app" "dapr-placement-server") }}
+{{ . | indent 6 }}
+{{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:

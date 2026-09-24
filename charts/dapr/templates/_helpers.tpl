@@ -56,3 +56,24 @@ Validates podAntiAffinityPolicy is one of the allowed values.
 {{- fail "global.ha.podAntiAffinityPolicy must be either 'preferredDuringSchedulingIgnoredDuringExecution' or 'requiredDuringSchedulingIgnoredDuringExecution'" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Renders topologySpreadConstraints for a control plane pod from
+global.topologySpreadConstraints. A constraint without a labelSelector is
+scoped to the pods of the calling component (app: <app>).
+Usage: include "dapr.topologySpreadConstraints" (dict "constraints" .Values.global.topologySpreadConstraints "app" "dapr-operator")
+*/}}
+{{- define "dapr.topologySpreadConstraints" -}}
+{{- $constraints := list -}}
+{{- range .constraints -}}
+{{- $constraint := deepCopy . -}}
+{{- if not (hasKey $constraint "labelSelector") -}}
+{{- $_ := set $constraint "labelSelector" (dict "matchLabels" (dict "app" $.app)) -}}
+{{- end -}}
+{{- $constraints = append $constraints $constraint -}}
+{{- end -}}
+{{- with $constraints -}}
+topologySpreadConstraints:
+{{ toYaml . }}
+{{- end -}}
+{{- end -}}
