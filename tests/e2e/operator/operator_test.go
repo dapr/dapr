@@ -17,12 +17,15 @@ limitations under the License.
 package hellodapr_e2e
 
 import (
+	"context"
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -62,11 +65,23 @@ func TestMain(m *testing.M) {
 	code := tr.Start(m)
 
 	for _, app := range testApps {
-		_, err := tr.Platform.GetService(daprServiceName)
-		if err == nil {
-			log.Fatalf("the dapr service %s still exists after app %s deleted", daprServiceName, app.AppName)
-		} else if !errors.IsNotFound(err) {
-			log.Fatalf("failed to get dapr service %s, err: %v", daprServiceName, err)
+		// Teardown deletes the app's Deployment without waiting for the
+		// operator to react, so the companion Service it owns can still be
+		// around briefly after Start returns; poll instead of checking once.
+		pollCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		waitErr := wait.PollUntilContextCancel(pollCtx, time.Second, true, func(context.Context) (bool, error) {
+			_, err := tr.Platform.GetService(daprServiceName)
+			if err == nil {
+				return false, nil
+			}
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		})
+		cancel()
+		if waitErr != nil {
+			log.Fatalf("the dapr service %s still exists after app %s deleted (or failed to check): %v", daprServiceName, app.AppName, waitErr)
 		}
 	}
 
