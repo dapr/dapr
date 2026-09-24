@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,10 @@ type Meilisearch struct {
 // New creates a new Meilisearch process for integration tests.
 func New(t *testing.T, fopts ...Option) *Meilisearch {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Meilisearch Docker image is not supported on Windows")
+	}
 
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker is not available")
