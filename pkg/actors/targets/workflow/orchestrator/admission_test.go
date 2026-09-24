@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -280,4 +281,24 @@ func Test_cleanupWorkflowStateInternal_dropsTheCache(t *testing.T) {
 	assert.Nil(t, h.orch.state, "the purged state must not be served from the cache")
 	assert.Nil(t, h.orch.rstate)
 	assert.Nil(t, h.orch.ometa)
+}
+
+// An activity-result reminder is the durable retry of a result publish and
+// refires every second on any error: a superseded result must be judged once
+// more on a fresh load and then acked, never left to refire for good.
+func Test_handleReminder_supersededResultIsDropped(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-reminder-superseded"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.orch.actorState = fakeStoreServingSigned(t, h.orch, h.orch.state)
+
+	data, err := anypb.New(taskCompletedWithExecID(7, "exec-A"))
+	require.NoError(t, err)
+	err = h.orch.handleReminder(t.Context(), &actorapi.Reminder{
+		Name: common.ReminderPrefixActivityResult + "stale",
+		Data: data,
+	})
+	require.NoError(t, err, "the reminder is acked so the scheduler deletes it")
+	assert.Empty(t, h.orch.state.Inbox, "the stale result must not be persisted")
 }
