@@ -356,12 +356,7 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		s.clientLock.Lock()
-		s.client = nil
-		s.clientLock.Unlock()
-		require.NoError(t, conn.Close())
-	})
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	s.client = schedulerv1pb.NewSchedulerClient(conn)
 	return s.client
