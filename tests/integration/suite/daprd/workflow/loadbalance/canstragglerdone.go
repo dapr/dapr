@@ -16,7 +16,6 @@ package loadbalance
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -41,21 +40,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(canstraggler))
+	suite.Register(new(canstragglerdone))
 }
 
-// canstraggler verifies that a failed activity orphaned by ContinueAsNew
-// cannot resolve the new generation's task of the same id. The orphan is
-// released only once the new generation's activity is running, and that
-// activity completes only after the orphan's failure has reached the
-// workflow, so the straggler is the first resolution to arrive for task 0 of
-// generation 2.
-type canstraggler struct {
+// canstragglerdone is canstraggler with an orphan that succeeds: its result
+// carries the previous scheduling's execution id and must not resolve the
+// new generation's task of the same id, whose own result is the output.
+type canstragglerdone struct {
 	workflow *workflow.Workflow
 	logline  [2]*logline.LogLine
 }
 
-func (c *canstraggler) Setup(t *testing.T) []framework.Option {
+func (c *canstragglerdone) Setup(t *testing.T) []framework.Option {
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 	wopts := make([]workflow.Option, 0, 3+len(c.logline))
@@ -74,7 +70,8 @@ func (c *canstraggler) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
+func (c *canstragglerdone) Run(t *testing.T, ctx context.Context) {
+	const first, second = "first", "second"
 	c.workflow.WaitUntilRunning(t, ctx)
 
 	orphanStarted := make(chan struct{})
@@ -93,24 +90,24 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	require.NoError(t, c.workflow.RegistryN(0).AddWorkflowN("canstraggler", func(ctx *task.WorkflowContext) (any, error) {
+	require.NoError(t, c.workflow.RegistryN(0).AddWorkflowN("canstragglerdone", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
 		}
 
-		if input == "first" {
+		if input == first {
 			// Scheduled and never awaited: orphaned by the ContinueAsNew.
-			ctx.CallActivity("gated", task.WithActivityInput("first"))
+			ctx.CallActivity("gated", task.WithActivityInput(first))
 			if err := ctx.WaitForSingleEvent("proceed", time.Minute).Await(nil); err != nil {
 				return nil, err
 			}
-			ctx.ContinueAsNew("second")
+			ctx.ContinueAsNew(second)
 			return nil, nil
 		}
 
 		var out string
-		if err := ctx.CallActivity("gated", task.WithActivityInput("second")).Await(&out); err != nil {
+		if err := ctx.CallActivity("gated", task.WithActivityInput(second)).Await(&out); err != nil {
 			return nil, err
 		}
 		return out, nil
@@ -123,10 +120,10 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 			return nil, err
 		}
 
-		if input == "first" {
+		if input == first {
 			markOrphanStarted()
 			<-releaseOrphan
-			return nil, errors.New("orphan failed")
+			return "done-first", nil
 		}
 		markSecondStarted()
 		<-releaseSecond
@@ -144,7 +141,7 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 		c.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
 
-	id, err := client.ScheduleNewWorkflow(ctx, "canstraggler", api.WithInput("first"))
+	id, err := client.ScheduleNewWorkflow(ctx, "canstragglerdone", api.WithInput(first))
 	require.NoError(t, err)
 
 	select {
