@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"google.golang.org/protobuf/proto"
 
@@ -344,12 +343,12 @@ func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) (reason s
 	}
 	if scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled(); scheduled != nil {
 		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
-			return "it resolves a superseded scheduling of task " + strconv.Itoa(int(taskID)), false
+			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID), false
 		}
 	} else {
 		for _, h := range state.History {
 			if h.GetEventId() >= taskID {
-				return "this generation passed id " + strconv.Itoa(int(taskID)) + " without scheduling a task", false
+				return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID), false
 			}
 		}
 	}

@@ -14,6 +14,7 @@ limitations under the License.
 package activity
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -206,7 +207,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 
 	switch {
 	case err != nil:
-		if isInstanceNotFound(err) {
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", ex.actorID, ex.wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
 			return nil
@@ -236,10 +237,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 // publishRetryWindow with the result in hand; re-executing would discard it.
 // Every other error surfaces at once.
 func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
-	pctx, cancel := ctx, context.CancelFunc(func() {})
-	if f.publishRetryWindow > 0 {
-		pctx, cancel = context.WithTimeout(ctx, f.publishRetryWindow)
-	}
+	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, publishRetryWindow))
 	defer cancel()
 	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
 	for {
@@ -254,10 +252,6 @@ func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *inte
 		case <-time.After(bo.NextBackOff()):
 		}
 	}
-}
-
-func isInstanceNotFound(err error) bool {
-	return strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error())
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
