@@ -106,8 +106,8 @@ type factory struct {
 	registerResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
 	staleClaimAfter  time.Duration
 
-	// publishRetryWindow bounds the in-hand retries of a refused result
-	// publish (see publishWithRetry); zero disables them. Set once in New.
+	// publishRetryWindow overrides the in-hand retry window of a refused
+	// result publish (see publishWithRetry); zero means the default.
 	publishRetryWindow time.Duration
 
 	// inflight tracks activity executions whose WorkItem is in the durabletask
@@ -204,14 +204,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	), common.JanitorPeriod())
 
 	return &factory{
-		appID:              opts.AppID,
-		actorType:          opts.ActivityActorType,
-		inflight:           inflightFor(opts.ActivityActorType),
-		fastPath:           opts.FastPath,
-		executionHeld:      opts.ExecutionHeld,
-		registerResolver:   opts.RegisterResolver,
-		staleClaimAfter:    2 * common.JanitorPeriod(),
-		publishRetryWindow: publishRetryWindow,
+		appID:            opts.AppID,
+		actorType:        opts.ActivityActorType,
+		inflight:         inflightFor(opts.ActivityActorType),
+		fastPath:         opts.FastPath,
+		executionHeld:    opts.ExecutionHeld,
+		registerResolver: opts.RegisterResolver,
+		staleClaimAfter:  2 * common.JanitorPeriod(),
 		claims: claim.New(claim.Options{
 			ActorType: opts.ActivityActorType,
 			State:     state,
