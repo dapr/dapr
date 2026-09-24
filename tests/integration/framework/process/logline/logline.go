@@ -182,6 +182,22 @@ func (l *LogLine) EventuallyFoundNone(t *testing.T) {
 
 // Contains checks if the captured log output contains the given substring.
 // This is useful for dynamic log checking during tests.
+// Count returns how many times substr appears in the stdout this LogLine has
+// captured so far.
+func (l *LogLine) Count(substr string) int {
+	return bytes.Count(l.StdoutBuffer(), []byte(substr))
+}
+
+// CountAll sums Count over lines. A clustered test captures one log per
+// sidecar and usually does not care which of them wrote the line.
+func CountAll(substr string, lines ...*LogLine) int {
+	var n int
+	for _, l := range lines {
+		n += l.Count(substr)
+	}
+	return n
+}
+
 func (l *LogLine) Contains(substr string) bool {
 	l.lock.Lock()
 	defer l.lock.Unlock()
