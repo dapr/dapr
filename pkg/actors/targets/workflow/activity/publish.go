@@ -212,6 +212,10 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			executionStatus = diag.StatusFailed
 			return nil
 		}
+		if strings.HasSuffix(err.Error(), common.ErrSchedulingSuperseded.Error()) {
+			log.Debugf("Activity actor '%s': dropping the result for workflow '%s', still superseded after the retry window: %s", ex.actorID, ex.wi.InstanceID, err)
+			return nil
+		}
 
 		if f.workflowsRemoteActivityReminder {
 			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.wi.Result); cerr == nil {
@@ -233,25 +237,39 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	return nil
 }
 
-// publishWithRetry retries the orchestrator's not-yet-durable refusal for
-// publishRetryWindow with the result in hand; re-executing would discard it.
-// Every other error surfaces at once.
+// publishWithRetry retries the orchestrator's not-yet-durable and superseded
+// refusals for publishRetryWindow with the result in hand: re-executing would
+// discard it, and a superseded verdict from a read lagging a ContinueAsNew
+// boundary clears once the store catches up. Every other error surfaces at
+// once.
 func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
 	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, publishRetryWindow))
 	defer cancel()
 	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
+	var refused error
 	for {
 		_, err := f.router.Call(pctx, req)
-		if err == nil || !strings.HasSuffix(err.Error(), common.ErrSchedulingNotDurable.Error()) || pctx.Err() != nil {
+		if err == nil || !retryInHand(err) {
+			// A call cut by the window's expiry reports the expiry, not the
+			// verdict: the last refusal is what the caller must act on.
+			if pctx.Err() != nil && refused != nil {
+				return refused
+			}
 			return err
 		}
+		refused = err
 		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, err)
 		select {
 		case <-pctx.Done():
-			return err
+			return refused
 		case <-time.After(bo.NextBackOff()):
 		}
 	}
+}
+
+func retryInHand(err error) bool {
+	msg := err.Error()
+	return strings.HasSuffix(msg, common.ErrSchedulingNotDurable.Error()) || strings.HasSuffix(msg, common.ErrSchedulingSuperseded.Error())
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {

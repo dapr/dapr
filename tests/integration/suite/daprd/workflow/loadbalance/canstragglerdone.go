@@ -21,10 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/grpc"
@@ -162,13 +161,18 @@ func (c *canstragglerdone) Run(t *testing.T, ctx context.Context) {
 	// the second is released only once the workflow actor has admitted the
 	// orphan's AddWorkflowEvent under its lock (the earlier one is the
 	// raised event), so the second's completion is serialised behind it.
-	// The admission is observed through what it logs under the lock, on
-	// either path: the durable inbox add or the drop.
+	// The admission is observed through what it logs, on any path: the
+	// durable inbox add, the drop, or the sender's retry of a superseded
+	// refusal.
 	admitted := func() int {
 		n := 0
 		for _, l := range c.logline {
-			for _, line := range []string{"adding event to the workflow inbox", "dropping completion (sender"} {
-				n += bytes.Count(l.StdoutBuffer(), fmt.Appendf(nil, "Workflow actor '%s': %s", id, line))
+			for _, needle := range []string{
+				fmt.Sprintf("Workflow actor '%s': adding event to the workflow inbox", id),
+				fmt.Sprintf("Workflow actor '%s': dropping completion (sender", id),
+				fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id),
+			} {
+				n += bytes.Count(l.StdoutBuffer(), []byte(needle))
 			}
 		}
 		return n

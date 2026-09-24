@@ -211,6 +211,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		executionHeld:    opts.ExecutionHeld,
 		registerResolver: opts.RegisterResolver,
 		staleClaimAfter:  2 * common.JanitorPeriod(),
+		// Tests shorten the in-hand retry window; zero keeps the default.
+		publishRetryWindow: common.EnvDurationOr("DAPR_WORKFLOW_TEST_ACTIVITY_PUBLISH_RETRY_WINDOW", 0),
 		claims: claim.New(claim.Options{
 			ActorType: opts.ActivityActorType,
 			State:     state,

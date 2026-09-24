@@ -65,7 +65,7 @@ const (
 type admission struct {
 	outcome admitOutcome
 	reason  string     // acked drop: why the completion is never consumed
-	settles bool       // acked drop of the current scheduling's own result
+	settles bool       // the acked drop is the current scheduling's own result
 	err     error      // rejected drop: returned to the sender instead of an ack
 	pending *foldEntry // duplicate of a held completion: the entry a retry joins
 }
@@ -148,8 +148,16 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 		return admission{outcome: admitDuplicate}
 	}
 
+	// A completed workflow acks and drops its own result. A superseded or
+	// passed scheduling is refused recoverably instead: a read lagging past a
+	// ContinueAsNew boundary shows the previous generation's rows, so the
+	// sender retries with the result in hand and drops it only once its
+	// window expires.
 	if reason, settles := activityDrop(e, state); reason != "" {
-		return admission{reason: reason, settles: settles}
+		if settles {
+			return admission{reason: reason, settles: settles}
+		}
+		return admission{err: wferrors.NewRecoverable(fmt.Errorf("%s: %w", reason, common.ErrSchedulingSuperseded))}
 	}
 	if !hold {
 		return admission{outcome: admitInbox}
@@ -299,8 +307,12 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	// history does not show yet may be ahead of its row: ask the sender to
 	// retry, unless the history proves it can never be consumed.
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
-		if taskID, _, ok := activityResolution(e); ok && fresh.FindHistoryEventByID(taskID) == nil {
-			if reason, _ := activityDrop(e, fresh); reason == "" {
+		if taskID, _, ok := activityResolution(e); ok {
+			switch reason, settles := activityDrop(e, fresh); {
+			case settles:
+			case reason != "":
+				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingSuperseded))
+			case fresh.FindHistoryEventByID(taskID) == nil:
 				log.Infof("Workflow actor '%s': completion for task %d has no scheduled task in signed history yet; asking the sender to retry", o.actorID, taskID)
 				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
 			}
