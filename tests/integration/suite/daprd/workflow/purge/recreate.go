@@ -16,12 +16,16 @@ package purge
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
@@ -30,6 +34,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -91,6 +96,25 @@ func (r *recreate) Run(t *testing.T, ctx context.Context) {
 
 	client := r.workflow.BackendClient(t, ctx)
 
+	// No signal in daprd shows a call parked on the workflow actor's lock
+	// (the pending-calls gauge covers app actors only; API logging and the
+	// gRPC server views record completions), so the create is issued on a
+	// connection that reports it in flight: from there only in-process
+	// dispatch separates it from the lock, while the deactivation it must
+	// precede is queued only after the held commit lands.
+	var inflight atomic.Int32
+	conn, err := grpc.NewClient(r.workflow.Dapr().GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			inflight.Add(1)
+			defer inflight.Add(-1)
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	creator := dtclient.NewTaskHubGrpcClient(conn, logger.New(t))
+
 	const id = api.InstanceID("purge-recreate")
 	for i := range 10 {
 		_, err := client.ScheduleNewWorkflow(ctx, "recreate", api.WithInstanceID(id))
@@ -112,10 +136,10 @@ func (r *recreate) Run(t *testing.T, ctx context.Context) {
 		// purge returns, ahead of the deactivation the purge queued.
 		createErr := make(chan error, 1)
 		go func() {
-			_, cerr := client.ScheduleNewWorkflow(ctx, "recreate", api.WithInstanceID(id))
+			_, cerr := creator.ScheduleNewWorkflow(ctx, "recreate", api.WithInstanceID(id))
 			createErr <- cerr
 		}()
-		time.Sleep(time.Millisecond * 200)
+		require.Eventually(t, func() bool { return inflight.Load() > 0 }, time.Second*10, time.Millisecond, "iteration %d: the create must be in flight", i)
 		release()
 
 		require.NoError(t, <-purgeErr, "iteration %d", i)
