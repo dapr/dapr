@@ -64,6 +64,10 @@ func (e *earlyresult) Setup(t *testing.T) []framework.Option {
 	)
 
 	e.workflow = workflow.New(t,
+		// The injected save failure rolls back signed rows mid-commit; under
+		// history signing the retried completion would then read as tampering
+		// instead of exercising the early-result path (as in chaos/savefail).
+		workflow.WithSigningDisabledN(0),
 		workflow.WithNoDB(),
 		workflow.WithFastPath(true),
 		workflow.WithDaprdOptions(0,
