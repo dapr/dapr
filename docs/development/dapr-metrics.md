@@ -258,8 +258,10 @@ Ingress metrics are tagged with `process_status` and `status`; egress metrics ar
 `success`. Both carry `app_id`, `component`, `namespace` and `topic`.
 
 `dapr_component_pubsub_ingress_in_flight` is a gauge rather than a counter, and carries only the
-four common tags. It is bounded by the component's `concurrency` setting, so a value sitting at
-that setting means the subscription is saturated, not how much work is queued behind it.
+four common tags. `concurrency` is configured per component while the gauge is per topic, so it
+shows how much of that budget each topic is actually taking, and it counts redelivered or reclaimed
+messages that never appear on the publish side. A topic sitting at the configured concurrency is
+saturated; the gauge does not show how much work is queued behind it.
 
 ### Bindings metrics
 
