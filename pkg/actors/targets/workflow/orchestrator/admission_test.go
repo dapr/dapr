@@ -161,6 +161,23 @@ func Test_admitEvent_droppedActivityResultSettlesTheAwait(t *testing.T) {
 	assert.False(t, h.orch.activityResultAwaited.Load(), "a dropped result must still clear the await")
 }
 
+// A straggler from a superseded scheduling is not the result the await is
+// for: dropping it must leave the guard against reusing the ID in place.
+func Test_admitEvent_droppedStragglerKeepsTheAwait(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-await-straggler"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.saved = true
+	h.orch.activityResultAwaited.Store(true)
+
+	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(7, "exec-A"), completionSender{}, false)
+	require.NoError(t, err, "the straggler is acked and dropped")
+	assert.Nil(t, entry)
+	assert.Empty(t, h.orch.state.Inbox)
+	assert.True(t, h.orch.activityResultAwaited.Load(), "a superseded scheduling's result must not settle the await")
+}
+
 // Under history signing an unmatched activity completion is verified against
 // durable state. A completion for a task that state does not show, below
 // every recorded id, may be ahead of its scheduling's commit and is refused

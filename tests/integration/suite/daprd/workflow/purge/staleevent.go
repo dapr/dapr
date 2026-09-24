@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -114,6 +115,10 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 
 	const id = api.InstanceID("purge-staleevent")
 	release := make(chan struct{})
+	// Idempotent and registered up front: a failed assertion must not leave
+	// the activity blocked through teardown.
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseOnce)
 	var held atomic.Bool
 	reg := s.workflow.Registry()
 	require.NoError(t, reg.AddActivityN("late", func(task.ActivityContext) (any, error) {
@@ -183,7 +188,7 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 10):
 		require.Fail(t, "the purge commit was never attempted")
 	}
-	close(release)
+	releaseOnce()
 	raiseErr := make(chan error, 1)
 	go func() { raiseErr <- client.RaiseEvent(ctx, id, "late") }()
 	time.Sleep(time.Millisecond * 500)
@@ -206,8 +211,7 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
 	ns, appID := s.workflow.Dapr().Namespace(), s.workflow.Dapr().AppID()
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Zero(c, s.sched.JobKeyCount(t, ctx, fmt.Sprintf("||dapr.internal.%s.%s.workflow||%s||", ns, appID, id)))
-		assert.Zero(c, s.sched.JobKeyCount(t, ctx, fmt.Sprintf("||dapr.internal.%s.%s.activity||%s::", ns, appID, id)))
-	}, time.Second*20, time.Millisecond*50, "no reminder for the old instance may keep firing")
+	zero := func(n int) bool { return n == 0 }
+	s.sched.WaitJobKeyCount(t, ctx, fmt.Sprintf("||dapr.internal.%s.%s.workflow||%s||", ns, appID, id), zero)
+	s.sched.WaitJobKeyCount(t, ctx, fmt.Sprintf("||dapr.internal.%s.%s.activity||%s::", ns, appID, id), zero)
 }

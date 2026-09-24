@@ -65,7 +65,8 @@ const (
 // admission is classifyEvent's verdict, applied by admitEvent.
 type admission struct {
 	outcome admitOutcome
-	reason  string     // acked drop: why the child completion is never consumed
+	reason  string     // acked drop: why the completion is never consumed
+	settles bool       // acked drop of the current scheduling's own result
 	err     error      // rejected drop: returned to the sender instead of an ack
 	pending *foldEntry // duplicate of a held completion: the entry a retry joins
 }
@@ -148,8 +149,8 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 		return admission{outcome: admitDuplicate}
 	}
 
-	if reason := activityDrop(e, state); reason != "" {
-		return admission{reason: reason}
+	if reason, settles := activityDrop(e, state); reason != "" {
+		return admission{reason: reason, settles: settles}
 	}
 	if !hold {
 		return admission{outcome: admitInbox}
@@ -180,10 +181,10 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 	if a.err != nil {
 		return nil, a.err
 	}
-	// An activity result settles the await whether it is admitted or dropped:
-	// a dropped one is still the result the terminal turn was waiting on, and
-	// createIfCompleted refuses reuse of the ID while the flag is set.
-	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+	// The current scheduling's result settles the await whether it is admitted
+	// or dropped by the terminal turn (createIfCompleted refuses reuse of the
+	// ID while the flag is set); a straggler from another scheduling does not.
+	if (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) && (a.reason == "" || a.settles) {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 	if a.reason != "" {
@@ -299,9 +300,11 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	// history does not show yet may be ahead of its row: ask the sender to
 	// retry, unless the history proves it can never be consumed.
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
-		if taskID, _, ok := activityResolution(e); ok && fresh.FindHistoryEventByID(taskID) == nil && activityDrop(e, fresh) == "" {
-			log.Infof("Workflow actor '%s': completion for task %d has no scheduled task in signed history yet; asking the sender to retry", o.actorID, taskID)
-			return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
+		if taskID, _, ok := activityResolution(e); ok && fresh.FindHistoryEventByID(taskID) == nil {
+			if reason, _ := activityDrop(e, fresh); reason == "" {
+				log.Infof("Workflow actor '%s': completion for task %d has no scheduled task in signed history yet; asking the sender to retry", o.actorID, taskID)
+				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
+			}
 		}
 		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, fverr)
 		return api.ErrInstanceNotFound
@@ -327,32 +330,33 @@ func activityResolution(e *backend.HistoryEvent) (taskID int32, execID string, o
 }
 
 // activityDrop reports why an activity completion can never be consumed by
-// this history, or "" when it still may: the workflow has completed; its
-// task is scheduled under a different TaskExecutionId (ContinueAsNew resets
-// task ids, so the completion resolves a superseded scheduling); or its task
-// is absent while the history already holds an id at or beyond it (ids are
-// assigned in sequence per generation, so a still-landing save cannot carry
-// it). An absent task below every recorded id may still be committing.
-func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) string {
+// this history, or "" when it still may: its task is scheduled under a
+// different TaskExecutionId (ContinueAsNew resets task ids, so the completion
+// resolves a superseded scheduling); its task is absent while the history
+// already holds an id at or beyond it (ids are assigned in sequence per
+// generation, so a still-landing save cannot carry it); or the workflow has
+// completed. Only the last is the current scheduling's own result (settles).
+// An absent task below every recorded id may still be committing.
+func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) (reason string, settles bool) {
 	taskID, execID, ok := activityResolution(e)
 	if !ok {
-		return ""
-	}
-	if state.IsCompleted() {
-		return "the workflow has completed"
+		return "", false
 	}
 	if scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled(); scheduled != nil {
 		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
-			return "it resolves a superseded scheduling of task " + strconv.Itoa(int(taskID))
+			return "it resolves a superseded scheduling of task " + strconv.Itoa(int(taskID)), false
 		}
-		return ""
-	}
-	for _, h := range state.History {
-		if h.GetEventId() >= taskID {
-			return "this generation passed id " + strconv.Itoa(int(taskID)) + " without scheduling a task"
+	} else {
+		for _, h := range state.History {
+			if h.GetEventId() >= taskID {
+				return "this generation passed id " + strconv.Itoa(int(taskID)) + " without scheduling a task", false
+			}
 		}
 	}
-	return ""
+	if state.IsCompleted() {
+		return "the workflow has completed", true
+	}
+	return "", false
 }
 
 // childCreatedFor returns the ChildWorkflowInstanceCreated event this
