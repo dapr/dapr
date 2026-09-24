@@ -344,6 +344,11 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 // This method cleans up a workflow associated with the given actorID
 func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, includeRetentionReminder bool) error {
+	// Once a purge has been attempted the next load must come from the store,
+	// whatever else failed: the deactivation below is asynchronous and the
+	// actor stays tabled until it runs.
+	defer o.invalidateCachedState()
+
 	// This will create a request to purge everything.
 	req, err := state.GetPurgeRequest(o.actorID)
 	if err != nil {
@@ -385,10 +390,6 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	// The deactivation below is asynchronous and the actor stays tabled
-	// until it runs: a create for the same ID arriving first must load the
-	// store, not read the purged state back from the cache.
-	o.invalidateCachedState()
 	o.deactivate(o)
 
 	return nil
