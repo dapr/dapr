@@ -59,10 +59,13 @@ type deadhost struct {
 func (a *deadhost) Setup(t *testing.T) []framework.Option {
 	a.place = placement.New(t)
 	a.scheduler = procscheduler.New(t)
+	// WAL, like the harness store: without it a write upgrade inside a
+	// transaction returns SQLITE_BUSY at once instead of waiting busyTimeout,
+	// and the survivors' ETag-conditional claim deletes fail in lockstep
+	// every janitor period, stranding the reclaim.
 	a.db = sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
 	)
 
 	appID := uuid.New().String()
