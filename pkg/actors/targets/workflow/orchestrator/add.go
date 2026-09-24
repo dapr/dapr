@@ -17,9 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -122,13 +124,11 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// under its own turn lock, which can deadlock against a parent turn
 	// dispatching back into it. An empty history never scheduled an activity,
 	// and a held entry would pin its sender against a state only the
-	// unstartable classification can settle. A TaskExecutionId mismatch is a
-	// straggler from a previous execution (ids reset on ContinueAsNew).
-	hold := canFold && isActivity && o.rstate.GetStalled() == nil && len(state.History) > 0
-	if hold && !o.foldExecutionMatches(e, state) {
-		log.Debugf("Workflow actor '%s': completion's task execution id does not match current history; taking the durable inbox path", o.actorID)
-		hold = false
-	}
+	// unstartable classification can settle. A completion whose scheduling
+	// is not in history yet cannot fold either: nothing in the turn would
+	// match it.
+	taskID, _, _ := activityResolution(e)
+	hold := canFold && isActivity && o.rstate.GetStalled() == nil && state.FindHistoryEventByID(taskID).GetTaskScheduled() != nil
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
@@ -148,6 +148,9 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 		return admission{outcome: admitDuplicate}
 	}
 
+	if reason := activityDrop(e, state); reason != "" {
+		return admission{reason: reason}
+	}
 	if !hold {
 		return admission{outcome: admitInbox}
 	}
@@ -186,7 +189,7 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 				return nil, err
 			}
 		}
-		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, a.reason)
+		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)
 		return nil, nil
 	}
 	if a.outcome == admitDuplicate {
@@ -290,11 +293,14 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return verr
 	}
 
-	// Not tampering: ContinueAsNew resets history and a rolled-back save can
-	// retract a scheduling row, so drop the unmatched completion like the
-	// unsigned path does (stripUnmatchedResolutions). Nothing is persisted,
-	// so a forged completion gains an attacker nothing.
+	// Dispatch precedes save, so a completion whose scheduling the durable
+	// history does not show yet may be ahead of its row: ask the sender to
+	// retry, unless the history proves it can never be consumed.
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
+		if taskID, _, ok := activityResolution(e); ok && fresh.FindHistoryEventByID(taskID) == nil && activityDrop(e, fresh) == "" {
+			log.Infof("Workflow actor '%s': completion for task %d has no scheduled task in signed history yet; asking the sender to retry", o.actorID, taskID)
+			return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
+		}
 		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, fverr)
 		return api.ErrInstanceNotFound
 	}
@@ -304,6 +310,47 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return terr
 	}
 	return api.ErrInstanceNotFound
+}
+
+// activityResolution returns the task id and TaskExecutionId an activity
+// completion resolves; ok is false for every other event.
+func activityResolution(e *backend.HistoryEvent) (taskID int32, execID string, ok bool) {
+	switch {
+	case e.GetTaskCompleted() != nil:
+		return e.GetTaskCompleted().GetTaskScheduledId(), e.GetTaskCompleted().GetTaskExecutionId(), true
+	case e.GetTaskFailed() != nil:
+		return e.GetTaskFailed().GetTaskScheduledId(), e.GetTaskFailed().GetTaskExecutionId(), true
+	}
+	return 0, "", false
+}
+
+// activityDrop reports why an activity completion can never be consumed by
+// this history, or "" when it still may: the workflow has completed; its
+// task is scheduled under a different TaskExecutionId (ContinueAsNew resets
+// task ids, so the completion resolves a superseded scheduling); or its task
+// is absent while the history already holds an id at or beyond it (ids are
+// assigned in sequence per generation, so a still-landing save cannot carry
+// it). An absent task below every recorded id may still be committing.
+func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) string {
+	taskID, execID, ok := activityResolution(e)
+	if !ok {
+		return ""
+	}
+	if state.IsCompleted() {
+		return "the workflow has completed"
+	}
+	if scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled(); scheduled != nil {
+		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
+			return "it resolves a superseded scheduling of task " + strconv.Itoa(int(taskID))
+		}
+		return ""
+	}
+	for _, h := range state.History {
+		if h.GetEventId() >= taskID {
+			return "this generation passed id " + strconv.Itoa(int(taskID)) + " without scheduling a task"
+		}
+	}
+	return ""
 }
 
 // childCreatedFor returns the ChildWorkflowInstanceCreated event this

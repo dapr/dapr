@@ -385,6 +385,10 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
+	// The deactivation below is asynchronous and the actor stays tabled
+	// until it runs: a create for the same ID arriving first must load the
+	// store, not read the purged state back from the cache.
+	o.invalidateCachedState()
 	o.deactivate(o)
 
 	return nil

@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -37,6 +38,11 @@ import (
 // minus cancellation, which also strips the caller's deadline, so a fresh one
 // keeps a misbehaving downstream from blocking the runner indefinitely.
 const detachedPublishTimeout = 30 * time.Second
+
+// publishRetryWindow bounds how long a refused result publish is retried with
+// the result in hand before the failure reaches the reminder chain, which
+// re-executes the body. It sits inside detachedPublishTimeout.
+const publishRetryWindow = 20 * time.Second
 
 // errPublishAbandoned settles an execution whose result can no longer be
 // published because the runtime is shutting down. Recoverable: followers
@@ -195,12 +201,12 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			WithActor(wfActorType, ex.workflowID).
 			WithData(resultData).
 			WithContentType(invokev1.ProtobufContentType)
-		_, err = f.router.Call(ctx, req)
+		err = f.publishWithRetry(ctx, ex, req)
 	}
 
 	switch {
 	case err != nil:
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+		if isInstanceNotFound(err) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", ex.actorID, ex.wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
 			return nil
@@ -224,6 +230,34 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 
 	return nil
+}
+
+// publishWithRetry retries the orchestrator's not-yet-durable refusal for
+// publishRetryWindow with the result in hand; re-executing would discard it.
+// Every other error surfaces at once.
+func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
+	pctx, cancel := ctx, context.CancelFunc(func() {})
+	if f.publishRetryWindow > 0 {
+		pctx, cancel = context.WithTimeout(ctx, f.publishRetryWindow)
+	}
+	defer cancel()
+	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
+	for {
+		_, err := f.router.Call(pctx, req)
+		if err == nil || !strings.HasSuffix(err.Error(), common.ErrSchedulingNotDurable.Error()) || pctx.Err() != nil {
+			return err
+		}
+		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, err)
+		select {
+		case <-pctx.Done():
+			return err
+		case <-time.After(bo.NextBackOff()):
+		}
+	}
+}
+
+func isInstanceNotFound(err error) bool {
+	return strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error())
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
