@@ -54,7 +54,7 @@ func (te *terminate) Run(t *testing.T, ctx context.Context) {
 	// Parent yields on an event so it stays running while we observe the
 	// spawned outcome under termination.
 	te.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("LongSpawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("LongSpawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID))
 		if err != nil {
 			return nil, err
