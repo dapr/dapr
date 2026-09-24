@@ -244,6 +244,7 @@ Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metri
 
 * dapr_component_pubsub_ingress_latencies: The consuming app event processing latency
 * dapr_component_pubsub_ingress_count: The number of incoming messages arriving from the pub/sub component
+* dapr_component_pubsub_ingress_in_flight: The number of messages a subscription currently has in flight, i.e. handed to the app and not yet resolved
 * dapr_component_pubsub_egress_count: The number of outgoing messages published to the pub/sub component
 * dapr_component_pubsub_egress_latencies: The latency of the response from the pub/sub component
 * dapr_component_pubsub_ingress_bulk_count: The number of incoming bulk requests arriving from the pub/sub component
@@ -255,6 +256,10 @@ Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metri
 
 Ingress metrics are tagged with `process_status` and `status`; egress metrics are tagged with
 `success`. Both carry `app_id`, `component`, `namespace` and `topic`.
+
+`dapr_component_pubsub_ingress_in_flight` is a gauge rather than a counter, and carries only the
+four common tags. It is bounded by the component's `concurrency` setting, so a value sitting at
+that setting means the subscription is saturated, not how much work is queued behind it.
 
 ### Bindings metrics
 
