@@ -180,6 +180,12 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 	if a.err != nil {
 		return nil, a.err
 	}
+	// An activity result settles the await whether it is admitted or dropped:
+	// a dropped one is still the result the terminal turn was waiting on, and
+	// createIfCompleted refuses reuse of the ID while the flag is set.
+	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+		o.activityResultAwaited.CompareAndSwap(true, false)
+	}
 	if a.reason != "" {
 		// Acknowledge a child completion this workflow will never consume
 		// only after confirming the cache it was judged on is current: the
@@ -197,10 +203,6 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 			return nil, err
 		}
 		return a.pending, nil
-	}
-
-	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
-		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 
 	// Absorbs the signer cert into state; the inbox save or the folding

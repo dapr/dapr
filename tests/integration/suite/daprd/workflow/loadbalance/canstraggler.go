@@ -14,8 +14,10 @@ limitations under the License.
 package loadbalance
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -23,9 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/google/uuid"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/grpc"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -45,13 +52,25 @@ func init() {
 // generation 2.
 type canstraggler struct {
 	workflow *workflow.Workflow
+	logline  [2]*logline.LogLine
 }
 
 func (c *canstraggler) Setup(t *testing.T) []framework.Option {
-	c.workflow = workflow.NewClustered(t, 2)
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	wopts := make([]workflow.Option, 0, 2+len(c.logline))
+	wopts = append(wopts, workflow.WithDaprds(2), workflow.WithClusteredDeployment(true))
+	for i := range c.logline {
+		c.logline[i] = logline.New(t, logline.WithCaptureAll())
+		wopts = append(wopts, workflow.WithDaprdOptions(i,
+			daprd.WithAppID(uid.String()),
+			daprd.WithExecOptions(exec.WithStdout(c.logline[i].Stdout()), exec.WithStderr(c.logline[i].Stderr())),
+		))
+	}
+	c.workflow = workflow.New(t, wopts...)
 
 	return []framework.Option{
-		framework.WithProcesses(c.workflow),
+		framework.WithProcesses(c.logline[0], c.logline[1], c.workflow),
 	}
 }
 
@@ -142,9 +161,22 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// The orphan's failure carries the previous scheduling's execution id
-	// and reaches the workflow before the second generation's result does.
+	// and reaches the workflow before the second generation's result does:
+	// the second is released only once the workflow actor has taken the
+	// orphan's AddWorkflowEvent under its lock (the earlier one is the
+	// raised event), so the second's completion is serialised behind it.
+	addEventLine := fmt.Appendf(nil, "Workflow actor '%s': invoking method 'AddWorkflowEvent'", id)
+	addEvents := func() int {
+		n := 0
+		for _, l := range c.logline {
+			n += bytes.Count(l.StdoutBuffer(), addEventLine)
+		}
+		return n
+	}
+	before := addEvents()
 	close(releaseOrphan)
-	time.Sleep(time.Second * 2)
+	require.Eventually(t, func() bool { return addEvents() > before }, time.Second*20, time.Millisecond*10,
+		"the orphan's failure must reach the workflow actor")
 	close(releaseSecond)
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id)

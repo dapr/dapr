@@ -139,6 +139,28 @@ func Test_classifyEvent_provenStragglersAreAckedAndDropped(t *testing.T) {
 	})
 }
 
+// A dropped activity result still settles the await: createIfCompleted
+// refuses reuse of a completed instance's ID while a result is awaited.
+func Test_admitEvent_droppedActivityResultSettlesTheAwait(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-await"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.saved = true
+	h.orch.state.AddToHistory(&protos.HistoryEvent{
+		EventId:   8,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{}},
+	})
+	h.orch.activityResultAwaited.Store(true)
+
+	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(9, "exec-C"), completionSender{}, false)
+	require.NoError(t, err, "the result is acked and dropped")
+	assert.Nil(t, entry)
+	assert.Empty(t, h.orch.state.Inbox)
+	assert.False(t, h.orch.activityResultAwaited.Load(), "a dropped result must still clear the await")
+}
+
 // Under history signing an unmatched activity completion is verified against
 // durable state. A completion for a task that state does not show, below
 // every recorded id, may be ahead of its scheduling's commit and is refused
