@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -118,10 +119,10 @@ func (m *multiappchild) Run(t *testing.T, ctx context.Context) {
 
 	// daprd1 runs the orchestrator; daprd2 hosts the activity. The parent
 	// explicitly routes the activity call to daprd2 via WithActivityAppID.
-	client1 := dworkflow.NewClient(m.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(m.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, regParent))
 
-	client2 := dworkflow.NewClient(m.daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(m.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorker(ctx, regChild))
 
 	// Schedule on the parent (orchestrator) instance.
