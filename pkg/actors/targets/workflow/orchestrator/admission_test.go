@@ -24,6 +24,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -46,7 +47,7 @@ func taskCompletedWithExecID(scheduled int32, execID string) *backend.HistoryEve
 	return e
 }
 
-func Test_classifyEvent_supersededSchedulingIsAckedAndDropped(t *testing.T) {
+func Test_classifyEvent_supersededSchedulingIsRefusedRecoverably(t *testing.T) {
 	t.Parallel()
 	const instanceID = "test-admit-superseded"
 	h := newWakeHarness(t, instanceID, true)
@@ -54,22 +55,19 @@ func Test_classifyEvent_supersededSchedulingIsAckedAndDropped(t *testing.T) {
 	h.saved = true
 
 	// Task 7 was rescheduled under exec-B; the completion of its first
-	// scheduling arrives late.
+	// scheduling arrives late. A read lagging a ContinueAsNew boundary looks
+	// the same, so the sender is asked to retry rather than told to drop.
 	stale := taskCompletedWithExecID(7, "exec-A")
 	for _, canFold := range []bool{false, true} {
 		a := h.orch.classifyEvent(stale, h.orch.state, completionSender{}, canFold)
-		assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
-		require.NoError(t, a.err, "canFold=%v", canFold)
-		assert.Contains(t, a.reason, "superseded scheduling", "canFold=%v", canFold)
+		require.ErrorContains(t, a.err, common.ErrSchedulingSuperseded.Error(), "canFold=%v", canFold)
+		assert.True(t, wferrors.IsRecoverable(a.err), "canFold=%v", canFold)
 	}
 
-	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), stale, completionSender{}),
-		"the straggler is acked so its sender stops re-delivering")
+	err := h.orch.addWorkflowEvent(t.Context(), stale, completionSender{})
+	require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error())
 	assert.Empty(t, h.orch.state.Inbox, "the straggler must not be persisted")
 	assert.Empty(t, h.orch.foldPending)
-	for _, op := range h.snapshotOps() {
-		assert.NotEqual(t, "save", op, "the straggler must not commit anything")
-	}
 }
 
 func Test_classifyEvent_currentSchedulingIsAdmitted(t *testing.T) {
@@ -108,7 +106,7 @@ func Test_classifyEvent_absentSchedulingTakesTheInbox(t *testing.T) {
 	}
 }
 
-func Test_classifyEvent_provenStragglersAreAckedAndDropped(t *testing.T) {
+func Test_classifyEvent_provenStragglers(t *testing.T) {
 	t.Parallel()
 	const instanceID = "test-admit-proven"
 
@@ -119,8 +117,8 @@ func Test_classifyEvent_provenStragglersAreAckedAndDropped(t *testing.T) {
 		h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
 		for _, canFold := range []bool{false, true} {
 			a := h.orch.classifyEvent(taskCompletedWithExecID(3, "exec-A"), h.orch.state, completionSender{}, canFold)
-			assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
-			assert.Contains(t, a.reason, "without scheduling", "canFold=%v", canFold)
+			require.ErrorContains(t, a.err, common.ErrSchedulingSuperseded.Error(), "canFold=%v", canFold)
+			assert.ErrorContains(t, a.err, "without scheduling", "canFold=%v", canFold)
 		}
 	})
 
@@ -162,7 +160,7 @@ func Test_admitEvent_droppedActivityResultSettlesTheAwait(t *testing.T) {
 }
 
 // A straggler from a superseded scheduling is not the result the await is
-// for: dropping it must leave the guard against reusing the ID in place.
+// for: refusing it must leave the guard against reusing the ID in place.
 func Test_admitEvent_droppedStragglerKeepsTheAwait(t *testing.T) {
 	t.Parallel()
 	const instanceID = "test-admit-await-straggler"
@@ -172,7 +170,7 @@ func Test_admitEvent_droppedStragglerKeepsTheAwait(t *testing.T) {
 	h.orch.activityResultAwaited.Store(true)
 
 	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(7, "exec-A"), completionSender{}, false)
-	require.NoError(t, err, "the straggler is acked and dropped")
+	require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error(), "the straggler is refused for the sender to retry, then drop")
 	assert.Nil(t, entry)
 	assert.Empty(t, h.orch.state.Inbox)
 	assert.True(t, h.orch.activityResultAwaited.Load(), "a superseded scheduling's result must not settle the await")
@@ -223,13 +221,14 @@ func Test_verifyAndAbsorbAttestation_absentSchedulingIsRefusedRecoverably(t *tes
 		})
 	}
 
-	t.Run("a completion the id sequence has passed is dropped", func(t *testing.T) {
+	t.Run("a completion the id sequence has passed is refused as superseded", func(t *testing.T) {
 		t.Parallel()
 		h := newSigned(t)
 		// The cache is stale: it does not hold task 7 yet, so the verdict comes from the durable load.
 		h.orch.state.History = h.orch.state.History[:1]
 		err := h.orch.addWorkflowEvent(t.Context(), attested(3, time.Now()), completionSender{})
-		require.ErrorIs(t, err, api.ErrInstanceNotFound)
+		require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error(), "the sender retries for its window, then drops")
+		assert.True(t, wferrors.IsRecoverable(err))
 		assert.Empty(t, h.orch.state.Inbox)
 		assert.False(t, h.orch.state.HasTamperMarker())
 	})

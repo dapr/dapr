@@ -14,6 +14,7 @@ limitations under the License.
 package purge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -25,13 +26,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -42,6 +48,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -62,6 +69,7 @@ type staleevent struct {
 	store    *fault.Store
 	sched    *scheduler.Scheduler
 	proxy    *proxy.Proxy
+	logline  *logline.LogLine
 }
 
 func (s *staleevent) Setup(t *testing.T) []framework.Option {
@@ -82,6 +90,7 @@ func (s *staleevent) Setup(t *testing.T) []framework.Option {
 		statestore.WithStateStore(s.store),
 	)
 
+	s.logline = logline.New(t, logline.WithCaptureAll())
 	s.workflow = workflow.New(t,
 		workflow.WithNoDB(),
 		workflow.WithSentryInstance(sen),
@@ -90,6 +99,7 @@ func (s *staleevent) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprdOptions(0,
 			daprd.WithAppID(appID),
 			daprd.WithSocket(t, sock),
+			daprd.WithExecOptions(exec.WithStdout(s.logline.Stdout()), exec.WithStderr(s.logline.Stderr())),
 			daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -106,7 +116,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sen, s.sched, s.proxy, s.ss, s.workflow),
+		framework.WithProcesses(s.logline, sen, s.sched, s.proxy, s.ss, s.workflow),
 	}
 }
 
@@ -188,10 +198,31 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 10):
 		require.Fail(t, "the purge commit was never attempted")
 	}
+	// No signal in daprd shows a call parked on the workflow actor's lock,
+	// so both callers report themselves in flight instead: the activity's
+	// result publish follows its completion log line, and the raise is
+	// counted by a client interceptor. From there only in-process dispatch
+	// separates each from the lock, while the deactivation they must
+	// precede is queued only after the held delete lands.
 	releaseOnce()
+	require.Eventually(t, func() bool {
+		return bytes.Contains(s.logline.StdoutBuffer(), []byte("activity completed for workflow with instanceId '"+string(id)+"'"))
+	}, time.Second*10, time.Millisecond*10, "the late activity must have completed")
+	var inflight atomic.Int32
+	conn, err := grpc.NewClient(s.workflow.Dapr().GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			inflight.Add(1)
+			defer inflight.Add(-1)
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	raiser := dtclient.NewTaskHubGrpcClient(conn, logger.New(t))
 	raiseErr := make(chan error, 1)
-	go func() { raiseErr <- client.RaiseEvent(ctx, id, "late") }()
-	time.Sleep(time.Millisecond * 500)
+	go func() { raiseErr <- raiser.RaiseEvent(ctx, id, "late") }()
+	require.Eventually(t, func() bool { return inflight.Load() > 0 }, time.Second*10, time.Millisecond, "the raise must be in flight")
 	releaseDelete()
 	<-purgeErr
 	<-raiseErr

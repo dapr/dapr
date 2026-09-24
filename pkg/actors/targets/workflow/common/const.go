@@ -23,3 +23,10 @@ const (
 // completion whose scheduling durable history does not show yet. The sender
 // retries with the result in hand; it matches by suffix across the router.
 var ErrSchedulingNotDurable = errors.New("the task's scheduling is not yet durable")
+
+// ErrSchedulingSuperseded is the orchestrator's refusal of an activity
+// completion whose task the history shows scheduled under another execution,
+// or passed without scheduling. A lagging read of a ContinueAsNew boundary
+// looks the same, so the sender retries with the result in hand for its
+// window and only then drops it; it matches by suffix across the router.
+var ErrSchedulingSuperseded = errors.New("the task's scheduling was superseded")
