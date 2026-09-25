@@ -122,6 +122,6 @@ func (w *basic) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*60, time.Millisecond*50)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, w.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3))
+		assert.GreaterOrEqual(c, w.daprd.Metrics(c, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:success"), float64(3))
 	}, time.Second*5, time.Millisecond*50)
 }
