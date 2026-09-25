@@ -14,6 +14,7 @@ limitations under the License.
 package sentry
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/sentry/ca/renewal"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/helm"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/oidc"

@@ -70,7 +70,9 @@ func (e *expiry) Setup(t *testing.T) []framework.Option {
 	}
 
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
-	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))
+	// The one month CA is within the default renewal threshold; disable
+	// renewal so the expiry metric is stable for the assertion.
+	e.given = procsentry.New(t, procsentry.WithCABundle(bundle), procsentry.WithCARenewalEnabled(false))
 
 	return []framework.Option{
 		framework.WithProcesses(e.notGiven, e.given),

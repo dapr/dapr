@@ -23,11 +23,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
@@ -78,6 +80,11 @@ type Signer interface {
 	// TrustAnchors returns the trust anchors for the CA in PEM format.
 	TrustAnchors() []byte
 
+	// Run runs the automatic CA renewal loop. It returns nil when a renewal or
+	// switchover has been persisted so the caller can reload the CA from the
+	// store.
+	Run(context.Context) error
+
 	// Extends signing to issue JWT tokens.
 	jwt.Issuer
 }
@@ -92,6 +99,8 @@ type store interface {
 type ca struct {
 	bundle bundle.Bundle
 	config config.Config
+	store  store
+	clock  clock.Clock
 	jwt.Issuer
 }
 
@@ -115,6 +124,10 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
+	return newFromStore(ctx, conf, castore, clock.RealClock{})
+}
+
+func newFromStore(ctx context.Context, conf config.Config, castore store, cl clock.Clock) (Signer, error) {
 	bndle, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
@@ -136,7 +149,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			X509RootKey:      x509RootKey,
 			TrustDomain:      conf.TrustDomain,
 			AllowedClockSkew: conf.AllowedClockSkew,
-			OverrideCATTL:    nil,
+			OverrideCATTL:    caTTL(conf),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
@@ -145,6 +158,23 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		bndle.X509 = certBundle
 
 		log.Info("Generating self-signed CA certs and persisting to store")
+	} else {
+		switch deriveState(bndle.X509, cl.Now(), conf) {
+		case stateDueForSwitch:
+			needsWrite = true
+			log.Infof("Trust anchor propagation grace has elapsed; switching signing to the renewed issuer (expires at %s)", bndle.X509.NextIssChain[0].NotAfter.Format(time.RFC3339))
+			promote(bndle.X509)
+			monitoring.CASwitchover()
+			monitoring.IssuerCertChanged()
+		case statePending:
+			log.Infof("Resuming pending CA renewal; signing switches to the renewed issuer at %s", switchTime(bndle.X509, conf.AllowedClockSkew, conf.TrustAnchorPropagationGrace).Format(time.RFC3339))
+		}
+	}
+
+	if pending := len(bndle.X509.NextIssChain) > 0; pending {
+		monitoring.CAPending(true, switchTime(bndle.X509, conf.AllowedClockSkew, conf.TrustAnchorPropagationGrace))
+	} else {
+		monitoring.CAPending(false, time.Time{})
 	}
 
 	if bndle.JWT == nil && conf.JWT.Enabled {
@@ -255,8 +285,18 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	return &ca{
 		bundle: bndle,
 		config: conf,
+		store:  castore,
+		clock:  cl,
 		Issuer: jwtIss,
 	}, nil
+}
+
+// caTTL returns the configured CA TTL override, or nil for the bundle default.
+func caTTL(conf config.Config) *time.Duration {
+	if conf.CATTL > 0 {
+		return &conf.CATTL
+	}
+	return nil
 }
 
 func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certificate, error) {

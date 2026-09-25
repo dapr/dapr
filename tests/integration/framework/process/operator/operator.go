@@ -87,6 +87,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		"-kubeconfig=" + *opts.kubeconfigPath,
 		"-webhook-server-port=" + strconv.Itoa(webhookPort),
 		"-webhook-server-listen-address=127.0.0.1",
+		"-trust-distribution=" + strconv.FormatBool(opts.trustDistribution),
 	}
 
 	if opts.configPath != nil {

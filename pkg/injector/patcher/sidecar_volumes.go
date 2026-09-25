@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // getVolumeMounts returns the list of VolumeMount's for the sidecar container.
@@ -64,6 +65,37 @@ func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, dap
 	}
 
 	return
+}
+
+// getTrustAnchorsVolume returns the volume and daprd mount for the
+// per-namespace trust anchors ConfigMap. The volume is optional so pods can
+// still be scheduled before the operator has distributed the ConfigMap into
+// the namespace; daprd waits for the mounted file to appear.
+func (c *SidecarConfig) getTrustAnchorsVolume() (vol corev1.Volume, daprdVolMount corev1.VolumeMount) {
+	configMapName := c.TrustAnchorsConfigMapName
+	if configMapName == "" {
+		configMapName = securityConsts.TrustAnchorsConfigMapName
+	}
+
+	vol = corev1.Volume{
+		Name: injectorConsts.TrustAnchorsVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMapName,
+				},
+				Optional: new(true),
+			},
+		},
+	}
+
+	daprdVolMount = corev1.VolumeMount{
+		Name:      injectorConsts.TrustAnchorsVolumeName,
+		MountPath: injectorConsts.TrustAnchorsVolumeMountPath,
+		ReadOnly:  true,
+	}
+
+	return vol, daprdVolMount
 }
 
 // getTokenVolume returns the volume projection for the Kubernetes service account.
