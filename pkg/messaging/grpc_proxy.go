@@ -153,7 +153,17 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return outCtx, appClient.(*grpc.ClientConn), nil, teardown, nil
 	}
 
-	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
+	// Drop any trace headers the caller already set (e.g. a gRPC client
+	// whose HTTP transport auto-instruments its own traceparent) before
+	// forwarding to the remote daprd. telemetryFn below appends this
+	// sidecar's own span context as the trace header for the next hop;
+	// leaving the caller's raw header in place would result in two
+	// comma-joined values for the same metadata key on the wire.
+	mdCopy := md.Copy()
+	delete(mdCopy, diagConsts.TraceparentHeader)
+	delete(mdCopy, diagConsts.TracestateHeader)
+	delete(mdCopy, diagConsts.GRPCTraceContextKey)
+	outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 
 	// proxy to a remote daprd
 	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace,
