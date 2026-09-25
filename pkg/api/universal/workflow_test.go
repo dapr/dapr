@@ -22,7 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
-	"github.com/dapr/dapr/pkg/messages"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
@@ -52,21 +52,21 @@ func TestStartWorkflowAPI(t *testing.T) {
 			workflowComponent: fakeComponentName,
 			workflowName:      "",
 			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowNameMissing,
+			expectedError:     apierrors.Workflow().NameMissing(),
 		},
 		{
 			testName:          "Invalid instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
 			instanceID:        "invalid#12",
-			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid#12"),
+			expectedError:     apierrors.Workflow().InstanceIDInvalid("invalid#12"),
 		},
 		{
 			testName:          "Too long instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
 			instanceID:        "this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed",
-			expectedError:     messages.ErrInstanceIDTooLong.WithFormat(64),
+			expectedError:     apierrors.Workflow().InstanceIDTooLong(64),
 		},
 		{
 			testName:          "No instance ID provided in start request",
@@ -119,7 +119,7 @@ func TestGetWorkflowAPI(t *testing.T) {
 			testName:          "No instance ID provided in get request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.Workflow().InstanceIDProvidedMissing(),
 		},
 		{
 			testName:          "All is well in get request",
@@ -164,7 +164,7 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 			testName:          "No instance ID provided in terminate request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.Workflow().InstanceIDProvidedMissing(),
 		},
 		{
 			testName:          "All is well in terminate request",
@@ -213,14 +213,14 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			eventName:         fakeEventName,
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.Workflow().InstanceIDProvidedMissing(),
 		},
 		{
 			testName:          "No event name provided in raise event request",
 			workflowComponent: fakeComponentName,
 			instanceID:        fakeInstanceID,
 			eventName:         "",
-			expectedError:     messages.ErrMissingWorkflowEventName,
+			expectedError:     apierrors.Workflow().EventNameMissing(),
 		},
 		{
 			testName:          "All is well in raise event request",
@@ -268,7 +268,7 @@ func TestPauseWorkflowApi(t *testing.T) {
 			testName:          "No instance ID provided in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.Workflow().InstanceIDProvidedMissing(),
 		},
 		{
 			testName:          "All is well in pause request",
@@ -313,7 +313,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 			testName:          "No instance ID provided in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.Workflow().InstanceIDProvidedMissing(),
 		},
 		{
 			testName:          "All is well in resume request",
@@ -348,13 +348,10 @@ func TestResumeWorkflowApi(t *testing.T) {
 }
 
 // TestWorkflowInstanceNotFoundError verifies that the Terminate and Purge
-// handlers format ErrWorkflowInstanceNotFound with a single argument. The
-// message template has one verb, so passing the sentinel error as an extra
-// argument used to append a "%!(EXTRA ...)" formatting marker to the message.
-// ErrorIs cannot catch this because APIError.Is ignores the message, so the
-// exact message is asserted here.
+// handlers surface the rich InstanceNotFound error without leaving a
+// "%!(EXTRA ...)" formatting marker in the message.
 func TestWorkflowInstanceNotFoundError(t *testing.T) {
-	expectedMessage := messages.ErrWorkflowInstanceNotFound.WithFormat(fakeInstanceID).Message()
+	expectedErr := apierrors.Workflow().InstanceNotFound(fakeInstanceID)
 
 	fakeAPI := &Universal{
 		logger:     logger.NewLogger("test"),
@@ -376,11 +373,8 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 			WorkflowComponent: fakeComponentName,
 			InstanceId:        fakeInstanceID,
 		})
-		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
-		var apiErr messages.APIError
-		require.ErrorAs(t, err, &apiErr)
-		require.Equal(t, expectedMessage, apiErr.Message())
-		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+		require.ErrorIs(t, err, expectedErr)
+		require.NotContains(t, err.Error(), "%!(EXTRA")
 	})
 
 	t.Run("Purge returns the not-found error without extra formatting", func(t *testing.T) {
@@ -388,11 +382,8 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 			WorkflowComponent: fakeComponentName,
 			InstanceId:        fakeInstanceID,
 		})
-		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
-		var apiErr messages.APIError
-		require.ErrorAs(t, err, &apiErr)
-		require.Equal(t, expectedMessage, apiErr.Message())
-		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+		require.ErrorIs(t, err, expectedErr)
+		require.NotContains(t, err.Error(), "%!(EXTRA")
 	})
 }
 
