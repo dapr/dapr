@@ -254,6 +254,7 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
+            defaultMode: 0440
       {{- with .Values.global.extraVolumes.sentry }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
