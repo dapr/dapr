@@ -76,6 +76,7 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 				Workflows: []wfaclapi.WorkflowRule{
 					{Name: "AllowedWF", Operations: []wfaclapi.WorkflowOperation{
 						wfaclapi.WorkflowOperationSchedule,
+						wfaclapi.WorkflowOperationGet,
 					}},
 				},
 			}},
@@ -220,6 +221,40 @@ func (w *workflowacl) Run(t *testing.T, ctx context.Context) {
 			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|operation:schedule|src_app_id:metric-caller|type:workflow"
 			assert.GreaterOrEqual(c, int(metrics[denyKey]), 1,
 				"expected at least 1 workflow ACL deny metric on target")
+		}, time.Second*10, time.Millisecond*10)
+	})
+
+	t.Run("cross-app get emits allow metric with get operation", func(t *testing.T) {
+		id, err := targetClient.ScheduleNewWorkflow(ctx, "AllowedWF")
+		require.NoError(t, err)
+		_, err = targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		_, err = callerClient.FetchWorkflowMetadata(ctx, id, api.WithFetchAppID(w.target.AppID()))
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.target.Metrics(c, ctx).All()
+			allowKey := "dapr_runtime_workflow_acl_action_allowed_total|app_id:metric-target|operation:get|src_app_id:metric-caller|type:workflow"
+			assert.GreaterOrEqual(c, int(metrics[allowKey]), 1,
+				"expected at least 1 workflow ACL allow metric for the get operation on target")
+		}, time.Second*10, time.Millisecond*10)
+	})
+
+	t.Run("cross-app terminate emits deny metric with terminate operation", func(t *testing.T) {
+		id, err := targetClient.ScheduleNewWorkflow(ctx, "AllowedWF")
+		require.NoError(t, err)
+		_, err = targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		err = callerClient.TerminateWorkflow(ctx, id, api.WithTerminateAppID(w.target.AppID()))
+		require.Error(t, err, "terminate is not in the policy's allowed operations")
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.target.Metrics(c, ctx).All()
+			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|operation:terminate|src_app_id:metric-caller|type:workflow"
+			assert.GreaterOrEqual(c, int(metrics[denyKey]), 1,
+				"expected at least 1 workflow ACL deny metric for the terminate operation on target")
 		}, time.Second*10, time.Millisecond*10)
 	})
 }

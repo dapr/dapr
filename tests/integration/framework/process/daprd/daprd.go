@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,23 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
+	if len(opts.features) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+		for _, f := range slices.Compact(slices.Sorted(slices.Values(opts.features))) {
+			sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+		}
+		f := filepath.Join(t.TempDir(), "features.yaml")
+		require.NoError(t, os.WriteFile(f, []byte(sb.String()), 0o600))
+		opts.configs = append(opts.configs, f)
+	}
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
@@ -118,6 +136,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	if opts.appPort != nil {
 		args = append(args, "--app-port="+strconv.Itoa(*opts.appPort))
+	}
+	if opts.appMaxConcurrency != nil {
+		args = append(args, "--app-max-concurrency="+strconv.Itoa(*opts.appMaxConcurrency))
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
@@ -155,6 +176,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.actorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
 	}
+	if opts.placementStartupTimeout != nil {
+		args = append(args, "--actors-placement-startup-timeout="+opts.placementStartupTimeout.String())
+	}
 	if opts.hotReloadReconcileInterval != nil {
 		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
 	}
@@ -183,8 +207,13 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
 	}
 
+	execPath := opts.execPath
+	if execPath == "" {
+		execPath = binary.EnvValue("daprd")
+	}
+
 	return &Daprd{
-		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		exec:             exec.New(t, execPath, args, opts.execOpts...),
 		ports:            fp,
 		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
@@ -448,6 +477,10 @@ func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []M
 	return d.meta(t, ctx).Subscriptions
 }
 
+func (d *Daprd) GetMetaEnabledFeatures(t assert.TestingT, ctx context.Context) []string {
+	return d.meta(t, ctx).EnabledFeatures
+}
+
 func (d *Daprd) GetMetaSubscriptionsWithType(t assert.TestingT, ctx context.Context, subType string) []MetadataResponsePubsubSubscription {
 	subs := d.GetMetaSubscriptions(t, ctx)
 	var filteredSubs []MetadataResponsePubsubSubscription
@@ -498,6 +531,7 @@ type Metadata struct {
 	Workflows              *MetadataWorkflows                   `json:"workflows"`
 	WorkflowAccessPolicies []*rtv1.MetadataWorkflowAccessPolicy `json:"workflowAccessPolicies,omitempty"`
 	Resiliencies           []*rtv1.MetadataResiliency           `json:"resiliencies,omitempty"`
+	EnabledFeatures        []string                             `json:"enabledFeatures,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -557,6 +591,18 @@ func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
 }
 
+func (d *Daprd) ActorRemindersURL(actorType, actorID string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders", d.HTTPAddress(), actorType, actorID)
+}
+
+func (d *Daprd) ActorTimerURL(actorType, actorID, name string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers/%s", d.HTTPAddress(), actorType, actorID, name)
+}
+
+func (d *Daprd) ActorTimersURL(actorType, actorID string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers", d.HTTPAddress(), actorType, actorID)
+}
+
 func (d *Daprd) Kill(t *testing.T) {
 	t.Helper()
 	d.exec.Kill(t)
@@ -566,6 +612,17 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
 	clone := d.exec.Clone(t)
 	d.exec.Kill(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
+}
+
+// RestartGraceful is Restart with an interrupt and exit wait instead of a hard
+// kill, for tests that need the shutdown path (actor HaltAll, drains) to run
+// before the new process starts.
+func (d *Daprd) RestartGraceful(t *testing.T, ctx context.Context) {
+	t.Helper()
+	clone := d.exec.Clone(t)
+	d.exec.Cleanup(t)
 	d.exec = clone
 	d.exec.Run(t, ctx)
 }
@@ -581,4 +638,31 @@ func (d *Daprd) ReplaceArg(t *testing.T, flag, value string) {
 func (d *Daprd) SignalHUP(t *testing.T) {
 	t.Helper()
 	d.exec.SignalHUP(t)
+}
+
+// ActiveActorCount returns the number of live actors of actorType reported by
+// the actor runtime, and whether the type is hosted at all.
+func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
+	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+		if a.Type == actorType {
+			return a.Count, true
+		}
+	}
+	return 0, false
+}
+
+// WaitUntilActorTypeHosted blocks until the actor runtime reports actorType
+// among its hosted types. A restarted daprd re-registers its actor types
+// after it becomes healthy, so an invocation right after WaitUntilRunning can
+// find the type unregistered.
+func (d *Daprd) WaitUntilActorTypeHosted(t *testing.T, ctx context.Context, actorType string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, a := range d.GetMetaActorRuntime(c, ctx).ActiveActors {
+			if a.Type == actorType {
+				return
+			}
+		}
+		assert.Fail(c, "actor type not hosted yet", actorType)
+	}, time.Second*20, time.Millisecond*10)
 }

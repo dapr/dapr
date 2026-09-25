@@ -66,6 +66,8 @@ type WorkflowRequests interface {
 	SetWorkflowComponent(val string)
 	// SetInstanceId sets the value of the InstanceId property.
 	SetInstanceId(val string)
+	// SetAppId sets the value of the AppId property.
+	SetAppId(val string)
 }
 
 func (x *GetWorkflowRequest) SetWorkflowComponent(val string) {
@@ -77,6 +79,12 @@ func (x *GetWorkflowRequest) SetWorkflowComponent(val string) {
 func (x *GetWorkflowRequest) SetInstanceId(val string) {
 	if x != nil {
 		x.InstanceId = val
+	}
+}
+
+func (x *GetWorkflowRequest) SetAppId(val string) {
+	if x != nil && val != "" {
+		x.AppId = &val
 	}
 }
 
@@ -92,6 +100,12 @@ func (x *TerminateWorkflowRequest) SetInstanceId(val string) {
 	}
 }
 
+func (x *TerminateWorkflowRequest) SetAppId(val string) {
+	if x != nil && val != "" {
+		x.AppId = &val
+	}
+}
+
 func (x *PauseWorkflowRequest) SetWorkflowComponent(val string) {
 	if x != nil {
 		x.WorkflowComponent = val
@@ -101,6 +115,12 @@ func (x *PauseWorkflowRequest) SetWorkflowComponent(val string) {
 func (x *PauseWorkflowRequest) SetInstanceId(val string) {
 	if x != nil {
 		x.InstanceId = val
+	}
+}
+
+func (x *PauseWorkflowRequest) SetAppId(val string) {
+	if x != nil && val != "" {
+		x.AppId = &val
 	}
 }
 
@@ -116,6 +136,12 @@ func (x *ResumeWorkflowRequest) SetInstanceId(val string) {
 	}
 }
 
+func (x *ResumeWorkflowRequest) SetAppId(val string) {
+	if x != nil && val != "" {
+		x.AppId = &val
+	}
+}
+
 func (x *PurgeWorkflowRequest) SetWorkflowComponent(val string) {
 	if x != nil {
 		x.WorkflowComponent = val
@@ -125,6 +151,12 @@ func (x *PurgeWorkflowRequest) SetWorkflowComponent(val string) {
 func (x *PurgeWorkflowRequest) SetInstanceId(val string) {
 	if x != nil {
 		x.InstanceId = val
+	}
+}
+
+func (x *PurgeWorkflowRequest) SetAppId(val string) {
+	if x != nil && val != "" {
+		x.AppId = &val
 	}
 }
 

@@ -105,7 +105,11 @@ ifeq ($(TARGET_OS_LOCAL),windows)
 else
 	BUILD_TOOLS_BIN ?= build-tools
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
-	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
+	# Use the binary produced by compile-build-tools only when explicitly
+	# requested (CI sets USE_BUILD_TOOLS_BIN=true right after compiling);
+	# `go run` always reflects source changes so it stays the default for
+	# local use, at the cost of re-linking the tool per invocation
+	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) $(if $(filter true,$(USE_BUILD_TOOLS_BIN)),./$(BUILD_TOOLS_BIN),go run .)
 endif
 
 # Default docker container and e2e test target.
@@ -390,21 +394,41 @@ else
 TEST_ADDITIONAL_TAGS:=
 endif
 
+# Process logs are written to one file per failed test (see
+# tests/docs/writing-integration-test.md), so what reaches the terminal is the
+# assertion, a pointer to that file, and a summary of failures at the end.
+#
+# --format testname prints one line per test, and the output of failed tests
+# only. Under GitHub Actions gotestsum upgrades it to the github-actions format,
+# which additionally collapses each test's output into a log group.
+GOTESTSUM_INTEGRATION_FLAGS := \
+	--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+	--junitfile $(TEST_OUTPUT_FILE_PREFIX)_integration.xml \
+	--format testname
+
 .PHONY: test-integration
 test-integration: test-deps
 		CGO_ENABLED=1 gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format testname \
+			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false $(ARGS)
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
 		CGO_ENABLED=1 gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format testname \
+			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true $(ARGS)
+
+# Local runs. Prints a live dot per test rather than a line, so a full suite run
+# fits on one screen. Pass a focus regex with FOCUS, e.g.
+#   make test-integration-dots FOCUS=actors/reminders
+.PHONY: test-integration-dots
+test-integration-dots: test-deps
+		CGO_ENABLED=1 gotestsum \
+			--format dots-v2 \
+			-- \
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true -focus="$(or $(FOCUS),.*)" $(ARGS)
 
 ################################################################################
 # Target: lint                                                                 #
@@ -435,7 +459,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.5; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.6; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

@@ -41,26 +41,16 @@ func init() {
 type disseminationcluster struct {
 	workflow *workflow.Workflow
 	appID    string
-	config   string
 }
 
 func (d *disseminationcluster) Setup(t *testing.T) []framework.Option {
 	d.appID = uuid.New().String()
-	d.config = `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: workflowsclustereddeployment
-spec:
-  features:
-  - name: WorkflowsClusteredDeployment
-    enabled: true
-`
 
 	d.workflow = workflow.New(t,
+		workflow.WithClusteredDeployment(true),
 		workflow.WithPlacementOptions(placement.WithDisseminateTimeout(time.Second*7)),
 		workflow.WithDaprdOptions(0,
 			daprd.WithAppID(d.appID),
-			daprd.WithConfigManifests(t, d.config),
 		),
 	)
 	return []framework.Option{
@@ -103,19 +93,29 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "activity body never started")
 	}
 
-	startVersion := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
+	extraDopts := []daprd.Option{
+		daprd.WithAppID(d.appID),
+		daprd.WithScheduler(d.workflow.Scheduler()),
+		daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
+	}
+	if d.workflow.HasPlacement() {
+		extraDopts = append(extraDopts, daprd.WithPlacementAddresses(d.workflow.Placement().Address()))
+	}
+	extraDopts = append(extraDopts, d.workflow.JoinOptions(t)...)
 
-	for i := range 2 {
-		extra := daprd.New(t,
-			daprd.WithAppID(d.appID),
-			daprd.WithPlacementAddresses(d.workflow.Placement().Address()),
-			daprd.WithScheduler(d.workflow.Scheduler()),
-			daprd.WithResourceFiles(d.workflow.DB().GetComponent(t)),
-			daprd.WithConfigManifests(t, d.config),
-		)
+	for range 2 {
+		startVersion := d.workflow.PlacementVersion(t, ctx)
+		extra := daprd.New(t, extraDopts...)
 		extra.Run(t, ctx)
 		extra.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { extra.Cleanup(t) })
+
+		assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsClusteredDeployment",
+			"extras must join with the harness feature set")
+		if d.workflow.FastPath() {
+			assert.Contains(t, extra.GetMetaEnabledFeatures(t, ctx), "WorkflowsFastPath",
+				"extras must join with the harness feature set or the claim gate is compiled out")
+		}
 
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("dedup-disseminationcluster", workflowFn))
@@ -125,13 +125,8 @@ func (d *disseminationcluster) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, extraClient.StartWorkItemListener(ctx, registry))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := d.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-			if !assert.NotNil(c, table) {
-				return
-			}
-			//nolint:gosec
-			assert.GreaterOrEqual(c, table.Version, startVersion+uint64(i+1),
-				"placement table version must advance for each new daprd")
+			assert.Greater(c, d.workflow.PlacementVersion(t, ctx), startVersion,
+				"the placement authority must disseminate for each new daprd")
 		}, 15*time.Second, 10*time.Millisecond)
 	}
 

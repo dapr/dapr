@@ -88,6 +88,15 @@ func (g *concurrencyGate) dequeue() *loops.TriggerRequest {
 	return req
 }
 
+// requeueFront returns skipped requests to the front of the pending queue in
+// their original order, preserving their seniority over later arrivals.
+func (g *concurrencyGate) requeueFront(reqs []*loops.TriggerRequest) {
+	if len(reqs) == 0 {
+		return
+	}
+	g.pending = append(reqs, g.pending...)
+}
+
 func (g *concurrencyGate) pendingLen() int {
 	return len(g.pending)
 }

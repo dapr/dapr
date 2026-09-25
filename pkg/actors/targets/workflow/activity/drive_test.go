@@ -1,0 +1,338 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package activity
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
+)
+
+func newInvokeReq(meta map[string][]string) *internalsv1pb.InternalInvokeRequest {
+	req := internalsv1pb.NewInternalInvokeRequest(todo.ExecuteActivityMethod)
+	if meta != nil {
+		req = req.WithMetadata(meta)
+	}
+	return req
+}
+
+// stubScheduler is a minimal scheduler.Interface capturing reminder creates.
+type stubScheduler struct {
+	lock      sync.Mutex
+	creates   []*actorapi.CreateReminderRequest
+	createErr error
+}
+
+func (s *stubScheduler) Close() error { return nil }
+func (s *stubScheduler) Get(context.Context, *actorapi.GetReminderRequest) (*actorapi.Reminder, error) {
+	return nil, nil
+}
+
+func (s *stubScheduler) Create(_ context.Context, req *actorapi.CreateReminderRequest) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.createErr != nil {
+		return s.createErr
+	}
+	s.creates = append(s.creates, req)
+	return nil
+}
+func (s *stubScheduler) Delete(context.Context, *actorapi.DeleteReminderRequest) error { return nil }
+func (s *stubScheduler) DeleteByActorID(context.Context, *actorapi.DeleteRemindersByActorIDRequest) error {
+	return nil
+}
+
+func (s *stubScheduler) List(context.Context, *actorapi.ListRemindersRequest) ([]*actorapi.Reminder, error) {
+	return nil, nil
+}
+
+func (s *stubScheduler) snapshotCreates() []*actorapi.CreateReminderRequest {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return append([]*actorapi.CreateReminderRequest(nil), s.creates...)
+}
+
+type driveHarness struct {
+	fact  *factory
+	sched *stubScheduler
+
+	lock      sync.Mutex
+	callErr   error
+	calls     []*actorapi.Reminder
+	cancelOn1 bool // cancel the drive scope from inside the first CallReminder
+}
+
+func (h *driveHarness) snapshotCalls() []*actorapi.Reminder {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	return append([]*actorapi.Reminder(nil), h.calls...)
+}
+
+func newDriveHarness(t *testing.T) *driveHarness {
+	t.Helper()
+	h := &driveHarness{sched: &stubScheduler{}}
+
+	fakeRouter := routerfake.New().WithCallReminderFn(func(ctx context.Context, rem *actorapi.Reminder) error {
+		h.lock.Lock()
+		h.calls = append(h.calls, rem)
+		cancelNow := h.cancelOn1 && len(h.calls) == 1
+		err := h.callErr
+		h.lock.Unlock()
+		if cancelNow {
+			h.fact.driveCancel()
+			return context.Canceled
+		}
+		return err
+	})
+
+	driveCtx, driveCancel := context.WithCancel(t.Context())
+	h.fact = &factory{
+		appID:             "testapp",
+		actorType:         "dapr.internal.default.testapp.activity",
+		workflowActorType: "dapr.internal.default.testapp.workflow",
+		router:            fakeRouter,
+		reminders:         h.sched,
+		inflight:          new(inflight.Map),
+		fastPath:          true,
+		drives:            detached.New(driveCtx),
+		driveCancel:       driveCancel,
+		rootCtx:           t.Context(),
+		detached:          detached.New(t.Context()),
+	}
+	return h
+}
+
+const testActivityName = "act"
+
+func testInvocation() *protos.ActivityInvocation {
+	return &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 3,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: testActivityName},
+			},
+		},
+	}
+}
+
+func Test_localDrive_successNoReminder(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
+	name := testActivityName
+	require.True(t, a.localDrive(testInvocation(), &name))
+
+	assert.Eventually(t, func() bool {
+		return len(h.snapshotCalls()) == 1
+	}, time.Second*5, time.Millisecond*10)
+	h.fact.driveScope().Wait()
+
+	call := h.snapshotCalls()[0]
+	assert.Equal(t, activityReminderName, call.Name)
+	assert.Equal(t, "wf::3::0", call.ActorID)
+	assert.True(t, call.SkipRetries, "the drive owns its recovery; the router's blind retries must be skipped")
+	assert.False(t, call.SkipLock, "the execution claim must take the activity actor lock")
+	assert.NotNil(t, call.Data, "the invocation must ride on the synthetic reminder")
+
+	assert.Empty(t, h.sched.snapshotCreates(), "a successful drive must not create any reminder")
+}
+
+func Test_localDrive_haltedFactoryFallsBack(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+	h.fact.driveCancel()
+
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
+	name := testActivityName
+	assert.False(t, a.localDrive(testInvocation(), &name),
+		"a halting factory must refuse the drive so the caller creates the durable reminder")
+	assert.Empty(t, h.snapshotCalls())
+}
+
+// Test_HaltAll_installsAFreshDriveScope: HaltAll also fires on placement
+// disconnection, after which the factory keeps serving new activations, so
+// the retired drive scope must be replaced rather than left cancelled.
+func Test_HaltAll_installsAFreshDriveScope(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+
+	name := testActivityName
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
+	require.True(t, a.localDrive(testInvocation(), &name))
+
+	require.NoError(t, h.fact.HaltAll(t.Context()))
+
+	a = h.fact.GetOrCreate("wf::3::0").(*activity)
+	require.True(t, a.localDrive(testInvocation(), &name),
+		"the fast path must survive the churn HaltAll signals")
+	h.fact.driveScope().Wait()
+
+	assert.Len(t, h.snapshotCalls(), 2)
+	assert.Empty(t, h.sched.snapshotCreates(), "neither drive failed, so no durable reminder is owed")
+}
+
+func Test_driveActivity_escalatesAfterRetries(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+	h.callErr = errors.New("engine busy")
+
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
+	name := testActivityName
+	require.True(t, a.localDrive(testInvocation(), &name))
+
+	assert.Eventually(t, func() bool {
+		return len(h.sched.snapshotCreates()) == 1
+	}, time.Second*10, time.Millisecond*10, "a failed drive must escalate to the durable reminder")
+	h.fact.driveScope().Wait()
+	h.fact.detached.Wait()
+
+	assert.Len(t, h.snapshotCalls(), localDriveMaxAttempts, "the drive retries at the reminder failure-policy cadence before escalating")
+
+	create := h.sched.snapshotCreates()[0]
+	assert.Equal(t, activityReminderName, create.Name)
+	assert.Equal(t, "wf::3::0", create.ActorID)
+	assert.Equal(t, h.fact.actorType, create.ActorType)
+	require.NotNil(t, create.ConcurrencyKey)
+	assert.Equal(t, testActivityName, *create.ConcurrencyKey)
+}
+
+func Test_driveActivity_escalatesImmediatelyOnCancel(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+	h.cancelOn1 = true
+
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
+	name := testActivityName
+	require.True(t, a.localDrive(testInvocation(), &name))
+
+	assert.Eventually(t, func() bool {
+		return len(h.sched.snapshotCreates()) == 1
+	}, time.Second*5, time.Millisecond*10, "a cancelled drive escalates without local retries: the reminder create is host-agnostic")
+	h.fact.driveScope().Wait()
+	h.fact.detached.Wait()
+
+	assert.Len(t, h.snapshotCalls(), 1, "drive-scope cancellation must not be retried locally")
+}
+
+func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
+	t.Parallel()
+
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
+
+	t.Run("live claim: no retry, no escalation", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		call, owner := h.fact.inflight.Acquire(key)
+		require.True(t, owner)
+		t.Cleanup(func() { call.Finish(nil) })
+
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), &name))
+		h.fact.driveScope().Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1, "a drain-cancelled invocation must not be retried: the retry routes to the new placement owner")
+		assert.Empty(t, h.sched.snapshotCreates())
+	})
+
+	t.Run("published claim: no retry, no escalation", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		call, owner := h.fact.inflight.Acquire(key)
+		require.True(t, owner)
+		call.Finish(nil)
+		h.fact.inflight.ReleaseAfter(key, call, time.Minute)
+
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), &name))
+		h.fact.driveScope().Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1)
+		assert.Empty(t, h.sched.snapshotCreates(), "the watcher already published; nothing to recover")
+	})
+
+	t.Run("no claim: no retry, escalates once", func(t *testing.T) {
+		t.Parallel()
+		h := newDriveHarness(t)
+		h.callErr = context.Canceled
+
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
+		name := testActivityName
+		require.True(t, a.localDrive(testInvocation(), &name))
+		assert.Eventually(t, func() bool {
+			return len(h.sched.snapshotCreates()) == 1
+		}, time.Second*5, time.Millisecond*10)
+		h.fact.driveScope().Wait()
+		h.fact.detached.Wait()
+
+		assert.Len(t, h.snapshotCalls(), 1)
+	})
+}
+
+func Test_escalateActivity_skippedOnShutdown(t *testing.T) {
+	t.Parallel()
+	h := newDriveHarness(t)
+
+	rootCtx, rootCancel := context.WithCancel(t.Context())
+	rootCancel()
+	h.fact.rootCtx = rootCtx
+	h.fact.detached = detached.New(rootCtx)
+
+	name := testActivityName
+	h.fact.escalateActivity("wf::3::0", testInvocation(), &name)
+	h.fact.detached.Wait()
+
+	assert.Empty(t, h.sched.snapshotCreates(), "process shutdown must not spawn escalations; the janitor re-dispatches on the next owner")
+}
+
+// Test_metaFlagged covers the shape of both orchestrator markers read on an
+// Execute call: the local-drive certification and the janitor-redispatch
+// mark. Only an explicit "true" counts; a missing key, a missing value and
+// any other value all read false, so an older or gate-off orchestrator keeps
+// the durable reminder path.
+func Test_metaFlagged(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{todo.MetadataActivityLocalDrive, todo.MetadataActivityJanitorRedispatch} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			assert.False(t, metaFlagged(newInvokeReq(nil), key))
+			assert.False(t, metaFlagged(newInvokeReq(map[string][]string{key: {"false"}}), key))
+			assert.False(t, metaFlagged(newInvokeReq(map[string][]string{key: {}}), key))
+			assert.False(t, metaFlagged(newInvokeReq(map[string][]string{"other": {"true"}}), key))
+			assert.True(t, metaFlagged(newInvokeReq(map[string][]string{key: {"true"}}), key))
+		})
+	}
+}

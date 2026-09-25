@@ -15,9 +15,11 @@ package cluster
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -132,6 +134,88 @@ func Test_handleJob_ErrReminderCanceled_localSentinel(t *testing.T) {
 
 			got := s.handleJob(t.Context(), job)
 			assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, got)
+		})
+	}
+}
+
+func Test_handleJob_invalidTargetMetadata(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]*schedulerv1pb.WatchJobsResponse{
+		"nil metadata": {
+			Name: "test-job",
+		},
+		"nil target": {
+			Name:     "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{},
+		},
+		"nil target type": {
+			Name: "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{
+				Target: &schedulerv1pb.JobTargetMetadata{},
+			},
+		},
+		"typed-nil actor wrapper": {
+			Name: "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{
+				Target: &schedulerv1pb.JobTargetMetadata{
+					Type: (*schedulerv1pb.JobTargetMetadata_Actor)(nil),
+				},
+			},
+		},
+		"nil actor payload": {
+			Name: "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{
+				Target: &schedulerv1pb.JobTargetMetadata{
+					Type: &schedulerv1pb.JobTargetMetadata_Actor{},
+				},
+			},
+		},
+		"empty actor type": {
+			Name: "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{
+				Target: &schedulerv1pb.JobTargetMetadata{
+					Type: &schedulerv1pb.JobTargetMetadata_Actor{
+						Actor: &schedulerv1pb.TargetActorReminder{Id: "instance-1"},
+					},
+				},
+			},
+		},
+		"empty actor id": {
+			Name: "test-job",
+			Metadata: &schedulerv1pb.JobMetadata{
+				Target: &schedulerv1pb.JobTargetMetadata{
+					Type: &schedulerv1pb.JobTargetMetadata_Actor{
+						Actor: &schedulerv1pb.TargetActorReminder{Type: "myactortype"},
+					},
+				},
+			},
+		},
+	}
+
+	for name, job := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var called atomic.Bool
+			actors := routerfake.New().WithCallReminderFn(
+				func(context.Context, *actorapi.Reminder) error {
+					called.Store(true)
+					return nil
+				},
+			)
+
+			s := &streamer{
+				actors:   actors,
+				wfengine: wfenginefake.New(),
+			}
+
+			var got schedulerv1pb.WatchJobsRequestResultStatus
+			require.NotPanics(t, func() {
+				got = s.handleJob(t.Context(), job)
+			})
+			assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_FAILED, got)
+			assert.False(t, called.Load(), "reminder must not be invoked for invalid target metadata")
 		})
 	}
 }

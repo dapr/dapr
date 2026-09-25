@@ -29,8 +29,8 @@ type FakeClient struct {
 	waitForWorkflowCompletionFn func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error)
 	terminateWorkflowFn         func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error
 	raiseEventFn                func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error
-	suspendWorkflowFn           func(ctx context.Context, id api.InstanceID, reason string) error
-	resumeWorkflowFn            func(ctx context.Context, id api.InstanceID, reason string) error
+	suspendWorkflowFn           func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error
+	resumeWorkflowFn            func(ctx context.Context, id api.InstanceID, reason string, opts ...api.ResumeOptions) error
 	purgeWorkflowStateFn        func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error
 	rerunWorkflowFromEventFn    func(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error)
 }
@@ -53,8 +53,12 @@ func NewClient() *FakeClient {
 		raiseEventFn: func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error {
 			return nil
 		},
-		suspendWorkflowFn:    func(ctx context.Context, id api.InstanceID, reason string) error { return nil },
-		resumeWorkflowFn:     func(ctx context.Context, id api.InstanceID, reason string) error { return nil },
+		suspendWorkflowFn: func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error {
+			return nil
+		},
+		resumeWorkflowFn: func(ctx context.Context, id api.InstanceID, reason string, opts ...api.ResumeOptions) error {
+			return nil
+		},
 		purgeWorkflowStateFn: func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error { return nil },
 		rerunWorkflowFromEventFn: func(ctx context.Context, source api.InstanceID, eventID uint32, opts ...api.RerunOptions) (api.InstanceID, error) {
 			return api.EmptyInstanceID, nil
@@ -92,12 +96,12 @@ func (f *FakeClient) WithRaiseEvent(fn func(ctx context.Context, id api.Instance
 	return f
 }
 
-func (f *FakeClient) WithSuspendWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string) error) *FakeClient {
+func (f *FakeClient) WithSuspendWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error) *FakeClient {
 	f.suspendWorkflowFn = fn
 	return f
 }
 
-func (f *FakeClient) WithResumeWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string) error) *FakeClient {
+func (f *FakeClient) WithResumeWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string, opts ...api.ResumeOptions) error) *FakeClient {
 	f.resumeWorkflowFn = fn
 	return f
 }
@@ -137,11 +141,11 @@ func (f *FakeClient) RaiseEvent(ctx context.Context, id api.InstanceID, eventNam
 }
 
 func (f *FakeClient) SuspendWorkflow(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error {
-	return f.suspendWorkflowFn(ctx, id, reason)
+	return f.suspendWorkflowFn(ctx, id, reason, opts...)
 }
 
 func (f *FakeClient) ResumeWorkflow(ctx context.Context, id api.InstanceID, reason string, opts ...api.ResumeOptions) error {
-	return f.resumeWorkflowFn(ctx, id, reason)
+	return f.resumeWorkflowFn(ctx, id, reason, opts...)
 }
 
 func (f *FakeClient) PurgeWorkflowState(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error {

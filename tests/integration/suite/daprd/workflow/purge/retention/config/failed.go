@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -67,7 +68,7 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(f.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(f.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")
@@ -76,10 +77,16 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	db := f.workflow.DB().GetConnection(t)
 	tableName := f.workflow.DB().TableName()
 
+	// Signing mode stores one signature row per history save plus a sigcert row.
+	runningCount := 8
+	if f.workflow.Signing() {
+		runningCount = 12
+	}
+
 	var count int
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-		assert.Equal(c, 8, count)
+		assert.Equal(c, runningCount, count)
 	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "someEvent"))

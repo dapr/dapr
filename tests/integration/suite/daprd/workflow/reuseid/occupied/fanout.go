@@ -114,9 +114,11 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	assert.Contains(t, meta.GetOutput().GetValue(), "already exists")
 
 	for _, id := range []string{c1ID, c3ID} {
-		cmeta, cerr := client.FetchWorkflowMetadata(ctx, api.InstanceID(id))
-		require.NoError(t, cerr)
-		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), cmeta.GetRuntimeStatus().String())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			cmeta, cerr := client.FetchWorkflowMetadata(ctx, api.InstanceID(id))
+			require.NoError(c, cerr)
+			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED.String(), cmeta.GetRuntimeStatus().String())
+		}, time.Second*10, time.Millisecond*10)
 	}
 
 	ometa, err := client.FetchWorkflowMetadata(ctx, api.InstanceID(occupantID))

@@ -61,6 +61,15 @@ type grpcMetrics struct {
 	enabled bool
 
 	meter stats.Recorder
+
+	// Cached recorders for the server interceptor hot path (built in Init):
+	// direct meter.Record through prebuilt tag maps instead of the
+	// RecordWithOptions allocation chain. Method and status sets are
+	// bounded, so the caches are too.
+	serverCompletedRpcsC *diagUtils.CachedInt64Counter
+	serverReceivedBytesC *diagUtils.CachedInt64Recorder
+	serverSentBytesC     *diagUtils.CachedInt64Recorder
+	serverLatencyC       *diagUtils.CachedFloat64Recorder
 }
 
 func newGRPCMetrics() *grpcMetrics {
@@ -117,6 +126,11 @@ func (g *grpcMetrics) Init(meter view.Meter, appID string, latencyDistribution *
 	g.enabled = true
 	g.meter = meter
 
+	g.serverCompletedRpcsC = diagUtils.NewCachedInt64Counter(meter, g.serverCompletedRpcs, appIDKey, appID)
+	g.serverReceivedBytesC = diagUtils.NewCachedInt64Recorder(meter, g.serverReceivedBytes, appIDKey, appID)
+	g.serverSentBytesC = diagUtils.NewCachedInt64Recorder(meter, g.serverSentBytes, appIDKey, appID)
+	g.serverLatencyC = diagUtils.NewCachedFloat64Recorder(meter, g.serverLatency, appIDKey, appID)
+
 	return meter.Register(
 		diagUtils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
 		diagUtils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
@@ -141,22 +155,10 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 	}
 
 	elapsed := float64(time.Since(start) / time.Millisecond)
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverCompletedRpcs.Name(), appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status)...),
-		stats.WithMeasurements(g.serverCompletedRpcs.M(1)))
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverReceivedBytes.Name(), appIDKey, g.appID, KeyServerMethod, method)...),
-		stats.WithMeasurements(g.serverReceivedBytes.M(reqContentSize)))
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverSentBytes.Name(), appIDKey, g.appID, KeyServerMethod, method)...),
-		stats.WithMeasurements(g.serverSentBytes.M(resContentSize)))
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverLatency.Name(), appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status)...),
-		stats.WithMeasurements(g.serverLatency.M(elapsed)))
+	g.serverCompletedRpcsC.Record2(KeyServerMethod, method, KeyServerStatus, status)
+	g.serverReceivedBytesC.Record1(KeyServerMethod, method, reqContentSize)
+	g.serverSentBytesC.Record1(KeyServerMethod, method, resContentSize)
+	g.serverLatencyC.Record2(KeyServerMethod, method, KeyServerStatus, status, elapsed)
 }
 
 func (g *grpcMetrics) StreamServerRequestSent(ctx context.Context, method, status string, start time.Time) {
@@ -165,14 +167,8 @@ func (g *grpcMetrics) StreamServerRequestSent(ctx context.Context, method, statu
 	}
 
 	elapsed := float64(time.Since(start) / time.Millisecond)
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverCompletedRpcs.Name(), appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status)...),
-		stats.WithMeasurements(g.serverCompletedRpcs.M(1)))
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(g.meter),
-		stats.WithTags(diagUtils.WithTags(g.serverLatency.Name(), appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status)...),
-		stats.WithMeasurements(g.serverLatency.M(elapsed)))
+	g.serverCompletedRpcsC.Record2(KeyServerMethod, method, KeyServerStatus, status)
+	g.serverLatencyC.Record2(KeyServerMethod, method, KeyServerStatus, status, elapsed)
 }
 
 func (g *grpcMetrics) StreamClientRequestSent(ctx context.Context, method, status string, start time.Time) {

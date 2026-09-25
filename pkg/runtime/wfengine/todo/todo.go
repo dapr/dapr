@@ -34,14 +34,44 @@ const (
 	ExecuteActivityMethod             = "Execute"
 
 	MetadataActivityReminderDueTime = "dueTime"
-	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
-	MetadataPurgeForce              = "PurgeForce"
+	// MetadataActivityLocalDrive certifies to the activity host that the
+	// dispatching orchestrator has its janitor backstop armed, so the host
+	// may elide the durable run-activity reminder and drive the execution
+	// locally (WorkflowsFastPath). Absent or unrecognised, the
+	// durable reminder path is used.
+	MetadataActivityLocalDrive = "localDrive"
+	// MetadataActivityJanitorRedispatch marks a janitor re-dispatch, gated
+	// on the execution-claim record so a body live on the previous owner is
+	// deferred to (WorkflowsFastPath). Ignored by older hosts.
+	MetadataActivityJanitorRedispatch = "janitorRedispatch"
+	MetadataPurgeRetentionCall        = "PurgeRetentionCall"
+	MetadataPurgeForce                = "PurgeForce"
 	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
 	// also verify all of its child workflows, recursively, are terminal
 	// before replying. Ignored by daprds that predate the flag.
 	MetadataCheckSubtreeTerminal = "CheckSubtreeTerminal"
+	// Set on a WaitForRuntimeStatus call to request a one-shot metadata fetch:
+	// reply immediately with the current metadata, or ErrInstanceNotFound when
+	// the instance does not exist, instead of parking the stream to wait for a
+	// status change. Used for cross-app GetWorkflowMetadata. Daprds that
+	// predate the flag ignore it, degrading to a wait rather than a failure.
+	MetadataFetchOnly = "MetadataFetchOnly"
+
+	// MetadataSenderInstanceID carries the instance ID of the child workflow
+	// delivering its completion, so the parent can drop a completion for a
+	// task whose child in the current generation is a different instance.
+	MetadataSenderInstanceID = "SenderInstanceID"
+	// MetadataParentExecutionID carries the parent execution ID the child was
+	// created under, so a completion re-sent after the parent continued as
+	// new is dropped even when the child instance ID is reused.
+	MetadataParentExecutionID = "ParentExecutionID"
 
 	ActorTypePrefix = "dapr.internal."
+
+	// ActivityReminderName is the per-activity-actor execution reminder name.
+	// Shared so the orchestrator can reap an escalated reminder whose task
+	// resolved while the escalation create was in flight.
+	ActivityReminderName = "run-activity"
 )
 
 var (

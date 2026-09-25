@@ -1,14 +1,14 @@
-FROM php:8.0-cli
+FROM php:8.4-cli
 
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+# curl, json and mbstring (the only extensions dapr/php-sdk requires) are already
+# built into the official php image. Composer falls back to the unzip binary
+# installed below when ext-zip is absent, so no extension install step is needed.
 RUN apt-get update && apt-get install -y wget git unzip && apt-get clean
-RUN install-php-extensions curl zip
 EXPOSE 3000
 RUN mkdir -p /app
 WORKDIR /app
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY composer.json /app/composer.json
-COPY composer.lock /app/composer.lock
 RUN composer install --no-dev -o -n
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"

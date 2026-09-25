@@ -22,6 +22,7 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,6 +47,21 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	}
 
 	opts := []grpc.DialOption{
+		// Scheduler connections are long-lived and survive unchanged host
+		// reloads (the hosts loop no longer rebuilds clients for an identical
+		// address set), so a scheduler restart is ridden out by THESE conns
+		// rather than fresh ones. gRPC's default reconnect backoff grows
+		// toward minutes; cap it so delivery and scheduling recover within
+		// seconds of the scheduler returning.
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  time.Millisecond * 500,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   time.Second * 3,
+			},
+			MinConnectTimeout: time.Second * 5,
+		}),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(math.MaxInt32),
 			grpc.MaxCallSendMsgSize(math.MaxInt32),

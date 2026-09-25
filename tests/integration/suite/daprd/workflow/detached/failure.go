@@ -53,7 +53,7 @@ func (f *failure) Run(t *testing.T, ctx context.Context) {
 	const spawnedInstanceID = "spawned-failing"
 
 	f.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("FailingSpawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("FailingSpawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID))
 		if err != nil {
 			return nil, err

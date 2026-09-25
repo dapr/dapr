@@ -16,6 +16,9 @@ package hosts
 import (
 	"context"
 	"fmt"
+	"slices"
+
+	"github.com/dapr/kit/logger"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
@@ -24,6 +27,8 @@ import (
 	"github.com/dapr/kit/events/loop"
 )
 
+var log = logger.NewLogger("dapr.runtime.scheduler.loops.hosts")
+
 type Options struct {
 	Security  security.Handler
 	Connector loop.Interface[loops.EventConn]
@@ -31,6 +36,15 @@ type Options struct {
 }
 
 type hosts struct {
+	// lastAddresses is the address set of the last reload actually applied.
+	// WatchHosts re-emits the (unchanged) address list every time its own
+	// stream reconnects, and rebuilding the clients for an identical set
+	// tears down every WatchJobs stream for nothing: each teardown aborts
+	// the streams' inflight triggers, which the scheduler then redelivers.
+	// A single-instance flap at startup is enough to double-deliver a
+	// due-now job.
+	lastAddresses []string
+
 	security  security.Handler
 	streamN   uint
 	connector loop.Interface[loops.EventConn]
@@ -56,6 +70,13 @@ func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 }
 
 func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClients) error {
+	addrs := slices.Clone(event.Addresses)
+	slices.Sort(addrs)
+	if slices.Equal(addrs, h.lastAddresses) {
+		log.Debugf("Scheduler host addresses unchanged, keeping existing connections: %v", event.Addresses)
+		return nil
+	}
+
 	var (
 		clients    []schedulerv1pb.SchedulerClient
 		closeConns []context.CancelFunc
@@ -77,6 +98,7 @@ func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClie
 	}
 
 	h.connector.Enqueue(&loops.Connect{Clients: clients, CloseConns: closeConns})
+	h.lastAddresses = addrs
 
 	return nil
 }

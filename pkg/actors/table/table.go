@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/concurrency/slice"
@@ -58,6 +59,10 @@ type Options struct {
 	// ResumeHosting is called. Used when no actor state store is configured at
 	// startup.
 	StartSuspended bool
+
+	// Timers is a closure because the timer storage is constructed after the
+	// table.
+	Timers func() internaltimers.Storage
 }
 
 type ActorTypeFactory struct {
@@ -83,6 +88,7 @@ type table struct {
 
 	reentrancyStore *reentrancystore.Store
 	clock           clock.Clock
+	timers          func() internaltimers.Storage
 
 	// suspended hides all registered actor types from advertisement and
 	// blocks actor instance creation, without removing the registered
@@ -97,6 +103,7 @@ func New(opts Options) Interface {
 		clock:           clock.RealClock{},
 		typeUpdates:     broadcaster.New[[]string](),
 		reentrancyStore: opts.ReentrancyStore,
+		timers:          opts.Timers,
 	}
 	t.suspended.Store(opts.StartSuspended)
 	return t
@@ -132,7 +139,20 @@ func (t *table) Len() map[string]int {
 	return alen
 }
 
+// deleteTimersFunc is called before actors are halted so a timer can never
+// fire between its actor's halt and its own removal.
+func (t *table) deleteTimersFunc(ctx context.Context, fn func(actorType, actorID string) bool) {
+	if t.timers == nil {
+		return
+	}
+	if storage := t.timers(); storage != nil {
+		storage.DeleteFunc(ctx, fn)
+	}
+}
+
 func (t *table) HaltAll(ctx context.Context) error {
+	t.deleteTimersFunc(ctx, func(string, string) bool { return true })
+
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 	t.factories.Range(func(_, factory any) bool {
@@ -150,6 +170,10 @@ func (t *table) HaltAll(ctx context.Context) error {
 }
 
 func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
+	t.deleteTimersFunc(ctx, func(actorType, actorID string) bool {
+		return !fn(&api.LookupActorRequest{ActorType: actorType, ActorID: actorID})
+	})
+
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 	t.factories.Range(func(_, factory any) bool {
@@ -215,6 +239,15 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	if len(actorTypes) == 0 {
 		return nil
 	}
+
+	removed := make(map[string]struct{}, len(actorTypes))
+	for _, actorType := range actorTypes {
+		removed[actorType] = struct{}{}
+	}
+	t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
+		_, ok := removed[actorType]
+		return ok
+	})
 
 	errs := slice.New[error]()
 	var wg sync.WaitGroup

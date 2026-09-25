@@ -23,6 +23,7 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -67,11 +68,11 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(n.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(n.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, 3)
+		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, n.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	// Inject the retentioner reminder via the scheduler directly. The daprd
@@ -79,7 +80,13 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 	// they are reserved for the workflow runtime.
 	dueTime := time.Now().Add(3 * time.Second).Format(time.RFC3339)
 	appID := n.workflow.Dapr().AppID()
-	_, err := n.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+	var schedClient schedulerv1pb.SchedulerClient
+	if n.workflow.Signing() {
+		schedClient = n.workflow.Scheduler().ClientMTLS(t, ctx, n.workflow.Dapr().AppID())
+	} else {
+		schedClient = n.workflow.Scheduler().Client(t, ctx)
+	}
+	_, err := schedClient.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "anyterminal-dxnUithe",
 		Job:  &schedulerv1pb.Job{DueTime: &dueTime},
 		Metadata: &schedulerv1pb.JobMetadata{

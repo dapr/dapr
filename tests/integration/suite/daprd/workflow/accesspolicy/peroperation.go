@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -281,6 +282,144 @@ func (p *peroperation) Run(t *testing.T, ctx context.Context) {
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
+	})
+
+	// The subtests below exercise the same per-operation policy decisions
+	// through the real cross-app client surfaces (the Dapr runtime API's
+	// app_id field and the durabletask SDK's With*AppID options) rather than
+	// hand-crafted actor invocations.
+
+	t.Run("api start allowed with schedule", func(t *testing.T) {
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
+		_, err := callerActorClient.StartWorkflowBeta1(ctx, &runtimev1pb.StartWorkflowRequest{
+			InstanceId:        "perop-api-start-1",
+			WorkflowComponent: "dapr",
+			WorkflowName:      "PerOpWF",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.NoError(t, err)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			meta, merr := targetClient.FetchWorkflowMetadata(ctx, "perop-api-start-1")
+			if !assert.NoError(c, merr) {
+				return
+			}
+			assert.Equal(c, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
+		}, time.Second*30, time.Millisecond*10)
+	})
+
+	t.Run("api start denied when only terminate is allowed", func(t *testing.T) {
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "terminate")
+		_, err := callerActorClient.StartWorkflowBeta1(ctx, &runtimev1pb.StartWorkflowRequest{
+			InstanceId:        "perop-api-start-2",
+			WorkflowComponent: "dapr",
+			WorkflowName:      "PerOpWF",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied by workflow access policy")
+	})
+
+	t.Run("api terminate allowed with terminate", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "terminate")
+		_, err := callerActorClient.TerminateWorkflowBeta1(ctx, &runtimev1pb.TerminateWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.NoError(t, err)
+		meta, err := targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+		assert.Equal(t, api.RUNTIME_STATUS_TERMINATED, meta.GetRuntimeStatus())
+	})
+
+	t.Run("api terminate denied when only get is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
+		_, err := callerActorClient.TerminateWorkflowBeta1(ctx, &runtimev1pb.TerminateWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied by workflow access policy")
+	})
+
+	t.Run("api raise allowed with raise", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "raise")
+		_, err := callerActorClient.RaiseEventWorkflowBeta1(ctx, &runtimev1pb.RaiseEventWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			EventName:         "FinishEvent",
+			EventData:         []byte(`"finished"`),
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.NoError(t, err)
+		meta, err := targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+	})
+
+	t.Run("api pause denied when only resume is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "resume")
+		_, err := callerActorClient.PauseWorkflowBeta1(ctx, &runtimev1pb.PauseWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied by workflow access policy")
+	})
+
+	t.Run("sdk get allowed with get", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
+		meta, err := callerClient.FetchWorkflowMetadata(ctx, id, api.WithFetchAppID(peropTargetAppID))
+		require.NoError(t, err)
+		assert.Equal(t, "PerOpWF", meta.GetName())
+	})
+
+	t.Run("sdk get denied when only schedule is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
+		_, err := callerClient.FetchWorkflowMetadata(ctx, id, api.WithFetchAppID(peropTargetAppID))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied by workflow access policy")
+	})
+
+	t.Run("api purge allowed with purge", func(t *testing.T) {
+		id := scheduleInstance(t)
+		require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
+		_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "purge")
+		_, err = callerActorClient.PurgeWorkflowBeta1(ctx, &runtimev1pb.PurgeWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.NoError(t, err)
+		_, err = targetClient.FetchWorkflowMetadata(ctx, id)
+		require.ErrorIs(t, err, api.ErrInstanceNotFound)
+	})
+
+	t.Run("api purge denied when only get is allowed", func(t *testing.T) {
+		id := scheduleInstance(t)
+		require.NoError(t, targetClient.TerminateWorkflow(ctx, id))
+		_, err := targetClient.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, err)
+
+		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
+		_, err = callerActorClient.PurgeWorkflowBeta1(ctx, &runtimev1pb.PurgeWorkflowRequest{
+			InstanceId:        string(id),
+			WorkflowComponent: "dapr",
+			AppId:             ptr.Of(peropTargetAppID),
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied by workflow access policy")
 	})
 
 	p.applyPolicyAllowAll(t, ctx)

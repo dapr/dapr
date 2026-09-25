@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/connector"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/hosts"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/watchhosts"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -46,6 +47,15 @@ type Options struct {
 	Security         security.Handler
 	Healthz          healthz.Healthz
 	SchedulerStreams uint
+
+	// PlacementAddresses are the placement service addresses this daprd was
+	// configured with, reported to the schedulers so they can detect a
+	// placement service outside the well-known service name.
+	PlacementAddresses []string
+	// ActorAddress is the daprd internal gRPC host:port reported on
+	// WatchJobs streams, so schedulers route actor reminder triggers to
+	// the placement owner host.
+	ActorAddress string
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -54,18 +64,21 @@ type Scheduler struct {
 	hosts      loop.Interface[loops.EventHost]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
+	leadership *leadership.Leadership
 
 	currentActorTypes *[]string
 }
 
 func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
-		Namespace:    opts.Namespace,
-		AppID:        opts.AppID,
-		WorkflowSpec: opts.WorkflowSpec,
-		Actors:       opts.Actors,
-		Channels:     opts.Channels,
-		WFEngine:     opts.WFEngine,
+		Namespace:          opts.Namespace,
+		AppID:              opts.AppID,
+		ActorAddress:       opts.ActorAddress,
+		WorkflowSpec:       opts.WorkflowSpec,
+		Actors:             opts.Actors,
+		Channels:           opts.Channels,
+		WFEngine:           opts.WFEngine,
+		PlacementAddresses: opts.PlacementAddresses,
 	})
 
 	if opts.SchedulerStreams < 1 {
@@ -82,22 +95,32 @@ func New(opts Options) (*Scheduler, error) {
 		Security: opts.Security,
 	})
 
+	leadership := leadership.New()
+
 	watchhosts := watchhosts.New(watchhosts.Options{
-		HostLoop:  hosts,
-		Addresses: opts.Addresses,
-		Security:  opts.Security,
-		Clients:   clients,
-		Healthz:   opts.Healthz,
+		HostLoop:   hosts,
+		Addresses:  opts.Addresses,
+		Security:   opts.Security,
+		Clients:    clients,
+		Healthz:    opts.Healthz,
+		Leadership: leadership,
 	})
 
 	return &Scheduler{
 		connector:  connector,
 		hosts:      hosts,
 		watchhosts: watchhosts,
+		leadership: leadership,
 		client: wrapper.New(wrapper.Options{
 			Clients: clients,
 		}),
 	}, nil
+}
+
+// Leadership returns the store tracking the scheduler placement leader as
+// observed on the WatchHosts stream.
+func (s *Scheduler) Leadership() *leadership.Leadership {
+	return s.leadership
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {

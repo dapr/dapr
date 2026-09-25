@@ -91,7 +91,13 @@ func Test_claimCompleteRace(t *testing.T) {
 			completerDone <- err
 		}()
 
-		waitCh, deregister := f.pending.Register(PendingKey(TaskTypeWorkflow, "abc"))
+		waitCh := make(chan pending.Result, 1)
+		deregister := f.pending.RegisterCallback(PendingKey(TaskTypeWorkflow, "abc"), func(r pending.Result) {
+			select {
+			case waitCh <- r:
+			default:
+			}
+		})
 
 		res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
 		require.NoError(t, err)
@@ -267,7 +273,13 @@ func Test_claim(t *testing.T) {
 		t.Parallel()
 		e, f := newClaimTestExecutor(t)
 
-		waitCh, deregister := f.pending.Register(PendingKey(TaskTypeWorkflow, "abc"))
+		waitCh := make(chan pending.Result, 1)
+		deregister := f.pending.RegisterCallback(PendingKey(TaskTypeWorkflow, "abc"), func(r pending.Result) {
+			select {
+			case waitCh <- r:
+			default:
+			}
+		})
 		defer deregister()
 
 		_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("payload")))

@@ -54,7 +54,12 @@ func (m *quotamidrun) Setup(t *testing.T) []framework.Option {
 			return nil, nil
 		}),
 		workflow.WithAddOrchestrator(t, "multiTimerFlow", func(ctx *task.WorkflowContext) (any, error) {
-			for range 5 {
+			// Enough iterations that timer jobs keep churning for the whole
+			// test: the healthz flip needs an armed timer job to straddle the
+			// quota-hit instant (its fire-side write is what the scheduler
+			// sees fail), and a workflow that completes before a slow fill
+			// finishes would leave healthz reporting 200 forever.
+			for range 300 {
 				if err := ctx.CreateTimer(time.Second).Await(nil); err != nil {
 					return nil, err
 				}
@@ -88,22 +93,30 @@ func (m *quotamidrun) Run(t *testing.T, ctx context.Context) {
 
 	sched.FillQuota(t, ctx, "quota-mid/")
 
-	httpClient := client.HTTP(t)
-	healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
-		if !assert.NoError(c, err) {
-			return
-		}
-		resp, err := httpClient.Do(req)
-		if resp != nil {
-			resp.Body.Close()
-		}
-		if err != nil {
-			return
-		}
-		assert.NotEqual(c, http.StatusOK, resp.StatusCode)
-	}, 15*time.Second, 50*time.Millisecond)
+	// Under WorkflowsFastPath the workflow drives activity and new-event
+	// wake-ups locally, so the scheduler carries no per-event job churn whose
+	// failing etcd writes would surface the exhausted quota on its healthz
+	// within the window. The kill below still applies in both modes: timers
+	// remain durable scheduler jobs, so the workflow cannot progress past its
+	// next timer once the scheduler is gone.
+	if !m.wf.FastPath() {
+		httpClient := client.HTTP(t)
+		healthzURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", sched.HealthzPort())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthzURL, nil)
+			if !assert.NoError(c, err) {
+				return
+			}
+			resp, err := httpClient.Do(req)
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if err != nil {
+				return
+			}
+			assert.NotEqual(c, http.StatusOK, resp.StatusCode)
+		}, 15*time.Second, 50*time.Millisecond)
+	}
 
 	sched.Kill(t)
 

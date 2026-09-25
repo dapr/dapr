@@ -15,12 +15,15 @@ package inmemory
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"sync"
 	"sync/atomic"
 
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/router"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -264,6 +267,19 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	}
 
 	err := i.router.CallReminder(ctx, reminder)
+	if errors.Is(err, actorerrors.ErrTimerFireNotLocal) {
+		// The actor is no longer hosted here: the ownership-loss sweep is
+		// deleting this timer, so remove it rather than count a fire or tick
+		// forward.
+		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
+		i.queueLock.Lock()
+		if i.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			i.updateActiveTimersCount(reminder.ActorType, -1)
+			i.updateActorTimers(reminder.ActorKey(), -1)
+		}
+		i.queueLock.Unlock()
+		return
+	}
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
 		// Successful and non-successful executions are treated as the same in
@@ -305,7 +321,7 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	}
 }
 
-func (i *inmemory) Create(_ context.Context, reminder *api.Reminder) error {
+func (i *inmemory) Create(ctx context.Context, reminder *api.Reminder) error {
 	timerKey := reminder.Key()
 
 	log.Debugf("Create timer: %s", reminder.String())
@@ -316,6 +332,13 @@ func (i *inmemory) Create(_ context.Context, reminder *api.Reminder) error {
 	// spin-retry-on-sync.Map-contention loop.
 	i.queueLock.Lock()
 	defer i.queueLock.Unlock()
+
+	// The caller's placement claim may have been force-cancelled by the
+	// dissemination drain timeout; inserting then would leave a timer the
+	// ownership-loss sweep has already run past.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// If there's already a timer with the same key, stop it so we can replace it.
 	replaced := false
@@ -356,6 +379,58 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		i.updateActorTimers(reminder.ActorKey(), -1)
 	}
+}
+
+func (i *inmemory) Get(_ context.Context, timerKey string) *api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	reminderAny, ok := i.activeTimers.Load(timerKey)
+	if !ok {
+		return nil
+	}
+	// Hand out a copy so callers can never alias the store.
+	c := *reminderAny.(*api.Reminder)
+	return &c
+}
+
+func (i *inmemory) List(_ context.Context, actorType, actorID string) []*api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	var out []*api.Reminder
+	i.activeTimers.Range(func(_, reminderAny any) bool {
+		reminder := reminderAny.(*api.Reminder)
+		if reminder.ActorType != actorType || reminder.ActorID != actorID {
+			return true
+		}
+		// Stored reminders are replaced rather than mutated in place, but hand
+		// out a copy so callers can never alias the store.
+		c := *reminder
+		out = append(out, &c)
+		return true
+	})
+
+	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
+	return out
+}
+
+func (i *inmemory) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	i.activeTimers.Range(func(key, reminderAny any) bool {
+		reminder := reminderAny.(*api.Reminder)
+		if !fn(reminder.ActorType, reminder.ActorID) {
+			return true
+		}
+		log.Debugf("Deleting timer for no longer hosted actor: %s", reminder.Key())
+		i.activeTimers.Delete(key)
+		i.processor.Dequeue(reminder.Key())
+		i.updateActiveTimersCount(reminder.ActorType, -1)
+		i.updateActorTimers(reminder.ActorKey(), -1)
+		return true
+	})
 }
 
 func (i *inmemory) updateActiveTimersCount(actorType string, inc int64) {

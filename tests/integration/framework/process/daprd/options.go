@@ -37,10 +37,12 @@ type Option func(*options)
 // options contains the options for running Daprd in integration tests.
 type options struct {
 	execOpts []exec.Option
+	execPath string
 
 	appID                      string
 	namespace                  *string
 	appPort                    *int
+	appMaxConcurrency          *int
 	grpcPort                   int
 	httpPort                   int
 	internalGRPCPort           int
@@ -55,6 +57,7 @@ type options struct {
 	resourceFiles              []string
 	resourceDirs               []string
 	configs                    []string
+	features                   []string
 	placementAddresses         []string
 	logLevel                   string
 	mode                       string
@@ -66,6 +69,7 @@ type options struct {
 	gracefulShutdownSeconds    *int
 	blockShutdownDuration      *string
 	actorsDisseminateTimeout   *time.Duration
+	placementStartupTimeout    *time.Duration
 	hotReloadReconcileInterval *time.Duration
 	controlPlaneTrustDomain    *string
 	appBindingOptionsTimeout   *time.Duration
@@ -78,6 +82,14 @@ type options struct {
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+// WithExecPath runs this daprd from the given binary instead of the one
+// DAPR_INTEGRATION_DAPRD_PATH points at.
+func WithExecPath(path string) Option {
+	return func(o *options) {
+		o.execPath = path
 	}
 }
 
@@ -115,6 +127,12 @@ func WithAppPort(port int) Option {
 func WithAppProtocol(protocol string) Option {
 	return func(o *options) {
 		o.appProtocol = protocol
+	}
+}
+
+func WithAppMaxConcurrency(maxConcurrency int) Option {
+	return func(o *options) {
+		o.appMaxConcurrency = &maxConcurrency
 	}
 }
 
@@ -219,6 +237,16 @@ func WithResourcesDir(dirs ...string) Option {
 func WithConfigs(configs ...string) Option {
 	return func(o *options) {
 		o.configs = append(o.configs, configs...)
+	}
+}
+
+// WithFeatureEnabled enables the given preview features. Calls accumulate
+// into one Configuration manifest, because daprd keeps only the last
+// spec.features list it loads.
+func WithFeatureEnabled(t *testing.T, features ...string) Option {
+	t.Helper()
+	return func(o *options) {
+		o.features = append(o.features, features...)
 	}
 }
 
@@ -327,6 +355,12 @@ func WithActorsDisseminateTimeout(timeout time.Duration) Option {
 	}
 }
 
+func WithActorsPlacementStartupTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.placementStartupTimeout = &timeout
+	}
+}
+
 func WithHotReloadReconcileInterval(interval time.Duration) Option {
 	return func(o *options) {
 		o.hotReloadReconcileInterval = &interval
@@ -422,4 +456,16 @@ func WithPlacement(placement *placement.Placement) Option {
 	return func(o *options) {
 		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
+}
+
+// WithWorkflowJanitorPeriod sets the WorkflowsFastPath janitor backstop
+// period for this daprd.
+func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
+}
+
+// WithWorkflowClaimRetention sets how long a Completed execution-claim
+// record is retained before its guard deletes it.
+func WithWorkflowClaimRetention(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_ACTIVITY_CLAIM_RETENTION", d.String()))
 }
