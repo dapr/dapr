@@ -1260,11 +1260,9 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			Event:       dBytes,
 			ContentType: entry.ContentType,
 		}
-		if entry.Metadata != nil {
-			// Populate entry metadata with request level metadata. Entry level metadata keys
-			// override request level metadata.
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
-		}
+		// Populate entry metadata with request level metadata. Entry level metadata keys
+		// override request level metadata.
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(),

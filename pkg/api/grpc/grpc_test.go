@@ -2596,6 +2596,8 @@ func TestPublishTopic(t *testing.T) {
 }
 
 func TestBulkPublish(t *testing.T) {
+	var capturedEntries []pubsub.BulkMessageEntry
+
 	fakeAPI := &api{
 		logger: logger.NewLogger("test"),
 		Universal: universal.New(universal.Options{
@@ -2625,6 +2627,8 @@ func TestBulkPublish(t *testing.T) {
 							entries = append(entries, entry)
 						}
 					}
+				case "metadata-topic":
+					capturedEntries = req.Entries
 				}
 				// Mock simulates only partial failures or total success, so error is always nil.
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
@@ -2673,6 +2677,30 @@ func TestBulkPublish(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, res.GetFailedEntries())
+	})
+
+	t.Run("request metadata reaches entry without its own metadata", func(t *testing.T) {
+		entriesWithAndWithoutMetadata := []*runtimev1pb.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte("data1")},
+			{EntryId: "2", Event: []byte("data2"), Metadata: map[string]string{"partitionKey": "a"}},
+		}
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "metadata-topic",
+			Entries:    entriesWithAndWithoutMetadata,
+			Metadata:   map[string]string{"ttlInSeconds": "300"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, res.GetFailedEntries())
+		require.Len(t, capturedEntries, 2)
+
+		// Entry "1" has no metadata of its own: request-level metadata must still reach it.
+		assert.Equal(t, "300", capturedEntries[0].Metadata["ttlInSeconds"])
+
+		// Entry "2" has its own metadata: request-level metadata is merged in without
+		// overriding the entry-level keys.
+		assert.Equal(t, "300", capturedEntries[1].Metadata["ttlInSeconds"])
+		assert.Equal(t, "a", capturedEntries[1].Metadata["partitionKey"])
 	})
 
 	t.Run("all failures from component", func(t *testing.T) {

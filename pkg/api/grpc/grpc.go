@@ -424,9 +424,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 		entries[i].Event = entry.GetEvent()
 		// Populate entry metadata with request level metadata. Entry level metadata keys
 		// override request level metadata.
-		if entry.GetMetadata() != nil {
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
-		}
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
 
 		if !rawPayload {
 			// Extract trace context from context.

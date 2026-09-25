@@ -331,6 +331,8 @@ func TestPubSubEndpoints(t *testing.T) {
 }
 
 func TestBulkPubSubEndpoints(t *testing.T) {
+	var capturedEntries []pubsub.BulkMessageEntry
+
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
@@ -357,6 +359,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				case "errnotallowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				case "metadatapubsub":
+					capturedEntries = req.Entries
+					return pubsub.BulkPublishResponse{}, nil
 				default:
 					return pubsub.BulkPublishResponse{}, nil
 				}
@@ -370,6 +375,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
 	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
 	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("metadatapubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer := func(t *testing.T) *fakeHTTPServer {
 		f := newFakeHTTPServer()
@@ -426,6 +432,28 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish request metadata reaches entry without metadata - 204", func(t *testing.T) {
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/metadatapubsub/topic?metadata.ttlInSeconds=300"
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			capturedEntries = nil
+			// act
+			resp := fakeServer(t).DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			require.Len(t, capturedEntries, len(bulkRequest))
+
+			// Entry "1" has no metadata of its own: request-level metadata must still reach it.
+			assert.Equal(t, "300", capturedEntries[0].Metadata["ttlInSeconds"])
+
+			// Entry "2" has its own metadata: request-level metadata is merged in without
+			// overriding the entry-level keys.
+			assert.Equal(t, "300", capturedEntries[1].Metadata["ttlInSeconds"])
+			assert.Equal(t, "mdVal1", capturedEntries[1].Metadata["md1"])
+			assert.Equal(t, "mdVal2", capturedEntries[1].Metadata["md2"])
 		}
 	})
 
