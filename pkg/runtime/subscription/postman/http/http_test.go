@@ -360,7 +360,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
-		require.NoError(t, h.Deliver(t.Context(), testPubSubMessage), "expected no error on empty status")
+		require.Error(t, h.Deliver(t.Context(), testPubSubMessage), "expected retry error on empty status")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
