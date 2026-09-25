@@ -15,6 +15,7 @@ package signing
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,6 +122,7 @@ func (s *signatureStripped) scheduleAndComplete(t *testing.T, ctx context.Contex
 	})
 	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
+	s.waitForWorkflowActorHosted(t, ctx)
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-stripped")
 	require.NoError(t, err)
@@ -138,7 +140,15 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 
 	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, dworkflow.NewRegistry()))
+	s.waitForWorkflowActorHosted(t, ctx)
 
 	_, err := client.FetchWorkflowMetadata(ctx, id)
 	require.Error(t, err)
+}
+
+func (s *signatureStripped) waitForWorkflowActorHosted(t *testing.T, ctx context.Context) {
+	t.Helper()
+	s.daprd.WaitUntilActorTypesHosted(t, ctx,
+		fmt.Sprintf("dapr.internal.%s.%s.workflow", s.daprd.Namespace(), s.daprd.AppID()),
+	)
 }
