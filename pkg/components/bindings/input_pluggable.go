@@ -143,10 +143,11 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 
 func (b *grpcInputBinding) Close() error {
 	defer b.wg.Wait()
-	if b.closed.CompareAndSwap(false, true) {
-		close(b.closeCh)
+	if !b.closed.CompareAndSwap(false, true) {
+		return nil
 	}
-	return nil
+	close(b.closeCh)
+	return b.GRPCConnector.Close()
 }
 
 // inputFromConnector creates a new GRPC inputbinding using the given underlying connector.
