@@ -22,7 +22,7 @@ import (
 
 func New(t *testing.T) logger.Logger {
 	log := logger.NewLogger(t.Name())
-	log.SetOutput(iowriter.New(t, t.Name()))
+	log.SetOutput(iowriter.New(t, "logger"))
 	log.SetOutputLevel(logger.DebugLevel)
 	return log
 }
