@@ -48,8 +48,8 @@ func init() {
 // deadlocking the workflow forever; this is the deterministic reproduction
 // of the scheduler crash redelivery stall seen in clustered deployment mode.
 // With the fix the buffered resolution completes the activity task as it is
-// scheduled, the activity is never dispatched, and the workflow completes
-// with the injected result.
+// scheduled, the scheduling is recorded without being dispatched, and the
+// workflow completes with the injected result.
 type completion struct {
 	workflow *workflow.Workflow
 }
@@ -129,9 +129,11 @@ func (e *completion) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"injected"`, meta.GetOutput().GetValue(), "the early result must resolve the activity")
 
 	assert.Equal(t, int32(0), activityCalls.Load(), "the activity must never execute; its result was injected")
-	// The suppressed ScheduleTask action means no TaskScheduled event is ever
-	// appended, and a consumed completion with no matching TaskScheduled is
-	// stripped from the persisted history; neither event may appear.
-	assert.Equal(t, 0, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)),
+	// The scheduling is recorded so the history stays replayable and the
+	// completion keeps its match, but the resolved work is never dispatched:
+	// the activity never ran (above) and no run-activity reminder was armed.
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)),
+		"the resolved activity's scheduling must be recorded")
+	assert.Zero(t, e.workflow.Scheduler().JobKeyCount(t, ctx, string(id)+"::1::"),
 		"the resolved activity must not be dispatched")
 }
