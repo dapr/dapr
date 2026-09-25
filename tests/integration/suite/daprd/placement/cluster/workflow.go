@@ -135,7 +135,8 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.Greater(c, table.Tables["default"].Version, versionAfterWf1)
-		assert.Equal(c, expHosts, table.Tables["default"].Hosts)
+		// Placement orders hosts by address, not by registration.
+		assert.ElementsMatch(c, expHosts, table.Tables["default"].Hosts)
 	}, time.Second*10, time.Second)
 
 	versionAfterWf2 := table.Tables["default"].Version
