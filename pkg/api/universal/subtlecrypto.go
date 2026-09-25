@@ -20,6 +20,7 @@ import (
 	"context"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -62,20 +63,20 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 // CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
 func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.compStore.CryptoProvidersLen() == 0 {
-		err := messages.ErrCryptoProvidersNotConfigured
+		err := apierrors.CryptoProvidersNotConfigured()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	if componentName == "" {
-		err := messages.ErrBadRequest.WithFormat("missing component name")
+		err := apierrors.CryptoProviderNameEmpty()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.compStore.GetCryptoProvider(componentName)
 	if !ok {
-		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
+		err := apierrors.CryptoProviderNotFound(componentName)
 		a.logger.Debug(err)
 		return nil, err
 	}
