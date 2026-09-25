@@ -16,7 +16,7 @@ It was decided to keep the bindings name as is. Alternative proposals were inclu
 ### Types
 
 It was decided to keep the same YAML format for both input bindings and bi-directional bindings as it is today.
-After careful inspection, splitting to two types (for example, trigger bindings and bindings) would incur significant maintanace overhead for the app operator and
+After careful inspection, splitting to two types (for example, trigger bindings and bindings) would incur significant maintenance overhead for the app operator and
 Did not provide meaningful value.
 
 In addition, there was no feedback from community or prospecive users that input bindings and output bindings were confusing in any way.
