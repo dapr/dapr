@@ -50,6 +50,7 @@ type Sentry struct {
 	ports *ports.Ports
 
 	bundle      *bundle.Bundle
+	bundleDir   string
 	port        int
 	healthzPort int
 	metricsPort int
@@ -126,6 +127,9 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	tmpDir := t.TempDir()
+	if opts.credentialsDir != nil {
+		tmpDir = *opts.credentialsDir
+	}
 
 	if opts.writeBundle {
 		caPath := filepath.Join(tmpDir, "ca.crt")
@@ -235,6 +239,22 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-mode="+*opts.mode)
 	}
 
+	if opts.rotation.enabled != nil {
+		args = append(args, "-rotation-enabled="+strconv.FormatBool(*opts.rotation.enabled))
+	}
+
+	if opts.rotation.triggerWindow != nil {
+		args = append(args, "-rotation-trigger-window="+opts.rotation.triggerWindow.String())
+	}
+
+	if opts.rotation.propagationWindow != nil {
+		args = append(args, "-rotation-propagation-window="+opts.rotation.propagationWindow.String())
+	}
+
+	if opts.rotation.checkInterval != nil {
+		args = append(args, "-rotation-check-interval="+opts.rotation.checkInterval.String())
+	}
+
 	if opts.writeConfig {
 		configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
@@ -251,6 +271,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
 		ports:       fp,
 		bundle:      opts.bundle,
+		bundleDir:   tmpDir,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
@@ -296,6 +317,13 @@ func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
 
 func (s *Sentry) CABundle() bundle.Bundle {
 	return *s.bundle
+}
+
+// BundleDirectory returns the issuer credentials directory given to sentry.
+// In standalone mode sentry reads the CA bundle from — and persists rotation
+// state to — this directory.
+func (s *Sentry) BundleDirectory() string {
+	return s.bundleDir
 }
 
 func (s *Sentry) Port() int {
