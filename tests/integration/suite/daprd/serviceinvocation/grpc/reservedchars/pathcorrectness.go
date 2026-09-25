@@ -187,11 +187,29 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 			"extra ../ should be clamped, callee receives clean path")
 	})
 
-	t.Run("trailing slash cleaned", func(t *testing.T) {
+	// Trailing slash: preserved end-to-end (dapr/dapr#7686). path.Clean
+	// strips a trailing slash by design; cleanPath re-attaches it after
+	// path.Clean runs so traversal is still resolved, but callers get
+	// back exactly the trailing-slash shape they asked for.
+	t.Run("trailing slash preserved", func(t *testing.T) {
 		got, code := invoke(t, "public/")
-		assert.Equalf(t, codes.OK, code, "trailing slash should be cleaned")
-		assert.Equalf(t, "public", got,
-			"trailing slash should be removed by path.Clean")
+		assert.Equalf(t, codes.OK, code, "trailing slash should be preserved, not rejected")
+		assert.Equalf(t, "public/", got,
+			"trailing slash should be preserved, not removed by path.Clean")
+	})
+
+	t.Run("nested method trailing slash preserved", func(t *testing.T) {
+		got, code := invoke(t, "foo/bar/")
+		assert.Equalf(t, codes.OK, code, "trailing slash should be preserved, not rejected")
+		assert.Equalf(t, "foo/bar/", got,
+			"trailing slash should be preserved on a multi-segment method")
+	})
+
+	t.Run("no trailing slash stays without one", func(t *testing.T) {
+		got, code := invoke(t, "foo/bar")
+		assert.Equalf(t, codes.OK, code, "method should pass through normally")
+		assert.Equalf(t, "foo/bar", got,
+			"a method with no trailing slash must not gain one")
 	})
 
 	t.Run("duplicate slashes cleaned", func(t *testing.T) {
@@ -199,5 +217,38 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		assert.Equalf(t, codes.OK, code, "duplicate slashes should be cleaned")
 		assert.Equalf(t, "api/v1/users", got,
 			"duplicate slashes should be collapsed by path.Clean")
+	})
+
+	t.Run("duplicate slashes cleaned but trailing slash preserved", func(t *testing.T) {
+		got, code := invoke(t, "//foo//bar//")
+		assert.Equalf(t, codes.OK, code, "duplicate slashes should be cleaned")
+		// The input has a leading "//" too, so path.Clean's output keeps a
+		// single leading slash (this is an absolute-rooted path), on top of
+		// the trailing slash our fix preserves.
+		assert.Equalf(t, "/foo/bar/", got,
+			"duplicate slashes collapsed, but the trailing slash must survive")
+	})
+
+	t.Run("traversal with trailing slash resolves and preserves slash", func(t *testing.T) {
+		got, code := invoke(t, "admin/../public/")
+		assert.Equalf(t, codes.OK, code, "traversal should be resolved, not rejected")
+		assert.Equalf(t, "public/", got,
+			"traversal should resolve to the clean path with the trailing slash preserved")
+	})
+
+	t.Run("double traversal with trailing slash resolves and preserves slash", func(t *testing.T) {
+		got, code := invoke(t, "admin/../../public/")
+		assert.Equalf(t, codes.OK, code, "traversal should be resolved, not rejected")
+		assert.Equalf(t, "public/", got,
+			"extra ../ should be clamped, trailing slash still preserved")
+	})
+
+	// NormalizeMethod treats a lone "/" specially: it is not a valid
+	// invocation target on its own, so it normalizes to the empty string
+	// rather than being preserved as "/".
+	t.Run("lone slash normalizes to empty method", func(t *testing.T) {
+		got, code := invoke(t, "/")
+		assert.Equalf(t, codes.OK, code, "a lone slash should not be rejected")
+		assert.Emptyf(t, got, "a lone slash is not a valid target and normalizes to empty")
 	})
 }
