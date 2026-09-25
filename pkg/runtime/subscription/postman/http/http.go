@@ -80,16 +80,16 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		WithCustomHTTPMetadata(msg.Metadata)
 	defer req.Close()
 
-	iTraceID := cloudEvent[contribpubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[contribpubsub.TraceIDField]
-	}
+	// A zero parent starts a new root span, so a message delivered without
+	// inbound trace context is still traced. No ops if tracing is off.
+	sc := pubsub.ParentSpanContextFromCloudEvent(cloudEvent, log)
+	ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
 
-	if traceID, ok := iTraceID.(string); ok {
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
-	} else if iTraceID != nil {
-		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+	if span != nil {
+		// Every return path below must end the span, including the ones that
+		// bail out before the status is known. Ending a span twice is a no-op,
+		// so the success path can still set the status first.
+		defer span.End()
 	}
 
 	start := time.Now()
@@ -237,25 +237,16 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	n := 0
 
 	for _, pubsubMsg := range psm.PubSubMessages {
-		cloudEvent := pubsubMsg.CloudEvent
+		// A zero parent starts a new root span, so an entry delivered without
+		// inbound trace context is still traced. No ops if tracing is off.
+		sc := pubsub.ParentSpanContextFromCloudEvent(pubsubMsg.CloudEvent, log)
 
-		iTraceID := cloudEvent[contribpubsub.TraceParentField]
-		if iTraceID == nil {
-			iTraceID = cloudEvent[contribpubsub.TraceIDField]
-		}
+		var span trace.Span
 
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-
-			var span trace.Span
-
-			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
-			if span != nil {
-				spans[n] = span
-				n++
-			}
-		} else if iTraceID != nil {
-			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+		if span != nil {
+			spans[n] = span
+			n++
 		}
 	}
 

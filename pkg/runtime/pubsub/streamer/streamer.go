@@ -191,6 +191,14 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return nil, err
 	}
 
+	if span != nil {
+		// registerPublishResponse below cannot currently return a nil channel,
+		// so its early return is unreachable; this keeps the span ended if that
+		// ever changes. Ending a span twice is a no-op, so the send path still
+		// sets the status first.
+		defer span.End()
+	}
+
 	ch, cleanup := connection.registerPublishResponse(envelope.GetId())
 	if ch == nil {
 		return nil, fmt.Errorf("no client stream expecting publish response for id %s ConnectionID%d", envelope.GetId(), connection.connectionID)
