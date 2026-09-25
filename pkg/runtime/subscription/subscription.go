@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -71,6 +72,11 @@ type Subscription struct {
 	drainSealed atomic.Bool
 	closed      atomic.Bool
 	inflight    atomic.Int64
+
+	// inflightMetricLock serialises the gauge record with the counter update.
+	// Without it two handlers can compute their new totals concurrently and
+	// publish them out of order, leaving the gauge on a stale value.
+	inflightMetricLock sync.Mutex
 
 	postman postman.Interface
 }
@@ -154,7 +160,7 @@ func New(opts Options) (*Subscription, error) {
 			<-ctx.Done()
 			return ctx.Err()
 		}
-		s.inflight.Add(1)
+		s.addInFlight(ctx, 1)
 
 		// closed signals shutdown is in progress; block on ctx.Done
 		// rather than returning an error (which would cause the broker
@@ -162,7 +168,7 @@ func New(opts Options) (*Subscription, error) {
 		// instead of redelivering on rebalance). Decrement before
 		// blocking so Stop's inflight wait can proceed.
 		if s.closed.Load() {
-			s.inflight.Add(-1)
+			s.addInFlight(ctx, -1)
 			<-ctx.Done()
 			return ctx.Err()
 		}
@@ -170,7 +176,7 @@ func New(opts Options) (*Subscription, error) {
 		released := false
 		defer func() {
 			if !released {
-				s.inflight.Add(-1)
+				s.addInFlight(ctx, -1)
 			}
 		}()
 
@@ -387,7 +393,7 @@ func New(opts Options) (*Subscription, error) {
 		// blocking so Stop's wait can proceed.
 		if err != nil && (s.closed.Load() || errors.Is(err, rtpubsub.ErrSubscriptionClosed)) {
 			released = true
-			s.inflight.Add(-1)
+			s.addInFlight(ctx, -1)
 			<-ctx.Done()
 			return ctx.Err()
 		}
@@ -418,6 +424,17 @@ func New(opts Options) (*Subscription, error) {
 	}
 
 	return s, nil
+}
+
+// addInFlight adjusts the in-flight counter and publishes the new value as a
+// gauge. The counter is the source of truth for drain; the metric is derived
+// from it so the two can never disagree.
+func (s *Subscription) addInFlight(ctx context.Context, delta int64) {
+	s.inflightMetricLock.Lock()
+	defer s.inflightMetricLock.Unlock()
+
+	n := s.inflight.Add(delta)
+	diag.DefaultComponentMonitoring.PubsubIngressInFlight(ctx, s.pubsubName, s.topic, n)
 }
 
 func (s *Subscription) Stop(err ...error) {
@@ -516,6 +533,10 @@ func (s *Subscription) Stop(err ...error) {
 	if inflight && !hitCeiling {
 		time.Sleep(time.Millisecond * 400)
 	}
+
+	// The subscription is done; zero the gauge so a stale non-zero value does
+	// not outlive it on the scrape endpoint.
+	diag.DefaultComponentMonitoring.PubsubIngressInFlight(context.Background(), s.pubsubName, s.topic, 0)
 
 	if len(err) > 0 {
 		s.cancel(cause)
