@@ -152,10 +152,9 @@ func (d *retrymatchinggrpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, d.daprd1.GRPCAddress(),
+	conn, err := grpc.DialContext(ctx, d.daprd1.GRPCAddress(), //nolint:staticcheck // this is a direct connection helper for the test harness.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

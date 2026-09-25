@@ -49,6 +49,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor/binarystore"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
@@ -155,6 +156,7 @@ type Processor struct {
 	lockCat   *category.Category
 	midCat    *category.Category
 	convCat   *category.Category
+	binCat    *category.Category
 
 	// inlineManagers is used by Init/Close when Process is not running
 	// (test-only path). The loop path never reads this map.
@@ -252,6 +254,11 @@ func New(opts Options) *Processor {
 		Registry: opts.Registry.Conversations(),
 		Store:    opts.ComponentStore,
 	})
+	binStoreProc := binarystore.New(binarystore.Options{
+		Meta:     opts.Meta,
+		Registry: opts.Registry.BinaryStores(),
+		Store:    opts.ComponentStore,
+	})
 
 	reporter := DefaultReporter
 	if opts.Reporter != nil {
@@ -279,6 +286,7 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:    secretProc,
 			components.CategoryStateStore:     stateProc,
 			components.CategoryConversation:   convProc,
+			components.CategoryBinaryStore:    binStoreProc,
 		},
 	}
 
@@ -344,6 +352,13 @@ func New(opts Options) *Processor {
 		Reporter:  reporter,
 		Security:  opts.Security,
 	})
+	p.binCat = category.New(category.Options{
+		Name:      string(components.CategoryBinaryStore),
+		Manager:   binStoreProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
 
 	// Root loop ----------------------------------------------------------
 	cats := map[components.Category]loop.Interface[loops.EventCategory]{
@@ -356,6 +371,7 @@ func New(opts Options) *Processor {
 		components.CategorySecretStore:    p.secCat.Loop(),
 		components.CategoryStateStore:     p.stateCat.Loop(),
 		components.CategoryConversation:   p.convCat.Loop(),
+		components.CategoryBinaryStore:    p.binCat.Loop(),
 	}
 	p.rootLoop = root.New(root.Options{
 		CompStore:      opts.ComponentStore,
@@ -415,6 +431,7 @@ func (p *Processor) Process(ctx context.Context) error {
 		p.lockCat.Run,
 		p.midCat.Run,
 		p.convCat.Run,
+		p.binCat.Run,
 		p.subscriber.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()
