@@ -39,7 +39,7 @@ type workflow struct {
 func (w *workflow) Setup(t *testing.T) []framework.Option {
 	w.logline = logline.New(t,
 		logline.WithStdoutLineContains(
-			"process component myworkflow error: incorrect type workflow.dapr",
+			"process component myworkflow (type: workflow.dapr) error: incorrect type workflow.dapr",
 		),
 	)
 
