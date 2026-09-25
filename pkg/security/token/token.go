@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const (
+var (
 	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
 	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
@@ -65,9 +65,15 @@ func GetSentryToken(allowKubernetes bool) (token string, validator sentryv1pb.Si
 	if allowKubernetes {
 		// Try to read a token from Kubernetes (for the Kubernetes validator)
 		b, err := os.ReadFile(kubeTknPath)
-		if err != nil && os.IsNotExist(err) {
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read kubernetes service account token at path '%s': %w", kubeTknPath, err)
+			}
 			// Attempt to use the legacy token if that exists
-			b, _ = os.ReadFile(legacyKubeTknPath)
+			b, err = os.ReadFile(legacyKubeTknPath)
+			if err != nil && !os.IsNotExist(err) {
+				return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read legacy kubernetes service account token at path '%s': %w", legacyKubeTknPath, err)
+			}
 			if len(b) > 0 {
 				log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
 			}
