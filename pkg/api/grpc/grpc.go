@@ -77,6 +77,8 @@ const (
 	metadataPrefix       = "metadata."
 )
 
+var errAPIClosed = status.Error(codes.Unavailable, "api server closed")
+
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
 	io.Closer
@@ -103,8 +105,9 @@ type api struct {
 	processor              *processor.Processor
 	wg                     sync.WaitGroup
 
-	closeCh chan struct{}
-	closed  atomic.Bool
+	closeLock sync.RWMutex
+	closeCh   chan struct{}
+	closed    bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -1523,11 +1526,33 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 func (a *api) Close() error {
 	defer a.wg.Wait()
 
-	if a.closed.CompareAndSwap(false, true) {
+	a.closeLock.Lock()
+	if !a.closed {
+		a.closed = true
 		close(a.closeCh)
 	}
+	a.closeLock.Unlock()
 
 	a.CompStore().DeleteAllConfigurationSubscribe()
+
+	return nil
+}
+
+func (a *api) goUnlessClosed(fns ...func()) error {
+	a.closeLock.RLock()
+	defer a.closeLock.RUnlock()
+
+	if a.closed {
+		return errAPIClosed
+	}
+
+	a.wg.Add(len(fns))
+	for _, fn := range fns {
+		go func() {
+			defer a.wg.Done()
+			fn()
+		}()
+	}
 
 	return nil
 }
