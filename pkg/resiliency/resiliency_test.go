@@ -221,6 +221,95 @@ func TestPoliciesForTargets(t *testing.T) {
 	}
 }
 
+// TestEndpointAndActorCBCacheConcurrentAccess is a regression test for a data race between
+// EndpointPolicy/ActorPreLockPolicy's "named policy" branch, which read r.serviceCBs /
+// r.actorCBCaches directly, and getServiceCBCache/getActorCBCache's "default policy" branch,
+// which writes to those same maps under r.serviceCBsMu / r.actorCBsCachesMu. Concurrent calls
+// for a named-policy app/actor type alongside calls for an app/actor type that only matches
+// the default policy (and so triggers on-demand cache creation) used to be flagged by the race
+// detector, and in production could crash daprd with a fatal "concurrent map read and map
+// write" error. Run with `go test -race` to verify.
+func TestEndpointAndActorCBCacheConcurrentAccess(t *testing.T) {
+	r := FromConfigurations(log, &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
+					"general": {
+						MaxRequests: 1,
+						Interval:    "8s",
+						Timeout:     "45s",
+						Trip:        "consecutiveFailures > 8",
+					},
+					// Matches the top-level default-circuit-breaker template name, so
+					// apps/actor types with no explicit target entry still resolve a
+					// circuit breaker and go through the on-demand cache-creation path.
+					"DefaultCircuitBreakerPolicy": {
+						MaxRequests: 1,
+						Interval:    "8s",
+						Timeout:     "45s",
+						Trip:        "consecutiveFailures > 8",
+					},
+				},
+			},
+			Targets: resiliencyV1alpha.Targets{
+				Apps: map[string]resiliencyV1alpha.EndpointPolicyNames{
+					"namedApp": {CircuitBreaker: "general"},
+				},
+				Actors: map[string]resiliencyV1alpha.ActorPolicyNames{
+					"namedActorType": {CircuitBreaker: "general", CircuitBreakerScope: "both"},
+				},
+			},
+		},
+	})
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	// Readers hitting the named-policy branch (EndpointPolicy:637 / ActorPreLockPolicy:771),
+	// which pre-fix read r.serviceCBs/r.actorCBCaches without holding the mutex.
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					r.EndpointPolicy("namedApp", "127.0.0.1:3500")
+					r.ActorPreLockPolicy("namedActorType", "id-1")
+				}
+			}
+		}()
+	}
+
+	// Writers hitting the default-policy branch, which calls getServiceCBCache/
+	// getActorCBCache and writes a new entry into the same maps under lock. Using a
+	// fresh app/actor type name each iteration forces a map write on every call instead
+	// of just the first.
+	for i := range 4 {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			for n := 0; ; n++ {
+				select {
+				case <-stop:
+					return
+				default:
+					app := fmt.Sprintf("dynamic-app-%d-%d", worker, n)
+					actorType := fmt.Sprintf("dynamic-actor-%d-%d", worker, n)
+					r.EndpointPolicy(app, "127.0.0.1:3500")
+					r.ActorPreLockPolicy(actorType, "id-1")
+				}
+			}
+		}(i)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+}
+
 func TestLoadKubernetesResiliency(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
