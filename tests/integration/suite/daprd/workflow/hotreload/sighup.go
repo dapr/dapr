@@ -17,13 +17,16 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -37,6 +40,7 @@ func init() {
 type sighup struct {
 	workflow   *workflow.Workflow
 	configFile string
+	log        *log.Log
 }
 
 func (s *sighup) Setup(t *testing.T) []framework.Option {
@@ -51,8 +55,12 @@ spec:
       increasedCardinality: false
 `)
 
+	s.log = log.New()
 	s.workflow = workflow.New(t,
-		workflow.WithDaprdOptions(0, daprd.WithConfigs(s.configFile)),
+		workflow.WithDaprdOptions(0,
+			daprd.WithConfigs(s.configFile),
+			daprd.WithExecOptions(exec.WithStdout(s.log), exec.WithStderr(s.log)),
+		),
 		workflow.WithAddActivityN(t, 0, "SayHello", func(ctx task.ActivityContext) (any, error) {
 			var name string
 			if err := ctx.GetInput(&name); err != nil {
@@ -97,7 +105,13 @@ spec:
     http:
       increasedCardinality: true
 `)
+	s.log.Reset()
 	s.workflow.Dapr().SignalHUP(t)
+
+	// SIGHUP is handled asynchronously, so readiness can pass on the old runtime.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, s.log.Contains("dapr initialized. Status: Running"))
+	}, 20*time.Second, 10*time.Millisecond)
 
 	s.workflow.WaitUntilRunning(t, ctx)
 

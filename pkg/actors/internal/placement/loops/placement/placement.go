@@ -233,6 +233,7 @@ func (p *placement) handleLockRequest(req *loops.LockRequest) {
 
 func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementReconnect) error {
 	var client transport.Transport
+	var streamCancel context.CancelFunc
 	var err error
 	var unavailableLogged bool
 	adoptFallback := func() {
@@ -255,7 +256,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			cctx, ccancel = context.WithCancelCause(ctx)
 			timer = time.AfterFunc(p.startupWait, func() { ccancel(errStartupTimeout) })
 		}
-		client, err = p.tryConnect(ctx, cctx)
+		client, streamCancel, err = p.tryConnect(ctx, cctx)
 		if timer != nil {
 			timer.Stop()
 		}
@@ -364,6 +365,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Namespace:            p.namespace,
 		Inflight:             p.inflight,
 		Channel:              client,
+		StreamCancel:         streamCancel,
 		PlacementLoop:        p.loop,
 		IDx:                  p.idx,
 		ActorTable:           p.actorTable,
@@ -469,16 +471,18 @@ func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoin
 	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
-func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, error) {
+func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, context.CancelFunc, error) {
 	conn, err := p.connector.Connect(connectCtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to placement service: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to placement service: %w", err)
 	}
 
-	client, err := p.streamFactory(ctx, conn)
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	client, err := p.streamFactory(streamCtx, conn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
+		streamCancel()
+		return nil, nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
-	return client, nil
+	return client, streamCancel, nil
 }
