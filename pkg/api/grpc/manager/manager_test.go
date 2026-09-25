@@ -14,12 +14,14 @@ limitations under the License.
 package manager
 
 import (
+	"context"
 	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
@@ -37,6 +39,34 @@ func TestNewManager(t *testing.T) {
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.KubernetesMode, m.mode)
 	})
+}
+
+func TestAddAppTokenToContext(t *testing.T) {
+	for name, test := range map[string]struct {
+		header string
+		want   string
+	}{
+		"default header": {want: "dapr-api-token"},
+		"custom header":  {header: "x-api-key", want: "x-api-key"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := NewManager(nil, modes.StandaloneMode, &AppChannelConfig{
+				AppAPIToken:       "token1",
+				AppAPITokenHeader: test.header,
+			})
+			ctx := metadata.NewOutgoingContext(context.Background(), metadata.MD{
+				"dapr-api-token": {"default-oldtoken"},
+				"x-api-key":      {"custom-oldtoken"},
+			})
+			ctx = m.AddAppTokenToContext(ctx)
+			md, ok := metadata.FromOutgoingContext(ctx)
+			require.True(t, ok)
+			assert.Equal(t, []string{"token1"}, md.Get(test.want))
+			if test.want != "dapr-api-token" {
+				assert.Empty(t, md.Get("dapr-api-token"))
+			}
+		})
+	}
 }
 
 func TestGetAppClient_Scaling(t *testing.T) {

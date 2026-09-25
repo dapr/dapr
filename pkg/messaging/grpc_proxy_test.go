@@ -206,6 +206,44 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "token1", md[securityConsts.APITokenHeader][0])
 	})
 
+	t.Run("proxy to the app with custom token metadata", func(t *testing.T) {
+		const (
+			customHeader       = "X-API-Key"
+			normalizedMetadata = "x-api-key"
+		)
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Resiliency:        resiliency.New(nil),
+			AppAPITokenHeader: customHeader,
+			AppendAppTokenFn: func(ctx context.Context) context.Context {
+				return metadata.AppendToOutgoingContext(ctx, customHeader, "token1")
+			},
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: "a"}, nil
+		})
+
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.Pairs(
+			diagConsts.GRPCProxyAppIDKey, "a",
+			securityConsts.APITokenHeader, "default-oldtoken",
+			normalizedMetadata, "custom-oldtoken",
+		))
+		proxy := p.(*proxy)
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown(true)
+
+		require.NoError(t, err)
+		assert.NotNil(t, conn)
+		md, _ := metadata.FromOutgoingContext(ctx)
+		assert.Empty(t, md[securityConsts.APITokenHeader])
+		assert.Equal(t, []string{"token1"}, md[normalizedMetadata])
+	})
+
 	t.Run("proxy to a remote app", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
