@@ -16,7 +16,6 @@ package config
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -1152,20 +1151,20 @@ func StringToHeader(value string) (map[string]string, error) {
 	for _, header := range headersPairs {
 		n, v, found := strings.Cut(header, "=")
 		if !found {
-			return nil, errors.New("missing '=' parse headers input" + header)
+			return nil, fmt.Errorf("missing '=' in header entry: %q", header)
 		}
 
 		trimmedName := strings.TrimSpace(n)
 
 		// Validate the key.
 		if !isValidHeaderKey(trimmedName) {
-			return nil, errors.New("invalid header key" + trimmedName)
+			return nil, fmt.Errorf("invalid header key: %q", trimmedName)
 		}
 
 		// Only decode the value.
 		value, err := url.PathUnescape(v)
 		if err != nil {
-			return nil, errors.Join(err, errors.New("escape header value"+v))
+			return nil, fmt.Errorf("failed to unescape header value %q: %w", v, err)
 		}
 		trimmedValue := strings.TrimSpace(value)
 
