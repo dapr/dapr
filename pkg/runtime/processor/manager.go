@@ -104,6 +104,8 @@ func (p *Processor) category(comp componentsapi.Component) components.Category {
 		components.CategorySecretStore,
 		components.CategoryStateStore,
 		components.CategoryConversation,
+		components.CategorySearch,
+		components.CategoryVector,
 	} {
 		if strings.HasPrefix(comp.Spec.Type, string(cat)+".") {
 			return cat

@@ -15,17 +15,21 @@ package http
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 
 	kitErrors "github.com/dapr/kit/errors"
 
+	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 const (
@@ -173,6 +177,14 @@ func respondWithError(w http.ResponseWriter, err error) {
 		return
 	}
 
+	// A plain gRPC status, as returned by search and vector components, keeps
+	// its canonical code and any google.rpc details instead of collapsing to
+	// a generic 500.
+	if st, ok := status.FromError(err); ok {
+		respondWithData(w, invokev1.HTTPStatusFromCode(st.Code()), statusErrorResponse(st))
+		return
+	}
+
 	// Respond with a generic error
 	msg := NewErrorResponse(errorcodes.CommonGeneric, err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
@@ -184,4 +196,37 @@ func setResponseMetadataHeaders(w http.ResponseWriter, md map[string]string) {
 	for k, v := range md {
 		h.Set(metadataPrefix+k, v)
 	}
+}
+
+// statusErrorResponse renders a gRPC status in the Dapr error envelope. The
+// canonical google.rpc.Code name is used as the error code and the status
+// details are carried through unchanged, so callers can read
+// google.rpc.ErrorInfo reasons such as SEARCH_CONTINUATION_EXPIRED.
+func statusErrorResponse(st *status.Status) []byte {
+	var codeName string
+	if grpcCode := st.Code(); grpcCode <= math.MaxInt32 {
+		if name, ok := code.Code_name[int32(grpcCode)]; ok {
+			codeName = name
+		}
+	}
+	if codeName == "" {
+		codeName = code.Code_UNKNOWN.String()
+	}
+	body := struct {
+		ErrorCode string            `json:"errorCode"`
+		Message   string            `json:"message"`
+		Details   []json.RawMessage `json:"details,omitempty"`
+	}{
+		ErrorCode: codeName,
+		Message:   st.Message(),
+	}
+	for _, detail := range st.Proto().GetDetails() {
+		raw, err := protojson.Marshal(detail)
+		if err != nil {
+			continue
+		}
+		body.Details = append(body.Details, raw)
+	}
+	b, _ := json.Marshal(body)
+	return b
 }

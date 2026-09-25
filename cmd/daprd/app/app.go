@@ -33,8 +33,10 @@ import (
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	searchLoader "github.com/dapr/dapr/pkg/components/search"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	vectorLoader "github.com/dapr/dapr/pkg/components/vector"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -95,6 +97,8 @@ func Run() {
 	configurationLoader.DefaultRegistry.Logger = logContrib
 	lockLoader.DefaultRegistry.Logger = logContrib
 	pubsubLoader.DefaultRegistry.Logger = logContrib
+	searchLoader.DefaultRegistry.Logger = logContrib
+	vectorLoader.DefaultRegistry.Logger = logContrib
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	conversationLoader.DefaultRegistry.Logger = logContrib
@@ -136,6 +140,8 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 		WithConfigurations(configurationLoader.DefaultRegistry).
 		WithLocks(lockLoader.DefaultRegistry).
 		WithPubSubs(pubsubLoader.DefaultRegistry).
+		WithSearches(searchLoader.DefaultRegistry).
+		WithVectors(vectorLoader.DefaultRegistry).
 		WithNameResolutions(nrLoader.DefaultRegistry).
 		WithBindings(bindingsLoader.DefaultRegistry).
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
