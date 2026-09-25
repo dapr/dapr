@@ -223,19 +223,31 @@ func (s *SQLite) DeleteStateKeys(t *testing.T, ctx context.Context, likePattern 
 func (s *SQLite) ReadStateValue(t *testing.T, ctx context.Context, instanceID, keySuffix string) (string, []byte) {
 	t.Helper()
 
+	key, raw, ok := s.TryReadStateValue(t, ctx, instanceID, keySuffix)
+	if !ok {
+		t.Fatalf("no %s row for instance %s", keySuffix, instanceID)
+	}
+	return key, raw
+}
+
+// TryReadStateValue is ReadStateValue for a row that may not exist yet: ok is
+// false instead of failing the test, so a caller can probe for a row.
+func (s *SQLite) TryReadStateValue(t *testing.T, ctx context.Context, instanceID, keySuffix string) (string, []byte, bool) {
+	t.Helper()
+
 	var key, encoded string
 	err := s.GetConnection(t).QueryRowContext(ctx,
 		"SELECT key, value FROM "+s.tableName+" WHERE key LIKE ? AND key LIKE ? LIMIT 1",
 		"%||"+instanceID+"||%", "%||"+keySuffix,
 	).Scan(&key, &encoded)
 	if errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no %s row for instance %s", keySuffix, instanceID)
+		return "", nil, false
 	}
 	require.NoError(t, err)
 
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	require.NoError(t, err)
-	return key, raw
+	return key, raw, true
 }
 
 // FirstStateValue returns the (key, base64-decoded value) of the first row

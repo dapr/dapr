@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/url"
 	"testing"
@@ -103,9 +104,13 @@ func CertificateCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, inst
 
 // HistoryCount returns the number of history entries stored for the given
 // workflow instance.
-func HistoryCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) int {
+func HistoryCount(t *testing.T, ctx context.Context, rows StateRows) int {
 	t.Helper()
-	return len(db.ReadStateValues(t, ctx, instanceID, "history"))
+	for i := 0; ; i++ {
+		if len(rows.Row(t, ctx, fmt.Sprintf("history-%06d", i))) == 0 {
+			return i
+		}
+	}
 }
 
 // MutateMetadata loads the persisted BackendWorkflowStateMetadata for the

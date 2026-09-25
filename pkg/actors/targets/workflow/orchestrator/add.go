@@ -148,13 +148,15 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 		return admission{outcome: admitDuplicate}
 	}
 
-	// A completed workflow acks and drops its own result. A superseded or
-	// passed scheduling is refused recoverably instead: a read lagging past a
-	// ContinueAsNew boundary shows the previous generation's rows, so the
-	// sender retries with the result in hand and drops it only once its
-	// window expires.
+	// A superseded or passed scheduling is refused recoverably: a read lagging
+	// past a ContinueAsNew boundary shows the previous generation's rows, so
+	// the sender retries with the result in hand and drops it only once its
+	// window expires. A terminal history can never gain the scheduling the
+	// completion is missing, so there the verdict is final however it was
+	// reached: ack it now rather than making the sender spend its window.
+	// Only this generation's own result settles the await.
 	if reason, settles := activityDrop(e, state); reason != "" {
-		if settles {
+		if settles || state.IsCompleted() {
 			return admission{reason: reason, settles: settles}
 		}
 		return admission{err: wferrors.NewRecoverable(fmt.Errorf("%s: %w", reason, common.ErrSchedulingSuperseded))}
@@ -186,22 +188,34 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 
 	a := o.classifyEvent(e, state, sender, canFold)
 	if a.err != nil {
+		// A scheduling refusal is judged on the history we hold, and the
+		// sender retries it in hand for its whole window: confirm the cache
+		// is current so a stale one is dropped here and the next retry is
+		// judged on a fresh load, rather than re-judged against the same
+		// frozen view every time. The refusal itself is still what the
+		// sender sees, so its retry contract is unchanged; only a purged
+		// instance overrides it, and that is terminal for the sender.
+		if !fresh && common.IsSchedulingRefusal(a.err) {
+			if cerr := o.confirmCachedState(ctx, state); errors.Is(cerr, api.ErrInstanceNotFound) {
+				return nil, cerr
+			}
+		}
 		return nil, a.err
 	}
-	// The current scheduling's result settles the await whether it is admitted
-	// or dropped by the terminal turn (createIfCompleted refuses reuse of the
-	// ID while the flag is set); a straggler from another scheduling does not.
-	if (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) && (a.reason == "" || a.settles) {
-		o.activityResultAwaited.CompareAndSwap(true, false)
-	}
 	if a.reason != "" {
-		// Acknowledge a child completion this workflow will never consume
-		// only after confirming the cache it was judged on is current: the
-		// child clears its pending notification on this ack.
+		// Acknowledge a completion this workflow will never consume only
+		// after confirming the cache it was judged on is current: a child
+		// clears its pending notification on this ack.
 		if !fresh {
 			if err := o.confirmCachedState(ctx, state); err != nil {
 				return nil, err
 			}
+		}
+		if a.settles {
+			// The terminal turn dropped this scheduling's own result, so
+			// nothing is owed and createIfCompleted may reuse the ID. A
+			// straggler from another scheduling settles nothing.
+			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)
 		return nil, nil
@@ -217,6 +231,13 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 	// turn's commit persists it alongside the event.
 	if err := o.verifyAndAbsorbAttestation(ctx, state, e); err != nil {
 		return nil, err
+	}
+
+	// The result is admitted, so it is no longer in flight: a duplicate or a
+	// refusal above leaves the ID-reuse guard armed, because the result it
+	// guards is still owed.
+	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 
 	if a.outcome == admitFold {
@@ -314,7 +335,7 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
 		if taskID, _, ok := activityResolution(e); ok {
 			switch reason, settles := activityDrop(e, fresh); {
-			case settles:
+			case settles, fresh.IsCompleted():
 			case reason != "":
 				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingSuperseded))
 			case fresh.FindHistoryEventByID(taskID) == nil:

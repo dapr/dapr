@@ -14,7 +14,6 @@ limitations under the License.
 package loadbalance
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -82,15 +82,10 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 	releaseSecond := make(chan struct{})
 	markOrphanStarted := sync.OnceFunc(func() { close(orphanStarted) })
 	markSecondStarted := sync.OnceFunc(func() { close(secondStarted) })
-	t.Cleanup(func() {
-		for _, ch := range []chan struct{}{releaseOrphan, releaseSecond} {
-			select {
-			case <-ch:
-			default:
-				close(ch)
-			}
-		}
-	})
+	releaseOrphanOnce := sync.OnceFunc(func() { close(releaseOrphan) })
+	releaseSecondOnce := sync.OnceFunc(func() { close(releaseSecond) })
+	t.Cleanup(releaseOrphanOnce)
+	t.Cleanup(releaseSecondOnce)
 
 	require.NoError(t, c.workflow.RegistryN(0).AddWorkflowN("canstraggler", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
@@ -161,35 +156,23 @@ func (c *canstraggler) Run(t *testing.T, ctx context.Context) {
 
 	// The orphan's failure carries the previous scheduling's execution id
 	// and reaches the workflow before the second generation's result does:
-	// the second is released only once the workflow actor has admitted the
-	// orphan's AddWorkflowEvent under its lock (the earlier one is the
-	// raised event), so the second's completion is serialised behind it.
-	// The admission is observed through what it logs, on any path: the
-	// durable inbox add, the drop, or the sender's retry of a superseded
-	// refusal.
-	admitted := func() int {
-		n := 0
-		for _, l := range c.logline {
-			for _, needle := range []string{
-				fmt.Sprintf("Workflow actor '%s': adding event to the workflow inbox", id),
-				fmt.Sprintf("Workflow actor '%s': dropping completion (sender", id),
-				fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id),
-			} {
-				n += bytes.Count(l.StdoutBuffer(), []byte(needle))
-			}
-		}
-		return n
-	}
-	before := admitted()
-	close(releaseOrphan)
-	require.Eventually(t, func() bool { return admitted() > before }, time.Second*20, time.Millisecond*10,
-		"the orphan's failure must reach the workflow actor")
-	close(releaseSecond)
+	// the second is released only once the workflow actor has judged the
+	// orphan's AddWorkflowEvent under its lock, so the second's completion
+	// is serialised behind it.
+	// The refusal is observed through the sender's in-hand retry, which
+	// only the orphan's own publish can produce: a running workflow refuses
+	// no other sender, so nothing else, the "proceed" event included, can
+	// satisfy the gate.
+	retried := fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id)
+	count := func(needle string) int { return logline.CountAll(needle, c.logline[:]...) }
+	releaseOrphanOnce()
+	require.Eventually(t, func() bool { return count(retried) >= 1 }, time.Second*20, time.Millisecond*10,
+		"the orphan's failure must be refused as superseded and retried in hand")
+	releaseSecondOnce()
 
 	metadata, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus(), "%v", metadata.GetFailureDetails())
 	assert.Equal(t, `"done-second"`, metadata.GetOutput().GetValue())
-	// No wake-up may be left behind for the dropped straggler.
-	c.workflow.Scheduler().WaitJobKeyCount(t, ctx, "new-event", func(n int) bool { return n == 0 })
+	fworkflow.WaitNoEventWakeups(t, ctx, c.workflow)
 }

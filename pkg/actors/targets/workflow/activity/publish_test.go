@@ -118,12 +118,8 @@ func Test_publishResult_retriesRefusalInHand(t *testing.T) {
 		f, scheduled := newExecHarness(t)
 		f.publishRetryWindow = 200 * time.Millisecond
 		var calls atomic.Int32
-		f.router = routerfake.New().WithCallFn(func(ctx context.Context, _ *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 			calls.Add(1)
-			// A real router reports the window's expiry, not the verdict.
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
 			return nil, errors.New("task 3: " + common.ErrSchedulingSuperseded.Error())
 		})
 
@@ -137,6 +133,34 @@ func Test_publishResult_retriesRefusalInHand(t *testing.T) {
 		require.NoError(t, <-ownerErr, "a straggler still superseded after the window is dropped, not re-executed")
 		f.detached.Wait()
 		assert.GreaterOrEqual(t, calls.Load(), int32(2), "the publish must have been retried within the window")
+	})
+
+	t.Run("a delivery accepted at the window's edge is not reported as the refusal", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		f.publishRetryWindow = 500 * time.Millisecond
+		var calls atomic.Int32
+		f.router = routerfake.New().WithCallFn(func(ctx context.Context, _ *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			// Refuse once, then accept from inside a call the window cuts:
+			// the acceptance is what the sender must act on, not the refusal
+			// it happens to remember.
+			if calls.Add(1) == 1 {
+				return nil, errors.New("task 3: " + common.ErrSchedulingSuperseded.Error())
+			}
+			<-ctx.Done()
+			return nil, nil
+		})
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		ownerErr := make(chan error, 1)
+		go func() {
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+		}()
+		wi := recvWorkItem(t, scheduled)
+		completeWorkItem(t, wi)
+		require.NoError(t, <-ownerErr, "an accepted delivery must settle the execution as a success")
+		f.detached.Wait()
+		assert.Equal(t, int32(2), calls.Load())
 	})
 
 	t.Run("a refusal that outlasts the window surfaces for recovery", func(t *testing.T) {

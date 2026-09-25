@@ -13,7 +13,12 @@ limitations under the License.
 
 package common
 
-import "errors"
+import (
+	"errors"
+	"strings"
+	"sync"
+	"time"
+)
 
 const (
 	ReminderPrefixActivityResult = "activity-result-"
@@ -30,3 +35,28 @@ var ErrSchedulingNotDurable = errors.New("the task's scheduling is not yet durab
 // looks the same, so the sender retries with the result in hand for its
 // window and only then drops it; it matches by suffix across the router.
 var ErrSchedulingSuperseded = errors.New("the task's scheduling was superseded")
+
+// defaultPublishRetryWindow bounds how long a refused activity result is
+// retried with the result in hand before the refusal reaches the reminder
+// chain, and how long the reminder chain itself keeps refiring one. It sits
+// inside activity.detachedPublishTimeout.
+const defaultPublishRetryWindow = 20 * time.Second
+
+// PublishRetryWindow resolves the in-hand retry window once per process. The
+// orchestrator bounds a refusal by the same window the sender spends on it,
+// so the window is spent exactly once wherever it is spent.
+var PublishRetryWindow = sync.OnceValue(func() time.Duration {
+	return EnvDurationOr("DAPR_WORKFLOW_TEST_ACTIVITY_PUBLISH_RETRY_WINDOW", defaultPublishRetryWindow)
+})
+
+// IsSchedulingRefusal reports whether err is one of the orchestrator's two
+// scheduling refusals. They cross the router as strings, so they match by
+// suffix.
+func IsSchedulingRefusal(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.HasSuffix(msg, ErrSchedulingNotDurable.Error()) ||
+		strings.HasSuffix(msg, ErrSchedulingSuperseded.Error())
+}
