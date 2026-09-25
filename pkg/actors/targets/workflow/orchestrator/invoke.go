@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
@@ -147,16 +148,20 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
 		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
-		if isSchedulingSuperseded(err) {
-			// The reminder is the durable retry, and a superseded result
-			// would refire it every second for good. Judge it once more on a
-			// fresh load, then drop it: this fire is already a later,
-			// independent read of the history.
+		if common.IsSchedulingRefusal(err) {
+			// This reminder retries forever, so each fire drops the cache
+			// and reads again across the store's lag, but only while the
+			// result is younger than the window the in-hand path would have
+			// spent on it. Unbounded, the refusal is a reminder storm. The
+			// timestamp comes from the host that ran the activity: skew is
+			// noise at this granularity, and a missing one reads as ancient
+			// and drops, which is the safe direction.
 			o.invalidateCachedState()
-			if err = o.addWorkflowEvent(ctx, &ev, completionSender{}); isSchedulingSuperseded(err) {
-				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its result resolves a superseded scheduling: %v", o.actorID, reminder.Name, err)
-				return nil
+			if time.Since(ev.GetTimestamp().AsTime()) < common.PublishRetryWindow() {
+				return err
 			}
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not resolve within the publish window: %v", o.actorID, reminder.Name, err)
+			return nil
 		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
@@ -315,8 +320,4 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		log.Errorf("Workflow actor '%s': execution failed with an error: %v", o.actorID, err)
 		return err
 	}
-}
-
-func isSchedulingSuperseded(err error) bool {
-	return err != nil && strings.HasSuffix(err.Error(), common.ErrSchedulingSuperseded.Error())
 }

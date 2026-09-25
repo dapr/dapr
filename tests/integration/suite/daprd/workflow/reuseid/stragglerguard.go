@@ -14,7 +14,6 @@ limitations under the License.
 package reuseid
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -152,31 +152,23 @@ func (s *stragglerguard) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for the second generation's activity to start")
 	}
 
-	// A completion's admission is logged under the actor lock on either
-	// path: the durable inbox add, or the drop.
-	admitted := func() int {
-		n := 0
-		for _, l := range s.logline {
-			for _, needle := range []string{
-				fmt.Sprintf("Workflow actor '%s': adding event to the workflow inbox", id),
-				fmt.Sprintf("Workflow actor '%s': dropping completion (sender", id),
-				fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id),
-			} {
-				n += bytes.Count(l.StdoutBuffer(), []byte(needle))
-			}
-		}
-		return n
-	}
-	waitAdmitted := func(above int, msg string) {
-		require.Eventually(t, func() bool { return admitted() > above }, time.Second*20, time.Millisecond*10, msg)
-	}
+	count := func(needle string) int { return logline.CountAll(needle, s.logline[:]...) }
+	// Each gate counts a line only the sender it waits on can write. A
+	// running workflow refuses no publish but the orphan's, so the in-hand
+	// retry is the orphan's alone; and a terminal one acks the orphan with
+	// the superseded-scheduling reason instead, so "the workflow has
+	// completed" is reachable only by the current scheduling's own result.
+	// That line is written after the same critical section clears the
+	// ID-reuse guard, so observing it orders the reuse below.
+	retried := fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id)
+	settled := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): the workflow has completed", id)
 
 	// The orphan's result is a straggler of the superseded scheduling and
-	// is dropped; the workflow is then terminated with the current
+	// is refused; the workflow is then terminated with the current
 	// scheduling's result still outstanding.
-	before := admitted()
 	releaseOrphanOnce()
-	waitAdmitted(before, "the orphan's result must reach the workflow actor")
+	require.Eventually(t, func() bool { return count(retried) >= 1 }, time.Second*20, time.Millisecond*10,
+		"the orphan's result must be refused as superseded and retried in hand")
 	require.NoError(t, client.TerminateWorkflow(ctx, id))
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
@@ -184,9 +176,9 @@ func (s *stragglerguard) Run(t *testing.T, ctx context.Context) {
 
 	// The current scheduling's result reaches a terminated workflow and is
 	// dropped as well; the ID is then reusable.
-	before = admitted()
 	releaseSecondOnce()
-	waitAdmitted(before, "the second generation's result must reach the workflow actor")
+	require.Eventually(t, func() bool { return count(settled) >= 1 }, time.Second*20, time.Millisecond*10,
+		"the current scheduling's result must be dropped by the terminated workflow")
 	_, err = client.ScheduleNewWorkflow(ctx, "stragglerguard", api.WithInstanceID(id), api.WithInput("third"))
 	require.NoError(t, err, "reusing the ID after the terminated instance's results arrived must succeed")
 	meta, err = client.WaitForWorkflowCompletion(ctx, id)
@@ -200,6 +192,5 @@ func (s *stragglerguard) Run(t *testing.T, ctx context.Context) {
 		assert.Nil(t, e.GetTaskCompleted(), "no result of the old instance may be in the fresh history")
 		assert.Nil(t, e.GetTaskFailed(), "no result of the old instance may be in the fresh history")
 	}
-	// No wake-up may be left behind for the dropped results.
-	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, "new-event", func(n int) bool { return n == 0 })
+	fworkflow.WaitNoEventWakeups(t, ctx, s.workflow)
 }

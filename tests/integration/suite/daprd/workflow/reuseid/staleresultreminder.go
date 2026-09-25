@@ -20,14 +20,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -48,7 +50,15 @@ type staleresultreminder struct {
 }
 
 func (s *staleresultreminder) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.New(t)
+	// A superseded result refires across the store's lag until it is older
+	// than the publish window, so shorten the window: the planted result
+	// carries a fresh timestamp and the job must drain well inside the
+	// suite's budget.
+	s.workflow = workflow.New(t,
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_TEST_ACTIVITY_PUBLISH_RETRY_WINDOW", "2s",
+		))),
+	)
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),
 	}
@@ -98,7 +108,17 @@ func (s *staleresultreminder) Run(t *testing.T, ctx context.Context) {
 	}
 	require.NotEmpty(t, scheduledExec, "task 0 must be recorded with an execution id")
 
-	stale, err := anypb.New(&protos.HistoryEvent{
+	// Planted through the scheduler as the activity actor would plant it:
+	// a one-shot reminder on the workflow actor with a retry-forever policy.
+	appID := s.workflow.Dapr().AppID()
+	var schedClient schedulerv1pb.SchedulerClient
+	if s.workflow.Signing() {
+		schedClient = s.workflow.Scheduler().ClientMTLS(t, ctx, appID)
+	} else {
+		schedClient = s.workflow.Scheduler().Client(t, ctx)
+	}
+	const reminderName = common.ReminderPrefixActivityResult + "stale"
+	fworkflow.PlantReminder(t, ctx, schedClient, appID, string(id), reminderName, &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_TaskCompleted{
@@ -109,36 +129,6 @@ func (s *staleresultreminder) Run(t *testing.T, ctx context.Context) {
 			},
 		},
 	})
-	require.NoError(t, err)
-
-	// Planted through the scheduler as the activity actor would plant it:
-	// a one-shot reminder on the workflow actor with a retry-forever policy.
-	appID := s.workflow.Dapr().AppID()
-	var schedClient schedulerv1pb.SchedulerClient
-	if s.workflow.Signing() {
-		schedClient = s.workflow.Scheduler().ClientMTLS(t, ctx, appID)
-	} else {
-		schedClient = s.workflow.Scheduler().Client(t, ctx)
-	}
-	dueTime := time.Now().Format(time.RFC3339)
-	const reminderName = common.ReminderPrefixActivityResult + "stale"
-	_, err = schedClient.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-		Name: reminderName,
-		Job:  &schedulerv1pb.Job{DueTime: &dueTime, Data: stale, FailurePolicy: common.RetryForeverPolicy()},
-		Metadata: &schedulerv1pb.JobMetadata{
-			Namespace: "default",
-			AppId:     appID,
-			Target: &schedulerv1pb.JobTargetMetadata{
-				Type: &schedulerv1pb.JobTargetMetadata_Actor{
-					Actor: &schedulerv1pb.TargetActorReminder{
-						Type: "dapr.internal.default." + appID + ".workflow",
-						Id:   string(id),
-					},
-				},
-			},
-		},
-	})
-	require.NoError(t, err)
 
 	// Consumed, not refired for good.
 	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, reminderName, func(n int) bool { return n == 0 })

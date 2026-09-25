@@ -14,7 +14,6 @@ limitations under the License.
 package loadbalance
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -154,23 +154,26 @@ func (s *stragglerdrop) Run(t *testing.T, ctx context.Context) {
 	// scheduling's execution id, reaches the workflow while generation 2's
 	// activity is still running, and is refused as superseded. The second
 	// result is released only once that refusal has been retried in hand.
-	count := func(needle string) int {
-		n := 0
-		for _, l := range s.logline {
-			n += bytes.Count(l.StdoutBuffer(), []byte(needle))
-		}
-		return n
-	}
+	count := func(needle string) int { return logline.CountAll(needle, s.logline[:]...) }
 	retried := fmt.Sprintf("result publish for workflow '%s' refused, retrying with the result in hand", id)
-	dropped := fmt.Sprintf("dropping the result for workflow '%s', still superseded after the retry window", id)
+	// The window can expire between two retries or inside one. The first
+	// hands the sender back the refusal and it drops the result itself; the
+	// second hands it the call's context error, which belongs to a delivery
+	// that may yet have committed, so the result routes to its durable
+	// reminder chain and the orchestrator drops it on the first fire that
+	// finds it older than the same window. Either path drops it exactly once.
+	drops := func() int {
+		return count(fmt.Sprintf("dropping the result for workflow '%s', still superseded after the retry window", id)) +
+			count(fmt.Sprintf("Workflow actor '%s': dropping activity-result reminder", id))
+	}
 	// Generation 2's activity stays held until the drop: once its own
 	// result is in history the straggler would be absorbed as a duplicate
 	// instead, which is harmless but not the path under test.
 	releaseOrphanOnce()
 	require.Eventually(t, func() bool { return count(retried) >= 1 }, time.Second*20, time.Millisecond*10,
 		"the orphan's result must be refused as superseded and retried in hand")
-	require.Eventually(t, func() bool { return count(dropped) >= 1 }, time.Second*20, time.Millisecond*50,
-		"the superseded result must be dropped by its sender once the window expires")
+	require.Eventually(t, func() bool { return drops() >= 1 }, time.Second*20, time.Millisecond*50,
+		"the superseded result must be dropped once the window expires")
 	// Generation 2's dispatch on the shared activity actor may already have
 	// aborted and retried the orphan's execution (at-least-once); what the
 	// drop guarantees is that nothing runs it again from here.
@@ -186,8 +189,8 @@ func (s *stragglerdrop) Run(t *testing.T, ctx context.Context) {
 	// durable is left to re-deliver it.
 	orphanActivity := string(id) + "::0::"
 	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, orphanActivity, func(n int) bool { return n == 0 })
-	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, "new-event", func(n int) bool { return n == 0 })
+	fworkflow.WaitNoEventWakeups(t, ctx, s.workflow)
 	time.Sleep(time.Second * 3)
 	assert.Equal(t, runsAtDrop, orphanRuns.Load(), "a dropped straggler must not be re-executed")
-	assert.Equal(t, 1, count(dropped), "the straggler must be dropped once")
+	assert.Equal(t, 1, drops(), "the straggler must be dropped once")
 }

@@ -293,12 +293,36 @@ func Test_handleReminder_supersededResultIsDropped(t *testing.T) {
 	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
 	h.orch.actorState = fakeStoreServingSigned(t, h.orch, h.orch.state)
 
-	data, err := anypb.New(taskCompletedWithExecID(7, "exec-A"))
+	stale := taskCompletedWithExecID(7, "exec-A")
+	// Older than the window the in-hand path would have spent on it, so the
+	// verdict has had every chance to clear and the reminder must stop.
+	stale.Timestamp = timestamppb.New(time.Now().Add(-2 * common.PublishRetryWindow()))
+	data, err := anypb.New(stale)
 	require.NoError(t, err)
 	err = h.orch.handleReminder(t.Context(), &actorapi.Reminder{
 		Name: common.ReminderPrefixActivityResult + "stale",
 		Data: data,
 	})
 	require.NoError(t, err, "the reminder is acked so the scheduler deletes it")
-	assert.Empty(t, h.orch.state.Inbox, "the stale result must not be persisted")
+	assert.NotContains(t, h.snapshotOps(), "save", "the stale result must not be persisted")
+}
+
+// A result still inside the window may be refused only because the read
+// lagged: the reminder must refire across it, on a dropped cache, rather than
+// be acked on its first judgement.
+func Test_handleReminder_youngSupersededResultRefires(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-reminder-young"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.orch.actorState = fakeStoreServingSigned(t, h.orch, h.orch.state)
+
+	data, err := anypb.New(taskCompletedWithExecID(7, "exec-A"))
+	require.NoError(t, err)
+	err = h.orch.handleReminder(t.Context(), &actorapi.Reminder{
+		Name: common.ReminderPrefixActivityResult + "young",
+		Data: data,
+	})
+	require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error(), "the reminder must refire")
+	assert.Nil(t, h.orch.state, "the cache is dropped so the refire re-reads")
 }

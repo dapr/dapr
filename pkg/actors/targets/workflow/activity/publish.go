@@ -40,11 +40,6 @@ import (
 // keeps a misbehaving downstream from blocking the runner indefinitely.
 const detachedPublishTimeout = 30 * time.Second
 
-// publishRetryWindow bounds how long a refused result publish is retried with
-// the result in hand before the failure reaches the reminder chain, which
-// re-executes the body. It sits inside detachedPublishTimeout.
-const publishRetryWindow = 20 * time.Second
-
 // errPublishAbandoned settles an execution whose result can no longer be
 // published because the runtime is shutting down. Recoverable: followers
 // parked on the call surface it into their retry chains instead of waiting on
@@ -238,23 +233,22 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 }
 
 // publishWithRetry retries the orchestrator's not-yet-durable and superseded
-// refusals for publishRetryWindow with the result in hand: re-executing would
-// discard it, and a superseded verdict from a read lagging a ContinueAsNew
-// boundary clears once the store catches up. Every other error surfaces at
-// once.
+// refusals for the publish retry window with the result in hand:
+// re-executing would discard it, and a superseded verdict from a read lagging
+// a ContinueAsNew boundary clears once the store catches up. Every other
+// error surfaces at once.
 func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
-	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, publishRetryWindow))
+	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, common.PublishRetryWindow()))
 	defer cancel()
 	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
 	var refused error
 	for {
 		_, err := f.router.Call(pctx, req)
-		if err == nil || !retryInHand(err) {
-			// A call cut by the window's expiry reports the expiry, not the
-			// verdict: the last refusal is what the caller must act on.
-			if pctx.Err() != nil && refused != nil {
-				return refused
-			}
+		if err == nil || !common.IsSchedulingRefusal(err) {
+			// Returned as-is, whatever the window did meanwhile: nil is an
+			// accepted delivery, and a context error belongs to a call that
+			// may well have committed its inbox row, so the sender must
+			// re-deliver rather than be told the last refusal still stands.
 			return err
 		}
 		refused = err
@@ -265,11 +259,6 @@ func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *inte
 		case <-time.After(bo.NextBackOff()):
 		}
 	}
-}
-
-func retryInHand(err error) bool {
-	msg := err.Error()
-	return strings.HasSuffix(msg, common.ErrSchedulingNotDurable.Error()) || strings.HasSuffix(msg, common.ErrSchedulingSuperseded.Error())
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
