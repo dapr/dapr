@@ -14,6 +14,7 @@ limitations under the License.
 package activity
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -195,7 +197,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			WithActor(wfActorType, ex.workflowID).
 			WithData(resultData).
 			WithContentType(invokev1.ProtobufContentType)
-		_, err = f.router.Call(ctx, req)
+		err = f.publishWithRetry(ctx, ex, req)
 	}
 
 	switch {
@@ -203,6 +205,10 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", ex.actorID, ex.wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
+			return nil
+		}
+		if strings.HasSuffix(err.Error(), common.ErrSchedulingSuperseded.Error()) {
+			log.Debugf("Activity actor '%s': dropping the result for workflow '%s', still superseded after the retry window: %s", ex.actorID, ex.wi.InstanceID, err)
 			return nil
 		}
 
@@ -224,6 +230,35 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 
 	return nil
+}
+
+// publishWithRetry retries the orchestrator's not-yet-durable and superseded
+// refusals for the publish retry window with the result in hand:
+// re-executing would discard it, and a superseded verdict from a read lagging
+// a ContinueAsNew boundary clears once the store catches up. Every other
+// error surfaces at once.
+func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
+	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, common.PublishRetryWindow()))
+	defer cancel()
+	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
+	var refused error
+	for {
+		_, err := f.router.Call(pctx, req)
+		if err == nil || !common.IsSchedulingRefusal(err) {
+			// Returned as-is, whatever the window did meanwhile: nil is an
+			// accepted delivery, and a context error belongs to a call that
+			// may well have committed its inbox row, so the sender must
+			// re-deliver rather than be told the last refusal still stands.
+			return err
+		}
+		refused = err
+		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, err)
+		select {
+		case <-pctx.Done():
+			return refused
+		case <-time.After(bo.NextBackOff()):
+		}
+	}
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {

@@ -35,6 +35,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/kit/crypto/spiffe/signer"
+	trustfake "github.com/dapr/kit/crypto/spiffe/trustanchors/fake"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
@@ -294,6 +295,14 @@ func Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned(t *testing.T) {
 
 func testAddSigner(t *testing.T) *signer.Signer {
 	t.Helper()
+	return testAddSignerWithTrust(t, false)
+}
+
+// testAddSignerWithTrust returns a signer whose own certificate is, when
+// withTrustAnchors is set, also its trust anchor, so history it signed
+// verifies on reload.
+func testAddSignerWithTrust(t *testing.T, withTrustAnchors bool) *signer.Signer {
+	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	template := &x509.Certificate{
@@ -301,7 +310,7 @@ func testAddSigner(t *testing.T) *signer.Signer {
 		Subject:      pkix.Name{CommonName: "test"},
 		NotBefore:    time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		NotAfter:     time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
-		URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/ns/default/app-a"}},
+		URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/ns/default/testapp"}},
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
 	require.NoError(t, err)
@@ -309,11 +318,15 @@ func testAddSigner(t *testing.T) *signer.Signer {
 	require.NoError(t, err)
 	id, err := x509svid.IDFromCert(certs[0])
 	require.NoError(t, err)
-	return signer.New(staticTestSVIDSource{svid: &x509svid.SVID{
+	source := staticTestSVIDSource{svid: &x509svid.SVID{
 		ID:           id,
 		Certificates: certs,
 		PrivateKey:   priv,
-	}}, nil)
+	}}
+	if withTrustAnchors {
+		return signer.New(source, trustfake.New(certs...))
+	}
+	return signer.New(source, nil)
 }
 
 type staticTestSVIDSource struct {

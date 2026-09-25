@@ -106,6 +106,10 @@ type factory struct {
 	registerResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
 	staleClaimAfter  time.Duration
 
+	// publishRetryWindow overrides the in-hand retry window of a refused
+	// result publish (see publishWithRetry); zero means the default.
+	publishRetryWindow time.Duration
+
 	// inflight tracks activity executions whose WorkItem is in the durabletask
 	// queue or being processed by the SDK, keyed by inflight.Key. Shared by
 	// every factory of this actor type (see inflightFor).

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
@@ -147,6 +148,21 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
 		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
+		if common.IsSchedulingRefusal(err) {
+			// This reminder retries forever, so each fire drops the cache
+			// and reads again across the store's lag, but only while the
+			// result is younger than the window the in-hand path would have
+			// spent on it. Unbounded, the refusal is a reminder storm. The
+			// timestamp comes from the host that ran the activity: skew is
+			// noise at this granularity, and a missing one reads as ancient
+			// and drops, which is the safe direction.
+			o.invalidateCachedState()
+			if time.Since(ev.GetTimestamp().AsTime()) < common.PublishRetryWindow() {
+				return err
+			}
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not resolve within the publish window: %v", o.actorID, reminder.Name, err)
+			return nil
+		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever

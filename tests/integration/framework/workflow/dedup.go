@@ -36,7 +36,7 @@ import (
 func InjectInboxEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, daprd *daprd.Daprd, instanceID string, evt *protos.HistoryEvent) {
 	t.Helper()
 
-	keyPrefix := workflowActorKeyPrefix(daprd, instanceID)
+	keyPrefix := WorkflowActorKeyPrefix(daprd, instanceID)
 
 	raw, err := proto.Marshal(evt)
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func InjectInboxEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, dapr
 func InsertHistoryEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, daprd *daprd.Daprd, instanceID string, evt *protos.HistoryEvent, pred func(*protos.HistoryEvent) bool) {
 	t.Helper()
 
-	keyPrefix := workflowActorKeyPrefix(daprd, instanceID)
+	keyPrefix := WorkflowActorKeyPrefix(daprd, instanceID)
 
 	values := db.ReadStateValues(t, ctx, instanceID, "history")
 	target := -1
@@ -114,7 +114,7 @@ func IsEventRaisedFor(name string) func(*protos.HistoryEvent) bool {
 func RemoveHistoryEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, daprd *daprd.Daprd, instanceID string, pred func(*protos.HistoryEvent) bool) {
 	t.Helper()
 
-	keyPrefix := workflowActorKeyPrefix(daprd, instanceID)
+	keyPrefix := WorkflowActorKeyPrefix(daprd, instanceID)
 
 	values := db.ReadStateValues(t, ctx, instanceID, "history")
 	target := -1
@@ -212,7 +212,9 @@ func IsTaskScheduledFor(eventID int32) func(*protos.HistoryEvent) bool {
 	}
 }
 
-func workflowActorKeyPrefix(daprd *daprd.Daprd, instanceID string) string {
+// WorkflowActorKeyPrefix is the state-store key prefix the workflow actor
+// writes an instance's rows under.
+func WorkflowActorKeyPrefix(daprd *daprd.Daprd, instanceID string) string {
 	appID := daprd.AppID()
 	return appID + "||dapr.internal.default." + appID + ".workflow||" + instanceID + "||"
 }

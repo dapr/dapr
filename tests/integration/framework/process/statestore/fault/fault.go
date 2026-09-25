@@ -46,10 +46,11 @@ type Store struct {
 
 	multiObserver func(*state.TransactionalStateRequest)
 
-	multiDeleteHold *holdSpec
-	multiHold       *holdSpec
-	bulkGetHold     *holdSpec
-	getHold         *holdSpec
+	multiDeleteHold  *holdSpec
+	multiHold        *holdSpec
+	multiWriteBehind *holdSpec
+	bulkGetHold      *holdSpec
+	getHold          *holdSpec
 
 	multiCancelled atomic.Int32
 
@@ -71,6 +72,7 @@ type holdSpec struct {
 	arrived   chan struct{}
 	releaseCh chan struct{}
 	done      chan struct{}
+	err       error
 }
 
 // SetMultiObserver registers a callback invoked synchronously on every Multi
@@ -162,6 +164,38 @@ func (s *Store) ArmMultiHold(sub string) (arrived <-chan struct{}, release func(
 
 	var once sync.Once
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// ArmMultiWriteBehind arms a one-shot write-behind on the next Multi touching
+// a key containing sub: the caller is answered success at once while the
+// request reaches the underlying store only when apply is called, so reads in
+// between serve the state from before the acknowledged write, as they do on
+// a store whose reads lag its writes. Armed from a SetMultiObserver callback
+// it captures the observed Multi itself. apply is idempotent and returns once
+// the request is applied, returning the store's verdict on it, so it is safe
+// to register with t.Cleanup.
+func (s *Store) ArmMultiWriteBehind(sub string) (arrived <-chan struct{}, apply func() error) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.multiWriteBehind = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() error {
+		once.Do(func() { close(spec.releaseCh) })
+		select {
+		case <-spec.arrived:
+			<-spec.done
+			return spec.err
+		default:
+			return nil
+		}
+	}
 }
 
 // MultiCancelled returns how many held Multi requests were abandoned because
@@ -348,6 +382,24 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 			s.multiCancelled.Add(1)
 			return cerr
 		}
+	}
+
+	s.mu.Lock()
+	var behind *holdSpec
+	if s.multiWriteBehind != nil && anyHasSubstring(keys, s.multiWriteBehind.sub) {
+		behind = s.multiWriteBehind
+		s.multiWriteBehind = nil
+	}
+	s.mu.Unlock()
+
+	if behind != nil {
+		close(behind.arrived)
+		go func() {
+			<-behind.releaseCh
+			behind.err = s.Wrapped.Store.(state.TransactionalStore).Multi(context.Background(), req)
+			close(behind.done)
+		}()
+		return nil
 	}
 
 	return s.Wrapped.Store.(state.TransactionalStore).Multi(ctx, req)

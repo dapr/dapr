@@ -268,41 +268,6 @@ func Test_fold_takeDropsStaleGeneration(t *testing.T) {
 	assert.Empty(t, h.orch.foldPending)
 }
 
-// A TaskExecutionId mismatch marks a straggler; it must not fold.
-func Test_fold_executionIDMismatchKeepsInboxPath(t *testing.T) {
-	const instanceID = "test-fold-execid"
-	h := newWakeHarness(t, instanceID, true)
-	h.fact.fastPath = true
-	h.primeRunning(t, instanceID, 7)
-	h.orch.state.History[1].GetTaskScheduled().TaskExecutionId = "exec-A"
-	h.orch.state.AddToHistory(&protos.HistoryEvent{
-		EventId:   8,
-		Timestamp: timestamppb.Now(),
-		EventType: &protos.HistoryEvent_TaskScheduled{
-			TaskScheduled: &protos.TaskScheduledEvent{Name: "act", TaskExecutionId: "exec-A"},
-		},
-	})
-
-	mismatch := taskCompletedEvent(7)
-	mismatch.GetTaskCompleted().TaskExecutionId = "exec-B"
-	entry, err := h.orch.admitEvent(t.Context(), mismatch, completionSender{}, true)
-	require.NoError(t, err)
-	assert.Nil(t, entry, "a mismatched execution id must not fold")
-	assert.Empty(t, h.orch.foldPending)
-
-	match := taskCompletedEvent(8)
-	match.GetTaskCompleted().TaskExecutionId = "exec-A"
-	entry, err = h.orch.admitEvent(t.Context(), match, completionSender{}, true)
-	require.NoError(t, err)
-	assert.NotNil(t, entry, "a matching execution id folds as usual")
-
-	absent := taskCompletedEvent(42)
-	absent.GetTaskCompleted().TaskExecutionId = "exec-A"
-	entry, err = h.orch.admitEvent(t.Context(), absent, completionSender{}, true)
-	require.NoError(t, err)
-	assert.Nil(t, entry, "an execution-id-carrying completion with no scheduling event is unmatched and must not fold")
-}
-
 // A turn stalling on payload size must persist taken folded completions to
 // the durable inbox and ack their senders: a nacked fold dies with the
 // sender's process, leaving the stall unrecoverable once a restart lifts
