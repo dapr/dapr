@@ -746,38 +746,40 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		return err
 	}
 	for key := range e.Items {
-		policyDef := h.res.ComponentInboundPolicy(h.storeName, resiliency.Configuration)
+		func() {
+			policyDef := h.res.ComponentInboundPolicy(h.storeName, resiliency.Configuration)
 
-		eventBody := &bytes.Buffer{}
-		_ = json.NewEncoder(eventBody).Encode(e)
+			eventBody := &bytes.Buffer{}
+			_ = json.NewEncoder(eventBody).Encode(e)
 
-		req := invokev1.NewInvokeMethodRequest("/configuration/"+h.storeName+"/"+key).
-			WithHTTPExtension(nethttp.MethodPost, "").
-			WithRawData(eventBody).
-			WithContentType(invokev1.JSONContentType)
-		if policyDef != nil {
-			req.WithReplay(policyDef.HasRetries())
-		}
-		defer req.Close()
-
-		policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
-		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-			rResp, rErr := appChannel.InvokeMethod(ctx, req, "")
-			if rErr != nil {
-				return struct{}{}, rErr
+			req := invokev1.NewInvokeMethodRequest("/configuration/"+h.storeName+"/"+key).
+				WithHTTPExtension(nethttp.MethodPost, "").
+				WithRawData(eventBody).
+				WithContentType(invokev1.JSONContentType)
+			if policyDef != nil {
+				req.WithReplay(policyDef.HasRetries())
 			}
-			if rResp != nil {
-				defer rResp.Close()
-			}
+			defer req.Close()
 
-			if rResp != nil && rResp.Status().GetCode() != nethttp.StatusOK {
-				return struct{}{}, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().GetCode())
+			policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
+			_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+				rResp, rErr := appChannel.InvokeMethod(ctx, req, "")
+				if rErr != nil {
+					return struct{}{}, rErr
+				}
+				if rResp != nil {
+					defer rResp.Close()
+				}
+
+				if rResp != nil && rResp.Status().GetCode() != nethttp.StatusOK {
+					return struct{}{}, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().GetCode())
+				}
+				return struct{}{}, nil
+			})
+			if err != nil {
+				log.Errorf("error sending configuration item to the app: %v", err)
 			}
-			return struct{}{}, nil
-		})
-		if err != nil {
-			log.Errorf("error sending configuration item to the app: %v", err)
-		}
+		}()
 	}
 	return nil
 }
