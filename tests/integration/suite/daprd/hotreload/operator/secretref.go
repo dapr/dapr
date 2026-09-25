@@ -16,11 +16,6 @@ package operator
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -34,8 +29,8 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
@@ -58,7 +53,6 @@ type secretref struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
 	logline  *logline.LogLine
-	client   *http.Client
 }
 
 func (s *secretref) Setup(t *testing.T) []framework.Option {
@@ -69,8 +63,6 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 	)
 
 	s.logline = logline.New(t, logline.WithCaptureAll())
-
-	s.client = client.HTTP(t)
 
 	s.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
@@ -98,39 +90,70 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 
 	require.Empty(t, s.daprd.GetMetaRegisteredComponents(t, ctx))
 
+	client := s.daprd.GRPCClient(t, ctx)
+
+	// The local env secret store, given its prefix through a secretKeyRef whose
+	// value is already populated the way the operator populates it: the secret
+	// bytes, base64 encoded, then JSON marshalled as a string.
+	newComp := func(prefix string) compapi.Component {
+		encoded := strconv.Quote(base64.StdEncoding.EncodeToString([]byte(prefix)))
+		return compapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "mysecrets"},
+			Spec: compapi.ComponentSpec{
+				Type:    "secretstores.local.env",
+				Version: "v1",
+				Metadata: []common.NameValuePair{{
+					Name:         "PREFIX",
+					SecretKeyRef: common.SecretKeyRef{Name: "env-prefix", Key: "prefix"},
+					Value:        common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(encoded)}},
+				}},
+			},
+		}
+	}
+
+	// A second decode of an already decoded value logs this error. It is logged
+	// while the component is being processed, so it has already been written by
+	// the time the component is observable over the API.
+	const decodeErr = "Error decoding secret"
+
 	t.Run("a created component resolves its secret ref exactly once", func(t *testing.T) {
 		s.logline.Reset()
 
-		comp := s.comp("FOO_")
+		comp := newComp("FOO_")
 		s.operator.SetComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, s.daprd.GetMetaRegisteredComponents(t, ctx), 1)
+			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
 
-		s.read(t, ctx, "SEC_1", "bar1")
-		s.assertNoDecodeError(t)
+		resp, err := client.GetSecret(ctx, &rtv1.GetSecretRequest{StoreName: "mysecrets", Key: "SEC_1"})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"SEC_1": "bar1"}, resp.GetData())
+		assert.False(t, s.logline.Contains(decodeErr), "secret was decoded more than once")
 	})
 
 	t.Run("an updated component resolves its secret ref exactly once", func(t *testing.T) {
 		s.logline.Reset()
 
-		comp := s.comp("BAR_")
+		comp := newComp("BAR_")
 		s.operator.SetComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_UPDATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, "baz1", s.get(c, ctx, "SEC_1"))
+			resp, err := client.GetSecret(ctx, &rtv1.GetSecretRequest{StoreName: "mysecrets", Key: "SEC_1"})
+			if assert.NoError(c, err) {
+				assert.Equal(c, map[string]string{"SEC_1": "baz1"}, resp.GetData())
+			}
 		}, time.Second*5, time.Millisecond*10)
 
-		s.assertNoDecodeError(t)
+		assert.False(t, s.logline.Contains(decodeErr), "secret was decoded more than once")
 	})
 
 	t.Run("an unchanged component is not reloaded", func(t *testing.T) {
 		s.logline.Reset()
 
-		comp := s.comp("BAR_")
+		comp := newComp("BAR_")
 		s.operator.SetComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_UPDATED})
 
@@ -138,72 +161,9 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 			assert.True(c, s.logline.Contains("Component update skipped: no changes detected"))
 		}, time.Second*5, time.Millisecond*10)
 
-		s.read(t, ctx, "SEC_1", "baz1")
-		s.assertNoDecodeError(t)
+		resp, err := client.GetSecret(ctx, &rtv1.GetSecretRequest{StoreName: "mysecrets", Key: "SEC_1"})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"SEC_1": "baz1"}, resp.GetData())
+		assert.False(t, s.logline.Contains(decodeErr), "secret was decoded more than once")
 	})
-}
-
-// comp builds the local env secret store, giving its prefix through a
-// secretKeyRef whose value is already populated the way the operator populates
-// it: the secret bytes, base64 encoded, then JSON marshalled as a string.
-func (s *secretref) comp(prefix string) compapi.Component {
-	encoded := strconv.Quote(base64.StdEncoding.EncodeToString([]byte(prefix)))
-	return compapi.Component{
-		ObjectMeta: metav1.ObjectMeta{Name: "mysecrets"},
-		Spec: compapi.ComponentSpec{
-			Type:    "secretstores.local.env",
-			Version: "v1",
-			Metadata: []common.NameValuePair{{
-				Name:         "PREFIX",
-				SecretKeyRef: common.SecretKeyRef{Name: "env-prefix", Key: "prefix"},
-				Value:        common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(encoded)}},
-			}},
-		},
-	}
-}
-
-// assertNoDecodeError fails if daprd logged a secret decode error, which is
-// what a second decode of an already decoded value produces. The error is
-// logged while the component is being processed, so it has already been
-// written by the time the component is observable over the API.
-func (s *secretref) assertNoDecodeError(t *testing.T) {
-	t.Helper()
-	assert.False(t, s.logline.Contains("Error decoding secret"), "secret was decoded more than once")
-}
-
-func (s *secretref) read(t *testing.T, ctx context.Context, key, expValue string) {
-	t.Helper()
-	assert.Equal(t, expValue, s.get(t, ctx, key))
-}
-
-// get returns the value the secret store gives for key, which reflects the
-// prefix the component was configured with, or an empty string if the read did
-// not succeed. Failures are recorded rather than fatal so that it can also be
-// polled while the component is being reloaded.
-func (s *secretref) get(t assert.TestingT, ctx context.Context, key string) string {
-	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/mysecrets/%s", s.daprd.HTTPPort(), url.QueryEscape(key))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
-	if !assert.NoError(t, err) { //nolint:testifylint
-		return ""
-	}
-
-	resp, err := s.client.Do(req)
-	if !assert.NoError(t, err) { //nolint:testifylint
-		return ""
-	}
-	body, err := io.ReadAll(resp.Body)
-	assert.NoError(t, resp.Body.Close())
-	if !assert.NoError(t, err) {
-		return ""
-	}
-	if !assert.Equal(t, http.StatusOK, resp.StatusCode, string(body)) {
-		return ""
-	}
-
-	var m map[string]string
-	if !assert.NoError(t, json.Unmarshal(body, &m)) {
-		return ""
-	}
-
-	return m[key]
 }
