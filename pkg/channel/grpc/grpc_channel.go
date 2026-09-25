@@ -215,7 +215,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	// Prepare gRPC Metadata
-	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
+	ctx = grpcMetadata.NewOutgoingContext(ctx, md)
 
 	conn, teardown, err := g.connFn()
 	if err != nil {
@@ -233,10 +233,6 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	resp, err := runtimev1pb.NewAppCallbackClient(conn).OnInvoke(ctx, pd.GetMessage(), opts...)
-
-	if g.ch != nil {
-		<-g.ch
-	}
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {
