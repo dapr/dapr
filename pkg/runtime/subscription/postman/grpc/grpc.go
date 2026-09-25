@@ -200,13 +200,13 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		if iTraceID != nil {
 			if traceID, ok := iTraceID.(string); ok {
 				sc, _ := diag.SpanContextFromW3CString(traceID)
+				if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+					sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+				}
 
 				// no ops if trace is off
-				var span trace.Span
-
-				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
+				_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
 				if span != nil {
-					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 					spans[n] = span
 					n++
 				}
