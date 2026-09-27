@@ -41,6 +41,7 @@ type Exec struct {
 
 	args       []string
 	binPath    string
+	logName    string
 	runErrorFn func(*testing.T, error)
 	exitCode   int
 	envs       map[string]string
@@ -119,23 +120,28 @@ func (e *Exec) ReplaceArg(t *testing.T, flag, value string) {
 func (e *Exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
-
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
 	iow := iowriter.New(t, filepath.Base(e.binPath))
+	e.logName = iow.Name()
+	iowriter.Eventf(t, "exec %s: %s %s", e.logName, e.binPath, strings.Join(e.args, " "))
+
+	// Both streams report under the one name, but each needs its own line
+	// buffer: sharing one lets either stream's EOF flush a partial line the
+	// other is still writing.
 	for _, pipe := range []struct {
 		cmdPipeFn func() (io.ReadCloser, error)
 		procPipe  io.WriteCloser
+		out       iowriter.WriteCloser
 	}{
-		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe},
-		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe},
+		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe, out: iow},
+		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe, out: iow.Stream()},
 	} {
 		cmdPipe, err := pipe.cmdPipeFn()
 		require.NoError(t, err)
 
-		pipe := tee.WriteCloser(iow, pipe.procPipe)
+		pipe := tee.WriteCloser(pipe.out, pipe.procPipe)
 
 		e.wg.Go(func() {
 			io.Copy(pipe, cmdPipe)
@@ -201,10 +207,36 @@ func (e *Exec) SignalHUP(t *testing.T) {
 func (e *Exec) checkExit(t *testing.T) {
 	t.Helper()
 
-	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
+	iowriter.Eventf(t, "waiting for %s to exit", e.name())
 
-	e.runErrorFn(t, e.cmd.Wait())
+	err := e.cmd.Wait()
+
+	// A test which has already failed tears its processes down mid flight, so
+	// how they exited says nothing about the code under test. Record it instead
+	// of asserting on it, otherwise every fast failure is buried under a stack
+	// of cascading exit code errors.
+	if t.Failed() {
+		if err == nil {
+			iowriter.Eventf(t, "%s exited cleanly during teardown of a failed test", e.name())
+		} else {
+			iowriter.Eventf(t, "%s exited during teardown of a failed test: %v", e.name(), err)
+		}
+		return
+	}
+
+	e.runErrorFn(t, err)
 	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
-	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
-	t.Logf("%q process exited", filepath.Base(e.binPath))
+	if e.cmd.ProcessState != nil {
+		iowriter.Eventf(t, "%s exited (code %d, want %d)", e.name(), e.cmd.ProcessState.ExitCode(), e.exitCode)
+		assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
+	}
+}
+
+// name is the label this process' output is reported under, falling back to
+// the binary name before Run has assigned one.
+func (e *Exec) name() string {
+	if e.logName != "" {
+		return e.logName
+	}
+	return filepath.Base(e.binPath)
 }

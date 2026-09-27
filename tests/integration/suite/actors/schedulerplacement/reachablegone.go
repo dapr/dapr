@@ -113,7 +113,7 @@ func (r *reachablegone) Run(t *testing.T, ctx context.Context) {
 		defer stream.CloseSend()
 		_, serr = stream.Recv()
 		assert.NoError(c, serr)
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	r.daprd.Run(t, ctx)
 	t.Cleanup(func() { r.daprd.Cleanup(t) })
@@ -134,14 +134,14 @@ func (r *reachablegone) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Zero(c, placementRuntimes(c))
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*5, time.Millisecond*10)
 
 	// The lost stream clears reachability, so the next timeout adopts the
 	// placement service.
 	r.sched.Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 
 	r.daprd.WaitUntilRunning(t, ctx)
 
@@ -153,6 +153,6 @@ func (r *reachablegone) Run(t *testing.T, ctx context.Context) {
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*30, time.Millisecond*10)
+	}, time.Second*15, time.Millisecond*10)
 	assert.Positive(t, r.invoked.Load())
 }

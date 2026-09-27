@@ -13,7 +13,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.18.4
-	github.com/dapr/durabletask-go v0.14.1
+	github.com/dapr/durabletask-go v0.14.2-0.20260923181807-3ab246ba418d
 	github.com/dapr/kit v0.18.3-0.20260727141402-dd127582d044
 	github.com/diagridio/go-etcd-cron v0.12.7
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -66,6 +66,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/ratelimit v0.3.0
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.36.0
@@ -464,7 +465,6 @@ require (
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/mod v0.40.0 // indirect

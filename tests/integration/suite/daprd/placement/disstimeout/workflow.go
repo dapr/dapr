@@ -27,6 +27,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -71,7 +72,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, table.Tables["default"].Hosts, 1)
 	}, time.Second*15, time.Millisecond*100)
 
-	wfClient := dworkflow.NewClient(w.actors.Daprd().GRPCConn(t, ctx))
+	wfClient := dworkflow.NewClientWithLogger(w.actors.Daprd().GRPCConn(t, ctx), logger.New(t))
 	wfCtx, wfCancel := context.WithCancel(ctx)
 	t.Cleanup(wfCancel)
 	require.NoError(t, wfClient.StartWorker(wfCtx, dworkflow.NewRegistry()))
