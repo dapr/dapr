@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -117,12 +118,12 @@ func (m *multireplicachild) Run(t *testing.T, ctx context.Context) {
 
 	// Start workers on ALL replicas.
 	for i := range 3 {
-		client := dworkflow.NewClient(m.daprds[i].GRPCConn(t, ctx))
+		client := dworkflow.NewClientWithLogger(m.daprds[i].GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, client.StartWorker(ctx, reg))
 	}
 
 	// Schedule from replica 0.
-	client := dworkflow.NewClient(m.daprds[0].GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(m.daprds[0].GRPCConn(t, ctx), logger.New(t))
 	id, err := client.ScheduleWorkflow(ctx, "sign-repchild-parent")
 	require.NoError(t, err)
 
