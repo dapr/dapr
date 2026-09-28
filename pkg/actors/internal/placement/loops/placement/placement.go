@@ -477,8 +477,21 @@ func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Trans
 
 	client, err := p.streamFactory(ctx, conn)
 	if err != nil {
+		conn.Close()
 		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
-	return client, nil
+	return &placementStream{Transport: client, conn: conn}, nil
+}
+
+// placementStream owns the connection for one placement session. Stream
+// teardown must close the channel as well as the RPC: CloseSend alone leaves
+// gRPC's background goroutines alive, even after the channel becomes idle.
+type placementStream struct {
+	transport.Transport
+	conn *grpc.ClientConn
+}
+
+func (s *placementStream) CloseSend() error {
+	return errors.Join(s.Transport.CloseSend(), s.conn.Close())
 }
