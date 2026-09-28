@@ -62,6 +62,21 @@ const (
 
 	// DefaultJWTTTL is the default time-to-live for JWT tokens.
 	DefaultJWTTTL = time.Hour * 24
+
+	// DefaultCATTL is the default time-to-live for the root and issuer
+	// certificates.
+	DefaultCATTL = time.Hour * 24 * 365
+
+	// DefaultCARenewalThreshold is the default fraction of the issuer
+	// certificate's lifetime after which the CA is automatically renewed.
+	// 0.9 of the default 1 year TTL leaves roughly 36 days of old issuer
+	// validity for the renewed trust anchor to propagate and switch over.
+	DefaultCARenewalThreshold = 0.9
+
+	// DefaultTrustAnchorPropagationGrace is the default period after appending
+	// a renewed trust anchor during which sentry keeps signing with the old
+	// issuer key, giving the new anchor time to propagate everywhere.
+	DefaultTrustAnchorPropagationGrace = time.Hour * 24
 )
 
 // Config holds the configuration for the Certificate Authority.
@@ -80,6 +95,24 @@ type Config struct {
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec
+
+	// CATTL is the time-to-live used when generating or renewing the root and
+	// issuer certificates. Zero uses DefaultCATTL.
+	CATTL time.Duration
+	// CARenewalEnabled enables automatic append-only CA renewal.
+	CARenewalEnabled bool
+	// CARenewalThreshold is the fraction of the issuer certificate's lifetime
+	// after which the CA is automatically renewed, in the range (0, 1).
+	CARenewalThreshold float64
+	// TrustAnchorPropagationGrace is how long sentry keeps signing with the
+	// old issuer key after appending a renewed trust anchor.
+	TrustAnchorPropagationGrace time.Duration
+	// NextIssuerCertPath is the path of the pending issuer certificate written
+	// during CA renewal.
+	NextIssuerCertPath string
+	// NextIssuerKeyPath is the path of the pending issuer key written during
+	// CA renewal.
+	NextIssuerKeyPath string
 }
 
 type ConfigJWT struct {

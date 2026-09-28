@@ -66,6 +66,13 @@ func (s *Store) Set(objs ...client.Object) {
 	}
 }
 
+func (s *Store) Get(namespace, name string) (client.Object, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	obj, ok := s.objs[namespace+"/"+name]
+	return obj, ok
+}
+
 func (s *Store) Objects() map[string]any {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
