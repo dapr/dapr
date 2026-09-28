@@ -82,19 +82,19 @@ func (c *ha) Setup(t *testing.T) []framework.Option {
 	)
 	etcdPorts := [3]int{etcd1, etcd2, etcd3}
 
-	for i := range c.schedulers {
+	for i, etcdPort := range etcdPorts {
 		c.schedulers[i] = scheduler.New(t,
 			scheduler.WithPlacementEnabled(true),
 			scheduler.WithInitialCluster(initialCluster),
 			scheduler.WithID("scheduler-"+strconv.Itoa(i)),
-			scheduler.WithEtcdClientPort(etcdPorts[i]),
+			scheduler.WithEtcdClientPort(etcdPort),
 		)
 		c.back[i] = scheduler.New(t,
 			scheduler.WithPlacementEnabled(true),
 			scheduler.WithInitialCluster(initialCluster),
 			scheduler.WithID(c.schedulers[i].ID()),
 			scheduler.WithPort(c.schedulers[i].Port()),
-			scheduler.WithEtcdClientPort(etcdPorts[i]),
+			scheduler.WithEtcdClientPort(etcdPort),
 			scheduler.WithDataDir(c.schedulers[i].DataDir()),
 		)
 	}
