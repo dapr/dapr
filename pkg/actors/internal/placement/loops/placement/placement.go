@@ -351,10 +351,14 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.fallback = nil
 	}
 
+	connected := "Connected to placement service: %s"
+	if p.schedulerPlacement {
+		connected = "Connected to scheduler placement leader %s"
+	}
 	if recon.TransientPrior {
-		log.Debugf("Connected to placement service: %s", p.connector.Address())
+		log.Debugf(connected, p.connector.Address())
 	} else {
-		log.Infof("Connected to placement service: %s", p.connector.Address())
+		log.Infof(connected, p.connector.Address())
 	}
 
 	p.idx++
