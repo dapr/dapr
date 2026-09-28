@@ -137,13 +137,12 @@ func RecordPlacementLeaderStatus(leader bool) {
 // (+1) or disconnecting (-1) for the given namespace.
 func RecordPlacementStreamsConnected(namespace string, delta int64) {
 	placementStreamsLock.Lock()
+	defer placementStreamsLock.Unlock()
 	placementStreamsCounts[namespace] += delta
 	current := placementStreamsCounts[namespace]
 	if current <= 0 {
 		delete(placementStreamsCounts, namespace)
 	}
-	placementStreamsLock.Unlock()
-
 	stats.RecordWithTags(context.Background(),
 		utils.WithTags(placementStreamsGauge.Name(), tagNamespace, namespace),
 		placementStreamsGauge.M(current))

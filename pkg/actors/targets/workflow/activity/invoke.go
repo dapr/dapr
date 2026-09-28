@@ -113,7 +113,7 @@ func decodeActivityInvocation(data []byte) (*protos.ActivityInvocation, *string,
 		return &invocation, taskScheduledName(invocation.GetHistoryEvent()), nil
 	}
 
-	// TODO: remove this legacy fallback in v1.19, once the floor version is
+	// TODO: remove this legacy fallback in v1.20, once the floor version is
 	// past the rollout.
 	var legacy backend.HistoryEvent
 	if legacyErr := proto.Unmarshal(data, &legacy); legacyErr != nil {

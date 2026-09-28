@@ -41,14 +41,14 @@ func Test_runOwned_handoffPublishIsOwned(t *testing.T) {
 	t.Parallel()
 
 	inflightKey := func() string {
-		return inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+		return inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
 	}
 
 	// handOff runs one execution up to the WorkItem dispatch, then cancels
 	// the owner so runOwned hands the still-queued WorkItem to the watcher.
 	handOff := func(t *testing.T, f *factory, scheduled chan *backend.ActivityWorkItem) *activityHandoff {
 		t.Helper()
-		a := f.GetOrCreate("wf::3").(*activity)
+		a := f.GetOrCreate("wf::3::0").(*activity)
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
@@ -138,7 +138,7 @@ type activityHandoff struct {
 func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 	t.Parallel()
 
-	key := inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
 
 	t.Run("a cancelled caller still gets its result published", func(t *testing.T) {
 		t.Parallel()
@@ -152,7 +152,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 			return &internalsv1pb.InternalInvokeResponse{}, nil
 		})
 
-		a := f.GetOrCreate("wf::3").(*activity)
+		a := f.GetOrCreate("wf::3::0").(*activity)
 		ctx, cancel := context.WithCancel(t.Context())
 		ownerErr := make(chan error, 1)
 		go func() {
@@ -186,7 +186,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 			return nil, errors.New("parent unreachable")
 		})
 
-		a := f.GetOrCreate("wf::3").(*activity)
+		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
 			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
@@ -212,7 +212,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		rootCancel()
 		f.detached = detached.New(rootCtx)
 
-		a := f.GetOrCreate("wf::3").(*activity)
+		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
 			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())

@@ -354,6 +354,9 @@ test-deps:
 #   exact delivery counts
 # Names must be plain directory names: they are joined into a grep -E
 # alternation in test-e2e-all, so regex metacharacters would mis-match.
+# placementcutover is excluded from both passes there too: it moves the
+# cluster's placement authority, so only the scheduler placement tail runs
+# it, and its tests fatal when run without DAPR_E2E_PLACEMENT_CUTOVER.
 DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
 
 # Compile the e2e test binaries without running them, so that a later
@@ -374,9 +377,17 @@ test-e2e-all: check-e2e-env test-deps
 	# Note: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
 	ret=0; \
-	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) | tr ' ' '|'))$$") || ret=$$?; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) placementcutover | tr ' ' '|'))$$") || ret=$$?; \
 	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.xml --format standard-quiet -- -timeout 20m -p 1 -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(DAPR_E2E_SERIAL_PACKAGES)) || ret=$$?; \
 	exit $$ret
+     ifneq ($(DAPR_E2E_SKIP_SCHEDULER_PLACEMENT),true)
+	# Scheduler placement pass: cut the cluster over to scheduler placement
+	# live, re-run the actor and workflow suites against it, then roll the
+	# cluster back. Set DAPR_E2E_SKIP_SCHEDULER_PLACEMENT=true to skip.
+	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestPlacementToScheduler ./tests/e2e/placementcutover/...
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.xml --format standard-quiet -- -timeout 40m -p 2 -count=1 -v -tags=e2e ./tests/e2e/actor_activation/... ./tests/e2e/actor_features/... ./tests/e2e/actor_invocation/... ./tests/e2e/actor_reentrancy/... ./tests/e2e/actor_reminder/... ./tests/e2e/actor_sdks/... ./tests/e2e/actor_state/... ./tests/e2e/workflow_accesspolicy/... ./tests/e2e/workflow_crossapp/... ./tests/e2e/workflow_retention/... ./tests/e2e/workflows/...
+	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestSchedulerToPlacement ./tests/e2e/placementcutover/...
+     endif
      else
 	for app in $(DAPR_E2E_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \

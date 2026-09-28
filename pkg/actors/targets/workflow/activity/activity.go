@@ -91,12 +91,14 @@ func (a *activity) ID() string {
 	return a.actorID
 }
 
-// workflowID returns the parent instance ID encoded in the actor ID. Instance
-// IDs may themselves contain the separator; the task ID after the last one
-// never does.
+// workflowID returns the parent instance ID encoded in the actor ID
+// "<instanceID>::<taskID>::<generation>". The instance ID may itself contain
+// the separator, so the last two components are cut.
 func (a *activity) workflowID() (string, error) {
 	if i := strings.LastIndex(a.actorID, common.ActivityIDSeparator); i >= 0 {
-		return a.actorID[:i], nil
+		if j := strings.LastIndex(a.actorID[:i], common.ActivityIDSeparator); j >= 0 {
+			return a.actorID[:j], nil
+		}
 	}
 	return "", fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
 }

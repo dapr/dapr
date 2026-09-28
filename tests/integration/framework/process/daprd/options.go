@@ -37,6 +37,7 @@ type Option func(*options)
 // options contains the options for running Daprd in integration tests.
 type options struct {
 	execOpts []exec.Option
+	execPath string
 
 	appID                      string
 	namespace                  *string
@@ -81,6 +82,14 @@ type options struct {
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+// WithExecPath runs this daprd from the given binary instead of the one
+// DAPR_INTEGRATION_DAPRD_PATH points at.
+func WithExecPath(path string) Option {
+	return func(o *options) {
+		o.execPath = path
 	}
 }
 

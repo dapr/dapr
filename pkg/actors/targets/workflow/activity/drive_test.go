@@ -143,7 +143,7 @@ func Test_localDrive_successNoReminder(t *testing.T) {
 	t.Parallel()
 	h := newDriveHarness(t)
 
-	a := h.fact.GetOrCreate("wf::3").(*activity)
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
 	name := testActivityName
 	require.True(t, a.localDrive(testInvocation(), &name))
 
@@ -154,7 +154,7 @@ func Test_localDrive_successNoReminder(t *testing.T) {
 
 	call := h.snapshotCalls()[0]
 	assert.Equal(t, activityReminderName, call.Name)
-	assert.Equal(t, "wf::3", call.ActorID)
+	assert.Equal(t, "wf::3::0", call.ActorID)
 	assert.True(t, call.SkipRetries, "the drive owns its recovery; the router's blind retries must be skipped")
 	assert.False(t, call.SkipLock, "the execution claim must take the activity actor lock")
 	assert.NotNil(t, call.Data, "the invocation must ride on the synthetic reminder")
@@ -167,7 +167,7 @@ func Test_localDrive_haltedFactoryFallsBack(t *testing.T) {
 	h := newDriveHarness(t)
 	h.fact.driveCancel()
 
-	a := h.fact.GetOrCreate("wf::3").(*activity)
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
 	name := testActivityName
 	assert.False(t, a.localDrive(testInvocation(), &name),
 		"a halting factory must refuse the drive so the caller creates the durable reminder")
@@ -182,12 +182,12 @@ func Test_HaltAll_installsAFreshDriveScope(t *testing.T) {
 	h := newDriveHarness(t)
 
 	name := testActivityName
-	a := h.fact.GetOrCreate("wf::3").(*activity)
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
 	require.True(t, a.localDrive(testInvocation(), &name))
 
 	require.NoError(t, h.fact.HaltAll(t.Context()))
 
-	a = h.fact.GetOrCreate("wf::3").(*activity)
+	a = h.fact.GetOrCreate("wf::3::0").(*activity)
 	require.True(t, a.localDrive(testInvocation(), &name),
 		"the fast path must survive the churn HaltAll signals")
 	h.fact.driveScope().Wait()
@@ -201,7 +201,7 @@ func Test_driveActivity_escalatesAfterRetries(t *testing.T) {
 	h := newDriveHarness(t)
 	h.callErr = errors.New("engine busy")
 
-	a := h.fact.GetOrCreate("wf::3").(*activity)
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
 	name := testActivityName
 	require.True(t, a.localDrive(testInvocation(), &name))
 
@@ -215,7 +215,7 @@ func Test_driveActivity_escalatesAfterRetries(t *testing.T) {
 
 	create := h.sched.snapshotCreates()[0]
 	assert.Equal(t, activityReminderName, create.Name)
-	assert.Equal(t, "wf::3", create.ActorID)
+	assert.Equal(t, "wf::3::0", create.ActorID)
 	assert.Equal(t, h.fact.actorType, create.ActorType)
 	require.NotNil(t, create.ConcurrencyKey)
 	assert.Equal(t, testActivityName, *create.ConcurrencyKey)
@@ -226,7 +226,7 @@ func Test_driveActivity_escalatesImmediatelyOnCancel(t *testing.T) {
 	h := newDriveHarness(t)
 	h.cancelOn1 = true
 
-	a := h.fact.GetOrCreate("wf::3").(*activity)
+	a := h.fact.GetOrCreate("wf::3::0").(*activity)
 	name := testActivityName
 	require.True(t, a.localDrive(testInvocation(), &name))
 
@@ -242,7 +242,7 @@ func Test_driveActivity_escalatesImmediatelyOnCancel(t *testing.T) {
 func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
 	t.Parallel()
 
-	key := inflight.Key("wf::3", testInvocation().GetHistoryEvent())
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
 
 	t.Run("live claim: no retry, no escalation", func(t *testing.T) {
 		t.Parallel()
@@ -253,7 +253,7 @@ func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
 		require.True(t, owner)
 		t.Cleanup(func() { call.Finish(nil) })
 
-		a := h.fact.GetOrCreate("wf::3").(*activity)
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), &name))
 		h.fact.driveScope().Wait()
@@ -273,7 +273,7 @@ func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
 		call.Finish(nil)
 		h.fact.inflight.ReleaseAfter(key, call, time.Minute)
 
-		a := h.fact.GetOrCreate("wf::3").(*activity)
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), &name))
 		h.fact.driveScope().Wait()
@@ -288,7 +288,7 @@ func Test_driveActivity_invocationCancelNotRetried(t *testing.T) {
 		h := newDriveHarness(t)
 		h.callErr = context.Canceled
 
-		a := h.fact.GetOrCreate("wf::3").(*activity)
+		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
 		require.True(t, a.localDrive(testInvocation(), &name))
 		assert.Eventually(t, func() bool {
@@ -311,7 +311,7 @@ func Test_escalateActivity_skippedOnShutdown(t *testing.T) {
 	h.fact.detached = detached.New(rootCtx)
 
 	name := testActivityName
-	h.fact.escalateActivity("wf::3", testInvocation(), &name)
+	h.fact.escalateActivity("wf::3::0", testInvocation(), &name)
 	h.fact.detached.Wait()
 
 	assert.Empty(t, h.sched.snapshotCreates(), "process shutdown must not spawn escalations; the janitor re-dispatches on the next owner")

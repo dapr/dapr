@@ -104,7 +104,7 @@ func (s *stuckround) Run(t *testing.T, ctx context.Context) {
 			leader = leader || host.GetLeader()
 		}
 		assert.True(c, leader)
-	}, time.Second*20, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*10)
 
 	// The fake host reports t2type and never acks its round, holding it
 	// open.

@@ -16,7 +16,7 @@ https://dapr.io
 >
 > For more information, see https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-persisting-scheduler
 {{- end }}
-{{- if eq .Values.global.scheduler.placement.enabled true }}
+{{- if eq (include "dapr.schedulerPlacementEnabled" .) "true" }}
 
 > Note: Actor placement is served by the Scheduler service (global.scheduler.placement.enabled=true).
 > The standalone placement StatefulSet is NOT deployed. Sidecars keep their placement address so
