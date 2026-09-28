@@ -41,7 +41,14 @@ type CloudEvent struct {
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
 func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]any, error) {
 	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
-		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
+		envelope, err := contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
+		if err != nil {
+			return nil, err
+		}
+		if req.Baggage != "" {
+			envelope[diagConsts.BaggageHeader] = req.Baggage
+		}
+		return envelope, nil
 	}
 
 	// certain metadata beginning with "cloudevent." are considered overrides to the cloudevent envelope

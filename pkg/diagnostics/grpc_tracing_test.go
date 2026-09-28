@@ -141,6 +141,32 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 }
 
 func TestSpanContextFromIncomingGRPCMetadata(t *testing.T) {
+	t.Run("grpc-trace-bin and tracestate headers", func(t *testing.T) {
+		traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+		require.NoError(t, err)
+		spanID, err := trace.SpanIDFromHex("0011223344556677")
+		require.NoError(t, err)
+		binary := diagUtils.BinaryFromSpanContext(trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     spanID,
+			TraceFlags: trace.FlagsSampled,
+		}))
+		md := grpcMetadata.New(map[string]string{
+			diagConsts.GRPCTraceContextKey: string(binary),
+			diagConsts.TracestateHeader:    "vendor=value",
+		})
+		testCtx := grpcMetadata.NewIncomingContext(t.Context(), md)
+		_, err = metadata.SetMetadataInContextUnary(testCtx, nil, nil, func(ctx context.Context, req any) (any, error) {
+			testCtx = ctx
+			return nil, nil
+		})
+		require.NoError(t, err)
+
+		sc, ok := SpanContextFromIncomingGRPCMetadata(testCtx)
+		require.True(t, ok)
+		assert.Equal(t, "vendor=value", sc.TraceState().String())
+	})
+
 	t.Run("traceparent and tracestate headers, no grpc-trace-bin", func(t *testing.T) {
 		md := grpcMetadata.New(map[string]string{
 			diagConsts.TraceparentHeader: "00-00112233445566778899aabbccddeeff-0011223344556677-01",

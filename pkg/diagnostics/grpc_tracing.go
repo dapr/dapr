@@ -310,12 +310,12 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		traceContext = md[diagConsts.TraceparentHeader]
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
-			if ok && len(md[diagConsts.TracestateHeader]) > 0 {
-				ts := TraceStateFromW3CString(md[diagConsts.TracestateHeader][0])
-				// SpanContext is immutable: WithTraceState returns a copy, so it must be reassigned.
-				sc = sc.WithTraceState(*ts)
-			}
 		}
+	}
+	if ok && len(md[diagConsts.TracestateHeader]) > 0 {
+		ts := TraceStateFromW3CString(md[diagConsts.TracestateHeader][0])
+		// SpanContext is immutable: WithTraceState returns a copy, so it must be reassigned.
+		sc = sc.WithTraceState(*ts)
 	}
 	return sc, ok
 }
