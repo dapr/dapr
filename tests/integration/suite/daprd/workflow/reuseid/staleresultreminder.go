@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -97,28 +97,23 @@ func (s *staleresultreminder) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// The recorded scheduling of task 0 carries this execution's id; the
-	// planted result names another.
-	hist, err := client.GetInstanceHistory(ctx, id)
-	require.NoError(t, err)
+	// planted result names another. A turn dispatches its activities before
+	// it saves, so the row is readable only once the commit lands.
+	rows := fworkflow.SQLiteRows(s.workflow.DB(), string(id))
 	var scheduledExec string
-	for _, ev := range hist.GetEvents() {
-		if ts := ev.GetTaskScheduled(); ts != nil && ev.GetEventId() == 0 {
-			scheduledExec = ts.GetTaskExecutionId()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
+		if !assert.NotNil(c, ev, "task 0 must be recorded in history") {
+			return
 		}
-	}
-	require.NotEmpty(t, scheduledExec, "task 0 must be recorded with an execution id")
+		scheduledExec = ev.GetTaskScheduled().GetTaskExecutionId()
+		assert.NotEmpty(c, scheduledExec, "task 0 must be recorded with an execution id")
+	}, time.Second*20, time.Millisecond*10)
 
 	// Planted through the scheduler as the activity actor would plant it:
 	// a one-shot reminder on the workflow actor with a retry-forever policy.
-	appID := s.workflow.Dapr().AppID()
-	var schedClient schedulerv1pb.SchedulerClient
-	if s.workflow.Signing() {
-		schedClient = s.workflow.Scheduler().ClientMTLS(t, ctx, appID)
-	} else {
-		schedClient = s.workflow.Scheduler().Client(t, ctx)
-	}
 	const reminderName = common.ReminderPrefixActivityResult + "stale"
-	fworkflow.PlantReminder(t, ctx, schedClient, appID, string(id), reminderName, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, s.workflow, s.workflow.Signing(), string(id), reminderName, &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_TaskCompleted{

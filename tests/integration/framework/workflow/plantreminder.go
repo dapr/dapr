@@ -16,44 +16,42 @@ package workflow
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
-// PlantReminder schedules a due-now reminder named name against the workflow
+// PlantReminder schedules a due-now reminder named name against w's workflow
 // actor for instanceID, carrying ev as its data and the retry-forever failure
 // policy real activity-result reminders are created with. It delivers an event
 // the runtime would not produce on its own, which is how a test reaches the
-// reminder-driven admission path directly. The scheduler client is passed in
-// because a test running with mTLS must use its own app identity.
-func PlantReminder(t *testing.T, ctx context.Context, client schedulerv1pb.SchedulerClient, appID, instanceID, name string, ev *protos.HistoryEvent) {
+// reminder-driven admission path directly. mtls selects the app's own identity
+// for the schedule call, which a deployment running with sentry demands.
+func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, mtls bool, instanceID, name string, ev *protos.HistoryEvent) {
 	t.Helper()
 
 	data, err := anypb.New(ev)
 	require.NoError(t, err)
 
-	dueTime := time.Now().Format(time.RFC3339)
-	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-		Name: name,
-		Job:  &schedulerv1pb.Job{DueTime: &dueTime, Data: data, FailurePolicy: common.RetryForeverPolicy()},
-		Metadata: &schedulerv1pb.JobMetadata{
-			Namespace: "default",
-			AppId:     appID,
-			Target: &schedulerv1pb.JobTargetMetadata{
-				Type: &schedulerv1pb.JobTargetMetadata_Actor{
-					Actor: &schedulerv1pb.TargetActorReminder{
-						Type: "dapr.internal.default." + appID + ".workflow",
-						Id:   instanceID,
-					},
-				},
-			},
-		},
-	})
+	sched, appID := w.Scheduler(), w.Dapr().AppID()
+	req := sched.JobNowActor(name, "default", appID, "dapr.internal.default."+appID+".workflow", instanceID)
+	req.Job.Data = data
+	req.Job.FailurePolicy = common.RetryForeverPolicy()
+
+	// Only the client actually needed is built: a scheduler running with
+	// sentry refuses the insecure one, and dialling it blocks until the
+	// deadline.
+	client := schedulerv1pb.SchedulerClient(nil)
+	if mtls {
+		client = sched.ClientMTLS(t, ctx, appID)
+	} else {
+		client = sched.Client(t, ctx)
+	}
+	_, err = client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 }

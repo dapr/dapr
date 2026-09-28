@@ -47,7 +47,9 @@ type orchestrator struct {
 	rstate *backend.WorkflowRuntimeState
 	ometa  *backend.WorkflowMetadata
 
-	activityResultAwaited atomic.Bool
+	// awaited holds the dispatched activity results not yet seen back; a
+	// completed instance refuses reuse of its ID while any is outstanding.
+	awaited awaitedResults
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool

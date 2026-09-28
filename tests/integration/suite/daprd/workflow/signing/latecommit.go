@@ -174,8 +174,13 @@ func (l *latecommitCase) run(t *testing.T, ctx context.Context) {
 		}
 	})
 	t.Cleanup(func() {
-		if apply != nil {
+		// apply is written on the state store's goroutine; observing armed
+		// closed is the only thing that orders that write before this read.
+		// A test that fails before the arm never closes it.
+		select {
+		case <-armed:
 			_ = apply()
+		default:
 		}
 	})
 
@@ -202,9 +207,7 @@ func (l *latecommitCase) run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10, "the completion must reach the actor before its scheduling is readable")
 	require.NoError(t, apply())
 
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second*20)
-	defer cancel()
-	meta, err := client.WaitForWorkflowCompletion(waitCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err, "the instance must complete once its scheduling row is readable")
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus(), "%v", meta.GetFailureDetails())
 	assert.JSONEq(t, `"late"`, meta.GetOutput().GetValue())

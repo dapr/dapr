@@ -224,6 +224,11 @@ func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginest
 		Key:       wfenginestate.MetadataKey,
 	}, false)
 	if err != nil {
+		// Unconfirmable is not confirmed: keeping the cache here would have
+		// every retry in the sender's window re-judged against the same
+		// unverified view. Both callers return an error the sender retries,
+		// so the only cost is a reload.
+		o.invalidateCachedState()
 		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
 	}
 	if res == nil || len(res.Data) == 0 {

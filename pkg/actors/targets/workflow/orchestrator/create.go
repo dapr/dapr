@@ -144,7 +144,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return status.Errorf(codes.AlreadyExists, "a workflow with ID '%s' already exists and the create enforces instance ID uniqueness", o.actorID)
 	}
 
-	if o.activityResultAwaited.Load() {
+	if o.awaited.any() {
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
 	}
 

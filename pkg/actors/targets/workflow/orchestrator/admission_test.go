@@ -151,13 +151,13 @@ func Test_admitEvent_droppedActivityResultSettlesTheAwait(t *testing.T) {
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{}},
 	})
-	h.orch.activityResultAwaited.Store(true)
+	h.orch.awaited.arm(9, "exec-C")
 
 	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(9, "exec-C"), completionSender{}, false)
 	require.NoError(t, err, "the result is acked and dropped")
 	assert.Nil(t, entry)
 	assert.Empty(t, h.orch.state.Inbox)
-	assert.False(t, h.orch.activityResultAwaited.Load(), "a dropped result must still clear the await")
+	assert.False(t, h.orch.awaited.any(), "a dropped result must still settle the dispatch it resolves")
 }
 
 // A straggler from a superseded scheduling is not the result the await is
@@ -168,13 +168,13 @@ func Test_admitEvent_droppedStragglerKeepsTheAwait(t *testing.T) {
 	h := newWakeHarness(t, instanceID, false)
 	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
 	h.saved = true
-	h.orch.activityResultAwaited.Store(true)
+	h.orch.awaited.arm(7, "exec-B")
 
 	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(7, "exec-A"), completionSender{}, false)
 	require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error(), "the straggler is refused for the sender to retry, then drop")
 	assert.Nil(t, entry)
 	assert.Empty(t, h.orch.state.Inbox)
-	assert.True(t, h.orch.activityResultAwaited.Load(), "a superseded scheduling's result must not settle the await")
+	assert.True(t, h.orch.awaited.any(), "a superseded scheduling's result must not settle the current dispatch")
 }
 
 // Under history signing an unmatched activity completion is verified against
@@ -325,4 +325,51 @@ func Test_handleReminder_youngSupersededResultRefires(t *testing.T) {
 	})
 	require.ErrorContains(t, err, common.ErrSchedulingSuperseded.Error(), "the reminder must refire")
 	assert.Nil(t, h.orch.state, "the cache is dropped so the refire re-reads")
+}
+
+// The guard is keyed by task id, so a result acked and dropped settles the
+// dispatch it names even when that dispatch belongs to a generation the
+// history has moved past. Without this a completed instance whose successor
+// never dispatched an activity of its own keeps refusing its ID for as long
+// as a client keeps retrying the create.
+func Test_admitEvent_ackedStragglerSettlesItsOwnDispatch(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-await-passed"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunning(t, instanceID, 3)
+	h.saved = true
+	h.orch.state.AddToHistory(&protos.HistoryEvent{
+		EventId:   4,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{}},
+	})
+	// Armed by a previous generation's dispatch of task 0; this generation
+	// passed id 0 without scheduling an activity there.
+	h.orch.awaited.arm(0, "exec-old")
+
+	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(0, "exec-old"), completionSender{}, false)
+	require.NoError(t, err, "the result is acked and dropped")
+	assert.Nil(t, entry)
+	assert.False(t, h.orch.awaited.any(), "nothing is owed once the only dispatch's result has been judged")
+}
+
+// One result settles only its own dispatch: with two activities in flight the
+// first to come back must not release the ID for the second.
+func Test_admitEvent_oneResultKeepsTheOtherDispatch(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-await-two"
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.saved = true
+	h.orch.awaited.arm(7, "exec-B")
+	h.orch.awaited.arm(8, "exec-C")
+
+	entry, err := h.orch.admitEvent(t.Context(), taskCompletedWithExecID(7, "exec-B"), completionSender{}, false)
+	require.NoError(t, err)
+	assert.Nil(t, entry)
+	assert.True(t, h.orch.awaited.any(), "the second activity's result is still owed")
+
+	_, err = h.orch.admitEvent(t.Context(), taskCompletedWithExecID(8, "exec-C"), completionSender{}, false)
+	require.NoError(t, err)
+	assert.False(t, h.orch.awaited.any())
 }

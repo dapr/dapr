@@ -65,7 +65,6 @@ const (
 type admission struct {
 	outcome admitOutcome
 	reason  string     // acked drop: why the completion is never consumed
-	settles bool       // the acked drop is the current scheduling's own result
 	err     error      // rejected drop: returned to the sender instead of an ack
 	pending *foldEntry // duplicate of a held completion: the entry a retry joins
 }
@@ -155,9 +154,9 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// completion is missing, so there the verdict is final however it was
 	// reached: ack it now rather than making the sender spend its window.
 	// Only this generation's own result settles the await.
-	if reason, settles := activityDrop(e, state); reason != "" {
-		if settles || state.IsCompleted() {
-			return admission{reason: reason, settles: settles}
+	if reason := activityDrop(e, state); reason != "" {
+		if state.IsCompleted() {
+			return admission{reason: reason}
 		}
 		return admission{err: wferrors.NewRecoverable(fmt.Errorf("%s: %w", reason, common.ErrSchedulingSuperseded))}
 	}
@@ -211,11 +210,11 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 				return nil, err
 			}
 		}
-		if a.settles {
-			// The terminal turn dropped this scheduling's own result, so
-			// nothing is owed and createIfCompleted may reuse the ID. A
-			// straggler from another scheduling settles nothing.
-			o.activityResultAwaited.CompareAndSwap(true, false)
+		// The result has been judged, so this dispatch is no longer owed.
+		// A result naming another execution of the task settles nothing:
+		// settle matches on the execution id.
+		if taskID, execID, ok := activityResolution(e); ok {
+			o.awaited.settle(taskID, execID)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)
 		return nil, nil
@@ -233,11 +232,10 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		return nil, err
 	}
 
-	// The result is admitted, so it is no longer in flight: a duplicate or a
-	// refusal above leaves the ID-reuse guard armed, because the result it
-	// guards is still owed.
-	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
-		o.activityResultAwaited.CompareAndSwap(true, false)
+	// Admitted, so this dispatch is no longer owed. A duplicate or a refusal
+	// above leaves it armed, because the result it stands for is still out.
+	if taskID, execID, ok := activityResolution(e); ok {
+		o.awaited.settle(taskID, execID)
 	}
 
 	if a.outcome == admitFold {
@@ -315,7 +313,9 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return wferrors.NewRecoverable(fmt.Errorf("failed to reload state to classify attestation failure (%s): %w", verr, lerr))
 	}
 	if fresh == nil {
-		// Purged since the cached load: nothing to protect.
+		// Purged since the cached load: nothing to protect, and the cache is
+		// now provably dead. create reads that same cache, so drop it.
+		o.invalidateCachedState()
 		return api.ErrInstanceNotFound
 	}
 	clone, _ := proto.Clone(e).(*backend.HistoryEvent)
@@ -326,7 +326,7 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	if fverr == nil {
 		log.Warnf("Workflow actor '%s': attestation verification failed against cached state but passed against durable state; refreshing cache and asking the sender to retry: %s", o.actorID, verr)
 		o.invalidateCachedState()
-		return verr
+		return wferrors.NewRecoverable(fmt.Errorf("%s: %w", verr, common.ErrSchedulingNotDurable))
 	}
 
 	// Dispatch precedes save, so a completion whose scheduling the durable
@@ -334,8 +334,8 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	// retry, unless the history proves it can never be consumed.
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
 		if taskID, _, ok := activityResolution(e); ok {
-			switch reason, settles := activityDrop(e, fresh); {
-			case settles, fresh.IsCompleted():
+			switch reason := activityDrop(e, fresh); {
+			case fresh.IsCompleted():
 			case reason != "":
 				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingSuperseded))
 			case fresh.FindHistoryEventByID(taskID) == nil:
@@ -343,6 +343,13 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
 			}
 		}
+		// Terminal for the sender, so nothing will redeliver this result and
+		// the dispatch is no longer owed. The cached state judged it not
+		// completed while the durable state is: it is stale either way.
+		if taskID, execID, ok := activityResolution(e); ok {
+			o.awaited.settle(taskID, execID)
+		}
+		o.invalidateCachedState()
 		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, fverr)
 		return api.ErrInstanceNotFound
 	}
@@ -372,28 +379,28 @@ func activityResolution(e *backend.HistoryEvent) (taskID int32, execID string, o
 // resolves a superseded scheduling); its task is absent while the history
 // already holds an id at or beyond it (ids are assigned in sequence per
 // generation, so a still-landing save cannot carry it); or the workflow has
-// completed. Only the last is the current scheduling's own result (settles).
+// completed.
 // An absent task below every recorded id may still be committing.
-func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) (reason string, settles bool) {
+func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) string {
 	taskID, execID, ok := activityResolution(e)
 	if !ok {
-		return "", false
+		return ""
 	}
 	if scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled(); scheduled != nil {
 		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
-			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID), false
+			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID)
 		}
 	} else {
 		for _, h := range state.History {
 			if h.GetEventId() >= taskID {
-				return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID), false
+				return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID)
 			}
 		}
 	}
 	if state.IsCompleted() {
-		return "the workflow has completed", true
+		return "the workflow has completed"
 	}
-	return "", false
+	return ""
 }
 
 // childCreatedFor returns the ChildWorkflowInstanceCreated event this

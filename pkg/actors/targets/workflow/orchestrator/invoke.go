@@ -160,6 +160,14 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			if time.Since(ev.GetTimestamp().AsTime()) < common.PublishRetryWindow() {
 				return err
 			}
+			// Past the window this fire is the last word, and a refusal is
+			// judged on whatever history the actor held. Dropping here on a
+			// cached verdict discards a result the store may already prove
+			// admissible, so spend the invalidate above and judge once more
+			// on the reload before giving up.
+			if err = o.addWorkflowEvent(ctx, &ev, completionSender{}); !common.IsSchedulingRefusal(err) {
+				return err
+			}
 			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not resolve within the publish window: %v", o.actorID, reminder.Name, err)
 			return nil
 		}

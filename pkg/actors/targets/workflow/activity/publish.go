@@ -209,6 +209,9 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		}
 		if strings.HasSuffix(err.Error(), common.ErrSchedulingSuperseded.Error()) {
 			log.Debugf("Activity actor '%s': dropping the result for workflow '%s', still superseded after the retry window: %s", ex.actorID, ex.wi.InstanceID, err)
+			// The body ran and its result is discarded: record it like the
+			// sibling drop above, or the execution is counted as nothing.
+			executionStatus = diag.StatusFailed
 			return nil
 		}
 
@@ -238,26 +241,34 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 // a ContinueAsNew boundary clears once the store catches up. Every other
 // error surfaces at once.
 func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *internalsv1pb.InternalInvokeRequest) error {
+	// The window bounds the retrying, not the delivery: the first attempt runs
+	// on the caller's whole budget, so a publish that is never refused is not
+	// shortened by a window it never enters.
+	//
+	// Whatever a call returns is returned as-is: nil is an accepted delivery,
+	// and a context error belongs to a call that may well have committed its
+	// inbox row, so the sender must re-deliver rather than be told the last
+	// refusal still stands.
+	_, err := f.router.Call(ctx, req)
+	if err == nil || !common.IsSchedulingRefusal(err) {
+		return err
+	}
+
 	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, common.PublishRetryWindow()))
 	defer cancel()
 	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
-	var refused error
+	refused := err
 	for {
-		_, err := f.router.Call(pctx, req)
-		if err == nil || !common.IsSchedulingRefusal(err) {
-			// Returned as-is, whatever the window did meanwhile: nil is an
-			// accepted delivery, and a context error belongs to a call that
-			// may well have committed its inbox row, so the sender must
-			// re-deliver rather than be told the last refusal still stands.
-			return err
-		}
-		refused = err
-		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, err)
+		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, refused)
 		select {
 		case <-pctx.Done():
 			return refused
 		case <-time.After(bo.NextBackOff()):
 		}
+		if _, err = f.router.Call(pctx, req); err == nil || !common.IsSchedulingRefusal(err) {
+			return err
+		}
+		refused = err
 	}
 }
 

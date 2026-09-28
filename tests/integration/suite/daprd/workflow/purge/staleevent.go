@@ -57,12 +57,19 @@ func init() {
 }
 
 // staleevent purges a completed instance whose state delete lands but whose
-// reminder delete fails, then delivers a late activity result and an
-// external event to the actor before its asynchronous deactivation runs. The
-// purge must drop the cached state whatever else failed, or the events are
-// admitted against the pre-purge cache and written back over the deleted
-// rows: a metadata row declaring the purged history's length with no history
-// rows, which every later load rejects.
+// reminder delete fails, then delivers an external event and a late activity
+// result to the actor before its asynchronous deactivation runs. The purge
+// must drop the cached state whatever else failed, or the event is admitted
+// against the pre-purge cache and written back over the deleted rows: a
+// metadata row declaring the purged history's length with no history rows,
+// which every later load rejects.
+//
+// The raised event is what pins the purge's own invalidation. It is queued on
+// the actor lock ahead of the activity result deliberately: a result reaching
+// a terminal instance is acked and dropped, and that drop confirms the cache
+// against the store, finds the row deleted and invalidates by itself. Deliver
+// the result first and the cache is gone however the purge behaved, which is
+// what made an earlier version of this case pass with the purge fix removed.
 type staleevent struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
@@ -198,16 +205,17 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 10):
 		require.Fail(t, "the purge commit was never attempted")
 	}
-	// No signal in daprd shows a call parked on the workflow actor's lock,
-	// so both callers report themselves in flight instead: the activity's
-	// result publish follows its completion log line, and the raise is
-	// counted by a client interceptor. From there only in-process dispatch
-	// separates each from the lock, while the deactivation they must
-	// precede is queued only after the held delete lands.
-	releaseOnce()
-	require.Eventually(t, func() bool {
-		return bytes.Contains(s.logline.StdoutBuffer(), []byte("activity completed for workflow with instanceId '"+string(id)+"'"))
-	}, time.Second*10, time.Millisecond*10, "the late activity must have completed")
+	// The raise must reach the actor BEFORE the late activity's result does.
+	// A result arriving at a terminal instance is acked and dropped, and that
+	// drop confirms the cached state against the store, which finds the
+	// metadata row deleted and invalidates the cache by itself. Releasing the
+	// activity first therefore clears the cache whatever the purge did, and
+	// leaves nothing for the raise to be admitted against.
+	//
+	// No signal in daprd shows a call parked on the workflow actor's lock, so
+	// the raise reports itself in flight through a client interceptor; from
+	// there only in-process dispatch separates it from the lock, which the
+	// held purge commit holds.
 	var inflight atomic.Int32
 	conn, err := grpc.NewClient(s.workflow.Dapr().GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -223,6 +231,13 @@ func (s *staleevent) Run(t *testing.T, ctx context.Context) {
 	raiseErr := make(chan error, 1)
 	go func() { raiseErr <- raiser.RaiseEvent(ctx, id, "late") }()
 	require.Eventually(t, func() bool { return inflight.Load() > 0 }, time.Second*10, time.Millisecond, "the raise must be in flight")
+
+	// Only now the late result, queued behind the raise.
+	releaseOnce()
+	require.Eventually(t, func() bool {
+		return bytes.Contains(s.logline.StdoutBuffer(), []byte("activity completed for workflow with instanceId '"+string(id)+"'"))
+	}, time.Second*10, time.Millisecond*10, "the late activity must have completed")
+
 	releaseDelete()
 	<-purgeErr
 	<-raiseErr

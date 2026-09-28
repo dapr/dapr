@@ -116,7 +116,7 @@ func Test_publishResult_retriesRefusalInHand(t *testing.T) {
 	t.Run("a superseded verdict that outlasts the window is dropped", func(t *testing.T) {
 		t.Parallel()
 		f, scheduled := newExecHarness(t)
-		f.publishRetryWindow = 200 * time.Millisecond
+		f.publishRetryWindow = 500 * time.Millisecond
 		var calls atomic.Int32
 		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 			calls.Add(1)
@@ -166,7 +166,7 @@ func Test_publishResult_retriesRefusalInHand(t *testing.T) {
 	t.Run("a refusal that outlasts the window surfaces for recovery", func(t *testing.T) {
 		t.Parallel()
 		f, scheduled := newExecHarness(t)
-		f.publishRetryWindow = 200 * time.Millisecond
+		f.publishRetryWindow = 500 * time.Millisecond
 		var calls atomic.Int32
 		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 			calls.Add(1)

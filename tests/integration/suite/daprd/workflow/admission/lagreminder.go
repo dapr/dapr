@@ -114,20 +114,22 @@ func (l *lagreminder) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// The activity stays gated for the whole case, so the only resolution of
-	// task 0 is the planted one.
-	hist, err := client.GetInstanceHistory(ctx, id)
-	require.NoError(t, err)
+	// task 0 is the planted one. A turn dispatches its activities before it
+	// saves, so the activity running is not yet proof that its scheduling is
+	// readable: wait for the row.
+	rows := fworkflow.SQLiteRows(l.workflow.DB(), id)
 	var execReal string
-	for _, ev := range hist.GetEvents() {
-		if ts := ev.GetTaskScheduled(); ts != nil && ev.GetEventId() == 0 {
-			execReal = ts.GetTaskExecutionId()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
+		if !assert.NotNil(c, ev, "task 0 must be recorded in history") {
+			return
 		}
-	}
-	require.NotEmpty(t, execReal, "task 0 must be recorded with an execution id")
+		execReal = ev.GetTaskScheduled().GetTaskExecutionId()
+		assert.NotEmpty(c, execReal, "task 0 must be recorded with an execution id")
+	}, time.Second*20, time.Millisecond*10)
 	execPeer := "peer-" + execReal
 
-	appID := l.workflow.Dapr().AppID()
-	fworkflow.PlantReminder(t, ctx, l.workflow.Scheduler().Client(t, ctx), appID, id, reminderName, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, l.workflow, false, id, reminderName, &protos.HistoryEvent{
 		EventId: -1,
 		// The orchestrator's age bound reads this field, not the reminder's.
 		Timestamp: timestamppb.Now(),
@@ -148,11 +150,6 @@ func (l *lagreminder) Run(t *testing.T, ctx context.Context) {
 	// The store catches up: the durable history now records task 0 under the
 	// scheduling the planted result resolves, and the metadata row carries a
 	// new ETag.
-	rows := fworkflow.SQLiteRows(l.workflow.DB(), id)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
-		assert.NotNil(c, ev, "task 0 must be recorded in history")
-	}, time.Second*20, time.Millisecond*10)
 	fworkflow.SetTaskExecutionID(t, ctx, rows, 0, execPeer)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)

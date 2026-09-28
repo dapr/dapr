@@ -112,7 +112,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	targetActorID := buildActivityActorID(o.actorID, e.GetEventId())
 
-	o.activityResultAwaited.Store(true)
+	o.awaited.arm(e.GetEventId(), ts.GetTaskExecutionId())
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
