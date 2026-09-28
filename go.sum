@@ -508,8 +508,8 @@ github.com/cyphar/filepath-securejoin v0.6.1 h1:5CeZ1jPXEiYt3+Z6zqprSAgSWiggmpVy
 github.com/cyphar/filepath-securejoin v0.6.1/go.mod h1:A8hd4EnAeyujCJRrICiOWqjS1AX0a9kM5XL+NwKoYSc=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.18.4 h1:yaams1iYBGFok91WvqtWphIs+JohSQzykHxOmskJp3I=
-github.com/dapr/components-contrib v1.18.4/go.mod h1:4MZlbYqyytdQIol9VF59uzhX4NJsa0xZlgr2faQq59o=
+github.com/dapr/components-contrib v1.18.5 h1:+kVrjo3eZWRATWotRdCrMRClOY9OQN71a8UoKvgYk0Q=
+github.com/dapr/components-contrib v1.18.5/go.mod h1:LurDZ3PzDWk6b8TZ8/vXLtLD3Q1cIXtXsYLWkOycHNg=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
 github.com/dapr/durabletask-go v0.12.5 h1:3861jjuhh/JBKdZ7zph5gNFyGzwepEIm5a63E1d67zo=
@@ -1533,8 +1533,8 @@ github.com/prometheus/statsd_exporter v0.22.7/go.mod h1:N/TevpjkIh9ccs6nuzY3jQn9
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/puzpuzpuz/xsync/v3 v3.5.1 h1:GJYJZwO6IdxN/IKbneznS6yPkVC+c3zyY/j19c++5Fg=
 github.com/puzpuzpuz/xsync/v3 v3.5.1/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
-github.com/rabbitmq/amqp091-go v1.13.0 h1:L8NA1WtF76C6KA3LAoufjfLgbist/If1UQYcsOjtxXA=
-github.com/rabbitmq/amqp091-go v1.13.0/go.mod h1:Hy4jKW5kQART1u+JkDTF9YYOQUHXqMuhrgxOEeS7G4o=
+github.com/rabbitmq/amqp091-go v1.14.0 h1:RSaT7aOKt/OrkVUyswPDW29lnRz9psuGmfZFBmLqLek=
+github.com/rabbitmq/amqp091-go v1.14.0/go.mod h1:Hy4jKW5kQART1u+JkDTF9YYOQUHXqMuhrgxOEeS7G4o=
 github.com/ravendb/ravendb-go-client v0.0.0-20240723121956-2b87f37fe427 h1:hOnThDlsq0e4M7Sl3A3MnMlazYJsNuuDDqywa5mI7wQ=
 github.com/ravendb/ravendb-go-client v0.0.0-20240723121956-2b87f37fe427/go.mod h1:Zhu1DOotWGZcjom6CZH+8mJ2AD3fOx0QjVIrbpMxN04=
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
