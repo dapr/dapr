@@ -15,15 +15,23 @@ package leader
 
 import (
 	"context"
+	"net"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 )
 
@@ -247,4 +255,104 @@ func TestWatcherClosesOnlyItsOwnConnection(t *testing.T) {
 	assert.Same(t, connB, l.conn, "a newer connection must survive the old watcher's cleanup")
 	assert.False(t, l.watchStarted)
 	assert.NotEqual(t, connectivity.Shutdown, connB.GetState())
+}
+
+// blackholeListener simulates a network partition. Once enabled, connections
+// stay open but everything sent either way is silently discarded.
+type blackholeListener struct {
+	net.Listener
+	enabled atomic.Bool
+}
+
+func (b *blackholeListener) Accept() (net.Conn, error) {
+	conn, err := b.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &blackholeConn{Conn: conn, enabled: &b.enabled}, nil
+}
+
+type blackholeConn struct {
+	net.Conn
+	enabled *atomic.Bool
+}
+
+func (c *blackholeConn) Read(p []byte) (int, error) {
+	for {
+		n, err := c.Conn.Read(p)
+		if err != nil || !c.enabled.Load() {
+			return n, err
+		}
+	}
+}
+
+func (c *blackholeConn) Write(p []byte) (int, error) {
+	if c.enabled.Load() {
+		return len(p), nil
+	}
+	return c.Conn.Write(p)
+}
+
+type reportServer struct {
+	schedulerv1pb.UnimplementedSchedulerServer
+	received chan struct{}
+}
+
+func (r *reportServer) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	if _, err := stream.Recv(); err != nil {
+		return err
+	}
+	close(r.received)
+	<-stream.Context().Done()
+	return nil
+}
+
+func TestConnectDetectsPartitionedLeader(t *testing.T) {
+	t.Parallel()
+
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	lis, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	require.NoError(t, err)
+	bh := &blackholeListener{Listener: lis}
+
+	srv := grpc.NewServer(grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime:             time.Second * 5,
+		PermitWithoutStream: true,
+	}))
+	rs := &reportServer{received: make(chan struct{})}
+	schedulerv1pb.RegisterSchedulerServer(srv, rs)
+	go srv.Serve(bh)
+	t.Cleanup(srv.Stop)
+
+	ldr := leadership.New()
+	ldr.Set(lis.Addr().String())
+	conn, err := newTest(ldr).Connect(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	stream, err := schedulerv1pb.NewSchedulerClient(conn).ReportActorTypes(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(new(schedulerv1pb.ReportActorTypesRequest)))
+	select {
+	case <-rs.received:
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "placement stream never reached the leader")
+	}
+
+	bh.enabled.Store(true)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, rerr := stream.Recv()
+		errCh <- rerr
+	}()
+
+	select {
+	case rerr := <-errCh:
+		require.Error(t, rerr)
+		assert.Equal(t, codes.Unavailable, status.Code(rerr), rerr)
+	case <-time.After(time.Second * 20):
+		require.Fail(t, "placement stream to a partitioned leader never failed")
+	}
 }
