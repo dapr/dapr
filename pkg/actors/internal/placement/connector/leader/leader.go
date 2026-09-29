@@ -21,8 +21,10 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
@@ -52,9 +54,20 @@ type leader struct {
 }
 
 func New(opts Options) connector.Interface {
+	// Without a keepalive, a partitioned leader hangs the stream for minutes
+	// while the scheduler moves this host's actors elsewhere. 10s is the gRPC
+	// minimum.
+	gopts := append([]grpc.DialOption{
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                time.Second * 10,
+			Timeout:             time.Second * 5,
+			PermitWithoutStream: true,
+		}),
+	}, opts.GRPCOptions...)
+
 	return &leader{
 		leadership: opts.Leadership,
-		gopts:      opts.GRPCOptions,
+		gopts:      gopts,
 	}
 }
 
