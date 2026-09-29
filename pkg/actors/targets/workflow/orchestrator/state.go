@@ -346,8 +346,14 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, includeRetentionReminder bool) error {
 	// Once a purge has been attempted the next load must come from the store,
 	// whatever else failed: the deactivation below is asynchronous and the
-	// actor stays tabled until it runs.
-	defer o.invalidateCachedState()
+	// actor stays tabled until it runs. Nothing is owed for an instance that
+	// no longer exists either, so the reuse guard goes with the cache: a late
+	// result for the purged instance is judged before this actor is reaped
+	// and would otherwise leave the flag set for the next generation.
+	defer func() {
+		o.invalidateCachedState()
+		o.activityResultAwaited.Store(false)
+	}()
 
 	// This will create a request to purge everything.
 	req, err := state.GetPurgeRequest(o.actorID)

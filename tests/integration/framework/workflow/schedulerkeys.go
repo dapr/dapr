@@ -70,13 +70,25 @@ func AssertScheduledTimers(t *testing.T, c *assert.CollectT, ctx context.Context
 func WaitNoEventWakeups(t *testing.T, ctx context.Context, w *procworkflow.Workflow) {
 	t.Helper()
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	// Polled on the test goroutine rather than through EventuallyWithT:
+	// ListAllKeys reports a query failure on t, so a transient error inside
+	// a callback would fail the test permanently and could call FailNow from
+	// the wrong goroutine. Same shape as Scheduler.WaitJobKeyCount.
+	deadline := time.Now().Add(time.Second * 20)
+	for {
 		var wakeups []string
 		for _, key := range w.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
 			if strings.Contains(key, "new-event") && !strings.Contains(key, "new-event-janitor") {
 				wakeups = append(wakeups, key)
 			}
 		}
-		assert.Empty(c, wakeups, "no event wake-up may be left behind")
-	}, time.Second*20, time.Millisecond*10)
+		if len(wakeups) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Empty(t, wakeups, "no event wake-up may be left behind")
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
 }

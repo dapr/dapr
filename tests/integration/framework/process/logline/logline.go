@@ -180,8 +180,6 @@ func (l *LogLine) EventuallyFoundNone(t *testing.T) {
 	assert.Eventually(t, l.FoundNone, time.Second*15, time.Millisecond*10)
 }
 
-// Contains checks if the captured log output contains the given substring.
-// This is useful for dynamic log checking during tests.
 // Count returns how many times substr appears in the stdout this LogLine has
 // captured so far.
 func (l *LogLine) Count(substr string) int {
@@ -198,6 +196,8 @@ func CountAll(substr string, lines ...*LogLine) int {
 	return n
 }
 
+// Contains checks if the captured log output contains the given substring.
+// This is useful for dynamic log checking during tests.
 func (l *LogLine) Contains(substr string) bool {
 	l.lock.Lock()
 	defer l.lock.Unlock()

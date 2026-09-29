@@ -286,9 +286,7 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return wferrors.NewRecoverable(fmt.Errorf("failed to reload state to classify attestation failure (%s): %w", verr, lerr))
 	}
 	if fresh == nil {
-		// Purged since the cached load: nothing to protect, and the cache is
-		// now provably dead. create reads that same cache, so drop it.
-		o.invalidateCachedState()
+		// Purged since the cached load: nothing to protect.
 		return api.ErrInstanceNotFound
 	}
 	clone, _ := proto.Clone(e).(*backend.HistoryEvent)
