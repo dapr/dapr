@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -100,20 +99,12 @@ func (s *staleresultreminder) Run(t *testing.T, ctx context.Context) {
 	// planted result names another. A turn dispatches its activities before
 	// it saves, so the row is readable only once the commit lands.
 	rows := fworkflow.SQLiteRows(s.workflow.DB(), string(id))
-	var scheduledExec string
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
-		if !assert.NotNil(c, ev, "task 0 must be recorded in history") {
-			return
-		}
-		scheduledExec = ev.GetTaskScheduled().GetTaskExecutionId()
-		assert.NotEmpty(c, scheduledExec, "task 0 must be recorded with an execution id")
-	}, time.Second*20, time.Millisecond*10)
+	scheduledExec := fworkflow.WaitTaskScheduled(t, ctx, rows, 0)
 
 	// Planted through the scheduler as the activity actor would plant it:
 	// a one-shot reminder on the workflow actor with a retry-forever policy.
 	const reminderName = common.ReminderPrefixActivityResult + "stale"
-	fworkflow.PlantReminder(t, ctx, s.workflow, s.workflow.Signing(), string(id), reminderName, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, s.workflow, string(id), reminderName, &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_TaskCompleted{

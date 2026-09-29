@@ -131,16 +131,7 @@ func (s *staleverdict) Run(t *testing.T, ctx context.Context) {
 	// A turn dispatches its activities before it saves, so task 0's
 	// scheduling is durable only once its row is readable.
 	rows := fworkflow.SQLiteRows(s.workflow.DB(), string(id))
-	var execReal string
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
-		if !assert.NotNil(c, ev, "task 0 must be recorded in history") {
-			return
-		}
-		execReal = ev.GetTaskScheduled().GetTaskExecutionId()
-		assert.NotEmpty(c, execReal, "task 0 must be recorded with an execution id")
-	}, time.Second*20, time.Millisecond*10,
-		"the scheduling of task 0 must be durable before it is rewritten")
+	execReal := fworkflow.WaitTaskScheduled(t, ctx, rows, 0)
 
 	// A peer moves the instance on: task 0's recorded scheduling names an
 	// execution the held result does not, and the metadata ETag moves with

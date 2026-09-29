@@ -13,7 +13,12 @@ limitations under the License.
 
 package orchestrator
 
-import "sync"
+import (
+	"sync"
+	"time"
+
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+)
 
 // awaitedResults records the activity results this actor has dispatched and
 // not yet seen come back. A completed instance refuses reuse of its ID while
@@ -28,7 +33,14 @@ import "sync"
 // for that straggler too.
 type awaitedResults struct {
 	mu sync.Mutex
-	m  map[int32]string
+	m  map[int32]awaitedEntry
+}
+
+type awaitedEntry struct {
+	execID string
+	// refusedAt is when this dispatch's result was first refused
+	// recoverably, or zero while it is still expected to be admitted.
+	refusedAt time.Time
 }
 
 // arm records that taskID was dispatched under execID and its result is owed.
@@ -36,34 +48,56 @@ func (a *awaitedResults) arm(taskID int32, execID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.m == nil {
-		a.m = make(map[int32]string, 1)
+		a.m = make(map[int32]awaitedEntry, 1)
 	}
-	a.m[taskID] = execID
+	// A re-dispatch owes the result afresh, whatever happened to the last.
+	a.m[taskID] = awaitedEntry{execID: execID}
 }
 
-// settle records that taskID's result arrived, whatever was then done with
-// it: admitted, or acknowledged and dropped. Nothing is owed for a result
-// that has been judged. A result naming another execution of the task
-// settles nothing, since the dispatch this entry stands for is still out.
-//
-// An empty execution id on either side matches: dapr authors synthetic
+// matches reports whether execID names the dispatch armed for taskID. An
+// empty execution id on either side matches: dapr authors synthetic
 // TaskFailed events without one, and SDKs older than execution ids send
 // results without one.
+func (a *awaitedResults) matches(armed awaitedEntry, execID string) bool {
+	return armed.execID == "" || execID == "" || armed.execID == execID
+}
+
+// settle records that taskID's result arrived and was judged, whatever was
+// then done with it: admitted, or acknowledged and dropped. Nothing is owed
+// for a result that has been judged.
 func (a *awaitedResults) settle(taskID int32, execID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	armed, ok := a.m[taskID]
-	if !ok {
-		return
-	}
-	if armed == "" || execID == "" || armed == execID {
+	if armed, ok := a.m[taskID]; ok && a.matches(armed, execID) {
 		delete(a.m, taskID)
 	}
+}
+
+// refuse records that taskID's result was refused recoverably. The sender
+// keeps it in hand and retries for the publish window, then drops it for
+// good with nothing left to re-deliver it, so the dispatch stops being owed
+// once that window has passed. The verdict alone cannot release it: a
+// refusal is routinely cleared by a later retry once a lagging read catches
+// up, and that retry must still find the ID held.
+func (a *awaitedResults) refuse(taskID int32, execID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	armed, ok := a.m[taskID]
+	if !ok || !a.matches(armed, execID) || !armed.refusedAt.IsZero() {
+		return
+	}
+	armed.refusedAt = time.Now()
+	a.m[taskID] = armed
 }
 
 // any reports whether any dispatched result is still owed.
 func (a *awaitedResults) any() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return len(a.m) > 0
+	for _, e := range a.m {
+		if e.refusedAt.IsZero() || time.Since(e.refusedAt) < common.PublishRetryWindow() {
+			return true
+		}
+	}
+	return false
 }

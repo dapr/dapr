@@ -17,12 +17,15 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -77,7 +80,20 @@ func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType,
 
 	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
 
-	anydata, err := anypb.New(result)
+	// The orchestrator bounds this reminder's refusals by the age of the
+	// event it carries, and the activity host stamped that when the body
+	// returned, which the in-hand publish window may already have spent in
+	// full. Hand the reminder its own clock: it is a fresh retry chain, and
+	// a scheduling save is allowed to outlast one window. Stamped on a copy
+	// so nothing observable is mutated; the attestation covers the task and
+	// its payloads, not the event timestamp, and dedup matches on id.
+	stamped, ok := proto.Clone(result).(*backend.HistoryEvent)
+	if !ok {
+		return errors.New("failed to clone the activity result for its reminder")
+	}
+	stamped.Timestamp = timestamppb.Now()
+
+	anydata, err := anypb.New(stamped)
 	if err != nil {
 		return err
 	}

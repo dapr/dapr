@@ -193,6 +193,17 @@ func (s *Store) ArmMultiWriteBehind(sub string) (arrived <-chan struct{}, apply 
 			<-spec.done
 			return spec.err
 		default:
+			// Nothing matched, so disarm: left in place, the next matching
+			// Multi (daprd's shutdown save, say) would be acknowledged
+			// before it is applied and then run on an untracked goroutine
+			// with an already-released hold. Registering apply through
+			// t.Cleanup, which the doc comment recommends, is exactly the
+			// path that reaches here.
+			s.mu.Lock()
+			if s.multiWriteBehind == spec {
+				s.multiWriteBehind = nil
+			}
+			s.mu.Unlock()
 			return nil
 		}
 	}

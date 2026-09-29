@@ -257,18 +257,24 @@ func (f *factory) publishWithRetry(ctx context.Context, ex *execution, req *inte
 	pctx, cancel := context.WithTimeout(ctx, cmp.Or(f.publishRetryWindow, common.PublishRetryWindow()))
 	defer cancel()
 	bo := common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap)
-	refused := err
 	for {
-		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, refused)
+		log.Debugf("Activity actor '%s': result publish for workflow '%s' refused, retrying with the result in hand: %v", ex.actorID, ex.wi.InstanceID, err)
 		select {
 		case <-pctx.Done():
-			return refused
+			// The window expiring means the refusal stands and the result
+			// is dropped. The caller's own budget expiring does not: that
+			// is a context error, and the sender must re-deliver rather
+			// than have a result acked as delivered on a window it never
+			// got to spend.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
 		case <-time.After(bo.NextBackOff()):
 		}
 		if _, err = f.router.Call(pctx, req); err == nil || !common.IsSchedulingRefusal(err) {
 			return err
 		}
-		refused = err
 	}
 }
 

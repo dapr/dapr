@@ -30,9 +30,11 @@ import (
 // actor for instanceID, carrying ev as its data and the retry-forever failure
 // policy real activity-result reminders are created with. It delivers an event
 // the runtime would not produce on its own, which is how a test reaches the
-// reminder-driven admission path directly. mtls selects the app's own identity
-// for the schedule call, which a deployment running with sentry demands.
-func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, mtls bool, instanceID, name string, ev *protos.HistoryEvent) {
+// reminder-driven admission path directly. A deployment running with sentry
+// demands the app's own identity on the schedule call, so the client follows
+// w.Sentry(): a caller passing the wrong one gets a dial that blocks until
+// its deadline rather than an error.
+func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, instanceID, name string, ev *protos.HistoryEvent) {
 	t.Helper()
 
 	data, err := anypb.New(ev)
@@ -47,7 +49,7 @@ func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, 
 	// sentry refuses the insecure one, and dialling it blocks until the
 	// deadline.
 	client := schedulerv1pb.SchedulerClient(nil)
-	if mtls {
+	if w.Sentry() != nil {
 		client = sched.ClientMTLS(t, ctx, appID)
 	} else {
 		client = sched.Client(t, ctx)

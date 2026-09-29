@@ -194,10 +194,18 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		// frozen view every time. The refusal itself is still what the
 		// sender sees, so its retry contract is unchanged; only a purged
 		// instance overrides it, and that is terminal for the sender.
-		if !fresh && common.IsSchedulingRefusal(a.err) {
-			if cerr := o.confirmCachedState(ctx, state); errors.Is(cerr, api.ErrInstanceNotFound) {
-				return nil, cerr
+		if common.IsSchedulingRefusal(a.err) {
+			if !fresh {
+				if cerr := o.confirmCachedState(ctx, state); errors.Is(cerr, api.ErrInstanceNotFound) {
+					return nil, cerr
+				}
 			}
+			// The sender keeps this result in hand and retries for the
+			// publish window, then drops it with nothing left to re-deliver
+			// it. Start that clock so the ID stops being held once no
+			// redelivery can exist: a refused result is routinely admitted
+			// by a later retry, so the verdict alone must not release it.
+			o.refuseAwaited(e)
 		}
 		return nil, a.err
 	}
@@ -213,9 +221,7 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		// The result has been judged, so this dispatch is no longer owed.
 		// A result naming another execution of the task settles nothing:
 		// settle matches on the execution id.
-		if taskID, execID, ok := activityResolution(e); ok {
-			o.awaited.settle(taskID, execID)
-		}
+		o.settleAwaited(e)
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)
 		return nil, nil
 	}
@@ -234,9 +240,7 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 
 	// Admitted, so this dispatch is no longer owed. A duplicate or a refusal
 	// above leaves it armed, because the result it stands for is still out.
-	if taskID, execID, ok := activityResolution(e); ok {
-		o.awaited.settle(taskID, execID)
-	}
+	o.settleAwaited(e)
 
 	if a.outcome == admitFold {
 		return o.foldSubmit(ctx, e, state), nil
@@ -343,11 +347,15 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 				return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
 			}
 		}
-		// Terminal for the sender, so nothing will redeliver this result and
-		// the dispatch is no longer owed. The cached state judged it not
-		// completed while the durable state is: it is stale either way.
-		if taskID, execID, ok := activityResolution(e); ok {
-			o.awaited.settle(taskID, execID)
+		// Terminal for the sender, so nothing will redeliver this result.
+		// Settle only when the instance itself is terminal, which is the
+		// case the switch falls through for: a live instance reaching here
+		// failed verification on content, and its own dispatch of that task
+		// is still running. Execution ids may be empty on both sides, and
+		// settle then matches anything, so this guard is what stops one
+		// generation's straggler releasing the ID for another's activity.
+		if fresh.IsCompleted() {
+			o.settleAwaited(e)
 		}
 		o.invalidateCachedState()
 		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, fverr)
@@ -359,6 +367,25 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return terr
 	}
 	return api.ErrInstanceNotFound
+}
+
+// settleAwaited releases the dispatch e resolves, if it resolves one. Every
+// terminal exit for an activity completion must go through here: an exit that
+// forgets leaves the instance's ID held for a result nothing will deliver.
+func (o *orchestrator) settleAwaited(e *backend.HistoryEvent) {
+	if taskID, execID, ok := activityResolution(e); ok {
+		o.awaited.settle(taskID, execID)
+	}
+}
+
+// refuseAwaited starts the clock on the dispatch e resolves. The sender keeps
+// the result in hand for the publish window and then drops it, so the ID is
+// held until that window has passed rather than on the refusal itself, which
+// a later retry routinely clears.
+func (o *orchestrator) refuseAwaited(e *backend.HistoryEvent) {
+	if taskID, execID, ok := activityResolution(e); ok {
+		o.awaited.refuse(taskID, execID)
+	}
 }
 
 // activityResolution returns the task id and TaskExecutionId an activity

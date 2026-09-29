@@ -17,7 +17,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -100,10 +102,29 @@ func TaskScheduledRow(t *testing.T, ctx context.Context, rows StateRows, taskID 
 		}
 		var ev backend.HistoryEvent
 		require.NoError(t, proto.Unmarshal(raw, &ev))
-		if ev.GetTaskScheduled() != nil && ev.GetEventId() == taskID {
+		if IsTaskScheduledFor(taskID)(&ev) {
 			return suffix, &ev
 		}
 	}
+}
+
+// WaitTaskScheduled waits until taskID's scheduling row is readable and
+// returns the execution id it was dispatched under. A turn dispatches its
+// activities before it saves, so an activity having started is not yet proof
+// that its scheduling is durable.
+func WaitTaskScheduled(t *testing.T, ctx context.Context, rows StateRows, taskID int32) string {
+	t.Helper()
+
+	var execID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, ev := TaskScheduledRow(t, ctx, rows, taskID)
+		if !assert.NotNil(c, ev, "task %d must be recorded in history", taskID) {
+			return
+		}
+		execID = ev.GetTaskScheduled().GetTaskExecutionId()
+		assert.NotEmpty(c, execID, "task %d must be recorded with an execution id", taskID)
+	}, time.Second*20, time.Millisecond*10)
+	return execID
 }
 
 // SetTaskExecutionID rewrites the durable scheduling of taskID so it names

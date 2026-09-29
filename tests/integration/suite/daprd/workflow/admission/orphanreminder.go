@@ -121,7 +121,7 @@ func (o *orphanreminder) Run(t *testing.T, ctx context.Context) {
 	// attestation is matched against the signed history first, and an
 	// unscheduled task id short-circuits there before any signature is read.
 
-	fworkflow.PlantReminder(t, ctx, o.workflow, true, id, reminderName, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, o.workflow, id, reminderName, &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_TaskCompleted{

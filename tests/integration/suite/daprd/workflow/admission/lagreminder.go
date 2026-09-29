@@ -118,18 +118,10 @@ func (l *lagreminder) Run(t *testing.T, ctx context.Context) {
 	// saves, so the activity running is not yet proof that its scheduling is
 	// readable: wait for the row.
 	rows := fworkflow.SQLiteRows(l.workflow.DB(), id)
-	var execReal string
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, ev := fworkflow.TaskScheduledRow(t, ctx, rows, 0)
-		if !assert.NotNil(c, ev, "task 0 must be recorded in history") {
-			return
-		}
-		execReal = ev.GetTaskScheduled().GetTaskExecutionId()
-		assert.NotEmpty(c, execReal, "task 0 must be recorded with an execution id")
-	}, time.Second*20, time.Millisecond*10)
+	execReal := fworkflow.WaitTaskScheduled(t, ctx, rows, 0)
 	execPeer := "peer-" + execReal
 
-	fworkflow.PlantReminder(t, ctx, l.workflow, false, id, reminderName, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, l.workflow, id, reminderName, &protos.HistoryEvent{
 		EventId: -1,
 		// The orchestrator's age bound reads this field, not the reminder's.
 		Timestamp: timestamppb.Now(),

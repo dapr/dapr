@@ -165,11 +165,13 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// cached verdict discards a result the store may already prove
 			// admissible, so spend the invalidate above and judge once more
 			// on the reload before giving up.
-			if err = o.addWorkflowEvent(ctx, &ev, completionSender{}); !common.IsSchedulingRefusal(err) {
-				return err
+			err = o.addWorkflowEvent(ctx, &ev, completionSender{})
+			if common.IsSchedulingRefusal(err) {
+				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not resolve within the publish window: %v", o.actorID, reminder.Name, err)
+				return nil
 			}
-			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not resolve within the publish window: %v", o.actorID, reminder.Name, err)
-			return nil
+			// Anything else the re-judge produced belongs to the arms below:
+			// a purged instance must be acked, not refired forever.
 		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler

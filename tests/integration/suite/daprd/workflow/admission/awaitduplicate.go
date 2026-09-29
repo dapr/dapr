@@ -167,7 +167,7 @@ func (a *awaitduplicate) Run(t *testing.T, ctx context.Context) {
 	// duplicate however faithfully it names the execution.
 
 	const dupReminder = common.ReminderPrefixActivityResult + "dup"
-	fworkflow.PlantReminder(t, ctx, a.workflow, false, id, dupReminder, &protos.HistoryEvent{
+	fworkflow.PlantReminder(t, ctx, a.workflow, id, dupReminder, &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_TaskCompleted{
