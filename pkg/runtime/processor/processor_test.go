@@ -236,6 +236,10 @@ func TestExtractComponentCategory(t *testing.T) {
 		{"states.redis", ""},
 		{"bindings.kafka", "bindings"},
 		{"binding.kafka", ""},
+		{"search.meilisearch", "search"},
+		{"searches.meilisearch", ""},
+		{"vector.meilisearch", "vector"},
+		{"vectors.meilisearch", ""},
 		{"this.is.invalid.category", ""},
 	}
 

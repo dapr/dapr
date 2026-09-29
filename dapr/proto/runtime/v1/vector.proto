@@ -1,0 +1,216 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/struct.proto";
+import "google/rpc/status.proto";
+
+import "dapr/proto/runtime/v1/search.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprVectorProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// =============================================================================
+// Vector building block - alpha1
+//
+// The Vector building block stores, retrieves and queries pre-embedded dense
+// vectors. Embedding generation is out of scope. IndexingOptionsAlpha1,
+// IndexAck and FailedItem are shared with search.proto, as is the portable
+// filter DSL, which addresses VectorRecord.metadata.
+//
+// Sparse and named vectors, hybrid fusion and query pagination are deferred
+// to beta; their field numbers are reserved below.
+// =============================================================================
+
+enum DistanceMetric {
+  // On CreateCollection: the component's documented default metric. On
+  // QueryVectors: the metric configured for the collection.
+  DISTANCE_METRIC_UNSPECIFIED = 0;
+  // Cosine similarity. Higher scores indicate closer matches.
+  DISTANCE_METRIC_COSINE = 1;
+  // Dot-product similarity. Higher scores indicate closer matches.
+  DISTANCE_METRIC_DOT_PRODUCT = 2;
+  // Euclidean distance. Lower scores indicate closer matches.
+  DISTANCE_METRIC_EUCLIDEAN = 3;
+}
+
+message CreateCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  // Component-specific collection settings, such as index parameters.
+  map<string, string> metadata = 3;
+  // Required. Length of every dense vector stored in the collection.
+  uint32 dimensions = 4;
+  // Distance metric for the collection. UNSPECIFIED selects the component's
+  // documented default. A metric the component cannot provide returns
+  // INVALID_ARGUMENT.
+  DistanceMetric metric = 5;
+}
+
+message GetCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  map<string, string> metadata = 3;
+}
+
+message GetCollectionResponseAlpha1 {
+  string collection = 1;
+  // Approximate number of records. Providers that cannot supply this value
+  // efficiently may return 0.
+  uint64 record_count = 2;
+  // Component-specific collection properties.
+  map<string, string> properties = 3;
+  uint32 dimensions = 4;
+  // Effective metric. Always a concrete value.
+  DistanceMetric metric = 5;
+}
+
+message ListCollectionsRequestAlpha1 {
+  string store_name = 1;
+  map<string, string> metadata = 2;
+}
+
+message ListCollectionsResponseAlpha1 {
+  repeated string collections = 1;
+}
+
+message DeleteCollectionRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  map<string, string> metadata = 3;
+}
+
+message VectorRecord {
+  string id = 1;
+  // Dense vector. Length must equal the collection's dimensions.
+  repeated float values = 2;
+  // Opaque caller payload stored with the record and returned unchanged. Not
+  // filterable.
+  bytes payload = 3;
+  // Structured, filterable attributes addressed by the filter DSL.
+  google.protobuf.Struct metadata = 6;
+
+  // Reserved for sparse and named vectors (deferred to beta).
+  reserved 4, 5;
+  reserved "sparse_values", "named_vectors";
+}
+
+message VectorMatch {
+  VectorRecord record = 1;
+  // Unnormalized value of the effective metric. Higher is better for COSINE
+  // and DOT_PRODUCT; lower is better for EUCLIDEAN.
+  double score = 2;
+}
+
+message UpsertVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated VectorRecord records = 3;
+  map<string, string> metadata = 4;
+  IndexingOptionsAlpha1 options = 5;
+}
+
+message UpsertVectorsResponseAlpha1 {
+  // Item-specific failures known at the acknowledgement boundary.
+  repeated FailedItem failed_items = 1;
+  // Always set to QUEUED or COMPLETED on a successful RPC.
+  IndexAck ack = 2;
+}
+
+message DeleteVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated string ids = 3;
+  map<string, string> metadata = 4;
+  IndexingOptionsAlpha1 options = 5;
+}
+
+message DeleteVectorsResponseAlpha1 {
+  // Always set to QUEUED or COMPLETED on a successful RPC.
+  IndexAck ack = 1;
+}
+
+message GetVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated string ids = 3;
+  bool include_values = 4;
+  map<string, string> metadata = 5;
+}
+
+message GetVectorsResponseAlpha1 {
+  // Found records in request order. IDs that do not exist are omitted.
+  repeated VectorRecord records = 1;
+}
+
+message QueryVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+
+  oneof query {
+    // Only values is read; the remaining VectorRecord fields are ignored.
+    VectorRecord vector = 3;
+    string by_id = 4;
+  }
+
+  uint32 top_k = 5;
+  google.protobuf.Struct filter = 6;
+  bool include_values = 7;
+  bool include_payload = 8;
+  // Determines how score and score_threshold are interpreted. UNSPECIFIED
+  // uses the metric configured for the collection. A metric the component
+  // cannot evaluate for this collection returns INVALID_ARGUMENT.
+  DistanceMetric metric = 9;
+  // Inclusive cutoff. A match is retained when its score is greater than or
+  // equal to this value for COSINE and DOT_PRODUCT, or less than or equal to
+  // this value for EUCLIDEAN. The value is not normalized.
+  optional double score_threshold = 13;
+  map<string, string> metadata = 14;
+
+  // Reserved for hybrid and named-vector queries (deferred to beta).
+  reserved 10, 11, 12;
+  reserved "sparse_query", "alpha", "vector_name";
+}
+
+message QueryVectorsResponseAlpha1 {
+  repeated VectorMatch matches = 1;
+  // Effective metric used for scores. This is set to a concrete value even
+  // when the request uses DISTANCE_METRIC_UNSPECIFIED.
+  DistanceMetric metric = 2;
+}
+
+message BatchQueryVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  repeated QueryVectorsRequestAlpha1 queries = 3;
+  map<string, string> metadata = 4;
+}
+
+// BatchQueryResultAlpha1 is the outcome of one query in a batch.
+message BatchQueryResultAlpha1 {
+  oneof result {
+    QueryVectorsResponseAlpha1 response = 1;
+    // error.code uses a canonical google.rpc.Code and must not be OK.
+    google.rpc.Status error = 2;
+  }
+}
+
+message BatchQueryVectorsResponseAlpha1 {
+  // One result per request query, in request order.
+  repeated BatchQueryResultAlpha1 results = 1;
+}

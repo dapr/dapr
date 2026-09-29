@@ -223,6 +223,49 @@ const (
 	DaprConverseAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	// DaprConverseAlpha2Procedure is the fully-qualified name of the Dapr's ConverseAlpha2 RPC.
 	DaprConverseAlpha2Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
+	// DaprCreateIndexAlpha1Procedure is the fully-qualified name of the Dapr's CreateIndexAlpha1 RPC.
+	DaprCreateIndexAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/CreateIndexAlpha1"
+	// DaprGetIndexAlpha1Procedure is the fully-qualified name of the Dapr's GetIndexAlpha1 RPC.
+	DaprGetIndexAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetIndexAlpha1"
+	// DaprListIndexesAlpha1Procedure is the fully-qualified name of the Dapr's ListIndexesAlpha1 RPC.
+	DaprListIndexesAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ListIndexesAlpha1"
+	// DaprDeleteIndexAlpha1Procedure is the fully-qualified name of the Dapr's DeleteIndexAlpha1 RPC.
+	DaprDeleteIndexAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteIndexAlpha1"
+	// DaprIndexDocumentsAlpha1Procedure is the fully-qualified name of the Dapr's IndexDocumentsAlpha1
+	// RPC.
+	DaprIndexDocumentsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/IndexDocumentsAlpha1"
+	// DaprGetDocumentsAlpha1Procedure is the fully-qualified name of the Dapr's GetDocumentsAlpha1 RPC.
+	DaprGetDocumentsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetDocumentsAlpha1"
+	// DaprDeleteDocumentsAlpha1Procedure is the fully-qualified name of the Dapr's
+	// DeleteDocumentsAlpha1 RPC.
+	DaprDeleteDocumentsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteDocumentsAlpha1"
+	// DaprSearchAlpha1Procedure is the fully-qualified name of the Dapr's SearchAlpha1 RPC.
+	DaprSearchAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/SearchAlpha1"
+	// DaprCreateCollectionAlpha1Procedure is the fully-qualified name of the Dapr's
+	// CreateCollectionAlpha1 RPC.
+	DaprCreateCollectionAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/CreateCollectionAlpha1"
+	// DaprGetCollectionAlpha1Procedure is the fully-qualified name of the Dapr's GetCollectionAlpha1
+	// RPC.
+	DaprGetCollectionAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetCollectionAlpha1"
+	// DaprListCollectionsAlpha1Procedure is the fully-qualified name of the Dapr's
+	// ListCollectionsAlpha1 RPC.
+	DaprListCollectionsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ListCollectionsAlpha1"
+	// DaprDeleteCollectionAlpha1Procedure is the fully-qualified name of the Dapr's
+	// DeleteCollectionAlpha1 RPC.
+	DaprDeleteCollectionAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteCollectionAlpha1"
+	// DaprUpsertVectorsAlpha1Procedure is the fully-qualified name of the Dapr's UpsertVectorsAlpha1
+	// RPC.
+	DaprUpsertVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/UpsertVectorsAlpha1"
+	// DaprDeleteVectorsAlpha1Procedure is the fully-qualified name of the Dapr's DeleteVectorsAlpha1
+	// RPC.
+	DaprDeleteVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteVectorsAlpha1"
+	// DaprGetVectorsAlpha1Procedure is the fully-qualified name of the Dapr's GetVectorsAlpha1 RPC.
+	DaprGetVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetVectorsAlpha1"
+	// DaprQueryVectorsAlpha1Procedure is the fully-qualified name of the Dapr's QueryVectorsAlpha1 RPC.
+	DaprQueryVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/QueryVectorsAlpha1"
+	// DaprBatchQueryVectorsAlpha1Procedure is the fully-qualified name of the Dapr's
+	// BatchQueryVectorsAlpha1 RPC.
+	DaprBatchQueryVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/BatchQueryVectorsAlpha1"
 )
 
 // DaprClient is a client for the dapr.proto.runtime.v1.Dapr service.
@@ -406,6 +449,41 @@ type DaprClient interface {
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
+	// Create an index.
+	CreateIndexAlpha1(context.Context, *connect.Request[v1.CreateIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Get an index.
+	GetIndexAlpha1(context.Context, *connect.Request[v1.GetIndexRequestAlpha1]) (*connect.Response[v1.GetIndexResponseAlpha1], error)
+	// List indexes.
+	ListIndexesAlpha1(context.Context, *connect.Request[v1.ListIndexesRequestAlpha1]) (*connect.Response[v1.ListIndexesResponseAlpha1], error)
+	// Delete an index.
+	DeleteIndexAlpha1(context.Context, *connect.Request[v1.DeleteIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Index (keyed upsert) documents.
+	IndexDocumentsAlpha1(context.Context, *connect.Request[v1.IndexDocumentsRequestAlpha1]) (*connect.Response[v1.IndexDocumentsResponseAlpha1], error)
+	// Get documents by ID.
+	GetDocumentsAlpha1(context.Context, *connect.Request[v1.GetDocumentsRequestAlpha1]) (*connect.Response[v1.GetDocumentsResponseAlpha1], error)
+	// Delete documents by ID.
+	DeleteDocumentsAlpha1(context.Context, *connect.Request[v1.DeleteDocumentsRequestAlpha1]) (*connect.Response[v1.DeleteDocumentsResponseAlpha1], error)
+	// Search an index.
+	SearchAlpha1(context.Context, *connect.Request[v1.SearchRequestAlpha1]) (*connect.Response[v1.SearchResponseAlpha1], error)
+	// Create a collection.
+	CreateCollectionAlpha1(context.Context, *connect.Request[v1.CreateCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Get a collection.
+	GetCollectionAlpha1(context.Context, *connect.Request[v1.GetCollectionRequestAlpha1]) (*connect.Response[v1.GetCollectionResponseAlpha1], error)
+	// List collections.
+	ListCollectionsAlpha1(context.Context, *connect.Request[v1.ListCollectionsRequestAlpha1]) (*connect.Response[v1.ListCollectionsResponseAlpha1], error)
+	// Delete a collection.
+	DeleteCollectionAlpha1(context.Context, *connect.Request[v1.DeleteCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Upsert (keyed) vectors.
+	UpsertVectorsAlpha1(context.Context, *connect.Request[v1.UpsertVectorsRequestAlpha1]) (*connect.Response[v1.UpsertVectorsResponseAlpha1], error)
+	// Delete vectors by ID.
+	DeleteVectorsAlpha1(context.Context, *connect.Request[v1.DeleteVectorsRequestAlpha1]) (*connect.Response[v1.DeleteVectorsResponseAlpha1], error)
+	// Get vectors by ID.
+	GetVectorsAlpha1(context.Context, *connect.Request[v1.GetVectorsRequestAlpha1]) (*connect.Response[v1.GetVectorsResponseAlpha1], error)
+	// Query vectors.
+	QueryVectorsAlpha1(context.Context, *connect.Request[v1.QueryVectorsRequestAlpha1]) (*connect.Response[v1.QueryVectorsResponseAlpha1], error)
+	// Issue multiple queries against the same collection, each succeeding or
+	// failing on its own.
+	BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error)
 }
 
 // NewDaprClient constructs a client for the dapr.proto.runtime.v1.Dapr service. By default, it uses
@@ -863,6 +941,108 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
 			connect.WithClientOptions(opts...),
 		),
+		createIndexAlpha1: connect.NewClient[v1.CreateIndexRequestAlpha1, emptypb.Empty](
+			httpClient,
+			baseURL+DaprCreateIndexAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("CreateIndexAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		getIndexAlpha1: connect.NewClient[v1.GetIndexRequestAlpha1, v1.GetIndexResponseAlpha1](
+			httpClient,
+			baseURL+DaprGetIndexAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("GetIndexAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		listIndexesAlpha1: connect.NewClient[v1.ListIndexesRequestAlpha1, v1.ListIndexesResponseAlpha1](
+			httpClient,
+			baseURL+DaprListIndexesAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("ListIndexesAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteIndexAlpha1: connect.NewClient[v1.DeleteIndexRequestAlpha1, emptypb.Empty](
+			httpClient,
+			baseURL+DaprDeleteIndexAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("DeleteIndexAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		indexDocumentsAlpha1: connect.NewClient[v1.IndexDocumentsRequestAlpha1, v1.IndexDocumentsResponseAlpha1](
+			httpClient,
+			baseURL+DaprIndexDocumentsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("IndexDocumentsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		getDocumentsAlpha1: connect.NewClient[v1.GetDocumentsRequestAlpha1, v1.GetDocumentsResponseAlpha1](
+			httpClient,
+			baseURL+DaprGetDocumentsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("GetDocumentsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteDocumentsAlpha1: connect.NewClient[v1.DeleteDocumentsRequestAlpha1, v1.DeleteDocumentsResponseAlpha1](
+			httpClient,
+			baseURL+DaprDeleteDocumentsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("DeleteDocumentsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		searchAlpha1: connect.NewClient[v1.SearchRequestAlpha1, v1.SearchResponseAlpha1](
+			httpClient,
+			baseURL+DaprSearchAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("SearchAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		createCollectionAlpha1: connect.NewClient[v1.CreateCollectionRequestAlpha1, emptypb.Empty](
+			httpClient,
+			baseURL+DaprCreateCollectionAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("CreateCollectionAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		getCollectionAlpha1: connect.NewClient[v1.GetCollectionRequestAlpha1, v1.GetCollectionResponseAlpha1](
+			httpClient,
+			baseURL+DaprGetCollectionAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("GetCollectionAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		listCollectionsAlpha1: connect.NewClient[v1.ListCollectionsRequestAlpha1, v1.ListCollectionsResponseAlpha1](
+			httpClient,
+			baseURL+DaprListCollectionsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("ListCollectionsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteCollectionAlpha1: connect.NewClient[v1.DeleteCollectionRequestAlpha1, emptypb.Empty](
+			httpClient,
+			baseURL+DaprDeleteCollectionAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("DeleteCollectionAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		upsertVectorsAlpha1: connect.NewClient[v1.UpsertVectorsRequestAlpha1, v1.UpsertVectorsResponseAlpha1](
+			httpClient,
+			baseURL+DaprUpsertVectorsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("UpsertVectorsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteVectorsAlpha1: connect.NewClient[v1.DeleteVectorsRequestAlpha1, v1.DeleteVectorsResponseAlpha1](
+			httpClient,
+			baseURL+DaprDeleteVectorsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("DeleteVectorsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		getVectorsAlpha1: connect.NewClient[v1.GetVectorsRequestAlpha1, v1.GetVectorsResponseAlpha1](
+			httpClient,
+			baseURL+DaprGetVectorsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("GetVectorsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		queryVectorsAlpha1: connect.NewClient[v1.QueryVectorsRequestAlpha1, v1.QueryVectorsResponseAlpha1](
+			httpClient,
+			baseURL+DaprQueryVectorsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("QueryVectorsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		batchQueryVectorsAlpha1: connect.NewClient[v1.BatchQueryVectorsRequestAlpha1, v1.BatchQueryVectorsResponseAlpha1](
+			httpClient,
+			baseURL+DaprBatchQueryVectorsAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("BatchQueryVectorsAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -942,6 +1122,23 @@ type daprClient struct {
 	listJobs                       *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	converseAlpha1                 *connect.Client[v1.ConversationRequest, v1.ConversationResponse]
 	converseAlpha2                 *connect.Client[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2]
+	createIndexAlpha1              *connect.Client[v1.CreateIndexRequestAlpha1, emptypb.Empty]
+	getIndexAlpha1                 *connect.Client[v1.GetIndexRequestAlpha1, v1.GetIndexResponseAlpha1]
+	listIndexesAlpha1              *connect.Client[v1.ListIndexesRequestAlpha1, v1.ListIndexesResponseAlpha1]
+	deleteIndexAlpha1              *connect.Client[v1.DeleteIndexRequestAlpha1, emptypb.Empty]
+	indexDocumentsAlpha1           *connect.Client[v1.IndexDocumentsRequestAlpha1, v1.IndexDocumentsResponseAlpha1]
+	getDocumentsAlpha1             *connect.Client[v1.GetDocumentsRequestAlpha1, v1.GetDocumentsResponseAlpha1]
+	deleteDocumentsAlpha1          *connect.Client[v1.DeleteDocumentsRequestAlpha1, v1.DeleteDocumentsResponseAlpha1]
+	searchAlpha1                   *connect.Client[v1.SearchRequestAlpha1, v1.SearchResponseAlpha1]
+	createCollectionAlpha1         *connect.Client[v1.CreateCollectionRequestAlpha1, emptypb.Empty]
+	getCollectionAlpha1            *connect.Client[v1.GetCollectionRequestAlpha1, v1.GetCollectionResponseAlpha1]
+	listCollectionsAlpha1          *connect.Client[v1.ListCollectionsRequestAlpha1, v1.ListCollectionsResponseAlpha1]
+	deleteCollectionAlpha1         *connect.Client[v1.DeleteCollectionRequestAlpha1, emptypb.Empty]
+	upsertVectorsAlpha1            *connect.Client[v1.UpsertVectorsRequestAlpha1, v1.UpsertVectorsResponseAlpha1]
+	deleteVectorsAlpha1            *connect.Client[v1.DeleteVectorsRequestAlpha1, v1.DeleteVectorsResponseAlpha1]
+	getVectorsAlpha1               *connect.Client[v1.GetVectorsRequestAlpha1, v1.GetVectorsResponseAlpha1]
+	queryVectorsAlpha1             *connect.Client[v1.QueryVectorsRequestAlpha1, v1.QueryVectorsResponseAlpha1]
+	batchQueryVectorsAlpha1        *connect.Client[v1.BatchQueryVectorsRequestAlpha1, v1.BatchQueryVectorsResponseAlpha1]
 }
 
 // InvokeService calls dapr.proto.runtime.v1.Dapr.InvokeService.
@@ -1340,6 +1537,91 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, req *connect.Request[v1
 	return c.converseAlpha2.CallUnary(ctx, req)
 }
 
+// CreateIndexAlpha1 calls dapr.proto.runtime.v1.Dapr.CreateIndexAlpha1.
+func (c *daprClient) CreateIndexAlpha1(ctx context.Context, req *connect.Request[v1.CreateIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return c.createIndexAlpha1.CallUnary(ctx, req)
+}
+
+// GetIndexAlpha1 calls dapr.proto.runtime.v1.Dapr.GetIndexAlpha1.
+func (c *daprClient) GetIndexAlpha1(ctx context.Context, req *connect.Request[v1.GetIndexRequestAlpha1]) (*connect.Response[v1.GetIndexResponseAlpha1], error) {
+	return c.getIndexAlpha1.CallUnary(ctx, req)
+}
+
+// ListIndexesAlpha1 calls dapr.proto.runtime.v1.Dapr.ListIndexesAlpha1.
+func (c *daprClient) ListIndexesAlpha1(ctx context.Context, req *connect.Request[v1.ListIndexesRequestAlpha1]) (*connect.Response[v1.ListIndexesResponseAlpha1], error) {
+	return c.listIndexesAlpha1.CallUnary(ctx, req)
+}
+
+// DeleteIndexAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteIndexAlpha1.
+func (c *daprClient) DeleteIndexAlpha1(ctx context.Context, req *connect.Request[v1.DeleteIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return c.deleteIndexAlpha1.CallUnary(ctx, req)
+}
+
+// IndexDocumentsAlpha1 calls dapr.proto.runtime.v1.Dapr.IndexDocumentsAlpha1.
+func (c *daprClient) IndexDocumentsAlpha1(ctx context.Context, req *connect.Request[v1.IndexDocumentsRequestAlpha1]) (*connect.Response[v1.IndexDocumentsResponseAlpha1], error) {
+	return c.indexDocumentsAlpha1.CallUnary(ctx, req)
+}
+
+// GetDocumentsAlpha1 calls dapr.proto.runtime.v1.Dapr.GetDocumentsAlpha1.
+func (c *daprClient) GetDocumentsAlpha1(ctx context.Context, req *connect.Request[v1.GetDocumentsRequestAlpha1]) (*connect.Response[v1.GetDocumentsResponseAlpha1], error) {
+	return c.getDocumentsAlpha1.CallUnary(ctx, req)
+}
+
+// DeleteDocumentsAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteDocumentsAlpha1.
+func (c *daprClient) DeleteDocumentsAlpha1(ctx context.Context, req *connect.Request[v1.DeleteDocumentsRequestAlpha1]) (*connect.Response[v1.DeleteDocumentsResponseAlpha1], error) {
+	return c.deleteDocumentsAlpha1.CallUnary(ctx, req)
+}
+
+// SearchAlpha1 calls dapr.proto.runtime.v1.Dapr.SearchAlpha1.
+func (c *daprClient) SearchAlpha1(ctx context.Context, req *connect.Request[v1.SearchRequestAlpha1]) (*connect.Response[v1.SearchResponseAlpha1], error) {
+	return c.searchAlpha1.CallUnary(ctx, req)
+}
+
+// CreateCollectionAlpha1 calls dapr.proto.runtime.v1.Dapr.CreateCollectionAlpha1.
+func (c *daprClient) CreateCollectionAlpha1(ctx context.Context, req *connect.Request[v1.CreateCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return c.createCollectionAlpha1.CallUnary(ctx, req)
+}
+
+// GetCollectionAlpha1 calls dapr.proto.runtime.v1.Dapr.GetCollectionAlpha1.
+func (c *daprClient) GetCollectionAlpha1(ctx context.Context, req *connect.Request[v1.GetCollectionRequestAlpha1]) (*connect.Response[v1.GetCollectionResponseAlpha1], error) {
+	return c.getCollectionAlpha1.CallUnary(ctx, req)
+}
+
+// ListCollectionsAlpha1 calls dapr.proto.runtime.v1.Dapr.ListCollectionsAlpha1.
+func (c *daprClient) ListCollectionsAlpha1(ctx context.Context, req *connect.Request[v1.ListCollectionsRequestAlpha1]) (*connect.Response[v1.ListCollectionsResponseAlpha1], error) {
+	return c.listCollectionsAlpha1.CallUnary(ctx, req)
+}
+
+// DeleteCollectionAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteCollectionAlpha1.
+func (c *daprClient) DeleteCollectionAlpha1(ctx context.Context, req *connect.Request[v1.DeleteCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return c.deleteCollectionAlpha1.CallUnary(ctx, req)
+}
+
+// UpsertVectorsAlpha1 calls dapr.proto.runtime.v1.Dapr.UpsertVectorsAlpha1.
+func (c *daprClient) UpsertVectorsAlpha1(ctx context.Context, req *connect.Request[v1.UpsertVectorsRequestAlpha1]) (*connect.Response[v1.UpsertVectorsResponseAlpha1], error) {
+	return c.upsertVectorsAlpha1.CallUnary(ctx, req)
+}
+
+// DeleteVectorsAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteVectorsAlpha1.
+func (c *daprClient) DeleteVectorsAlpha1(ctx context.Context, req *connect.Request[v1.DeleteVectorsRequestAlpha1]) (*connect.Response[v1.DeleteVectorsResponseAlpha1], error) {
+	return c.deleteVectorsAlpha1.CallUnary(ctx, req)
+}
+
+// GetVectorsAlpha1 calls dapr.proto.runtime.v1.Dapr.GetVectorsAlpha1.
+func (c *daprClient) GetVectorsAlpha1(ctx context.Context, req *connect.Request[v1.GetVectorsRequestAlpha1]) (*connect.Response[v1.GetVectorsResponseAlpha1], error) {
+	return c.getVectorsAlpha1.CallUnary(ctx, req)
+}
+
+// QueryVectorsAlpha1 calls dapr.proto.runtime.v1.Dapr.QueryVectorsAlpha1.
+func (c *daprClient) QueryVectorsAlpha1(ctx context.Context, req *connect.Request[v1.QueryVectorsRequestAlpha1]) (*connect.Response[v1.QueryVectorsResponseAlpha1], error) {
+	return c.queryVectorsAlpha1.CallUnary(ctx, req)
+}
+
+// BatchQueryVectorsAlpha1 calls dapr.proto.runtime.v1.Dapr.BatchQueryVectorsAlpha1.
+func (c *daprClient) BatchQueryVectorsAlpha1(ctx context.Context, req *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error) {
+	return c.batchQueryVectorsAlpha1.CallUnary(ctx, req)
+}
+
 // DaprHandler is an implementation of the dapr.proto.runtime.v1.Dapr service.
 type DaprHandler interface {
 	// Invokes a method on a remote Dapr app.
@@ -1521,6 +1803,41 @@ type DaprHandler interface {
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
+	// Create an index.
+	CreateIndexAlpha1(context.Context, *connect.Request[v1.CreateIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Get an index.
+	GetIndexAlpha1(context.Context, *connect.Request[v1.GetIndexRequestAlpha1]) (*connect.Response[v1.GetIndexResponseAlpha1], error)
+	// List indexes.
+	ListIndexesAlpha1(context.Context, *connect.Request[v1.ListIndexesRequestAlpha1]) (*connect.Response[v1.ListIndexesResponseAlpha1], error)
+	// Delete an index.
+	DeleteIndexAlpha1(context.Context, *connect.Request[v1.DeleteIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Index (keyed upsert) documents.
+	IndexDocumentsAlpha1(context.Context, *connect.Request[v1.IndexDocumentsRequestAlpha1]) (*connect.Response[v1.IndexDocumentsResponseAlpha1], error)
+	// Get documents by ID.
+	GetDocumentsAlpha1(context.Context, *connect.Request[v1.GetDocumentsRequestAlpha1]) (*connect.Response[v1.GetDocumentsResponseAlpha1], error)
+	// Delete documents by ID.
+	DeleteDocumentsAlpha1(context.Context, *connect.Request[v1.DeleteDocumentsRequestAlpha1]) (*connect.Response[v1.DeleteDocumentsResponseAlpha1], error)
+	// Search an index.
+	SearchAlpha1(context.Context, *connect.Request[v1.SearchRequestAlpha1]) (*connect.Response[v1.SearchResponseAlpha1], error)
+	// Create a collection.
+	CreateCollectionAlpha1(context.Context, *connect.Request[v1.CreateCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Get a collection.
+	GetCollectionAlpha1(context.Context, *connect.Request[v1.GetCollectionRequestAlpha1]) (*connect.Response[v1.GetCollectionResponseAlpha1], error)
+	// List collections.
+	ListCollectionsAlpha1(context.Context, *connect.Request[v1.ListCollectionsRequestAlpha1]) (*connect.Response[v1.ListCollectionsResponseAlpha1], error)
+	// Delete a collection.
+	DeleteCollectionAlpha1(context.Context, *connect.Request[v1.DeleteCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error)
+	// Upsert (keyed) vectors.
+	UpsertVectorsAlpha1(context.Context, *connect.Request[v1.UpsertVectorsRequestAlpha1]) (*connect.Response[v1.UpsertVectorsResponseAlpha1], error)
+	// Delete vectors by ID.
+	DeleteVectorsAlpha1(context.Context, *connect.Request[v1.DeleteVectorsRequestAlpha1]) (*connect.Response[v1.DeleteVectorsResponseAlpha1], error)
+	// Get vectors by ID.
+	GetVectorsAlpha1(context.Context, *connect.Request[v1.GetVectorsRequestAlpha1]) (*connect.Response[v1.GetVectorsResponseAlpha1], error)
+	// Query vectors.
+	QueryVectorsAlpha1(context.Context, *connect.Request[v1.QueryVectorsRequestAlpha1]) (*connect.Response[v1.QueryVectorsResponseAlpha1], error)
+	// Issue multiple queries against the same collection, each succeeding or
+	// failing on its own.
+	BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error)
 }
 
 // NewDaprHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -1974,6 +2291,108 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daprCreateIndexAlpha1Handler := connect.NewUnaryHandler(
+		DaprCreateIndexAlpha1Procedure,
+		svc.CreateIndexAlpha1,
+		connect.WithSchema(daprMethods.ByName("CreateIndexAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetIndexAlpha1Handler := connect.NewUnaryHandler(
+		DaprGetIndexAlpha1Procedure,
+		svc.GetIndexAlpha1,
+		connect.WithSchema(daprMethods.ByName("GetIndexAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprListIndexesAlpha1Handler := connect.NewUnaryHandler(
+		DaprListIndexesAlpha1Procedure,
+		svc.ListIndexesAlpha1,
+		connect.WithSchema(daprMethods.ByName("ListIndexesAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprDeleteIndexAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteIndexAlpha1Procedure,
+		svc.DeleteIndexAlpha1,
+		connect.WithSchema(daprMethods.ByName("DeleteIndexAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprIndexDocumentsAlpha1Handler := connect.NewUnaryHandler(
+		DaprIndexDocumentsAlpha1Procedure,
+		svc.IndexDocumentsAlpha1,
+		connect.WithSchema(daprMethods.ByName("IndexDocumentsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetDocumentsAlpha1Handler := connect.NewUnaryHandler(
+		DaprGetDocumentsAlpha1Procedure,
+		svc.GetDocumentsAlpha1,
+		connect.WithSchema(daprMethods.ByName("GetDocumentsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprDeleteDocumentsAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteDocumentsAlpha1Procedure,
+		svc.DeleteDocumentsAlpha1,
+		connect.WithSchema(daprMethods.ByName("DeleteDocumentsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprSearchAlpha1Handler := connect.NewUnaryHandler(
+		DaprSearchAlpha1Procedure,
+		svc.SearchAlpha1,
+		connect.WithSchema(daprMethods.ByName("SearchAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprCreateCollectionAlpha1Handler := connect.NewUnaryHandler(
+		DaprCreateCollectionAlpha1Procedure,
+		svc.CreateCollectionAlpha1,
+		connect.WithSchema(daprMethods.ByName("CreateCollectionAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetCollectionAlpha1Handler := connect.NewUnaryHandler(
+		DaprGetCollectionAlpha1Procedure,
+		svc.GetCollectionAlpha1,
+		connect.WithSchema(daprMethods.ByName("GetCollectionAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprListCollectionsAlpha1Handler := connect.NewUnaryHandler(
+		DaprListCollectionsAlpha1Procedure,
+		svc.ListCollectionsAlpha1,
+		connect.WithSchema(daprMethods.ByName("ListCollectionsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprDeleteCollectionAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteCollectionAlpha1Procedure,
+		svc.DeleteCollectionAlpha1,
+		connect.WithSchema(daprMethods.ByName("DeleteCollectionAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprUpsertVectorsAlpha1Handler := connect.NewUnaryHandler(
+		DaprUpsertVectorsAlpha1Procedure,
+		svc.UpsertVectorsAlpha1,
+		connect.WithSchema(daprMethods.ByName("UpsertVectorsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprDeleteVectorsAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteVectorsAlpha1Procedure,
+		svc.DeleteVectorsAlpha1,
+		connect.WithSchema(daprMethods.ByName("DeleteVectorsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetVectorsAlpha1Handler := connect.NewUnaryHandler(
+		DaprGetVectorsAlpha1Procedure,
+		svc.GetVectorsAlpha1,
+		connect.WithSchema(daprMethods.ByName("GetVectorsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprQueryVectorsAlpha1Handler := connect.NewUnaryHandler(
+		DaprQueryVectorsAlpha1Procedure,
+		svc.QueryVectorsAlpha1,
+		connect.WithSchema(daprMethods.ByName("QueryVectorsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprBatchQueryVectorsAlpha1Handler := connect.NewUnaryHandler(
+		DaprBatchQueryVectorsAlpha1Procedure,
+		svc.BatchQueryVectorsAlpha1,
+		connect.WithSchema(daprMethods.ByName("BatchQueryVectorsAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.runtime.v1.Dapr/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaprInvokeServiceProcedure:
@@ -2124,6 +2543,40 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprConverseAlpha1Handler.ServeHTTP(w, r)
 		case DaprConverseAlpha2Procedure:
 			daprConverseAlpha2Handler.ServeHTTP(w, r)
+		case DaprCreateIndexAlpha1Procedure:
+			daprCreateIndexAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetIndexAlpha1Procedure:
+			daprGetIndexAlpha1Handler.ServeHTTP(w, r)
+		case DaprListIndexesAlpha1Procedure:
+			daprListIndexesAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteIndexAlpha1Procedure:
+			daprDeleteIndexAlpha1Handler.ServeHTTP(w, r)
+		case DaprIndexDocumentsAlpha1Procedure:
+			daprIndexDocumentsAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetDocumentsAlpha1Procedure:
+			daprGetDocumentsAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteDocumentsAlpha1Procedure:
+			daprDeleteDocumentsAlpha1Handler.ServeHTTP(w, r)
+		case DaprSearchAlpha1Procedure:
+			daprSearchAlpha1Handler.ServeHTTP(w, r)
+		case DaprCreateCollectionAlpha1Procedure:
+			daprCreateCollectionAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetCollectionAlpha1Procedure:
+			daprGetCollectionAlpha1Handler.ServeHTTP(w, r)
+		case DaprListCollectionsAlpha1Procedure:
+			daprListCollectionsAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteCollectionAlpha1Procedure:
+			daprDeleteCollectionAlpha1Handler.ServeHTTP(w, r)
+		case DaprUpsertVectorsAlpha1Procedure:
+			daprUpsertVectorsAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteVectorsAlpha1Procedure:
+			daprDeleteVectorsAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetVectorsAlpha1Procedure:
+			daprGetVectorsAlpha1Handler.ServeHTTP(w, r)
+		case DaprQueryVectorsAlpha1Procedure:
+			daprQueryVectorsAlpha1Handler.ServeHTTP(w, r)
+		case DaprBatchQueryVectorsAlpha1Procedure:
+			daprBatchQueryVectorsAlpha1Handler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2427,4 +2880,72 @@ func (UnimplementedDaprHandler) ConverseAlpha1(context.Context, *connect.Request
 
 func (UnimplementedDaprHandler) ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ConverseAlpha2 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) CreateIndexAlpha1(context.Context, *connect.Request[v1.CreateIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.CreateIndexAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetIndexAlpha1(context.Context, *connect.Request[v1.GetIndexRequestAlpha1]) (*connect.Response[v1.GetIndexResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetIndexAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) ListIndexesAlpha1(context.Context, *connect.Request[v1.ListIndexesRequestAlpha1]) (*connect.Response[v1.ListIndexesResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListIndexesAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteIndexAlpha1(context.Context, *connect.Request[v1.DeleteIndexRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteIndexAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) IndexDocumentsAlpha1(context.Context, *connect.Request[v1.IndexDocumentsRequestAlpha1]) (*connect.Response[v1.IndexDocumentsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.IndexDocumentsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetDocumentsAlpha1(context.Context, *connect.Request[v1.GetDocumentsRequestAlpha1]) (*connect.Response[v1.GetDocumentsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetDocumentsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteDocumentsAlpha1(context.Context, *connect.Request[v1.DeleteDocumentsRequestAlpha1]) (*connect.Response[v1.DeleteDocumentsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteDocumentsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) SearchAlpha1(context.Context, *connect.Request[v1.SearchRequestAlpha1]) (*connect.Response[v1.SearchResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.SearchAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) CreateCollectionAlpha1(context.Context, *connect.Request[v1.CreateCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.CreateCollectionAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetCollectionAlpha1(context.Context, *connect.Request[v1.GetCollectionRequestAlpha1]) (*connect.Response[v1.GetCollectionResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetCollectionAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) ListCollectionsAlpha1(context.Context, *connect.Request[v1.ListCollectionsRequestAlpha1]) (*connect.Response[v1.ListCollectionsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListCollectionsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteCollectionAlpha1(context.Context, *connect.Request[v1.DeleteCollectionRequestAlpha1]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteCollectionAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) UpsertVectorsAlpha1(context.Context, *connect.Request[v1.UpsertVectorsRequestAlpha1]) (*connect.Response[v1.UpsertVectorsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.UpsertVectorsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteVectorsAlpha1(context.Context, *connect.Request[v1.DeleteVectorsRequestAlpha1]) (*connect.Response[v1.DeleteVectorsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteVectorsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetVectorsAlpha1(context.Context, *connect.Request[v1.GetVectorsRequestAlpha1]) (*connect.Response[v1.GetVectorsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetVectorsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) QueryVectorsAlpha1(context.Context, *connect.Request[v1.QueryVectorsRequestAlpha1]) (*connect.Response[v1.QueryVectorsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.QueryVectorsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.BatchQueryVectorsAlpha1 is not implemented"))
 }
