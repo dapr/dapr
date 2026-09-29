@@ -78,16 +78,21 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		return api.ErrInstanceNotFound
 	}
 
-	// ackDropped acknowledges a child completion this workflow will never
-	// consume, after confirming the cache it was judged on is current: the
-	// child clears its pending notification on this ack.
+	// ackDropped acknowledges a completion this workflow will never consume,
+	// after confirming the cache it was judged on is current: a child clears
+	// its pending notification on this ack.
 	ackDropped := func(reason string) error {
 		if !fresh {
 			if err := o.confirmCachedState(ctx, state); err != nil {
 				return err
 			}
 		}
-		log.Debugf("Workflow actor '%s': dropping child completion from '%s': %s", o.actorID, sender.instanceID, reason)
+		// The result is no longer in flight, whether this workflow consumed
+		// it or dropped it, so a completed instance's ID becomes reusable.
+		if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+			o.activityResultAwaited.CompareAndSwap(true, false)
+		}
+		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, reason)
 		return nil
 	}
 
@@ -139,6 +144,16 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
 		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
+	}
+
+	// A completion this history proves can never be consumed is acknowledged
+	// and dropped: the sender has nothing to gain by re-delivering it, and
+	// the activity contract is at-least-once, so a result the workflow will
+	// not use is the sender's to discard.
+	taskID, execID, isResolution := activityResolution(e)
+	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
+	if reason := activityDrop(state, taskID, execID, isResolution, scheduled); reason != "" {
+		return ackDropped(reason)
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
@@ -297,4 +312,47 @@ func senderFromMetadata(md map[string]*internalsv1pb.ListStringValue) completion
 		instanceID:        first(todo.MetadataSenderInstanceID),
 		parentExecutionID: first(todo.MetadataParentExecutionID),
 	}
+}
+
+// activityResolution returns the task id and TaskExecutionId an activity
+// completion resolves; ok is false for every other event.
+func activityResolution(e *backend.HistoryEvent) (taskID int32, execID string, ok bool) {
+	switch {
+	case e.GetTaskCompleted() != nil:
+		return e.GetTaskCompleted().GetTaskScheduledId(), e.GetTaskCompleted().GetTaskExecutionId(), true
+	case e.GetTaskFailed() != nil:
+		return e.GetTaskFailed().GetTaskScheduledId(), e.GetTaskFailed().GetTaskExecutionId(), true
+	}
+	return 0, "", false
+}
+
+// activityDrop reports why an activity completion can never be consumed by
+// this history, or "" when it still may: its task is scheduled under a
+// different TaskExecutionId (ContinueAsNew resets task ids, so the completion
+// resolves a superseded scheduling); its task is absent while the history
+// already holds an id at or beyond it (ids are assigned in sequence per
+// generation, so a still-landing save cannot carry it); or the workflow has
+// completed.
+// An absent task below every recorded id may still be committing.
+// scheduled is the TaskScheduled recorded for taskID, or nil: the caller has
+// already paid for that lookup, and the history scan is linear.
+func activityDrop(state *wfenginestate.State, taskID int32, execID string, isResolution bool, scheduled *protos.TaskScheduledEvent) string {
+	if !isResolution {
+		return ""
+	}
+	if scheduled != nil {
+		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
+			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID)
+		}
+	} else {
+		for _, h := range state.History {
+			if h.GetEventId() >= taskID {
+				return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID)
+			}
+		}
+	}
+	if state.IsCompleted() {
+		return "the workflow has completed"
+	}
+	return ""
 }
