@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -350,9 +351,18 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	// no longer exists either, so the reuse guard goes with the cache: a late
 	// result for the purged instance is judged before this actor is reaped
 	// and would otherwise leave the flag set for the next generation.
+	// The cache goes whatever happened: a purge whose rows landed but whose
+	// reminder deletes failed must not keep serving them. The reuse guard is
+	// different, because it only stops an ID being reused while a result is
+	// still owed: clear it only once the rows are actually gone, or a purge
+	// that failed to delete anything would let a create through while the
+	// instance and its outstanding activity are both still live.
+	var rowsDeleted atomic.Bool
 	defer func() {
 		o.invalidateCachedState()
-		o.activityResultAwaited.Store(false)
+		if rowsDeleted.Load() {
+			o.activityResultAwaited.Store(false)
+		}
 	}()
 
 	// This will create a request to purge everything.
@@ -364,7 +374,11 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	runners := []concurrency.Runner{
 		func(ctx context.Context) error {
 			// This will do the purging
-			return o.actorState.TransactionalStateOperation(ctx, true, req, false)
+			if terr := o.actorState.TransactionalStateOperation(ctx, true, req, false); terr != nil {
+				return terr
+			}
+			rowsDeleted.Store(true)
+			return nil
 		},
 		func(ctx context.Context) error {
 			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{

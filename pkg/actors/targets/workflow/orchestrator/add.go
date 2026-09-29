@@ -125,8 +125,9 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// unstartable classification can settle. A completion whose scheduling
 	// is not in history yet cannot fold either: nothing in the turn would
 	// match it.
-	taskID, _, _ := activityResolution(e)
-	hold := canFold && isActivity && o.rstate.GetStalled() == nil && state.FindHistoryEventByID(taskID).GetTaskScheduled() != nil
+	taskID, execID, isResolution := activityResolution(e)
+	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
+	hold := canFold && isActivity && o.rstate.GetStalled() == nil && scheduled != nil
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
@@ -150,7 +151,7 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// and dropped: the sender has nothing to gain by re-delivering it, and
 	// the activity contract is at-least-once, so a result the workflow will
 	// not use is the sender's to discard.
-	if reason := activityDrop(e, state); reason != "" {
+	if reason := activityDrop(state, taskID, execID, isResolution, scheduled); reason != "" {
 		return admission{reason: reason}
 	}
 	if !hold {
@@ -336,12 +337,13 @@ func activityResolution(e *backend.HistoryEvent) (taskID int32, execID string, o
 // generation, so a still-landing save cannot carry it); or the workflow has
 // completed.
 // An absent task below every recorded id may still be committing.
-func activityDrop(e *backend.HistoryEvent, state *wfenginestate.State) string {
-	taskID, execID, ok := activityResolution(e)
-	if !ok {
+// scheduled is the TaskScheduled recorded for taskID, or nil: the caller has
+// already paid for that lookup, and the history scan is linear.
+func activityDrop(state *wfenginestate.State, taskID int32, execID string, isResolution bool, scheduled *protos.TaskScheduledEvent) string {
+	if !isResolution {
 		return ""
 	}
-	if scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled(); scheduled != nil {
+	if scheduled != nil {
 		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
 			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID)
 		}
