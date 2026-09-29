@@ -248,35 +248,6 @@ func foldedEvents(entries []*foldEntry) []*backend.HistoryEvent {
 	return events
 }
 
-// foldExecutionMatches reports whether a completion's TaskExecutionId agrees
-// with the scheduling event at its task id; empty ids on either side are
-// tolerated (older SDKs, synthetic events).
-func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfenginestate.State) bool {
-	var taskID int32
-	var execID string
-	switch {
-	case e.GetTaskCompleted() != nil:
-		taskID = e.GetTaskCompleted().GetTaskScheduledId()
-		execID = e.GetTaskCompleted().GetTaskExecutionId()
-	case e.GetTaskFailed() != nil:
-		taskID = e.GetTaskFailed().GetTaskScheduledId()
-		execID = e.GetTaskFailed().GetTaskExecutionId()
-	default:
-		return true
-	}
-	if execID == "" {
-		return true
-	}
-	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
-	if scheduled == nil {
-		return false
-	}
-	if scheduled.GetTaskExecutionId() == "" {
-		return true
-	}
-	return scheduled.GetTaskExecutionId() == execID
-}
-
 // foldAck signals the taken entries' senders that the commit containing
 // their event succeeded, and records the folded outcome. The record lives
 // here, on the commit side, not with a waiter: a sender whose invocation
