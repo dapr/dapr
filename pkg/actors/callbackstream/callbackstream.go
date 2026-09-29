@@ -74,7 +74,8 @@ var loopFactory = loop.New[event](64)
 // (Send / CurrentConfig / HasConnection) reads an atomic.Pointer snapshot
 // maintained by that loop.
 type Manager struct {
-	loop loop.Interface[event]
+	loop   loop.Interface[event]
+	closed chan struct{}
 
 	// latest is the loop's published view of "most recent registered
 	// connection + config". Hot Send paths read it without any
@@ -98,7 +99,7 @@ type snapshot struct {
 // NewManager returns a new Manager with no active connections. The
 // caller must invoke Run to drive the event loop.
 func NewManager() *Manager {
-	m := &Manager{}
+	m := &Manager{closed: make(chan struct{})}
 	m.loop = loopFactory.NewLoop(m)
 	m.latest.Store(&snapshot{})
 	return m
@@ -114,6 +115,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			m.loop.Close(&eventStop{})
+			close(m.closed)
 			return nil
 		},
 	).Run(ctx)
@@ -174,9 +176,10 @@ func (m *Manager) Register(ctx context.Context, cfg *config.ApplicationConfig) *
 
 	done := make(chan struct{})
 	m.loop.Enqueue(&eventRegister{conn: conn, done: done})
+	// Enqueue drops the event once the loop is closed, so done never closes.
 	select {
 	case <-done:
-	case <-ctx.Done():
+	case <-m.closed:
 	}
 
 	log.Debugf("Registered actor callback stream (connID=%d, entities=%v)", conn.ID, cfg.Entities)

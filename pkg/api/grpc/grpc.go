@@ -1587,12 +1587,8 @@ func (a *api) goUnlessClosed(fns ...func()) error {
 		return errAPIClosed
 	}
 
-	a.wg.Add(len(fns))
 	for _, fn := range fns {
-		go func() {
-			defer a.wg.Done()
-			fn()
-		}()
+		a.wg.Go(fn)
 	}
 
 	return nil

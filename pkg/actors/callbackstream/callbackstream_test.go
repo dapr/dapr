@@ -446,15 +446,13 @@ func TestRegisterReturnsAfterLoopAlreadyClosed(t *testing.T) {
 	}
 
 	registerDone := make(chan *Connection, 1)
-	registerCtx, registerCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer registerCancel()
 	go func() {
-		registerDone <- mgr.Register(registerCtx, &config.ApplicationConfig{})
+		registerDone <- mgr.Register(t.Context(), &config.ApplicationConfig{})
 	}()
 
 	select {
 	case <-registerDone:
 	case <-time.After(time.Second):
-		t.Fatal("Register did not return after its context expired against an already-closed loop")
+		t.Fatal("Register did not return against an already-closed loop")
 	}
 }
