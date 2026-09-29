@@ -310,11 +310,12 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		traceContext = md[diagConsts.TraceparentHeader]
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
-			if ok && len(md[diagConsts.TracestateHeader]) > 0 {
-				ts := TraceStateFromW3CString(md[diagConsts.TracestateHeader][0])
-				sc.WithTraceState(*ts)
-			}
 		}
+	}
+	if ok && len(md[diagConsts.TracestateHeader]) > 0 {
+		ts := TraceStateFromW3CString(md[diagConsts.TracestateHeader][0])
+		// SpanContext is immutable: WithTraceState returns a copy, so it must be reassigned.
+		sc = sc.WithTraceState(*ts)
 	}
 	return sc, ok
 }
@@ -328,7 +329,12 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 
 	traceparent := SpanContextToW3CString(spanContext)
 	ctx = grpcMetadata.AppendToOutgoingContext(ctx, contribpubsub.TraceParentField, traceparent)
-	return grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
+	ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
+	// grpc-trace-bin carries no room for tracestate, so it must travel as its own header.
+	if tracestate := TraceStateToW3CString(spanContext); tracestate != "" {
+		ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.TracestateHeader, tracestate)
+	}
+	return ctx
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
