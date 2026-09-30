@@ -87,12 +87,10 @@ func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, file
 
 	req := &binarystore.GetRequest{FileName: fileName}
 
-	policyRunner := resiliency.NewRunner[*binarystore.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*binarystore.GetResponse, error) {
-		return component.Get(ctx, req)
-	})
+	// The response body is read after this method returns, so it must not use a
+	// Runner context that is canceled as soon as the component call completes.
+	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
+	resp, err := component.Get(policyDef.ComponentContext(ctx), req)
 	if err != nil {
 		return nil, mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreGet)
 	}

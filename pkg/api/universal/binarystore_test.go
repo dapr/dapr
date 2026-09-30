@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,10 +28,40 @@ import (
 
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/components-contrib/binarystore/fake"
+	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
+
+type contextReaderBinaryStore struct {
+	binarystore.BinaryStore
+}
+
+func (c *contextReaderBinaryStore) Get(ctx context.Context, req *binarystore.GetRequest) (*binarystore.GetResponse, error) {
+	return &binarystore.GetResponse{
+		Data: &contextReadCloser{
+			ctx:    ctx,
+			reader: strings.NewReader("payload"),
+		},
+	}, nil
+}
+
+type contextReadCloser struct {
+	ctx    context.Context
+	reader *strings.Reader
+}
+
+func (c *contextReadCloser) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.reader.Read(p)
+}
+
+func (*contextReadCloser) Close() error {
+	return nil
+}
 
 func newBinaryTestUniversal(t *testing.T) (*Universal, binarystore.BinaryStore) {
 	t.Helper()
@@ -91,6 +122,40 @@ func TestBinaryStore_GetMissingReturnsNotFound(t *testing.T) {
 	u, _ := newBinaryTestUniversal(t)
 	_, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "nope")
 	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+}
+
+func TestBinaryStore_GetReaderContextRemainsActive(t *testing.T) {
+	store := &contextReaderBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+	}
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", store)
+	u := &Universal{
+		logger: testLogger,
+		resiliency: resiliency.FromConfigurations(testLogger, &v1alpha1.Resiliency{
+			Spec: v1alpha1.ResiliencySpec{
+				Policies: v1alpha1.Policies{
+					Timeouts: map[string]string{"getTimeout": "1s"},
+				},
+				Targets: v1alpha1.Targets{
+					Components: map[string]v1alpha1.ComponentPolicyNames{
+						"mystore": {
+							Outbound: v1alpha1.PolicyNames{Timeout: "getTimeout"},
+						},
+					},
+				},
+			},
+		}),
+		compStore: compStore,
+	}
+
+	body, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
+	require.NoError(t, err)
+	defer body.Close()
+
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("payload"), got)
 }
 
 func TestBinaryStore_DeleteMissingReturnsNotFound(t *testing.T) {
