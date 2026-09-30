@@ -38,6 +38,18 @@ type contextReaderBinaryStore struct {
 	binarystore.BinaryStore
 }
 
+type binaryStoreContextKey struct{}
+
+type contextCheckingBinaryStore struct {
+	binarystore.BinaryStore
+	t *testing.T
+}
+
+func (c *contextCheckingBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
+	require.Equal(c.t, "identity", ctx.Value(binaryStoreContextKey{}))
+	return nil
+}
+
 func (c *contextReaderBinaryStore) Get(ctx context.Context, req *binarystore.GetRequest) (*binarystore.GetResponse, error) {
 	return &binarystore.GetResponse{
 		Data: &contextReadCloser{
@@ -102,6 +114,32 @@ func TestBinaryStore_SetNoOverwriteConflicts(t *testing.T) {
 	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "f", true, bytes.NewReader([]byte("a"))))
 	err := u.SetBinaryFileAlpha1(ctx, "mystore", "f", false, bytes.NewReader([]byte("b")))
 	require.ErrorIs(t, err, messages.ErrBinaryStoreFileExists)
+}
+
+func TestBinaryStore_SetAppliesComponentContext(t *testing.T) {
+	store := &contextCheckingBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+		t:           t,
+	}
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", store)
+	res := resiliency.New(nil)
+	res.SetComponentContextDecorator(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, binaryStoreContextKey{}, "identity")
+	})
+	u := &Universal{
+		logger:     testLogger,
+		resiliency: res,
+		compStore:  compStore,
+	}
+
+	require.NoError(t, u.SetBinaryFileAlpha1(
+		context.Background(),
+		"mystore",
+		"file.bin",
+		true,
+		bytes.NewReader([]byte("payload")),
+	))
 }
 
 func TestBinaryStore_OverwriteReplaces(t *testing.T) {

@@ -63,7 +63,8 @@ func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, file
 	// The request body is a one-shot stream and cannot be rewound for retries.
 	// Invoke the component directly so a partially-consumed reader cannot be
 	// replayed and produce a truncated or empty file on retry.
-	err = component.Set(ctx, req)
+	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
+	err = component.Set(policyDef.ComponentContext(ctx), req)
 	if err != nil {
 		return mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreSet)
 	}
