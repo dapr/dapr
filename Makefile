@@ -407,14 +407,14 @@ GOTESTSUM_INTEGRATION_FLAGS := \
 	--format testname
 
 .PHONY: test-integration
-test-integration: test-deps
+test-integration: test-integration-deps
 		CGO_ENABLED=1 gotestsum \
 			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false $(ARGS)
 
 .PHONY: test-integration-parallel
-test-integration-parallel: test-deps
+test-integration-parallel: test-integration-deps
 		CGO_ENABLED=1 gotestsum \
 			$(GOTESTSUM_INTEGRATION_FLAGS) \
 			-- \
@@ -424,7 +424,7 @@ test-integration-parallel: test-deps
 # fits on one screen. Pass a focus regex with FOCUS, e.g.
 #   make test-integration-dots FOCUS=actors/reminders
 .PHONY: test-integration-dots
-test-integration-dots: test-deps
+test-integration-dots: test-integration-deps
 		CGO_ENABLED=1 gotestsum \
 			--format dots-v2 \
 			-- \
