@@ -121,6 +121,7 @@ func (s *signatureStripped) scheduleAndComplete(t *testing.T, ctx context.Contex
 	})
 	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
+	s.waitUntilWorkflowHosted(t, ctx)
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-stripped")
 	require.NoError(t, err)
@@ -138,7 +139,17 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 
 	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, dworkflow.NewRegistry()))
+	s.waitUntilWorkflowHosted(t, ctx)
 
 	_, err := client.FetchWorkflowMetadata(ctx, id)
 	require.Error(t, err)
+}
+
+// waitUntilWorkflowHosted waits for the workflow actor type the worker just
+// registered: after a restart, daprd re-registers it only once healthy, so a
+// workflow call made straight after StartWorker can be refused with
+// "operations on actor reminders are only possible on hosted actor types".
+func (s *signatureStripped) waitUntilWorkflowHosted(t *testing.T, ctx context.Context) {
+	t.Helper()
+	s.daprd.WaitUntilActorTypeHosted(t, ctx, "dapr.internal."+s.daprd.Namespace()+"."+s.daprd.AppID()+".workflow")
 }
