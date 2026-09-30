@@ -157,3 +157,9 @@ func (c *Cluster) Addresses() []string {
 	}
 	return addrs
 }
+
+func (c *Cluster) SchedulerN(t *testing.T, n int) *scheduler.Scheduler {
+	t.Helper()
+	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
+	return c.schedulers[n]
+}
