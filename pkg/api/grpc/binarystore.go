@@ -41,21 +41,25 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	}
 
 	// Validate the initial request.
-	if reqProto.GetInitialRequest() == nil {
+	initialRequest := reqProto.GetInitialRequest()
+	if initialRequest == nil {
 		err = messages.ErrBadRequest.WithFormat("first message does not contain the required initial request")
 		a.logger.Debug(err)
 		return err
 	}
-	if reqProto.GetInitialRequest().GetComponentName() == "" {
+	componentName := initialRequest.GetComponentName()
+	if componentName == "" {
 		err = messages.ErrBadRequest.WithFormat("missing property 'componentName' in the initial request")
 		a.logger.Debug(err)
 		return err
 	}
-	if reqProto.GetInitialRequest().GetFileName() == "" {
+	fileName := initialRequest.GetFileName()
+	if fileName == "" {
 		err = messages.ErrBinaryStoreNameMissing
 		a.logger.Debug(err)
 		return err
 	}
+	overwrite := initialRequest.GetOverwrite()
 
 	// Pipe the streamed payload to the universal layer which forwards it to
 	// the component as an io.Reader, avoiding buffering the whole file.
@@ -68,12 +72,7 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 		writerDone <- a.binaryStoreReadStream(ctx, stream, reqProto, inWriter)
 	})
 
-	setErr := a.Universal.SetBinaryFileAlpha1(ctx,
-		reqProto.GetInitialRequest().GetComponentName(),
-		reqProto.GetInitialRequest().GetFileName(),
-		reqProto.GetInitialRequest().GetOverwrite(),
-		inReader,
-	)
+	setErr := a.Universal.SetBinaryFileAlpha1(ctx, componentName, fileName, overwrite, inReader)
 	// Closing the reader unblocks the writer goroutine if it is still waiting
 	// on a full pipe (e.g. the component rejected the upload early).
 	_ = inReader.CloseWithError(setErr)
@@ -85,11 +84,7 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 		return setErr
 	}
 	if wErr != nil {
-		err = messages.ErrBinaryStoreSet.WithFormat(
-			reqProto.GetInitialRequest().GetFileName(),
-			reqProto.GetInitialRequest().GetComponentName(),
-			wErr.Error(),
-		)
+		err = messages.ErrBinaryStoreSet.WithFormat(fileName, componentName, wErr.Error())
 		a.logger.Debug(err)
 		return err
 	}
