@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -318,6 +319,23 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 // This method cleans up a workflow associated with the given actorID
 func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, includeRetentionReminder bool) error {
+	// Once a purge has been attempted the next load must come from the store,
+	// whatever else failed: the deactivation below is asynchronous and the
+	// actor stays tabled until it runs, so anything that takes the lock first
+	// would otherwise be served the rows this just deleted.
+	//
+	// The reuse guard is different: it only holds an ID while a result is
+	// still owed, so it clears only once the rows are actually gone. A purge
+	// that deleted nothing must not let a create through while the instance
+	// and its outstanding activity are both still live.
+	var rowsDeleted atomic.Bool
+	defer func() {
+		o.invalidateCachedState()
+		if rowsDeleted.Load() {
+			o.activityResultAwaited.Store(false)
+		}
+	}()
+
 	// This will create a request to purge everything.
 	req, err := state.GetPurgeRequest(o.actorID)
 	if err != nil {
@@ -327,7 +345,11 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	runners := []concurrency.Runner{
 		func(ctx context.Context) error {
 			// This will do the purging
-			return o.actorState.TransactionalStateOperation(ctx, true, req, false)
+			if terr := o.actorState.TransactionalStateOperation(ctx, true, req, false); terr != nil {
+				return terr
+			}
+			rowsDeleted.Store(true)
+			return nil
 		},
 		func(ctx context.Context) error {
 			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
