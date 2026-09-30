@@ -101,7 +101,7 @@ spec:
   version: v1
   metadata:
   - name: url
-    value: "file://%s"
+    value: 'file://%s'
 `, guestPath)),
 	)
 
