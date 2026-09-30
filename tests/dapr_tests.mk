@@ -344,6 +344,9 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
+
+.PHONY: test-integration-deps
+test-integration-deps: test-deps
 	# Pre-fetch modules with retries so the integration binary builds run
 	# offline; a single connection reset mid-build otherwise fails the run.
 	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
