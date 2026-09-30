@@ -25,6 +25,7 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
@@ -44,10 +45,19 @@ type etcdleader struct {
 }
 
 func (e *etcdleader) Setup(t *testing.T) []framework.Option {
-	opts := []cluster.Option{cluster.WithCount(3)}
+	os.SkipWindows(t)
+
+	opts := make([]cluster.Option, 0, 2+len(e.logs))
+	opts = append(opts,
+		cluster.WithCount(3),
+		cluster.WithSchedulerOptions(scheduler.WithPlacementEnabled(true)),
+	)
 	for n := range e.logs {
 		e.logs[n] = logline.New(t, logline.WithCaptureAll())
-		opts = append(opts, cluster.WithSchedulerNOptions(uint32(n), scheduler.WithLogLineStdout(e.logs[n])))
+		opts = append(opts, cluster.WithSchedulerNOptions(uint32(n),
+			scheduler.WithLogLineStdout(e.logs[n]),
+			scheduler.WithLogLineStderr(e.logs[n]),
+		))
 	}
 	e.cluster = cluster.New(t, opts...)
 
@@ -78,6 +88,46 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
+	// hosts returns the addresses and the leader addresses a scheduler
+	// currently broadcasts.
+	hosts := func(c *assert.CollectT, n int) ([]string, []string) {
+		stream, err := e.cluster.ClientN(t, ctx, n).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		if !assert.NoError(c, err) {
+			return nil, nil
+		}
+		//nolint:errcheck
+		defer stream.CloseSend()
+		resp, err := stream.Recv()
+		if !assert.NoError(c, err) {
+			return nil, nil
+		}
+		var addrs, leaders []string
+		for _, host := range resp.GetHosts() {
+			addrs = append(addrs, host.GetAddress())
+			if host.GetLeader() {
+				leaders = append(leaders, host.GetAddress())
+			}
+		}
+		return addrs, leaders
+	}
+
+	// A placement capable sidecar on each survivor, so they advertise a
+	// placement leader, and later receive the jobs scheduled on them.
+	initial := &schedulerv1pb.WatchJobsRequestInitial{
+		AppId:                      "app",
+		Namespace:                  "default",
+		SupportsSchedulerPlacement: true,
+	}
+	triggered := make([]<-chan string, 2)
+	for i, n := range survivors {
+		triggered[i] = e.cluster.SchedulerN(t, n).WatchJobsSuccess(t, ctx, initial)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			addrs, leaders := hosts(c, n)
+			assert.Len(c, addrs, 3)
+			assert.Len(c, leaders, 1)
+		}, 20*time.Second, 10*time.Millisecond)
+	}
+
 	start := time.Now()
 	stopped := make(chan struct{})
 	go func() {
@@ -89,25 +139,8 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 	// inside the 7s etcd request timeout.
 	leaders := make([]string, 2)
 	for i, n := range survivors {
-		client := e.cluster.ClientN(t, ctx, n)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			stream, err := client.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-			if !assert.NoError(c, err) {
-				return
-			}
-			//nolint:errcheck
-			defer stream.CloseSend()
-			resp, err := stream.Recv()
-			if !assert.NoError(c, err) || !assert.Len(c, resp.GetHosts(), 2) {
-				return
-			}
-			var addrs, leaderAddrs []string
-			for _, host := range resp.GetHosts() {
-				addrs = append(addrs, host.GetAddress())
-				if host.GetLeader() {
-					leaderAddrs = append(leaderAddrs, host.GetAddress())
-				}
-			}
+			addrs, leaderAddrs := hosts(c, n)
 			assert.ElementsMatch(c, []string{
 				e.cluster.Addresses()[survivors[0]],
 				e.cluster.Addresses()[survivors[1]],
@@ -142,11 +175,6 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 	assert.Greater(t, status.RaftTerm, term)
 
 	// The survivors' engines are running: a job scheduled on each fires.
-	initial := &schedulerv1pb.WatchJobsRequestInitial{AppId: "app", Namespace: "default"}
-	triggered := make([]<-chan string, 2)
-	for i, n := range survivors {
-		triggered[i] = e.cluster.SchedulerN(t, n).WatchJobsSuccess(t, ctx, initial)
-	}
 	for i, n := range survivors {
 		_, err = e.cluster.ClientN(t, ctx, n).ScheduleJob(ctx, e.cluster.SchedulerN(t, n).JobNowJob("job"+strconv.Itoa(i), "default", "app"))
 		require.NoError(t, err)
