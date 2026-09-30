@@ -224,6 +224,42 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, codes.ResourceExhausted, status.Code(err))
 	})
 
+	t.Run("out-of-order chunk sequence fails", func(t *testing.T) {
+		stream, err := client.SetBinaryFileAlpha1(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+					ComponentName: "mystore",
+					FileName:      "out-of-order.bin",
+					Overwrite:     new(true),
+				},
+			},
+		}))
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{
+					Data: []byte("second"),
+					Seq:  1,
+				},
+			},
+		}))
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{
+					Data: []byte("first"),
+					Seq:  0,
+				},
+			},
+		}))
+
+		_, err = stream.CloseAndRecv()
+		require.Error(t, err)
+		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Contains(t, status.Convert(err).Message(), "invalid sequence number received: 1 (expected: 0)")
+	})
+
 	t.Run("set without overwrite conflicts", func(t *testing.T) {
 		// "hello.bin" already exists from the previous subtest.
 		stream, err := client.SetBinaryFileAlpha1(ctx)
