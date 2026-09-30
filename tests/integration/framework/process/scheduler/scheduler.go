@@ -258,9 +258,9 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			return
 		}
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+		assert.NoError(c, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
 
 	if s.embed && !s.userpass {
