@@ -13,7 +13,12 @@ limitations under the License.
 
 package common
 
-import "errors"
+import (
+	"errors"
+	"strings"
+	"sync"
+	"time"
+)
 
 const (
 	ReminderPrefixActivityResult = "activity-result-"
@@ -26,3 +31,23 @@ const (
 // rather than have the result dropped as unmatched. It crosses the router as
 // a string, so callers match it by suffix.
 var ErrSchedulingNotDurable = errors.New("the task's scheduling is not yet durable")
+
+// defaultSchedulingDurableWindow bounds how long a completion may keep being
+// refused while its scheduling is still committing. It is sized to the state
+// commit timeout: past that the save has either landed or failed, so a
+// completion still refused is not merely ahead of its row.
+const defaultSchedulingDurableWindow = 30 * time.Second
+
+// SchedulingDurableWindow resolves that bound once per process. The env
+// override exists for integration tests that cannot wait a real commit
+// timeout; it is not a supported production knob.
+var SchedulingDurableWindow = sync.OnceValue(func() time.Duration {
+	return EnvDurationOr("DAPR_WORKFLOW_TEST_SCHEDULING_DURABLE_WINDOW", defaultSchedulingDurableWindow)
+})
+
+// IsSchedulingNotDurable reports whether err is the orchestrator's
+// not-yet-durable refusal. It crosses the router as a string, so it matches
+// by suffix.
+func IsSchedulingNotDurable(err error) bool {
+	return err != nil && strings.HasSuffix(err.Error(), ErrSchedulingNotDurable.Error())
+}
