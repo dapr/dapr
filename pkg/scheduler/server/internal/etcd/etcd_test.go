@@ -42,7 +42,7 @@ func TestClientKeepAliveFirstResponse(t *testing.T) {
 		Name:                 "id1",
 		Embed:                true,
 		InitialCluster:       []string{"id1=http://127.0.0.1:" + strconv.Itoa(ports[0])},
-		ClientPort:           uint64(ports[1]), //nolint:gosec
+		ClientPort:           uint64(ports[1]),
 		ClientListenAddress:  "127.0.0.1",
 		BackendBatchInterval: "50ms",
 		Security:             fake.New(),
