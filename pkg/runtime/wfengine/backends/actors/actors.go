@@ -847,7 +847,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		// The caller is still waiting but the stream was cancelled, so the
 		// runtime (not the caller) is shutting down. Tell the client to retry.
 		case ctx.Err() == nil && isCancelled(err):
-			return status.Error(codes.Unavailable, "runtime shutting down, retry")
+			return status.Error(codes.Unavailable, "target runtime shutting down, retry")
 		case !targeterrors.IsStalled(err):
 			return err
 		}
