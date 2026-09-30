@@ -254,6 +254,11 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 				return cronCtx.Err()
 			}
+			if err != nil {
+				log.Warnf("Scheduler cron exited unexpectedly, restarting server: %s", err)
+			} else {
+				log.Warn("Scheduler cron exited unexpectedly, restarting server")
+			}
 			return err
 		},
 		func(ctx context.Context) error {

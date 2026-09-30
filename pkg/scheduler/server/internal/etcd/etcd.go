@@ -33,6 +33,14 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
+// clientDialTimeout also determines the client's lease keepalive
+// first-response deadline (DialTimeout+1s, 5s when unset). That deadline must
+// cover etcd quorum wobble right after a cluster-wide restart, or every
+// just-elected scheduler silently loses its leadership lease and rebuilds.
+// 20s matches the go-etcd-cron leadership lease TTL, giving a fresh election
+// the same tolerance as steady state.
+const clientDialTimeout = 20 * time.Second
+
 type Options struct {
 	Name string
 
@@ -99,9 +107,10 @@ func New(ctx context.Context, opts Options) (Interface, error) {
 	}
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints: opts.ClientEndpoints,
-		Username:  opts.ClientUsername,
-		Password:  opts.ClientPassword,
+		Endpoints:   opts.ClientEndpoints,
+		Username:    opts.ClientUsername,
+		Password:    opts.ClientPassword,
+		DialTimeout: clientDialTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create etcd client: %w", err)
@@ -140,8 +149,9 @@ func (e *etcd) Run(ctx context.Context) error {
 	}
 
 	e.client, err = clientv3.New(clientv3.Config{
-		Endpoints: []string{e.config.ListenClientUrls[0].Host},
-		Logger:    e.etcd.GetLogger(),
+		Endpoints:   []string{e.config.ListenClientUrls[0].Host},
+		Logger:      e.etcd.GetLogger(),
+		DialTimeout: clientDialTimeout,
 	})
 	if err != nil {
 		return errors.Join(err, e.client.Close())
