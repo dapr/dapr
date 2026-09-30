@@ -1,0 +1,47 @@
+diff --git a/tests/integration/framework/process/kubernetes/options.go b/tests/integration/framework/process/kubernetes/options.go
+index a3e55557..8d5d9627 100644
+--- a/tests/integration/framework/process/kubernetes/options.go
++++ b/tests/integration/framework/process/kubernetes/options.go
+@@ -120,6 +120,10 @@ func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
+ 	return handleClusterListResource(t, "/api/v1/pods", pods)
+ }
+ 
++func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option {
++	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
++}
++
+ func WithClusterServiceList(t *testing.T, services *corev1.ServiceList) Option {
+ 	return handleClusterListResource(t, "/api/v1/services", services)
+ }
+@@ -178,6 +182,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
+ 				},
+ 			}),
+ 			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
++			WithNamespacedPodList(t, ns, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
+ 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
+ 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
+ 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),
+diff --git a/tests/integration/suite/scheduler/kubernetes/namespace.go b/tests/integration/suite/scheduler/kubernetes/namespace.go
+index 779c2edf..14977e8f 100644
+--- a/tests/integration/suite/scheduler/kubernetes/namespace.go
++++ b/tests/integration/suite/scheduler/kubernetes/namespace.go
+@@ -56,6 +56,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
+ 	)
+ 
+ 	n.kubeapi = kubernetes.New(t,
++		kubernetes.WithNamespacedPodList(t, "default", &corev1.PodList{TypeMeta: metav1.TypeMeta{Kind: "PodList", APIVersion: "v1"}}),
+ 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
+ 			Items: []corev1.Namespace{{
+ 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+diff --git a/tests/integration/suite/scheduler/kubernetes/prefix.go b/tests/integration/suite/scheduler/kubernetes/prefix.go
+index b7e408a1..91347096 100644
+--- a/tests/integration/suite/scheduler/kubernetes/prefix.go
++++ b/tests/integration/suite/scheduler/kubernetes/prefix.go
+@@ -56,6 +56,7 @@ func (p *prefix) Setup(t *testing.T) []framework.Option {
+ 	)
+ 
+ 	p.kubeapi = kubernetes.New(t,
++		kubernetes.WithNamespacedPodList(t, "default", &corev1.PodList{TypeMeta: metav1.TypeMeta{Kind: "PodList", APIVersion: "v1"}}),
+ 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
+ 			Items: []corev1.Namespace{{
+ 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
