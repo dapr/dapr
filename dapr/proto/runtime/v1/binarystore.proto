@@ -46,7 +46,7 @@ message SetBinaryFileRequestInitialAlpha1 {
   // When false (POST semantics), the operation fails if a file with the same
   // name already exists. When true (PUT semantics), any existing file is
   // replaced. Defaults to false.
-  bool overwrite = 3 [json_name="overwrite"];
+  optional bool overwrite = 3 [json_name="overwrite"];
 }
 
 // SetBinaryFileResponse is the response for SetBinaryFileAlpha1.
