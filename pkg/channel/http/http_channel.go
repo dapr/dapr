@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/baggage"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -644,6 +646,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	ts := diag.TraceStateToW3CString(span.SpanContext())
 	if ts != "" {
 		channelReq.Header.Set("tracestate", ts)
+	}
+	if b := baggage.FromContext(ctx); b.Len() > 0 {
+		channelReq.Header.Set(diagConsts.BaggageHeader, b.String())
 	}
 
 	if h.appHeaderToken != "" {

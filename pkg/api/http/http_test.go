@@ -65,6 +65,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -156,6 +157,7 @@ var testResiliency = &v1alpha1.Resiliency{
 }
 
 func TestPubSubEndpoints(t *testing.T) {
+	var publishedData []byte
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
@@ -164,6 +166,10 @@ func TestPubSubEndpoints(t *testing.T) {
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
+				if req.Topic == "baggage" {
+					publishedData = req.Data
+				}
+
 				if req.PubsubName == "errorpubsub" {
 					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 				}
@@ -205,6 +211,21 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		}
+	})
+
+	t.Run("Publish propagates baggage header to CloudEvent", func(t *testing.T) {
+		resp := fakeServer(t).DoRequest(
+			"POST",
+			apiVersionV1+"/publish/pubsubname/baggage",
+			[]byte(`{"key": "value"}`),
+			nil,
+			diagConsts.BaggageHeader, "key1=value1,key2=value2",
+		)
+		require.Equal(t, 204, resp.StatusCode)
+
+		var cloudEvent map[string]any
+		require.NoError(t, json.Unmarshal(publishedData, &cloudEvent))
+		require.Equal(t, "key1=value1,key2=value2", cloudEvent[diagConsts.BaggageHeader])
 	})
 
 	t.Run("Publish multi path successfully - 204 No Content", func(t *testing.T) {
