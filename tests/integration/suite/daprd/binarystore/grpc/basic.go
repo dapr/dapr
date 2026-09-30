@@ -66,8 +66,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
-				Options: &rtv1.SetBinaryFileRequestOptions{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
 					Overwrite:     true,
@@ -105,8 +105,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
-				Options: &rtv1.SetBinaryFileRequestOptions{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
 					Overwrite:     false,
@@ -142,8 +142,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Options{
-				Options: &rtv1.SetBinaryFileRequestOptions{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "temp.bin",
 					Overwrite:     true,

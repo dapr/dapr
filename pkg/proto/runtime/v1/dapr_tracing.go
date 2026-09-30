@@ -82,11 +82,15 @@ func (x *ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 }
 
 func (x *SetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
-	m[diagConsts.DBNameSpanAttributeKey] = x.GetOptions().GetComponentName()
+	m[diagConsts.DBNameSpanAttributeKey] = x.GetInitialRequest().GetComponentName()
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
 	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
+}
+
+func (*SetBinaryFileRequest_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
 }
 
 func (x *GetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {

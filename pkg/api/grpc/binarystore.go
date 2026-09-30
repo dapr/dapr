@@ -33,25 +33,25 @@ const binaryStoreFirstChunkTimeout = 5 * time.Second
 
 // SetBinaryFileAlpha1 stores a binary file uploaded as a stream of chunks.
 func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server) (err error) { //nolint:nosnakecase
-	// Get the first message from the caller containing the options
+	// Get the initial request from the caller.
 	reqProto := &runtimev1pb.SetBinaryFileRequest{}
 	if err = a.binaryStoreGetFirstChunk(stream, reqProto); err != nil {
 		a.logger.Debug(err)
 		return err
 	}
 
-	// Validate required options
-	if reqProto.GetOptions() == nil {
-		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
+	// Validate the initial request.
+	if reqProto.GetInitialRequest() == nil {
+		err = messages.ErrBadRequest.WithFormat("first message does not contain the required initial request")
 		a.logger.Debug(err)
 		return err
 	}
-	if reqProto.GetOptions().GetComponentName() == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'componentName' in the options message")
+	if reqProto.GetInitialRequest().GetComponentName() == "" {
+		err = messages.ErrBadRequest.WithFormat("missing property 'componentName' in the initial request")
 		a.logger.Debug(err)
 		return err
 	}
-	if reqProto.GetOptions().GetFileName() == "" {
+	if reqProto.GetInitialRequest().GetFileName() == "" {
 		err = messages.ErrBinaryStoreNameMissing
 		a.logger.Debug(err)
 		return err
@@ -69,9 +69,9 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	})
 
 	setErr := a.Universal.SetBinaryFileAlpha1(ctx,
-		reqProto.GetOptions().GetComponentName(),
-		reqProto.GetOptions().GetFileName(),
-		reqProto.GetOptions().GetOverwrite(),
+		reqProto.GetInitialRequest().GetComponentName(),
+		reqProto.GetInitialRequest().GetFileName(),
+		reqProto.GetInitialRequest().GetOverwrite(),
 		inReader,
 	)
 	// Closing the reader unblocks the writer goroutine if it is still waiting
@@ -86,8 +86,8 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	}
 	if wErr != nil {
 		err = messages.ErrBinaryStoreSet.WithFormat(
-			reqProto.GetOptions().GetFileName(),
-			reqProto.GetOptions().GetComponentName(),
+			reqProto.GetInitialRequest().GetFileName(),
+			reqProto.GetInitialRequest().GetComponentName(),
 			wErr.Error(),
 		)
 		a.logger.Debug(err)
@@ -189,7 +189,7 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 }
 
 // binaryStoreReadStream drains the remaining chunks from the client stream into
-// the provided writer, enforcing sequence numbers and rejecting options in
+// the provided writer, enforcing sequence numbers and rejecting initial requests in
 // non-leading messages.
 func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequest, inWriter *io.PipeWriter) error {
 	var expectSeq uint64
@@ -221,8 +221,8 @@ func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr
 			return inWriter.CloseWithError(fmt.Errorf("error receiving message: %w", readErr))
 		}
 
-		if reqProto.GetOptions() != nil {
-			return inWriter.CloseWithError(errors.New("options found in non-leading message"))
+		if reqProto.GetInitialRequest() != nil {
+			return inWriter.CloseWithError(errors.New("initial request found in non-leading message"))
 		}
 	}
 }

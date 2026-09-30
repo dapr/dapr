@@ -30,15 +30,15 @@ import "dapr/proto/common/v1/common.proto";
 message SetBinaryFileRequest {
   oneof set_binary_file_request_type {
     // Request details. Must be present in the first message only.
-    SetBinaryFileRequestOptions options = 1;
+    SetBinaryFileRequestInitialAlpha1 initial_request = 1;
     // Chunk of data of arbitrary size.
     common.v1.StreamPayload payload = 2;
   }
 }
 
-// SetBinaryFileRequestOptions contains options for the first message in the
+// SetBinaryFileRequestInitialAlpha1 contains options for the first message in the
 // SetBinaryFileAlpha1 request.
-message SetBinaryFileRequestOptions {
+message SetBinaryFileRequestInitialAlpha1 {
   // Name of the component. Required.
   string component_name = 1 [json_name="componentName"];
   // Name of the file to store. Required.
