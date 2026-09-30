@@ -189,20 +189,25 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequest, inWriter *io.PipeWriter) error {
 	var expectSeq uint64
 
+	closeWithError := func(err error) error {
+		_ = inWriter.CloseWithError(err)
+		return err
+	}
+
 	for {
 		if ctx.Err() != nil {
-			return inWriter.CloseWithError(ctx.Err())
+			return closeWithError(ctx.Err())
 		}
 
 		// Process the payload carried by the message currently held in reqProto
 		// (this may be set from the first message).
 		if payload := reqProto.GetPayload(); payload != nil {
 			if payload.GetSeq() != expectSeq {
-				return inWriter.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", payload.GetSeq(), expectSeq))
+				return closeWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", payload.GetSeq(), expectSeq))
 			}
 			_, err := messaging.ReadChunk(payload, inWriter)
 			if err != nil {
-				return inWriter.CloseWithError(err)
+				return closeWithError(err)
 			}
 			expectSeq++
 		}
@@ -213,11 +218,11 @@ func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr
 		if errors.Is(readErr, io.EOF) {
 			return inWriter.Close()
 		} else if readErr != nil {
-			return inWriter.CloseWithError(fmt.Errorf("error receiving message: %w", readErr))
+			return closeWithError(fmt.Errorf("error receiving message: %w", readErr))
 		}
 
 		if reqProto.GetInitialRequest() != nil {
-			return inWriter.CloseWithError(errors.New("initial request found in non-leading message"))
+			return closeWithError(errors.New("initial request found in non-leading message"))
 		}
 	}
 }
