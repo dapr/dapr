@@ -515,6 +515,9 @@ replace (
 	// this is a fork that utilises github.com/iskorotkov/avro/v2
 	// TODO: @mikeee remove this once the pr against the base has been merged and released.
 	github.com/apache/pulsar-client-go v0.18.0 => github.com/twmb/pulsar-client-go v0.20.1-0.20260624144353-90eefc81f70a
+
+	// TODO: remove once diagridio/go-etcd-cron elector retry fix is released.
+	github.com/diagridio/go-etcd-cron => github.com/cicoyle/go-etcd-cron v0.0.0-20260930193905-e191fcb5b335
 	// etcd v3.5 needs the interceptor API removed in otelgrpc v0.61.
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0
 

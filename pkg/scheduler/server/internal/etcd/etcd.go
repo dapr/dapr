@@ -68,6 +68,7 @@ type Options struct {
 type Interface interface {
 	Run(context.Context) error
 	Client(context.Context) (*clientv3.Client, error)
+	TransferLeadership()
 }
 
 type etcd struct {
@@ -224,6 +225,32 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 	log.Infof("Defragmentation completed in %s", time.Since(start))
 
 	return nil
+}
+
+// TransferLeadership hands off etcd leadership if this member holds it,
+// waiting at most 2s.
+func (e *etcd) TransferLeadership() {
+	select {
+	case <-e.readyCh:
+	default:
+		return
+	}
+
+	if e.etcd == nil {
+		return
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- e.etcd.Server.TransferLeadership() }()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			log.Warnf("Failed to transfer etcd leadership: %s", err)
+		}
+	case <-time.After(2 * time.Second):
+		log.Warn("Timed out waiting for etcd leadership transfer")
+	}
 }
 
 func (e *etcd) Close() error {

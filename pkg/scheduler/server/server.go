@@ -243,7 +243,13 @@ func (s *Server) Run(ctx context.Context) error {
 	runners := []concurrency.Runner{
 		s.runServer,
 		func(ctx context.Context) error {
-			defer cronCancel()
+			defer func() {
+				// Hand off etcd leadership before cron re-election writes.
+				if s.etcd != nil {
+					s.etcd.TransferLeadership()
+				}
+				cronCancel()
+			}()
 			return s.placement.Run(ctx)
 		},
 		func(context.Context) error {
