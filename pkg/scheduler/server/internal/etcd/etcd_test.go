@@ -94,12 +94,11 @@ func TestClientKeepAliveFirstResponse(t *testing.T) {
 	}
 
 	closed := func() bool {
-		for name, ch := range keepalives {
+		for _, ch := range keepalives {
 			for {
 				select {
 				case _, ok := <-ch:
 					if !ok {
-						t.Logf("%s client closed the keepalive channel", name)
 						return true
 					}
 					continue
