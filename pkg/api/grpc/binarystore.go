@@ -77,12 +77,13 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	// on a full pipe (e.g. the component rejected the upload early).
 	_ = inReader.CloseWithError(setErr)
 
-	wErr := <-writerDone
 	if setErr != nil {
 		// setErr is already an APIError.
 		a.logger.Debug(setErr)
 		return setErr
 	}
+
+	wErr := <-writerDone
 	if wErr != nil {
 		err = messages.ErrBinaryStoreSet.WithFormat(fileName, componentName, wErr.Error())
 		a.logger.Debug(err)
