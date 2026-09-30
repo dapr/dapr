@@ -26,6 +26,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
@@ -54,10 +55,10 @@ func (e *etcdleader) Setup(t *testing.T) []framework.Option {
 	)
 	for n := range e.logs {
 		e.logs[n] = logline.New(t, logline.WithCaptureAll())
-		opts = append(opts, cluster.WithSchedulerNOptions(uint32(n),
-			scheduler.WithLogLineStdout(e.logs[n]),
-			scheduler.WithLogLineStderr(e.logs[n]),
-		))
+		opts = append(opts, cluster.WithSchedulerNOptions(uint32(n), scheduler.WithExecOptions(
+			exec.WithStdout(e.logs[n].Stdout()),
+			exec.WithStderr(e.logs[n].Stderr()),
+		)))
 	}
 	e.cluster = cluster.New(t, opts...)
 
@@ -92,16 +93,13 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 	// currently broadcasts.
 	hosts := func(c *assert.CollectT, n int) ([]string, []string) {
 		stream, err := e.cluster.ClientN(t, ctx, n).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if !assert.NoError(c, err) {
-			return nil, nil
-		}
+		require.NoError(c, err)
 		//nolint:errcheck
 		defer stream.CloseSend()
 		resp, err := stream.Recv()
-		if !assert.NoError(c, err) {
-			return nil, nil
-		}
-		var addrs, leaders []string
+		require.NoError(c, err)
+		addrs := make([]string, 0, len(resp.GetHosts()))
+		var leaders []string
 		for _, host := range resp.GetHosts() {
 			addrs = append(addrs, host.GetAddress())
 			if host.GetLeader() {
@@ -162,10 +160,10 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 	// down, so the survivors' writes never raced the transfer.
 	logs := string(e.logs[leader].StdoutBuffer())
 	require.Contains(t, logs, "leadership transfer finished")
-	require.Contains(t, logs, "Cron shut down")
+	require.Contains(t, logs, "cron instance shutdown")
 	require.Less(t,
 		strings.Index(logs, "leadership transfer finished"),
-		strings.Index(logs, "Cron shut down"),
+		strings.Index(logs, "cron instance shutdown"),
 		"etcd leadership transferred after cron shut down")
 
 	status, err := e.cluster.SchedulerN(t, survivors[0]).ETCDClient(t, ctx).
