@@ -113,7 +113,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{name: "leading slash", fileName: "/x.bin", code: codes.InvalidArgument},
 			{name: "backslash", fileName: `a\b.bin`, code: codes.InvalidArgument},
 			{name: "dot", fileName: ".", code: codes.InvalidArgument},
-			{name: "dot dot", fileName: "..", code: codes.InvalidArgument},
+			{name: "parent directory", fileName: "..", code: codes.InvalidArgument},
 		}
 
 		for _, test := range tests {

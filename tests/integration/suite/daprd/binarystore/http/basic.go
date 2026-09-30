@@ -98,7 +98,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{name: "leading slash", fileName: "/x.bin", statusCode: http.StatusBadRequest},
 			{name: "backslash", fileName: `a\b.bin`, statusCode: http.StatusBadRequest},
 			{name: "dot", fileName: ".", statusCode: http.StatusBadRequest},
-			{name: "dot dot", fileName: "..", statusCode: http.StatusBadRequest},
+			{name: "parent directory", fileName: "..", statusCode: http.StatusBadRequest},
 		}
 
 		for _, test := range tests {
