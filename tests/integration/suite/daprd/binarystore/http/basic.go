@@ -16,6 +16,7 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -82,6 +83,17 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		got, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		assert.Equal(t, payload, got)
+	})
+
+	t.Run("upload larger than default body limit fails", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, base+"/large.bin", bytes.NewReader(payload))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 
 	t.Run("POST without overwrite conflicts on existing file", func(t *testing.T) {

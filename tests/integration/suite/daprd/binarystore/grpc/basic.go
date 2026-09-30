@@ -16,6 +16,7 @@ limitations under the License.
 package grpc
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -70,7 +71,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
-					Overwrite:     true,
+					Overwrite:     new(true),
 				},
 			},
 		}))
@@ -100,6 +101,87 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []byte("hello world"), got)
 	})
 
+	t.Run("total upload larger than default body limit succeeds with smaller chunks", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
+		stream, err := client.SetBinaryFileAlpha1(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+					ComponentName: "mystore",
+					FileName:      "large.bin",
+					Overwrite:     new(true),
+				},
+			},
+		}))
+		const chunkSize = 1 << 20
+		var seq uint64
+		for offset := 0; offset < len(payload); offset += chunkSize {
+			end := min(offset+chunkSize, len(payload))
+			require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+				SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+					Payload: &commonv1pb.StreamPayload{
+						Data: payload[offset:end],
+						Seq:  seq,
+					},
+				},
+			}))
+			seq++
+		}
+		_, err = stream.CloseAndRecv()
+		require.NoError(t, err)
+
+		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequest{
+			ComponentName: "mystore",
+			FileName:      "large.bin",
+		})
+		require.NoError(t, err)
+
+		var got []byte
+		for {
+			msg, err := getStream.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			got = append(got, msg.GetPayload().GetData()...)
+		}
+		assert.Equal(t, payload, got)
+	})
+
+	t.Run("chunk larger than default body limit fails", func(t *testing.T) {
+		stream, err := client.SetBinaryFileAlpha1(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+					ComponentName: "mystore",
+					FileName:      "oversized-chunk.bin",
+					Overwrite:     new(true),
+				},
+			},
+		}))
+
+		sendErr := stream.Send(&rtv1.SetBinaryFileRequest{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				Payload: &commonv1pb.StreamPayload{
+					Data: bytes.Repeat([]byte{0xAB}, 5<<20),
+					Seq:  0,
+				},
+			},
+		})
+		_, closeErr := stream.CloseAndRecv()
+		if closeErr != nil {
+			err = closeErr
+		} else {
+			err = sendErr
+		}
+		require.Error(t, err)
+		assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+	})
+
 	t.Run("set without overwrite conflicts", func(t *testing.T) {
 		// "hello.bin" already exists from the previous subtest.
 		stream, err := client.SetBinaryFileAlpha1(ctx)
@@ -109,7 +191,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
-					Overwrite:     false,
+					Overwrite:     new(false),
 				},
 			},
 		}))
@@ -146,7 +228,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "temp.bin",
-					Overwrite:     true,
+					Overwrite:     new(true),
 				},
 			},
 		}))
