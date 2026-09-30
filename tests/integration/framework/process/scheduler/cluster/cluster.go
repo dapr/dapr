@@ -124,8 +124,9 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 
 	for _, sched := range c.schedulers {
+		client := sched.Client(t, ctx)
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
-			stream, err := sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+			stream, err := client.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 			require.NoError(t, err)
 			resp, err := stream.Recv()
 			stream.CloseSend()
