@@ -115,9 +115,14 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 	var watchMu sync.Mutex
 	var watchErrs []error
 	watchersDead := make(chan struct{})
-	liveWatchers := int64(3)
+	var watchersDeadOnce sync.Once
+	var liveWatchers int64
 
-	for _, sched := range []*scheduler.Scheduler{s.scheduler1, s.scheduler2, s.scheduler3} {
+	watch := func(sched *scheduler.Scheduler) {
+		watchMu.Lock()
+		liveWatchers++
+		watchMu.Unlock()
+
 		//nolint:staticcheck
 		conn, err := grpc.DialContext(watchCtx, sched.Address(),
 			grpc.WithDefaultCallOptions(
@@ -148,7 +153,7 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 					watchErrs = append(watchErrs, err)
 					liveWatchers--
 					if liveWatchers == 0 {
-						close(watchersDead)
+						watchersDeadOnce.Do(func() { close(watchersDead) })
 					}
 					watchMu.Unlock()
 					return
@@ -160,6 +165,10 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 		}(w)
+	}
+
+	for _, sched := range []*scheduler.Scheduler{s.scheduler1, s.scheduler2, s.scheduler3} {
+		watch(sched)
 	}
 
 	client := s.scheduler1.Client(t, ctx)
@@ -195,6 +204,9 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 	s.scheduler4.Run(t, ctx)
 	t.Cleanup(func() { s.scheduler4.Kill(t) })
 	s.scheduler4.WaitUntilRunning(t, ctx)
+	// The stream to the killed scheduler died with it; the jobs its
+	// replacement owns are only deliverable over a stream of its own.
+	watch(s.scheduler4)
 
 	select {
 	case job := <-triggerCh:
@@ -204,10 +216,12 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 		errs := watchErrs
 		watchMu.Unlock()
 		require.Fail(t, "all watch streams died; no trigger can ever arrive", "%v", errs)
-	case <-time.After(3 * time.Minute):
+	// The killed scheduler cannot revoke its 20s leadership lease, so its
+	// replacement takes the key only once the lease expires.
+	case <-time.After(35 * time.Second):
 		t.Logf("Leadership keys: %v",
 			s.scheduler1.ListAllKeys(t, diagnosticCtx(t, ctx), "dapr/leadership"))
-		require.Fail(t, "No triggers after quorum change within bound")
+		require.Fail(t, "No triggers after quorum change within 35s")
 	case <-ctx.Done():
 		t.Logf("Leadership keys: %v",
 			s.scheduler1.ListAllKeys(t, diagnosticCtx(t, ctx), "dapr/leadership"))
