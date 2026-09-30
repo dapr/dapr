@@ -632,7 +632,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 		DialTimeout: 5 * time.Second,
 		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return resp
 }
