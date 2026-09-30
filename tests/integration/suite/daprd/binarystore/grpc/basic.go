@@ -101,6 +101,48 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []byte("hello world"), got)
 	})
 
+	t.Run("set validates file name", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			fileName string
+			code     codes.Code
+		}{
+			{name: "valid", fileName: "valid-name.bin", code: codes.OK},
+			{name: "nested path", fileName: "a/b.bin", code: codes.InvalidArgument},
+			{name: "parent path", fileName: "../x.bin", code: codes.InvalidArgument},
+			{name: "leading slash", fileName: "/x.bin", code: codes.InvalidArgument},
+			{name: "backslash", fileName: `a\b.bin`, code: codes.InvalidArgument},
+			{name: "dot", fileName: ".", code: codes.InvalidArgument},
+			{name: "dot dot", fileName: "..", code: codes.InvalidArgument},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				stream, err := client.SetBinaryFileAlpha1(ctx)
+				require.NoError(t, err)
+				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+						InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+							ComponentName: "mystore",
+							FileName:      test.fileName,
+							Overwrite:     new(true),
+						},
+					},
+				}))
+				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
+					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+						Payload: &commonv1pb.StreamPayload{
+							Data: []byte("payload"),
+							Seq:  0,
+						},
+					},
+				}))
+				_, err = stream.CloseAndRecv()
+				assert.Equal(t, test.code, status.Code(err))
+			})
+		}
+	})
+
 	t.Run("total upload larger than default body limit succeeds with smaller chunks", func(t *testing.T) {
 		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
 		stream, err := client.SetBinaryFileAlpha1(ctx)

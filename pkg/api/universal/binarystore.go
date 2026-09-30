@@ -19,11 +19,23 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
+
+func validateBinaryStoreFileName(fileName string) error {
+	switch {
+	case fileName == "":
+		return messages.ErrBinaryStoreNameMissing
+	case fileName == ".", fileName == "..", strings.ContainsAny(fileName, `/\`):
+		return messages.ErrBadRequest.WithFormat("invalid file name %q: must be a single path segment", fileName)
+	default:
+		return nil
+	}
+}
 
 // getBinaryStore looks up an initialised binary store component by name,
 // returning an APIError suitable for direct return to the caller if missing.
@@ -43,8 +55,7 @@ func (a *Universal) getBinaryStore(componentName string) (binarystore.BinaryStor
 //
 // The caller must not close r until this method returns.
 func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, fileName string, overwrite bool, r io.Reader) error {
-	if fileName == "" {
-		err := messages.ErrBinaryStoreNameMissing
+	if err := validateBinaryStoreFileName(fileName); err != nil {
 		a.logger.Debug(err)
 		return err
 	}
@@ -75,8 +86,7 @@ func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, file
 // returns a streaming reader. The caller is responsible for closing the
 // returned reader when reading is complete.
 func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, fileName string) (io.ReadCloser, error) {
-	if fileName == "" {
-		err := messages.ErrBinaryStoreNameMissing
+	if err := validateBinaryStoreFileName(fileName); err != nil {
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -107,8 +117,7 @@ func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, file
 
 // DeleteBinaryFileAlpha1 removes the named file from the given component.
 func (a *Universal) DeleteBinaryFileAlpha1(ctx context.Context, componentName, fileName string) error {
-	if fileName == "" {
-		err := messages.ErrBinaryStoreNameMissing
+	if err := validateBinaryStoreFileName(fileName); err != nil {
 		a.logger.Debug(err)
 		return err
 	}

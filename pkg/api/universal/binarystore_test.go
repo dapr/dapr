@@ -212,6 +212,20 @@ func TestBinaryStore_MissingFileName(t *testing.T) {
 	require.ErrorIs(t, u.DeleteBinaryFileAlpha1(ctx, "mystore", ""), messages.ErrBinaryStoreNameMissing)
 }
 
+func TestBinaryStore_InvalidFileName(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	for _, fileName := range []string{"a/b.bin", `a\b.bin`, "../x.bin", "/x.bin", ".", ".."} {
+		t.Run(fileName, func(t *testing.T) {
+			require.ErrorIs(t, u.SetBinaryFileAlpha1(ctx, "mystore", fileName, true, bytes.NewReader(nil)), messages.ErrBadRequest)
+			_, err := u.GetBinaryFileAlpha1(ctx, "mystore", fileName)
+			require.ErrorIs(t, err, messages.ErrBadRequest)
+			require.ErrorIs(t, u.DeleteBinaryFileAlpha1(ctx, "mystore", fileName), messages.ErrBadRequest)
+		})
+	}
+}
+
 func TestBinaryStore_ComponentNotFound(t *testing.T) {
 	u, _ := newBinaryTestUniversal(t)
 	ctx := context.Background()
