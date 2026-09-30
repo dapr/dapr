@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -298,7 +299,7 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	if fverr == nil {
 		log.Warnf("Workflow actor '%s': attestation verification failed against cached state but passed against durable state; refreshing cache and asking the sender to retry: %s", o.actorID, verr)
 		o.invalidateCachedState()
-		return verr
+		return wferrors.NewRecoverable(fmt.Errorf("%s: %w", verr, common.ErrSchedulingNotDurable))
 	}
 
 	// Not tampering: ContinueAsNew resets history and a rolled-back save can
@@ -306,6 +307,16 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	// unsigned path does (stripUnmatchedResolutions). Nothing is persisted,
 	// so a forged completion gains an attacker nothing.
 	if errors.Is(fverr, signing.ErrUnknownTaskScheduledID) {
+		// Dispatch precedes save, so a completion whose scheduling the
+		// durable history does not record yet may be ahead of its own row
+		// rather than unmatched: ask the sender to re-deliver. activityDrop
+		// has already acked anything this history proves unconsumable, so
+		// reaching here with no event at all at that id is the ahead-of-row
+		// case.
+		if taskID, _, ok := activityResolution(e); ok && fresh.FindHistoryEventByID(taskID) == nil {
+			log.Infof("Workflow actor '%s': completion for task %d has no scheduled task in signed history yet; asking the sender to retry", o.actorID, taskID)
+			return wferrors.NewRecoverable(fmt.Errorf("task %d (%s): %w", taskID, fverr, common.ErrSchedulingNotDurable))
+		}
 		log.Warnf("Workflow actor '%s': dropping completion with no matching scheduled task in signed history: %s", o.actorID, fverr)
 		return api.ErrInstanceNotFound
 	}
