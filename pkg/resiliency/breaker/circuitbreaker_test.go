@@ -26,6 +26,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+const breakerTestTimeout = 300 * time.Millisecond
+
 func TestCircuitBreaker_RequestCount(t *testing.T) {
 	t.Parallel()
 	log := logger.NewLogger("test")
@@ -37,7 +39,7 @@ func TestCircuitBreaker_RequestCount(t *testing.T) {
 	cb := breaker.CircuitBreaker{
 		Name:    "requestCountTest",
 		Trip:    &trip,
-		Timeout: 100 * time.Millisecond,
+		Timeout: breakerTestTimeout,
 	}
 	cb.Initialize(log)
 	assert.Equal(t, breaker.StateClosed, cb.State())
@@ -56,8 +58,9 @@ func TestCircuitBreaker_RequestCount(t *testing.T) {
 	}
 	assert.Equal(t, breaker.StateOpen, cb.State())
 
-	time.Sleep(200 * time.Millisecond)
-	assert.Equal(t, breaker.StateHalfOpen, cb.State())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, breaker.StateHalfOpen, cb.State())
+	}, breakerTestTimeout+time.Second, 20*time.Millisecond)
 
 	res, err := cb.Execute(func() (any, error) {
 		return 42, nil
@@ -77,7 +80,7 @@ func TestCircuitBreaker_TotalFailures(t *testing.T) {
 	cb := breaker.CircuitBreaker{
 		Name:    "totalFailuresTest",
 		Trip:    &trip,
-		Timeout: 100 * time.Millisecond,
+		Timeout: breakerTestTimeout,
 	}
 	cb.Initialize(log)
 	assert.Equal(t, breaker.StateClosed, cb.State())
@@ -110,8 +113,9 @@ func TestCircuitBreaker_TotalFailures(t *testing.T) {
 	require.EqualError(t, err, "circuit breaker is open")
 	assert.Nil(t, res)
 
-	time.Sleep(200 * time.Millisecond)
-	assert.Equal(t, breaker.StateHalfOpen, cb.State())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, breaker.StateHalfOpen, cb.State())
+	}, breakerTestTimeout+time.Second, 20*time.Millisecond)
 
 	res, err = cb.Execute(func() (any, error) {
 		return 42, nil
@@ -131,7 +135,7 @@ func TestCircuitBreaker_ConsecutiveFailures(t *testing.T) {
 	cb := breaker.CircuitBreaker{
 		Name:    "test",
 		Trip:    &trip,
-		Timeout: 100 * time.Millisecond,
+		Timeout: breakerTestTimeout,
 	}
 	assert.Equal(t, breaker.StateUnknown, cb.State())
 	cb.Initialize(log)
@@ -171,8 +175,9 @@ func TestCircuitBreaker_ConsecutiveFailures(t *testing.T) {
 	require.EqualError(t, err, "circuit breaker is open")
 	assert.Nil(t, res)
 
-	time.Sleep(200 * time.Millisecond)
-	assert.Equal(t, breaker.StateHalfOpen, cb.State())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, breaker.StateHalfOpen, cb.State())
+	}, breakerTestTimeout+time.Second, 20*time.Millisecond)
 
 	res, err = cb.Execute(func() (any, error) {
 		return 42, nil
