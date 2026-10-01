@@ -15,7 +15,7 @@ require (
 	github.com/dapr/components-contrib v1.18.0-rc.1.0.20260924175451-6a7838d26286
 	github.com/dapr/durabletask-go v0.14.2-0.20260924161741-d92d44c3fb5a
 	github.com/dapr/kit v0.18.3-0.20260727141402-dd127582d044
-	github.com/diagridio/go-etcd-cron v0.12.8
+	github.com/diagridio/go-etcd-cron v0.12.9
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/go-chi/cors v1.2.1
@@ -515,9 +515,6 @@ replace (
 	// this is a fork that utilises github.com/iskorotkov/avro/v2
 	// TODO: @mikeee remove this once the pr against the base has been merged and released.
 	github.com/apache/pulsar-client-go v0.18.0 => github.com/twmb/pulsar-client-go v0.20.1-0.20260624144353-90eefc81f70a
-
-	// TODO: remove once diagridio/go-etcd-cron elector retry fix is released.
-	github.com/diagridio/go-etcd-cron => github.com/cicoyle/go-etcd-cron v0.0.0-20260930193905-e191fcb5b335
 	// etcd v3.5 needs the interceptor API removed in otelgrpc v0.61.
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0
 

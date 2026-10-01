@@ -158,12 +158,13 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 
 	// The stopped scheduler transferred etcd leadership before its cron shut
 	// down, so the survivors' writes never raced the transfer.
-	logs := string(e.logs[leader].StdoutBuffer())
-	require.Contains(t, logs, "leadership transfer finished")
-	require.Contains(t, logs, "cron instance shutdown")
+	_, transfer, found := strings.Cut(string(e.logs[leader].StdoutBuffer()), "leadership transfer starting")
+	require.True(t, found, "etcd leadership transfer did not start")
+	require.Contains(t, transfer, "became follower")
+	require.Contains(t, transfer, "cron instance shutdown")
 	require.Less(t,
-		strings.Index(logs, "leadership transfer finished"),
-		strings.Index(logs, "cron instance shutdown"),
+		strings.Index(transfer, "became follower"),
+		strings.Index(transfer, "cron instance shutdown"),
 		"etcd leadership transferred after cron shut down")
 
 	status, err := e.cluster.SchedulerN(t, survivors[0]).ETCDClient(t, ctx).

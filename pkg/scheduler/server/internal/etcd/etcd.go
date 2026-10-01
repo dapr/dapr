@@ -228,7 +228,7 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 }
 
 // TransferLeadership hands off etcd leadership if this member holds it,
-// waiting at most 2s.
+// waiting at most 100ms.
 func (e *etcd) TransferLeadership() {
 	select {
 	case <-e.readyCh:
@@ -248,8 +248,7 @@ func (e *etcd) TransferLeadership() {
 		if err != nil {
 			log.Warnf("Failed to transfer etcd leadership: %s", err)
 		}
-	case <-time.After(2 * time.Second):
-		log.Warn("Timed out waiting for etcd leadership transfer")
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 
