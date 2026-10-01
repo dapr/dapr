@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/components-contrib/state"
@@ -46,30 +47,67 @@ import (
 
 func init() {
 	suite.Register(new(earlyresultnobuffer))
+	suite.Register(new(earlytimernobuffer))
+	suite.Register(new(earlychildnobuffer))
 }
 
-// earlyresultnobuffer is earlyresult with a worker that does not buffer an
-// early result. Like the Python, Java and JavaScript SDKs, it replays the
-// events in order and ignores a TaskCompleted with no pending task, and it
-// gives every new scheduling a new TaskExecutionId. The workflow must still
-// complete with step1's result.
-type earlyresultnobuffer struct {
+// earlyresultnobuffer, earlytimernobuffer and earlychildnobuffer run the
+// earlyresult fault sequence against a worker that does not buffer an early
+// resolution. Like the Python, Java and JavaScript SDKs, it replays the
+// events in order and ignores a resolution with no pending activity, timer
+// or child workflow, and it gives every new scheduling a new
+// TaskExecutionId. The workflow runs step0, then a middle step (an
+// activity, a zero-length timer or a child workflow), then step2; the turn
+// that schedules the middle step fails its save after the step was started,
+// so its resolution reaches the inbox before its scheduling is saved. The
+// workflow must still complete.
+type (
+	earlyresultnobuffer struct{ nobuffer }
+	earlytimernobuffer  struct{ nobuffer }
+	earlychildnobuffer  struct{ nobuffer }
+)
+
+type stepKind int
+
+const (
+	kindActivity stepKind = iota
+	kindTimer
+	kindChild
+)
+
+type nobuffer struct {
+	id       string
+	middle   stepKind
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *fault.Store
 }
 
 func (e *earlyresultnobuffer) Setup(t *testing.T) []framework.Option {
+	return e.setup(t, "earlyresultnobuffer", kindActivity)
+}
+
+func (e *earlytimernobuffer) Setup(t *testing.T) []framework.Option {
+	return e.setup(t, "earlytimernobuffer", kindTimer)
+}
+
+func (e *earlychildnobuffer) Setup(t *testing.T) []framework.Option {
+	return e.setup(t, "earlychildnobuffer", kindChild)
+}
+
+func (n *nobuffer) setup(t *testing.T, id string, middle stepKind) []framework.Option {
 	os.SkipWindows(t)
 
-	e.store = fault.New(t)
+	n.id, n.middle = id, middle
+
+	n.store = fault.New(t)
 	sock := socket.New(t)
-	e.ss = statestore.New(t,
+	n.ss = statestore.New(t,
 		statestore.WithSocket(sock),
-		statestore.WithStateStore(e.store),
+		statestore.WithStateStore(n.store),
 	)
 
-	e.workflow = workflow.New(t,
+	n.workflow = workflow.New(t,
 		// As in earlyresult: under history signing the retried completion
 		// would read as tampering instead of exercising the early-result path.
 		workflow.WithSigningDisabledN(0),
@@ -88,62 +126,73 @@ spec:
   metadata:
   - name: actorStateStore
     value: "true"
-`, e.ss.SocketName())),
+`, n.ss.SocketName())),
 		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.ss, e.workflow),
+		framework.WithProcesses(n.ss, n.workflow),
 	}
 }
 
-// sequence replays the workflow step0, step1, step2, returning step1's
-// result, the way an SDK without an early-result buffer does: events are
-// applied in order, a resolution with no pending task is ignored, and the
-// actions are the schedulings that no TaskScheduled in the events consumed.
-func sequence(events []*protos.HistoryEvent) []*protos.WorkflowAction {
-	steps := [...]string{"step0", "step1", "step2"}
+// replay returns the actions of the workflow step0, middle, step2, which
+// returns "done", the way an SDK without an early-resolution buffer does:
+// events are applied in order, a resolution with no pending step is ignored,
+// and the actions are the schedulings no event in the history consumed. A
+// child workflow, any instance other than parent, completes at once.
+func replay(parent string, middle stepKind, instance string, events []*protos.HistoryEvent) []*protos.WorkflowAction {
+	if instance != parent {
+		return []*protos.WorkflowAction{completeAction(0, `"child"`)}
+	}
+	var started time.Time
 	pending := map[int32]bool{}
 	actions := map[int32]*protos.WorkflowAction{}
-	var out string
-	schedule := func(id int32) {
+	schedule := func(id int32, kind stepKind, name string) {
 		pending[id] = true
-		actions[id] = &protos.WorkflowAction{
-			Id: id,
-			WorkflowActionType: &protos.WorkflowAction_ScheduleTask{
-				ScheduleTask: &protos.ScheduleTaskAction{Name: steps[id], TaskExecutionId: uuid.NewString()},
-			},
+		var a *protos.WorkflowAction
+		switch kind {
+		case kindTimer:
+			a = &protos.WorkflowAction{Id: id, WorkflowActionType: &protos.WorkflowAction_CreateTimer{
+				CreateTimer: &protos.CreateTimerAction{FireAt: timestamppb.New(started)},
+			}}
+		case kindChild:
+			a = &protos.WorkflowAction{Id: id, WorkflowActionType: &protos.WorkflowAction_CreateChildWorkflow{
+				CreateChildWorkflow: &protos.CreateChildWorkflowAction{InstanceId: parent + "-child", Name: "child"},
+			}}
+		default:
+			a = &protos.WorkflowAction{Id: id, WorkflowActionType: &protos.WorkflowAction_ScheduleTask{
+				ScheduleTask: &protos.ScheduleTaskAction{Name: name, TaskExecutionId: uuid.NewString()},
+			}}
+		}
+		actions[id] = a
+	}
+	resolve := func(id int32) {
+		if !pending[id] {
+			return
+		}
+		delete(pending, id)
+		switch id {
+		case 0:
+			schedule(1, middle, "step1")
+		case 1:
+			schedule(2, kindActivity, "step2")
+		case 2:
+			actions[3] = completeAction(3, `"done"`)
 		}
 	}
 	for _, ev := range events {
 		switch {
 		case ev.GetExecutionStarted() != nil:
-			schedule(0)
-		case ev.GetTaskScheduled() != nil:
+			started = ev.GetTimestamp().AsTime()
+			schedule(0, kindActivity, "step0")
+		case ev.GetTaskScheduled() != nil, ev.GetTimerCreated() != nil, ev.GetChildWorkflowInstanceCreated() != nil:
 			delete(actions, ev.GetEventId())
 		case ev.GetTaskCompleted() != nil:
-			id := ev.GetTaskCompleted().GetTaskScheduledId()
-			if !pending[id] {
-				continue
-			}
-			delete(pending, id)
-			if id == 1 {
-				out = ev.GetTaskCompleted().GetResult().GetValue()
-			}
-			next := id + 1
-			if next < int32(len(steps)) {
-				schedule(next)
-				continue
-			}
-			actions[next] = &protos.WorkflowAction{
-				Id: next,
-				WorkflowActionType: &protos.WorkflowAction_CompleteWorkflow{
-					CompleteWorkflow: &protos.CompleteWorkflowAction{
-						WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
-						Result:         wrapperspb.String(out),
-					},
-				},
-			}
+			resolve(ev.GetTaskCompleted().GetTaskScheduledId())
+		case ev.GetTimerFired() != nil:
+			resolve(ev.GetTimerFired().GetTimerId())
+		case ev.GetChildWorkflowInstanceCompleted() != nil:
+			resolve(ev.GetChildWorkflowInstanceCompleted().GetTaskScheduledId())
 		}
 	}
 	list := make([]*protos.WorkflowAction, 0, len(actions))
@@ -153,12 +202,22 @@ func sequence(events []*protos.HistoryEvent) []*protos.WorkflowAction {
 	return list
 }
 
-func (e *earlyresultnobuffer) Run(t *testing.T, ctx context.Context) {
-	e.workflow.WaitUntilRunning(t, ctx)
+func completeAction(id int32, result string) *protos.WorkflowAction {
+	return &protos.WorkflowAction{
+		Id: id,
+		WorkflowActionType: &protos.WorkflowAction_CompleteWorkflow{
+			CompleteWorkflow: &protos.CompleteWorkflowAction{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				Result:         wrapperspb.String(result),
+			},
+		},
+	}
+}
 
-	const id = "earlyresultnobuffer"
+func (n *nobuffer) Run(t *testing.T, ctx context.Context) {
+	n.workflow.WaitUntilRunning(t, ctx)
 
-	conn := e.workflow.Dapr().GRPCConn(t, ctx)
+	conn := n.workflow.Dapr().GRPCConn(t, ctx)
 	thub := protos.NewTaskHubSidecarServiceClient(conn)
 	_, err := thub.Hello(ctx, new(emptypb.Empty))
 	require.NoError(t, err)
@@ -178,7 +237,7 @@ func (e *earlyresultnobuffer) Run(t *testing.T, ctx context.Context) {
 				thub.CompleteWorkflowTask(ctx, &protos.WorkflowResponse{
 					InstanceId:      wr.GetInstanceId(),
 					CompletionToken: wi.GetCompletionToken(),
-					Actions:         sequence(append(wr.GetPastEvents(), wr.GetNewEvents()...)),
+					Actions:         replay(n.id, n.middle, wr.GetInstanceId(), append(wr.GetPastEvents(), wr.GetNewEvents()...)),
 				})
 			case *protos.WorkItem_ActivityRequest:
 				ar := req.ActivityRequest
@@ -195,37 +254,37 @@ func (e *earlyresultnobuffer) Run(t *testing.T, ctx context.Context) {
 
 	var historySaves atomic.Int32
 	failed := make(chan struct{})
-	e.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
+	n.store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
 		var history, inboxDelete bool
 		for _, op := range req.Operations {
 			switch v := op.(type) {
 			case state.SetRequest:
-				history = history || strings.Contains(v.Key, id+"||history-")
+				history = history || strings.Contains(v.Key, n.id+"||history-")
 			case state.DeleteRequest:
-				inboxDelete = inboxDelete || strings.Contains(v.Key, id+"||inbox-")
+				inboxDelete = inboxDelete || strings.Contains(v.Key, n.id+"||inbox-")
 			}
 		}
 		switch {
 		case history && historySaves.Add(1) == 2:
-			e.store.ArmFailures(id+"||history-", 1, failed)
+			n.store.ArmFailures(n.id+"||history-", 1, failed)
 		case inboxDelete && !history:
-			e.store.ArmFailures(id+"||inbox-", 1, nil)
+			n.store.ArmFailures(n.id+"||inbox-", 1, nil)
 		}
 	})
 
 	sched := client.NewTaskHubGrpcClient(conn, logger.New(t))
-	_, err = sched.ScheduleNewWorkflow(ctx, "seq", api.WithInstanceID(id))
+	_, err = sched.ScheduleNewWorkflow(ctx, "seq", api.WithInstanceID(api.InstanceID(n.id)))
 	require.NoError(t, err)
 	select {
 	case <-failed:
 	case <-time.After(20 * time.Second):
-		require.Fail(t, "the turn dispatching step1 never saved")
+		require.Fail(t, "the turn scheduling the middle step never saved")
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	meta, err := sched.WaitForWorkflowCompletion(waitCtx, id)
+	meta, err := sched.WaitForWorkflowCompletion(waitCtx, api.InstanceID(n.id))
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus(), meta.GetFailureDetails().GetErrorMessage())
-	assert.JSONEq(t, `"step1"`, meta.GetOutput().GetValue())
+	assert.JSONEq(t, `"done"`, meta.GetOutput().GetValue())
 }

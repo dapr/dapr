@@ -47,10 +47,9 @@ func init() {
 // completion dispatches step2 and then fails to save, so step1's completion
 // is nacked back to its activity, which re-delivers it through a result
 // reminder held back for a few seconds. step2's completion reaches the
-// workflow first, in a turn that does not schedule step2, so the result is
-// dropped. Once step1's completion is re-delivered, the workflow schedules
-// step2 under a new TaskExecutionId, which dispatches it again: the workflow
-// completes with the result of step2's second run.
+// workflow first, in a turn that does not schedule step2, and is kept in the
+// inbox. Once step1's completion is re-delivered, the workflow schedules
+// step2 again and the kept result resolves it: step2 runs once.
 type latereschedule struct {
 	workflow   *workflow.Workflow
 	ss         *statestore.StateStore
@@ -154,5 +153,5 @@ func (l *latereschedule) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus(), meta.GetFailureDetails().GetErrorMessage())
 	assert.JSONEq(t, `"two"`, meta.GetOutput().GetValue())
-	assert.Equal(t, int32(2), l.step2Calls.Load(), "step2 runs again for its new scheduling")
+	assert.Equal(t, int32(1), l.step2Calls.Load(), "the kept result resolves step2's new scheduling")
 }
