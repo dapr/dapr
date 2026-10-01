@@ -161,9 +161,10 @@ func (p *placement) handleLockRequest(req *loops.LockRequest) {
 
 func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementReconnect) error {
 	var client v1pb.Placement_ReportDaprStatusClient
+	var streamCancel context.CancelFunc
 	var err error
 	for {
-		client, err = p.tryConnect(ctx)
+		client, streamCancel, err = p.tryConnect(ctx)
 		if err == nil {
 			break
 		}
@@ -194,6 +195,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Namespace:            p.namespace,
 		Inflight:             p.inflight,
 		Channel:              client,
+		StreamCancel:         streamCancel,
 		PlacementLoop:        p.loop,
 		IDx:                  p.idx,
 		ActorTable:           p.actorTable,
@@ -281,16 +283,18 @@ func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoin
 	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
-func (p *placement) tryConnect(ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, error) {
+func (p *placement) tryConnect(ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, context.CancelFunc, error) {
 	conn, err := p.connector.Connect(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to placement service: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to placement service: %w", err)
 	}
 
-	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(streamCtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
+		streamCancel()
+		return nil, nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
-	return client, nil
+	return client, streamCancel, nil
 }
