@@ -218,7 +218,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
 					assert.EventuallyWithT(t, func(c *assert.CollectT) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
-						assert.Equal(t, expTLSCode, status)
+						assert.Equal(c, expTLSCode, status)
 						assertBody(c, body)
 					}, time.Second*20, time.Millisecond*10)
 				})
