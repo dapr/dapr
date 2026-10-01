@@ -383,8 +383,8 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
-		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution()),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution()),
 		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()),
 		// Sum of per-event 1s, not Count: identical exposition (cumulative
 		// int64 exports as a Prometheus counter either way), but Sum lets
