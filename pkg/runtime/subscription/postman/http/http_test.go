@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	nethttp "net/http"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -199,7 +200,7 @@ func TestDeliverRestoresTraceState(t *testing.T) {
 func TestDeliverRestoresBaggage(t *testing.T) {
 	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
 		"pubsub", "", []byte("message"), "", "")
-	cloudEvent[diagConsts.BaggageHeader] = "key=value"
+	cloudEvent[diagConsts.BaggageHeader] = "key2=value2,key1=value1"
 	message := &runtimePubsub.SubscribedMessage{
 		CloudEvent: cloudEvent,
 		Topic:      "topic",
@@ -211,11 +212,17 @@ func TestDeliverRestoresBaggage(t *testing.T) {
 	defer response.Close()
 	mockAppChannel := new(channelt.MockAppChannel)
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
-		return baggage.FromContext(ctx).String() == "key=value"
-	}), mock.Anything).Return(response, nil)
+		return baggage.FromContext(ctx).Len() == 0
+	}), mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+		return slices.Equal(req.Metadata()[diagConsts.BaggageHeader].GetValues(), []string{"key2=value2,key1=value1"})
+	})).Return(response, nil)
+
+	parentBaggage, err := baggage.Parse("parent=value")
+	require.NoError(t, err)
+	ctx := baggage.ContextWithBaggage(t.Context(), parentBaggage)
 
 	h := New(Options{Channels: new(channels.Channels).WithAppChannel(mockAppChannel)})
-	require.NoError(t, h.Deliver(t.Context(), message))
+	require.NoError(t, h.Deliver(ctx, message))
 	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
 
