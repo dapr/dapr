@@ -994,3 +994,22 @@ func TestSpanContextSerialization(t *testing.T) {
 	gotSc, _ := diagUtils.SpanContextFromBinary(decoded)
 	assert.Equal(t, wantSc, gotSc)
 }
+
+func TestSpanContextToGRPCMetadataNoDuplicateTraceparent(t *testing.T) {
+	// Regression for #10563: an existing outgoing traceparent must not be duplicated.
+	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(),
+		"traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+
+	traceID, _ := trace.TraceIDFromHex("11111111111111111111111111111111")
+	spanID, _ := trace.SpanIDFromHex("2222222222222222")
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	ctx = SpanContextToGRPCMetadata(ctx, sc)
+
+	md, _ := grpcMetadata.FromOutgoingContext(ctx)
+	assert.Len(t, md.Get("traceparent"), 1, "expected exactly one traceparent, not a duplicate")
+}
