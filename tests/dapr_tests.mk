@@ -345,6 +345,14 @@ test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
 
+.PHONY: test-integration-deps
+test-integration-deps: test-deps
+	# Pre-fetch modules with retries so the integration binary builds run
+	# offline; a single connection reset mid-build otherwise fails the run.
+	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
+		for i in 1 2 3 4 5; do go -C $$d mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done; \
+	done
+
 # Packages that must not run concurrently with the rest of the e2e suite:
 # - hotreloading creates and updates resources in the shared test namespace
 #   whose hot reload restarts every daprd sidecar in that namespace
