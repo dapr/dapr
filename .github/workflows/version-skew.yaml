@@ -202,10 +202,10 @@ jobs:
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
-        name: latest-release/${{ matrix.mode }}_test_e2e.json
-        path: latest-release/${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.*
+        name: version-skew-${{ matrix.mode }}_test_integration
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.*
     - name: Update PR comment for success
       if: ${{ success() }}
       uses: artursouza/sticky-pull-request-comment@v2.2.0

@@ -70,15 +70,8 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	// orchestration didn't exist
 	// create a new state entry if one doesn't already exist
 	if state == nil {
-		state = wfenginestate.NewState(wfenginestate.Options{
-			AppID:             o.appID,
-			Namespace:         o.namespace,
-			WorkflowActorType: o.actorType,
-			ActivityActorType: o.activityActorType,
-			Signer:            o.signer,
-		})
-		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+		state = wfenginestate.NewState(o.stateOptions())
+		o.primeCachedState(state, startEvent.GetExecutionStarted())
 
 		if propagatedHistory != nil {
 			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {

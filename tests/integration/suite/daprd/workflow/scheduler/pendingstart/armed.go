@@ -49,6 +49,7 @@ type armed struct {
 
 func (p *armed) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
+		workflow.WithSigning(false),
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_PENDING_START_REDRIVE_GRACE", "1s",
 		))),

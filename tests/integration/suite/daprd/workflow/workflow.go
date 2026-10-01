@@ -15,6 +15,7 @@ package workflow
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/admission"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/attestation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
@@ -58,6 +59,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/fold"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/localwake"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/pendingstart"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/startdriver"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/wakev2"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/security"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/signing"
@@ -69,5 +71,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/tracing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/unstartable"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/upgrade"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/versioning"
 )
