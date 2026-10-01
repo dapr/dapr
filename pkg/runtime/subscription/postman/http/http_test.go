@@ -211,12 +211,18 @@ func TestDeliverRestoresBaggage(t *testing.T) {
 	response := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawDataString(`{"status":"SUCCESS"}`)
 	defer response.Close()
 	mockAppChannel := new(channelt.MockAppChannel)
-	mockAppChannel.On("InvokeMethod", mock.Anything, mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(func(ctx context.Context) bool {
+		return baggage.FromContext(ctx).Len() == 0
+	}), mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
 		return slices.Equal(req.Metadata()[diagConsts.BaggageHeader].GetValues(), []string{"key2=value2,key1=value1"})
 	})).Return(response, nil)
 
+	parentBaggage, err := baggage.Parse("parent=value")
+	require.NoError(t, err)
+	ctx := baggage.ContextWithBaggage(t.Context(), parentBaggage)
+
 	h := New(Options{Channels: new(channels.Channels).WithAppChannel(mockAppChannel)})
-	require.NoError(t, h.Deliver(t.Context(), message))
+	require.NoError(t, h.Deliver(ctx, message))
 	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
 
