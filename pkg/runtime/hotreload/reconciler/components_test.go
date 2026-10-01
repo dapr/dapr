@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -63,7 +64,11 @@ func guardComp(gen int64, marker string) compapi.Component {
 	}
 }
 
-func newComponentsGuardManager(t *testing.T) (*components, *processor.Processor, *compstore.ComponentStore, *daprt.MockPubSub) {
+// newComponentsManager builds a components manager backed by a real processor.
+// In KubernetesMode an operator client is set, which is what makes the secret
+// processor treat secretKeyRef values as operator-populated and base64 decode
+// them in place.
+func newComponentsManager(t *testing.T, mode modes.DaprMode) (*components, *processor.Processor, *compstore.ComponentStore, *daprt.MockPubSub) {
 	t.Helper()
 
 	cs := compstore.New()
@@ -77,19 +82,24 @@ func newComponentsGuardManager(t *testing.T) (*components, *processor.Processor,
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Close").Return(nil)
 
-	proc := processor.New(processor.Options{
+	opts := processor.Options{
 		ID:             "id",
 		Namespace:      "test",
 		Registry:       reg,
 		ComponentStore: cs,
-		Meta:           meta.New(meta.Options{ID: "id", Namespace: "test", Mode: modes.StandaloneMode}),
+		Meta:           meta.New(meta.Options{ID: "id", Namespace: "test", Mode: mode}),
 		Resiliency:     resiliency.New(log),
-		Mode:           modes.StandaloneMode,
+		Mode:           mode,
 		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
 		Security:       securityfake.New(),
 		Reporter:       reg.Reporter(),
-	})
+	}
+	if mode == modes.KubernetesMode {
+		opts.OperatorClient = operatorv1.NewOperatorClient(nil)
+	}
+
+	proc := processor.New(opts)
 
 	m := &components{
 		store: cs,
@@ -309,7 +319,7 @@ func Test_components_actorStateStore(t *testing.T) {
 // reorder case raised in review.
 func Test_components_update_generationGuard(t *testing.T) {
 	t.Run("rejects a stale lower-generation update for an existing component", func(t *testing.T) {
-		m, proc, cs, mockPubSub := newComponentsGuardManager(t)
+		m, proc, cs, mockPubSub := newComponentsManager(t, modes.StandaloneMode)
 		ctx := runProc(t, proc)
 
 		// update blocks until the component is committed.
@@ -335,7 +345,7 @@ func Test_components_update_generationGuard(t *testing.T) {
 		// `exists` branch, so once a delete clears the store a late lower
 		// generation hits exists==false and is reinstalled. Closing this fully
 		// would require tracking the last-seen generation across deletes.
-		m, proc, cs, mockPubSub := newComponentsGuardManager(t)
+		m, proc, cs, mockPubSub := newComponentsManager(t, modes.StandaloneMode)
 		ctx := runProc(t, proc)
 
 		require.NoError(t, m.update(ctx, guardComp(5, "v5")))
