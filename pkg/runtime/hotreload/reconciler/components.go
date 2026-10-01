@@ -85,10 +85,19 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	defer c.notifyActorStateStoreChanged()()
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
-	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
 	if exists {
-		if differ.AreSame(oldComp, comp) {
+		// Resolve a copy before comparing: the stored copy was resolved on
+		// load, so comparing it against the raw incoming spec would differ
+		// every tick for a secret-ref metadata item. It must be a copy -
+		// Spec.Metadata is a slice, so resolving in place would write through
+		// to the caller's comp, and the processor's own pass on reload would
+		// then decode already-decoded values (on Kubernetes, failing per value
+		// and logging the secret's first byte).
+		resolved := comp.DeepCopy()
+		_, _ = c.proc.Secret().ProcessResource(ctx, resolved)
+
+		if differ.AreSame(oldComp, *resolved) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
 			return nil
 		}
