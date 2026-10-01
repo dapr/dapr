@@ -27,6 +27,7 @@ import (
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -213,6 +214,7 @@ func New(opts Options) (Interface, error) {
 		backend.WithOnGetWorkItemsDisconnectCallback(wfe.onWorkItemDisconnection),
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
+		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
 	)
 
 	var topts []backend.NewTaskWorkerOptions
