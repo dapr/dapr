@@ -89,24 +89,15 @@ func (r *restartall) Run(t *testing.T, ctx context.Context) {
 	wg.Wait()
 
 	// The exec pipe of a stopped process is closed, so restarted members need
-	// fresh instances (with the same identity, ports, initial cluster and data
-	// dir) for their logs to be captured.
+	// fresh instances for their logs to be captured.
 	lines := make([]*logline.LogLine, 3)
 	schedulers := make([]*scheduler.Scheduler, 3)
 	for i := range 3 {
-		old := r.cluster.SchedulerN(t, i)
 		lines[i] = logline.New(t, logline.WithCaptureAll())
 		lines[i].Run(t, ctx)
 		t.Cleanup(func() { lines[i].Cleanup(t) })
 
-		schedulers[i] = scheduler.New(t,
-			scheduler.WithID(old.ID()),
-			scheduler.WithPort(old.Port()),
-			scheduler.WithHealthzPort(old.HealthzPort()),
-			scheduler.WithMetricsPort(old.MetricsPort()),
-			scheduler.WithEtcdClientPort(old.EtcdClientPort()),
-			scheduler.WithInitialCluster(old.InitialCluster()),
-			scheduler.WithDataDir(old.DataDir()),
+		schedulers[i] = r.cluster.SchedulerN(t, i).Clone(t,
 			scheduler.WithLogLineStdout(lines[i]),
 			scheduler.WithExecOptions(exec.WithStderr(lines[i].Stderr())),
 		)
