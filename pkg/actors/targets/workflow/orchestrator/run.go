@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -123,11 +124,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}()
 
 	rs := o.rstate
-	inbox, heldBack := o.withoutUnscheduledResults(state)
-	newEvents := inbox
+	newEvents, heldBack := o.withoutUnscheduledResults(state)
 	if len(folded) > 0 {
-		newEvents = make([]*backend.HistoryEvent, 0, len(inbox)+len(folded))
-		newEvents = append(newEvents, inbox...)
+		newEvents = append(make([]*backend.HistoryEvent, 0, len(newEvents)+len(folded)), newEvents...)
 		for _, f := range folded {
 			newEvents = append(newEvents, f.event)
 		}
@@ -375,9 +374,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// delivers it. Its task is not dispatched again: the activity ran, and
 	// the activity actor would only return the cached outcome of that run.
 	var carried []*backend.HistoryEvent
-	if len(heldBack) > 0 && !runtimestate.IsCompleted(rs) {
-		carried = rescheduledResults(heldBack, rs.GetNewEvents())
-		pendingTasks = withoutTasks(pendingTasks, carried)
+	if len(heldBack) > 0 {
+		carried, pendingTasks = carriedResults(rs, heldBack, pendingTasks)
 	}
 
 	createWorkflows, oerr := o.classifyOutboundMessages(rs)
@@ -1004,16 +1002,13 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 // schedules the task again the result already in the state stops it from
 // being dispatched, so the task never resolves. The turn keeps a held-back
 // result only if it schedules the task again under the same TaskExecutionId
-// (see rescheduledResults). Otherwise the inbox clear drops it, and the task
+// (see carryRescheduled). Otherwise the inbox clear drops it, and the task
 // is dispatched again.
 func (o *orchestrator) withoutUnscheduledResults(state *wfenginestate.State) (inbox, heldBack []*backend.HistoryEvent) {
 	var scheduled map[int32]struct{}
-	isUnscheduled := func(e *backend.HistoryEvent) bool {
+	for i, e := range state.Inbox {
 		taskID, _, ok := activityResolution(e)
-		if !ok {
-			return false
-		}
-		if scheduled == nil {
+		if ok && scheduled == nil {
 			scheduled = make(map[int32]struct{})
 			for _, h := range state.History {
 				if h.GetTaskScheduled() != nil {
@@ -1021,66 +1016,63 @@ func (o *orchestrator) withoutUnscheduledResults(state *wfenginestate.State) (in
 				}
 			}
 		}
-		_, found := scheduled[taskID]
-		return !found
-	}
-
-	for i, e := range state.Inbox {
-		if !isUnscheduled(e) {
+		if _, found := scheduled[taskID]; !ok || found {
+			if heldBack != nil {
+				inbox = append(inbox, e)
+			}
 			continue
 		}
-		// At least one: copy, so the persisted inbox is left as it is.
-		inbox = make([]*backend.HistoryEvent, 0, len(state.Inbox)-1)
-		inbox = append(inbox, state.Inbox[:i]...)
-		for _, ev := range state.Inbox[i:] {
-			if isUnscheduled(ev) {
-				taskID, _, _ := activityResolution(ev)
-				log.Warnf("Workflow actor '%s': holding back the result of task %d, whose scheduling was never saved, until the task is scheduled", o.actorID, taskID)
-				heldBack = append(heldBack, ev)
-				continue
-			}
-			inbox = append(inbox, ev)
+		if heldBack == nil {
+			// The first one held back: copy, so the persisted inbox is left
+			// as it is.
+			inbox = append(make([]*backend.HistoryEvent, 0, len(state.Inbox)-1), state.Inbox[:i]...)
 		}
-		return inbox, heldBack
+		log.Warnf("Workflow actor '%s': holding back the result of task %d, whose scheduling was never saved, until the task is scheduled", o.actorID, taskID)
+		heldBack = append(heldBack, e)
 	}
-	return state.Inbox, nil
+	if heldBack == nil {
+		return state.Inbox, nil
+	}
+	return inbox, heldBack
 }
 
-// rescheduledResults returns the held-back results whose task newEvents
-// schedule again under the same TaskExecutionId (or both without one): the
-// scheduling the result's activity ran for.
-func rescheduledResults(heldBack, newEvents []*backend.HistoryEvent) []*backend.HistoryEvent {
-	var out []*backend.HistoryEvent
+// carriedResults returns the held-back results the turn that produced rs
+// keeps, and pending without the tasks they resolve. A turn that completed
+// keeps none, and nor does one that continued as new: the new generation's
+// history restarts its task IDs, so its schedulings answer none of the
+// previous generation's results.
+func carriedResults(rs *backend.WorkflowRuntimeState, heldBack, pending []*backend.HistoryEvent) (carried, stillPending []*backend.HistoryEvent) {
+	if runtimestate.IsCompleted(rs) || rs.GetContinuedAsNew() {
+		return nil, pending
+	}
+	return carryRescheduled(heldBack, rs.GetNewEvents(), pending)
+}
+
+// carryRescheduled returns carried, the held-back results whose task
+// newEvents schedule again under the same TaskExecutionId: the scheduling the
+// result's activity ran for. A result without a TaskExecutionId is never
+// carried, as nothing ties it to this scheduling rather than to an earlier
+// generation's task with the same ID; its task is dispatched again. It also
+// returns pending without the tasks the carried results resolve.
+func carryRescheduled(heldBack, newEvents, pending []*backend.HistoryEvent) (carried, stillPending []*backend.HistoryEvent) {
+	carriedIDs := make(map[int32]struct{}, len(heldBack))
 	for _, r := range heldBack {
 		taskID, execID, _ := activityResolution(r)
-		for _, e := range newEvents {
-			if ts := e.GetTaskScheduled(); ts != nil && e.GetEventId() == taskID && ts.GetTaskExecutionId() == execID {
-				out = append(out, r)
-				break
-			}
+		if slices.ContainsFunc(newEvents, func(e *backend.HistoryEvent) bool {
+			ts := e.GetTaskScheduled()
+			return ts != nil && e.GetEventId() == taskID && execID != "" && ts.GetTaskExecutionId() == execID
+		}) {
+			carried = append(carried, r)
+			carriedIDs[taskID] = struct{}{}
 		}
 	}
-	return out
-}
-
-// withoutTasks returns tasks without the TaskScheduled events the results
-// resolve.
-func withoutTasks(tasks, results []*backend.HistoryEvent) []*backend.HistoryEvent {
-	if len(results) == 0 {
-		return tasks
+	if len(carried) == 0 {
+		return nil, pending
 	}
-	resolved := make(map[int32]struct{}, len(results))
-	for _, r := range results {
-		taskID, _, _ := activityResolution(r)
-		resolved[taskID] = struct{}{}
-	}
-	out := make([]*backend.HistoryEvent, 0, len(tasks))
-	for _, t := range tasks {
-		if _, ok := resolved[t.GetEventId()]; !ok {
-			out = append(out, t)
-		}
-	}
-	return out
+	return carried, slices.DeleteFunc(slices.Clone(pending), func(t *backend.HistoryEvent) bool {
+		_, ok := carriedIDs[t.GetEventId()]
+		return ok
+	})
 }
 
 // filterValidInboxEvents returns inbox events that pass validation. Result

@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,10 +50,10 @@ func TestWithoutUnscheduledResults(t *testing.T) {
 		{EventId: 2, EventType: &protos.HistoryEvent_TimerCreated{TimerCreated: &protos.TimerCreatedEvent{}}},
 	}
 	raised := &backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "e"}}}
-	scheduledResult := completedWithExecution(1, "")
+	scheduledResult := taskCompletedWithExecID(1, "")
 	fired := timerFiredEvent(2)
 	state.Inbox = []*backend.HistoryEvent{
-		completedWithExecution(3, "run:a3"), // its scheduling was never saved
+		taskCompletedWithExecID(3, "run:a3"), // its scheduling was never saved
 		fired,
 		scheduledResult,
 		failedWithExecution(9, ""), // nor this one's
@@ -71,20 +72,54 @@ func TestWithoutUnscheduledResults(t *testing.T) {
 	assert.Empty(t, held)
 }
 
-func TestRescheduledResults(t *testing.T) {
+func TestCarryRescheduled(t *testing.T) {
 	t.Parallel()
-	same := completedWithExecution(3, "run:a3")
+	same := taskCompletedWithExecID(3, "run:a3")
 	bothEmpty := failedWithExecution(4, "")
-	otherExec := completedWithExecution(5, "run-old:a5")
-	notScheduled := completedWithExecution(6, "run:a6")
+	otherExec := taskCompletedWithExecID(5, "run-old:a5")
+	notScheduled := taskCompletedWithExecID(6, "run:a6")
 	newEvents := []*backend.HistoryEvent{
 		scheduledWithExecution(3, "run:a3"),
 		scheduledWithExecution(4, ""),
 		scheduledWithExecution(5, "run:a5"),
 	}
-	got := rescheduledResults([]*backend.HistoryEvent{same, bothEmpty, otherExec, notScheduled}, newEvents)
-	assert.Equal(t, []*backend.HistoryEvent{same, bothEmpty}, got)
-	assert.Equal(t, newEvents[2:], withoutTasks(newEvents, got))
+	carried, pending := carryRescheduled([]*backend.HistoryEvent{same, bothEmpty, otherExec, notScheduled}, newEvents, newEvents)
+	assert.Equal(t, []*backend.HistoryEvent{same}, carried, "a result without a TaskExecutionId is not tied to the scheduling, so it is not carried")
+	assert.Equal(t, newEvents[1:], pending)
+}
+
+func TestCarriedResults(t *testing.T) {
+	t.Parallel()
+	result := taskCompletedWithExecID(3, "run:a3")
+	scheduled := scheduledWithExecution(3, "run:a3")
+
+	t.Run("rescheduled", func(t *testing.T) {
+		t.Parallel()
+		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{scheduled}}
+		carried, pending := carriedResults(rs, []*backend.HistoryEvent{result}, []*backend.HistoryEvent{scheduled})
+		assert.Equal(t, []*backend.HistoryEvent{result}, carried)
+		assert.Empty(t, pending)
+	})
+
+	// The new generation schedules a task under the ID of the previous
+	// generation's result.
+	t.Run("continued as new", func(t *testing.T) {
+		t.Parallel()
+		rs := &backend.WorkflowRuntimeState{ContinuedAsNew: true, NewEvents: []*backend.HistoryEvent{scheduled}}
+		carried, pending := carriedResults(rs, []*backend.HistoryEvent{result}, []*backend.HistoryEvent{scheduled})
+		assert.Empty(t, carried)
+		assert.Equal(t, []*backend.HistoryEvent{scheduled}, pending)
+	})
+
+	t.Run("completed", func(t *testing.T) {
+		t.Parallel()
+		rs := &backend.WorkflowRuntimeState{
+			NewEvents:      []*backend.HistoryEvent{scheduled},
+			CompletedEvent: &protos.ExecutionCompletedEvent{},
+		}
+		carried, _ := carriedResults(rs, []*backend.HistoryEvent{result}, []*backend.HistoryEvent{scheduled})
+		assert.Empty(t, carried)
+	})
 }
 
 // Test_runWorkflow_carriesResultOfUnsavedScheduling reproduces a turn
@@ -115,7 +150,7 @@ func Test_runWorkflow_carriesResultOfUnsavedScheduling(t *testing.T) {
 		scheduledWithExecution(1, "run:a1"),
 		{EventId: 2, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TimerCreated{TimerCreated: &protos.TimerCreatedEvent{}}},
 	}
-	result := completedWithExecution(3, "run:a3")
+	result := taskCompletedWithExecID(3, "run:a3")
 	fired := timerFiredEvent(2)
 
 	var turns [][]*backend.HistoryEvent
@@ -165,38 +200,19 @@ func Test_runWorkflow_carriesResultOfUnsavedScheduling(t *testing.T) {
 	require.Len(t, turns, 2)
 	assert.Equal(t, []*backend.HistoryEvent{result}, turns[1], "the next turn delivers the result after its task's scheduling")
 	assert.Empty(t, h.orch.state.Inbox)
-	resolved := false
-	for _, e := range h.orch.state.History {
-		if e.GetTaskCompleted().GetTaskScheduledId() == 3 {
-			resolved = true
-		}
-	}
-	assert.True(t, resolved, "task 3 is resolved in history")
+	assert.True(t, slices.ContainsFunc(h.orch.state.History, func(e *backend.HistoryEvent) bool {
+		return e.GetTaskCompleted().GetTaskScheduledId() == 3
+	}), "task 3 is resolved in history")
 }
 
 func scheduledWithExecution(id int32, execID string) *backend.HistoryEvent {
-	return &backend.HistoryEvent{
-		EventId: id,
-		EventType: &protos.HistoryEvent_TaskScheduled{
-			TaskScheduled: &protos.TaskScheduledEvent{Name: "act", TaskExecutionId: execID},
-		},
-	}
-}
-
-func completedWithExecution(id int32, execID string) *backend.HistoryEvent {
-	return &backend.HistoryEvent{
-		EventId: -1,
-		EventType: &protos.HistoryEvent_TaskCompleted{
-			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: id, TaskExecutionId: execID, Result: wrapperspb.String("r")},
-		},
-	}
+	e := taskScheduledEvent(id)
+	e.GetTaskScheduled().TaskExecutionId = execID
+	return e
 }
 
 func failedWithExecution(id int32, execID string) *backend.HistoryEvent {
-	return &backend.HistoryEvent{
-		EventId: -1,
-		EventType: &protos.HistoryEvent_TaskFailed{
-			TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: id, TaskExecutionId: execID},
-		},
-	}
+	e := taskFailedEvent(id)
+	e.GetTaskFailed().TaskExecutionId = execID
+	return e
 }
