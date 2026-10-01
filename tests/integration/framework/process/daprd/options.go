@@ -464,6 +464,12 @@ func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
 	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
 }
 
+// WithWorkflowHealthPingInterval sets how often this daprd sends HealthPings
+// on idle work item streams, so tests need not wait the production interval.
+func WithWorkflowHealthPingInterval(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_HEALTH_PING_INTERVAL", d.String()))
+}
+
 // WithWorkflowClaimRetention sets how long a Completed execution-claim
 // record is retained before its guard deletes it.
 func WithWorkflowClaimRetention(t *testing.T, d time.Duration) Option {
