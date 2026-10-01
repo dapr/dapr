@@ -573,7 +573,7 @@ func TestReporter(t *testing.T) {
 				"mockPubSub",
 			)
 
-			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(errors.New("error"))
+			mockPubSub.On("Init", mock.Anything).Return(errors.New("error"))
 
 			err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
 			require.Error(t, err)
