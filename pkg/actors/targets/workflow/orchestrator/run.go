@@ -123,10 +123,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}()
 
 	rs := o.rstate
-	newEvents := state.Inbox
+	inbox, heldBack := o.withoutUnscheduledResults(state)
+	newEvents := inbox
 	if len(folded) > 0 {
-		newEvents = make([]*backend.HistoryEvent, 0, len(state.Inbox)+len(folded))
-		newEvents = append(newEvents, state.Inbox...)
+		newEvents = make([]*backend.HistoryEvent, 0, len(inbox)+len(folded))
+		newEvents = append(newEvents, inbox...)
 		for _, f := range folded {
 			newEvents = append(newEvents, f.event)
 		}
@@ -368,6 +369,16 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	pendingTasks := rs.GetPendingTasks()
+	// A result left out of this turn because its scheduling was never saved
+	// is kept when this turn schedules its task again: it goes back into the
+	// inbox in this turn's save, beside the scheduling, and the next turn
+	// delivers it. Its task is not dispatched again: the activity ran, and
+	// the activity actor would only return the cached outcome of that run.
+	var carried []*backend.HistoryEvent
+	if len(heldBack) > 0 && !runtimestate.IsCompleted(rs) {
+		carried = rescheduledResults(heldBack, rs.GetNewEvents())
+		pendingTasks = withoutTasks(pendingTasks, carried)
+	}
 
 	createWorkflows, oerr := o.classifyOutboundMessages(rs)
 	if oerr != nil {
@@ -419,6 +430,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
+	for _, e := range carried {
+		state.AddToInbox(e)
+	}
 	if !wasCompleted && runtimestate.IsCompleted(rs) && o.getExecutionStartedEvent(state).GetParentInstance() != nil {
 		state.SetParentNotifyPending(true)
 	}
@@ -431,6 +445,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// The turn's single Multi is durable: folded completions are now in
 	// history and their senders are acked (see the deferred fold handling).
 	foldedCommitted = true
+
+	// Arm a turn for each carried result, as for any new inbox event. If
+	// that fails the reminder driving this turn retries it, and the retried
+	// turn delivers the result from the inbox.
+	for _, e := range carried {
+		if derr := o.driveNewEvent(ctx, e, state); derr != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to arm a turn for a carried activity result: %w", derr))
+		}
+	}
 
 	o.reapEscalatedCompletions(state)
 
@@ -970,6 +993,94 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 		rs.NewEvents = filtered
 		return
 	}
+}
+
+// withoutUnscheduledResults splits the inbox into the events the turn is
+// handed and heldBack: the activity results whose task no persisted
+// TaskScheduled carries. Such a result comes from a dispatch made by a turn
+// whose save then failed: the activity ran, but its scheduling was never
+// saved. A worker that does not buffer early results ignores it, because the
+// task does not exist yet when it replays the result, and when the turn then
+// schedules the task again the result already in the state stops it from
+// being dispatched, so the task never resolves. The turn keeps a held-back
+// result only if it schedules the task again under the same TaskExecutionId
+// (see rescheduledResults). Otherwise the inbox clear drops it, and the task
+// is dispatched again.
+func (o *orchestrator) withoutUnscheduledResults(state *wfenginestate.State) (inbox, heldBack []*backend.HistoryEvent) {
+	var scheduled map[int32]struct{}
+	isUnscheduled := func(e *backend.HistoryEvent) bool {
+		taskID, _, ok := activityResolution(e)
+		if !ok {
+			return false
+		}
+		if scheduled == nil {
+			scheduled = make(map[int32]struct{})
+			for _, h := range state.History {
+				if h.GetTaskScheduled() != nil {
+					scheduled[h.GetEventId()] = struct{}{}
+				}
+			}
+		}
+		_, found := scheduled[taskID]
+		return !found
+	}
+
+	for i, e := range state.Inbox {
+		if !isUnscheduled(e) {
+			continue
+		}
+		// At least one: copy, so the persisted inbox is left as it is.
+		inbox = make([]*backend.HistoryEvent, 0, len(state.Inbox)-1)
+		inbox = append(inbox, state.Inbox[:i]...)
+		for _, ev := range state.Inbox[i:] {
+			if isUnscheduled(ev) {
+				taskID, _, _ := activityResolution(ev)
+				log.Warnf("Workflow actor '%s': holding back the result of task %d, whose scheduling was never saved, until the task is scheduled", o.actorID, taskID)
+				heldBack = append(heldBack, ev)
+				continue
+			}
+			inbox = append(inbox, ev)
+		}
+		return inbox, heldBack
+	}
+	return state.Inbox, nil
+}
+
+// rescheduledResults returns the held-back results whose task newEvents
+// schedule again under the same TaskExecutionId (or both without one): the
+// scheduling the result's activity ran for.
+func rescheduledResults(heldBack, newEvents []*backend.HistoryEvent) []*backend.HistoryEvent {
+	var out []*backend.HistoryEvent
+	for _, r := range heldBack {
+		taskID, execID, _ := activityResolution(r)
+		for _, e := range newEvents {
+			if ts := e.GetTaskScheduled(); ts != nil && e.GetEventId() == taskID && ts.GetTaskExecutionId() == execID {
+				out = append(out, r)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// withoutTasks returns tasks without the TaskScheduled events the results
+// resolve.
+func withoutTasks(tasks, results []*backend.HistoryEvent) []*backend.HistoryEvent {
+	if len(results) == 0 {
+		return tasks
+	}
+	resolved := make(map[int32]struct{}, len(results))
+	for _, r := range results {
+		taskID, _, _ := activityResolution(r)
+		resolved[taskID] = struct{}{}
+	}
+	out := make([]*backend.HistoryEvent, 0, len(tasks))
+	for _, t := range tasks {
+		if _, ok := resolved[t.GetEventId()]; !ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // filterValidInboxEvents returns inbox events that pass validation. Result
