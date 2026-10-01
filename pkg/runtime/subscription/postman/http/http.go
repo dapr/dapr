@@ -23,12 +23,14 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -90,6 +92,12 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		// bail out before the status is known. Ending a span twice is a no-op,
 		// so the success path can still set the status first.
 		defer span.End()
+	}
+
+	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+		if parsedBaggage, err := baggage.Parse(baggageString); err == nil {
+			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+		}
 	}
 
 	start := time.Now()
@@ -241,9 +249,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		// inbound trace context is still traced. No ops if tracing is off.
 		sc := pubsub.ParentSpanContextFromCloudEvent(pubsubMsg.CloudEvent, log)
 
-		var span trace.Span
-
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+		// The returned context is discarded: each entry gets its own span and
+		// the batch is delivered under one call.
+		_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
 		if span != nil {
 			spans[n] = span
 			n++

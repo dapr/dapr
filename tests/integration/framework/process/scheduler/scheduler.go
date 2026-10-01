@@ -258,9 +258,9 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			return
 		}
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+		assert.NoError(c, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
 
 	if s.embed && !s.userpass {
@@ -452,11 +452,11 @@ func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metric
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
-	client, err := clientv3.New(clientv3.Config{
+	client, err := clientv3.New(client.WithEtcdLogger(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 5 * time.Second,
 		Context:     ctx,
-	})
+	}))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -632,7 +632,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 		DialTimeout: 5 * time.Second,
 		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return resp
 }

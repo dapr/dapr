@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -29,7 +30,6 @@ import (
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -105,7 +105,7 @@ func (p *payloadfanin) Run(t *testing.T, ctx context.Context) {
 		return chunk, nil
 	}))
 
-	cl := client.NewTaskHubGrpcClient(p.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	cl := client.NewTaskHubGrpcClient(p.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, registry))
 
 	id, err := cl.ScheduleNewWorkflow(ctx, "fanin")

@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -24,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -402,6 +404,12 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
+	// Baggage travels with the message independently of the span, so it is
+	// forwarded whether or not tracing is enabled.
+	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+		ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.BaggageHeader, baggageString)
+	}
+
 	return ctx, envelope, span, nil
 }
 
@@ -434,6 +442,12 @@ func ParentSpanContextFromCloudEvent(cloudEvent map[string]any, log logger.Logge
 	if !ok {
 		log.Debugf("ignoring unparseable trace context %q on pub/sub event %v; a new root span is started if tracing is enabled", traceID, cloudEvent[contribpubsub.IDField])
 		return trace.SpanContext{}
+	}
+
+	// A tracestate belongs to the parent it arrived with, so it is only applied
+	// once that parent has been parsed.
+	if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+		sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
 	}
 
 	return sc

@@ -32,13 +32,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -98,7 +98,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	tt.grpcClient = runtimev1pb.NewDaprClient(conn)
 
-	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(conn, logger.New(t))
 
 	t.Run("terminate", func(t *testing.T) {
 		delayTime := 30 * time.Second

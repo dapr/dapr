@@ -182,13 +182,10 @@ func TestDeliverBulkTracing(t *testing.T) {
 		assert.Equal(t, 1, continued, "the entry carrying a traceparent continues its trace")
 		assert.Equal(t, 3, roots, "the entries with no usable trace context each start a new root span")
 
-		traceParents := deliveredTraceParents(*delivered)
-		require.Len(t, traceParents, 4, "the app must be given a trace context for every entry")
-
-		for _, traceParent := range traceParents {
-			_, ok := diag.SpanContextFromW3CString(traceParent)
-			assert.True(t, ok, "injected traceparent %q must be parseable", traceParent)
-		}
+		// A bulk batch is delivered under a single call. DeliverBulk starts a
+		// span per entry but does not inject any of them into the outgoing
+		// metadata, so the app is handed no per-entry traceparent.
+		assert.Empty(t, deliveredTraceParents(*delivered))
 	})
 
 	t.Run("tracing disabled starts no span", func(t *testing.T) {

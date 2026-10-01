@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -88,7 +89,7 @@ func (tp *tampered) Run(tt *testing.T, ctx context.Context) {
 		return "", nil
 	})
 
-	client := dworkflow.NewClient(tp.daprd.GRPCConn(tt, ctx))
+	client := dworkflow.NewClientWithLogger(tp.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-tamper")
@@ -116,7 +117,7 @@ func (tp *tampered) Run(tt *testing.T, ctx context.Context) {
 	tp.daprd.Restart(tt, ctx)
 	tp.daprd.WaitUntilRunning(tt, ctx)
 
-	client = dworkflow.NewClient(tp.daprd.GRPCConn(tt, ctx))
+	client = dworkflow.NewClientWithLogger(tp.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	_, err = client.FetchWorkflowMetadata(ctx, id)

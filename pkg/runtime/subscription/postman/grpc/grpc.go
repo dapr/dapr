@@ -206,12 +206,10 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		// inbound trace context is still traced.
 		sc := pubsub.ParentSpanContextFromCloudEvent(pubSubMsg.CloudEvent, log)
 
-		// no ops if trace is off
-		var span trace.Span
-
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
+		// no ops if trace is off. The returned context is discarded: each entry
+		// gets its own span and the batch is delivered under one call.
+		_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
 		if span != nil {
-			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 			spans[n] = span
 			n++
 		}
