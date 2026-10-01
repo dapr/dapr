@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,6 +77,7 @@ type Scheduler struct {
 	userpass bool
 
 	runOnce sync.Once
+	fopts   []Option
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -207,7 +209,23 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		namespace:          opts.namespace,
 		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
 		embed:              opts.embed == nil || *opts.embed,
+		fopts:              fopts,
 	}
+}
+
+// Clone returns a new, not yet running, Scheduler with the same options,
+// identity, ports, initial cluster and data dir, with opts applied on top.
+func (s *Scheduler) Clone(t *testing.T, opts ...Option) *Scheduler {
+	t.Helper()
+	return New(t, slices.Concat(s.fopts, []Option{
+		WithID(s.id),
+		WithPort(s.port),
+		WithHealthzPort(s.healthzPort),
+		WithMetricsPort(s.metricsPort),
+		WithEtcdClientPort(s.etcdClientPort),
+		WithInitialCluster(s.etcdInitialCluster),
+		WithDataDir(s.dataDir),
+	}, opts)...)
 }
 
 func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
