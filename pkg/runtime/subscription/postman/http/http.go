@@ -95,8 +95,11 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	}
 
 	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
-		if parsedBaggage, err := baggage.Parse(baggageString); err == nil {
-			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+		// Forward the raw string: re-serializing parsed baggage loses member order.
+		// Drop any ctx baggage, which the HTTP channel would otherwise prefer.
+		if _, err := baggage.Parse(baggageString); err == nil {
+			ctx = baggage.ContextWithoutBaggage(ctx)
+			req.WithCustomHTTPMetadata(map[string]string{diagConsts.BaggageHeader: baggageString})
 		}
 	}
 
