@@ -798,6 +798,12 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 	return runtimeState, nil
 }
 
+// isCancelled returns whether err is a context cancellation, either local or
+// carried as a gRPC Canceled status.
+func isCancelled(err error) bool {
+	return errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled
+}
+
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
 
@@ -838,6 +844,10 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		// so callers can rely on errors.Is.
 		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
+		// The caller is still waiting but the stream was cancelled, so the
+		// runtime (not the caller) is shutting down. Tell the client to retry.
+		case ctx.Err() == nil && isCancelled(err):
+			return status.Error(codes.Unavailable, "target runtime shutting down, retry")
 		case !targeterrors.IsStalled(err):
 			return err
 		}
