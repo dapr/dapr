@@ -28,13 +28,12 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/task"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
