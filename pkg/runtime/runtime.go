@@ -894,9 +894,29 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.appHealthReady = a.appHealthReadyInit
 	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.channels.AppChannel() != nil {
+		// The placement client starts only once hosted actors are registered,
+		// which otherwise waits for the app's first healthy probe. The actors
+		// daprd hosts itself, such as the workflow engine's, do not use the
+		// app channel, so once a probe fails, register with no app actor
+		// types: an app that is unhealthy from the start must not keep
+		// workflows from running. Its own actor types are registered when it
+		// first turns healthy.
+		rctx := ctx
+		var registerUnhealthy sync.Once
+
 		// We can't just pass "a.channels.HealthProbe" because appChannel may be re-created
 		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (*apphealth.Status, error) {
-			return a.channels.AppChannel().HealthProbe(ctx)
+			status, err := a.channels.AppChannel().HealthProbe(ctx)
+			if err != nil || status == nil || !status.IsHealthy {
+				registerUnhealthy.Do(func() {
+					go func() {
+						if rerr := a.actors.RegisterHosted(rctx, hostconfig.Config{}); rerr != nil {
+							log.Warnf("Failed to register hosted actors while the app is unhealthy: %s", rerr)
+						}
+					}()
+				})
+			}
+			return status, err
 		})
 		err := a.runnerCloser.AddCloser(a.appHealth)
 		if err != nil {
