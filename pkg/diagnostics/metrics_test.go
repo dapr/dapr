@@ -37,9 +37,7 @@ func TestInitMetricsOnTwoMeters(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for ctx.Err() == nil {
 			stats.RecordWithOptions(ctx,
 				stats.WithRecorder(first),
@@ -49,7 +47,7 @@ func TestInitMetricsOnTwoMeters(t *testing.T) {
 				),
 			)
 		}
-	}()
+	})
 
 	second := view.NewMeter()
 	t.Cleanup(second.Stop)

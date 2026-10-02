@@ -96,8 +96,6 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, err
 	}
 
-	log.Debugf("Connected to placement %s", hostPort)
-
 	return conn, nil
 }
 
