@@ -108,6 +108,8 @@ func (e *failure) Run(t *testing.T, ctx context.Context) {
 	assert.Contains(t, meta.GetFailureDetails().GetErrorMessage(), "injected failure")
 
 	assert.Equal(t, int32(0), activityCalls.Load(), "the activity must never execute; its failure was injected")
-	assert.Equal(t, 0, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)),
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, fworkflow.IsTaskScheduledFor(1)),
+		"the resolved activity's scheduling must be recorded")
+	assert.Zero(t, e.workflow.Scheduler().JobKeyCount(t, ctx, string(id)+"::1::"),
 		"the resolved activity must not be dispatched")
 }
