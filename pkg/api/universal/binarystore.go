@@ -30,8 +30,8 @@ func validateBinaryStoreFileName(fileName string) error {
 	switch {
 	case fileName == "":
 		return messages.ErrBinaryStoreNameMissing
-	case fileName == ".", fileName == "..", strings.ContainsAny(fileName, `/\`):
-		return messages.ErrBadRequest.WithFormat("invalid file name %q: must be a single path segment", fileName)
+	case fileName == ".", fileName == "..", strings.ContainsAny(fileName, `/\*?[]#`):
+		return messages.ErrBadRequest.WithFormat("invalid file name %q: contains reserved characters", fileName)
 	default:
 		return nil
 	}

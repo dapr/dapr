@@ -216,7 +216,18 @@ func TestBinaryStore_InvalidFileName(t *testing.T) {
 	u, _ := newBinaryTestUniversal(t)
 	ctx := context.Background()
 
-	for _, fileName := range []string{"a/b.bin", `a\b.bin`, "../x.bin", "/x.bin", ".", ".."} {
+	for _, fileName := range []string{
+		"a/b.bin",
+		`a\b.bin`,
+		"../x.bin",
+		"/x.bin",
+		"a*.bin",
+		"a?.bin",
+		"a[1].bin",
+		"a#1.bin",
+		".",
+		"..",
+	} {
 		t.Run(fileName, func(t *testing.T) {
 			require.ErrorIs(t, u.SetBinaryFileAlpha1(ctx, "mystore", fileName, true, bytes.NewReader(nil)), messages.ErrBadRequest)
 			_, err := u.GetBinaryFileAlpha1(ctx, "mystore", fileName)
