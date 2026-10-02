@@ -35,6 +35,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/kit/streams"
 )
 
 func TestHandleRequest(t *testing.T) {
@@ -602,4 +603,70 @@ func TestHandleRequestWithGlobPatterns(t *testing.T) {
 			assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
 		})
 	}
+}
+
+func TestReadRequestBody(t *testing.T) {
+	t.Run("body within limit is read fully", func(t *testing.T) {
+		payload := bytes.Repeat([]byte("a"), 1024)
+		req := httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader(payload))
+
+		body, err := readRequestBody(req)
+		require.NoError(t, err)
+		assert.Equal(t, payload, body)
+	})
+
+	t.Run("empty body returns error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader(nil))
+
+		_, err := readRequestBody(req)
+		require.Error(t, err)
+	})
+
+	t.Run("nil body returns error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mutate", nil)
+		req.Body = nil
+
+		_, err := readRequestBody(req)
+		require.Error(t, err)
+	})
+
+	t.Run("body exceeding the limit is rejected", func(t *testing.T) {
+		payload := bytes.Repeat([]byte("a"), maxAdmissionRequestBodySize+1)
+		req := httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader(payload))
+
+		body, err := readRequestBody(req)
+		require.ErrorIs(t, err, streams.ErrStreamTooLarge)
+		assert.Nil(t, body)
+	})
+}
+
+func TestHandleRequestRejectsOversizedBody(t *testing.T) {
+	i, err := NewInjector(Options{
+		Config: Config{
+			SidecarImage:            "test-image",
+			Namespace:               "test-ns",
+			ControlPlaneTrustDomain: "test-trust-domain",
+		},
+		DaprClient: fake.NewSimpleClientset(),
+		KubeClient: kubernetesfake.NewSimpleClientset(),
+		Healthz:    healthz.New(),
+	})
+	require.NoError(t, err)
+
+	injector := i.(*injector)
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
+		return nil, nil
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
+	t.Cleanup(ts.Close)
+
+	// Exceed the limit by a wide margin (rather than by a single byte) so the
+	// assertion isn't sensitive to how the underlying connection chunks reads.
+	oversized := bytes.Repeat([]byte("a"), maxAdmissionRequestBodySize+1024*1024)
+	resp, err := http.Post(ts.URL, runtime.ContentTypeJSON, bytes.NewReader(oversized))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
 }
