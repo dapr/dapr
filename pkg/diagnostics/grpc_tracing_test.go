@@ -1013,3 +1013,27 @@ func TestSpanContextToGRPCMetadataNoDuplicateTraceparent(t *testing.T) {
 	md, _ := grpcMetadata.FromOutgoingContext(ctx)
 	assert.Len(t, md.Get("traceparent"), 1, "expected exactly one traceparent, not a duplicate")
 }
+
+func TestSpanContextToGRPCMetadataClearsStaleTracestate(t *testing.T) {
+	// #10563 follow-up: when the current span has no tracestate, a stale tracestate
+	// already on the outgoing context (from the caller) must be cleared, not retained
+	// alongside the replaced traceparent.
+	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(),
+		"traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+		"tracestate", "vendor=stale",
+	)
+
+	traceID, _ := trace.TraceIDFromHex("11111111111111111111111111111111")
+	spanID, _ := trace.SpanIDFromHex("2222222222222222")
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	ctx = SpanContextToGRPCMetadata(ctx, sc)
+
+	md, _ := grpcMetadata.FromOutgoingContext(ctx)
+	assert.Len(t, md.Get("traceparent"), 1, "expected exactly one traceparent")
+	assert.Empty(t, md.Get("tracestate"), "stale tracestate should be cleared when the span has none")
+}

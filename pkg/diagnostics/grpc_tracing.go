@@ -338,8 +338,12 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 	md.Set(contribpubsub.TraceParentField, SpanContextToW3CString(spanContext))
 	md.Set(diagConsts.GRPCTraceContextKey, string(traceContextBinary))
 	// grpc-trace-bin carries no room for tracestate, so it must travel as its own header.
+	// Clear any existing tracestate when the current span has none, so a stale value from
+	// the caller is not left behind next to the replaced traceparent.
 	if tracestate := TraceStateToW3CString(spanContext); tracestate != "" {
 		md.Set(diagConsts.TracestateHeader, tracestate)
+	} else {
+		md.Delete(diagConsts.TracestateHeader)
 	}
 	return grpcMetadata.NewOutgoingContext(ctx, md)
 }
