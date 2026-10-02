@@ -127,8 +127,6 @@ func (l *leader) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 		}
 		l.lock.Unlock()
 
-		log.Infof("Connected to scheduler placement leader %s", addr)
-
 		return conn, nil
 	}
 }
