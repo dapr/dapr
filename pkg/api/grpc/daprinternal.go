@@ -358,6 +358,7 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		IsTimer:        in.GetIsTimer(),
 		IsRemote:       true,
 		SkipLock:       in.GetSkipLock(),
+		Callback:       in.GetCallback(),
 	})
 }
 
