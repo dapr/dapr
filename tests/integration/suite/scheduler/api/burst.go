@@ -88,7 +88,7 @@ func (b *burst) Run(t *testing.T, ctx context.Context) {
 		for a := range apps {
 			for p := range producers {
 				for j := range perWave {
-					name := "w" + strconv.Itoa(wave) + "-p" + strconv.Itoa(p) + "-j" + strconv.Itoa(j)
+					name := "w" + strconv.Itoa(wave) + "-a" + strconv.Itoa(a) + "-p" + strconv.Itoa(p) + "-j" + strconv.Itoa(j)
 					expected[name] = struct{}{}
 					wg.Go(func() {
 						_, err := client.ScheduleJob(ctx, b.scheduler.JobNowJob(name, "default", "app"+strconv.Itoa(a)))
