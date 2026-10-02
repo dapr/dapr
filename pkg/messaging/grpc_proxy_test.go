@@ -242,6 +242,46 @@ func TestIntercept(t *testing.T) {
 		assert.NotContains(t, md, securityConsts.APITokenHeader)
 	})
 
+	t.Run("proxy to a remote app strips caller-supplied trace headers", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return metadata.AppendToOutgoingContext(ctx, diagConsts.TraceparentHeader, "00-daprspan-daprspan-01")
+		})
+
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{
+				id: "b",
+			}, nil
+		})
+
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{
+			diagConsts.GRPCProxyAppIDKey:   []string{"b"},
+			diagConsts.TraceparentHeader:   []string{"00-callerspan-callerspan-01"},
+			diagConsts.TracestateHeader:    []string{"caller-state"},
+			diagConsts.GRPCTraceContextKey: []string{"caller-bin"},
+		})
+		proxy := p.(*proxy)
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown(true)
+
+		require.NoError(t, err)
+		assert.NotNil(t, conn)
+
+		md, _ := metadata.FromOutgoingContext(ctx)
+		// Only the sidecar's own trace header set by telemetryFn should be
+		// forwarded: the caller-supplied traceparent must not survive
+		// alongside it as a second, comma-joined value.
+		require.Len(t, md[diagConsts.TraceparentHeader], 1)
+		assert.Equal(t, "00-daprspan-daprspan-01", md[diagConsts.TraceparentHeader][0])
+		assert.NotContains(t, md, diagConsts.TracestateHeader)
+		assert.NotContains(t, md, diagConsts.GRPCTraceContextKey)
+	})
+
 	t.Run("access policies applied", func(t *testing.T) {
 		acl := &config.AccessControlList{
 			DefaultAction: "deny",
