@@ -542,4 +542,4 @@ replace (
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
-replace github.com/diagridio/go-etcd-cron => github.com/cicoyle/go-etcd-cron v0.0.0-20261002185610-007be7fe6447
+replace github.com/diagridio/go-etcd-cron => github.com/cicoyle/go-etcd-cron v0.0.0-20261002193154-3b00c4e0bc9a

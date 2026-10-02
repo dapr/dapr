@@ -437,8 +437,8 @@ github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459/go.mod h1:CQthfP
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/cicoyle/go-etcd-cron v0.0.0-20261002185610-007be7fe6447 h1:/0iMrkVPpCbhufKI59HfWdHWdV8U43ypkXI2FgmtuLc=
-github.com/cicoyle/go-etcd-cron v0.0.0-20261002185610-007be7fe6447/go.mod h1:pkcsu8DFcUmoVMLPcwevKg5y2jRclOGUmTqkqhmebPE=
+github.com/cicoyle/go-etcd-cron v0.0.0-20261002193154-3b00c4e0bc9a h1:t6CPZYg02tOzVf7jZ8y/LXKEfQ7J0ZVQrmKlDCsrscM=
+github.com/cicoyle/go-etcd-cron v0.0.0-20261002193154-3b00c4e0bc9a/go.mod h1:pkcsu8DFcUmoVMLPcwevKg5y2jRclOGUmTqkqhmebPE=
 github.com/cinience/go_rocketmq v0.0.2 h1:HZkcQ2wfwZeigkpUs71Gojp/WRiBzkz2uezrOFquh08=
 github.com/cinience/go_rocketmq v0.0.2/go.mod h1:2YNY7emT546dcFpMEWLesmAEi4ndW7+tX5VfNf1Zsgs=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
