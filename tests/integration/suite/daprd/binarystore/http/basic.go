@@ -86,27 +86,70 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, payload, got)
 	})
 
+	t.Run("file name escaping", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			path    string
+			payload string
+		}{
+			{name: "plus", path: "file+name.bin", payload: "plus"},
+			{name: "encoded space", path: "file%20name.bin", payload: "space"},
+		}
+
+		for _, test := range tests {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, base+"/"+test.path, strings.NewReader(test.payload))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			require.Equal(t, http.StatusNoContent, resp.StatusCode)
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/"+test.path, nil)
+				require.NoError(t, err)
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+
+				got, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				assert.Equal(t, test.payload, string(got))
+			})
+		}
+	})
+
 	t.Run("PUT validates file name", func(t *testing.T) {
 		tests := []struct {
-			name       string
-			fileName   string
-			statusCode int
+			name        string
+			fileName    string
+			requestPath string
+			statusCode  int
 		}{
 			{name: "valid", fileName: "valid-name.bin", statusCode: http.StatusNoContent},
 			{name: "nested path", fileName: "a/b.bin", statusCode: http.StatusBadRequest},
+			{name: "encoded slash", requestPath: "a%2Fb.bin", statusCode: http.StatusBadRequest},
 			{name: "parent path", fileName: "../x.bin", statusCode: http.StatusBadRequest},
 			{name: "leading slash", fileName: "/x.bin", statusCode: http.StatusBadRequest},
 			{name: "backslash", fileName: `a\b.bin`, statusCode: http.StatusBadRequest},
+			{name: "asterisk", requestPath: "a*.bin", statusCode: http.StatusBadRequest},
 			{name: "dot", fileName: ".", statusCode: http.StatusBadRequest},
 			{name: "parent directory", fileName: "..", statusCode: http.StatusBadRequest},
 		}
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
+				requestPath := test.requestPath
+				if requestPath == "" {
+					requestPath = url.PathEscape(test.fileName)
+				}
+
 				req, err := http.NewRequestWithContext(
 					ctx,
 					http.MethodPut,
-					base+"/"+url.PathEscape(test.fileName),
+					base+"/"+requestPath,
 					strings.NewReader("payload"),
 				)
 				require.NoError(t, err)
