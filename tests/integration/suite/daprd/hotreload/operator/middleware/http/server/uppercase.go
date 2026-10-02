@@ -342,7 +342,7 @@ func (u *uppercase) doReq(t require.TestingT, ctx context.Context, client *netht
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader("hello"))
-		if !assert.NoError(t, err) {
+		if !assert.NoError(c, err) {
 			return
 		}
 		resp, err := client.Do(req)
