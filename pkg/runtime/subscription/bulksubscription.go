@@ -82,7 +82,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		entryIdIndexMap := make(map[string]int, len(msg.Entries)) //nolint:stylecheck
 		bulkSubCallData := todo.BulkSubscribeCallData{
 			BulkResponses:   &bulkResponses,
-			BulkSubDiag:     &bulkSubDiag,
+			BulkSubDiag:     bulkSubDiag,
 			EntryIdIndexMap: &entryIdIndexMap,
 			PsName:          psName,
 			Topic:           topic,
@@ -95,12 +95,12 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route)
 			if dlqErr != nil {
 				todo.PopulateAllBulkResponsesWithError(msg, &bulkResponses, err)
-				todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+				todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 
 				return bulkResponses, err
 			}
 
-			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 
 			return nil, nil
 		}
@@ -146,7 +146,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 				if contribpubsub.HasExpired(cloudEvent) {
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
 
-					bulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
+					bulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 
 					if route.DeadLetterTopic != "" {
 						_ = s.sendToDeadLetter(ctx, psName, &contribpubsub.NewMessage{
@@ -189,26 +189,26 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		}
 
 		if errors.Is(overallInvokeErr, context.Canceled) {
-			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 			return bulkResponses, overallInvokeErr
 		}
 
 		if hasAnyError {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			bulkSubDiag.RetryReported = true
+			bulkSubDiag.SetRetryReported()
 			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route)
 			if dlqErr != nil {
-				todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+				todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 				return bulkResponses, err
 			}
 
-			todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+			todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 
 			return nil, nil
 		}
 
-		todo.ReportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
+		todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
 
 		return bulkResponses, err
 	}
@@ -238,9 +238,7 @@ func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCal
 		}
 	}
 
-	if !bscData.BulkSubDiag.RetryReported {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(msg.Entries))
-	}
+	bscData.BulkSubDiag.AddRetriesIfNotReported(int64(len(msg.Entries)))
 
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
@@ -263,7 +261,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 		// The event does not match any route specified so ignore it.
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.PsName, bscData.Topic)
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 		if route.DeadLetterTopic != "" {
 			_ = s.sendToDeadLetter(ctx, bscData.PsName, &contribpubsub.NewMessage{
 				Data:        message.Event,
@@ -333,10 +331,7 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		data = data[:n]
 	}
 
-	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(data))
-	if bscData.BulkSubDiag.RetryReported {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] -= int64(len(data))
-	}
+	bscData.BulkSubDiag.AddDeadLettered(int64(len(data)))
 
 	req := &contribpubsub.BulkPublishRequest{
 		Entries:    data,

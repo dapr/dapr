@@ -16,6 +16,7 @@ package subscription
 import (
 	"context"
 	"maps"
+	"sync"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -31,6 +32,15 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 	rawPayload bool, envelope map[string]any,
 ) (*[]contribpubsub.BulkSubscribeResponseEntry, error) {
 	bscData := *bulkSubCallData
+
+	// pending holds the entries still to be delivered, which the accumulator
+	// narrows to the ones that failed before the next attempt runs. A timed out
+	// attempt is abandoned rather than stopped, so it can still be delivering
+	// while the attempt that replaced it is accumulated: guard pending, and give
+	// every attempt its own message, so that the two never share one.
+	var pendingLock sync.Mutex
+	pending := psm.PubSubMessages
+
 	policyRunner := resiliency.NewRunnerWithOptions(
 		ctx, policyDef, resiliency.RunnerOpts[*todo.BulkSubscribeResiliencyRes]{
 			Accumulator: func(bsrr *todo.BulkSubscribeResiliencyRes) {
@@ -42,25 +52,34 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 					}
 				}
 
-				filteredPubSubMsgs := utils.Filter(psm.PubSubMessages, func(ps todo.Message) bool {
+				pendingLock.Lock()
+				defer pendingLock.Unlock()
+
+				// utils.Filter returns a new slice, so an attempt still working
+				// through an earlier one is left untouched by this.
+				pending = utils.Filter(pending, func(ps todo.Message) bool {
 					if index, ok := (*bscData.EntryIdIndexMap)[ps.Entry.EntryId]; ok {
 						return (*bscData.BulkResponses)[index].Error != nil
 					}
 
 					return false
 				})
-				psm.PubSubMessages = filteredPubSubMsgs
-				psm.Length = len(filteredPubSubMsgs)
 			},
 		})
 	_, err := policyRunner(func(ctx context.Context) (*todo.BulkSubscribeResiliencyRes, error) {
+		pendingLock.Lock()
+		attempt := psm
+		attempt.PubSubMessages = pending
+		pendingLock.Unlock()
+		attempt.Length = len(attempt.PubSubMessages)
+
 		bsrr := &todo.BulkSubscribeResiliencyRes{
-			Entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(psm.PubSubMessages)),
+			Entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(attempt.PubSubMessages)),
 			Envelope: maps.Clone(envelope),
 		}
 		err := s.postman.DeliverBulk(ctx, &postman.DeliverBulkRequest{
 			BulkSubCallData:      &bscData,
-			BulkSubMsg:           &psm,
+			BulkSubMsg:           &attempt,
 			BulkSubResiliencyRes: bsrr,
 			BulkResponses:        &bsrr.Entries,
 			RawPayload:           rawPayload,
