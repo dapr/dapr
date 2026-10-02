@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.18.0-rc.1.0.20260924175451-6a7838d26286
+	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261001154511-469b0a027a14
 	github.com/dapr/durabletask-go v0.14.2-0.20260930152504-a90f95c3898d
 	github.com/dapr/kit v0.18.3-0.20260727141402-dd127582d044
 	github.com/diagridio/go-etcd-cron v0.12.9
@@ -430,7 +430,7 @@ require (
 	github.com/tchap/go-patricia/v2 v2.3.2 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.128 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.3.128 // indirect
-	github.com/tetratelabs/wazero v1.8.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -542,7 +542,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-// TEMPORARY: pulling in binary store building block support from dapr/components-contrib#4559 until it merges.
-// Remove this replace once that PR lands and components-contrib is bumped to a released version.
-replace github.com/dapr/components-contrib => github.com/WhitWaldo/dapr-components-contrib v0.0.0-20260922165401-9b858106d10c

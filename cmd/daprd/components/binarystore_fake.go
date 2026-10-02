@@ -1,4 +1,4 @@
-//go:build allcomponents || binarystore_fake
+//go:build binarystore_fake
 
 /*
 Copyright 2026 The Dapr Authors
