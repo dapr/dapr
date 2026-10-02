@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,7 +98,14 @@ func (p *pubsubHTTP) Run(t *testing.T, ctx context.Context) {
 	select {
 	case headers := <-p.headerCh:
 		assert.Equal(t, "vendor=value", headers.Get("tracestate"))
-		assert.Equal(t, "key1=value1,key2=value2", headers.Get("baggage"))
+
+		// The HTTP subscriber path round-trips baggage through the OpenTelemetry
+		// API, whose String() iterates an unordered map, so compare members
+		// rather than the serialised string.
+		assert.ElementsMatch(t,
+			[]string{"key1=value1", "key2=value2"},
+			strings.Split(headers.Get("baggage"), ","),
+		)
 	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timed out waiting for pubsub event to be delivered to app")
 	}
