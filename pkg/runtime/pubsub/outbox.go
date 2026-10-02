@@ -38,6 +38,7 @@ const (
 	outboxPublishTopicKey            = "outboxPublishTopic"
 	outboxPubsubKey                  = "outboxPubsub"
 	outboxDiscardWhenMissingStateKey = "outboxDiscardWhenMissingState"
+	outboxInternalTopicKey           = "outboxInternalTopic"
 	outboxStatePrefix                = "outbox"
 	defaultStateScanDelay            = time.Second * 1
 )
@@ -49,6 +50,7 @@ type outboxConfig struct {
 	publishTopic                  string
 	outboxPubsub                  string
 	outboxDiscardWhenMissingState bool
+	internalTopic                 string
 }
 
 type outboxImpl struct {
@@ -101,8 +103,8 @@ func (o *outboxImpl) componentContext(ctx context.Context) context.Context {
 // AddOrUpdateOutbox examines a statestore for outbox properties and saves it for later usage in outbox operations.
 func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 	var (
-		publishPubSub, publishTopicKey, outboxPubsub string
-		outboxDiscardWhenMissingState                bool
+		publishPubSub, publishTopicKey, outboxPubsub, internalTopic string
+		outboxDiscardWhenMissingState                               bool
 	)
 
 	for _, v := range stateStore.Spec.Metadata {
@@ -115,6 +117,8 @@ func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 			outboxPubsub = v.Value.String()
 		case outboxDiscardWhenMissingStateKey:
 			outboxDiscardWhenMissingState = kitstrings.IsTruthy(v.Value.String())
+		case outboxInternalTopicKey:
+			internalTopic = v.Value.String()
 		}
 	}
 
@@ -131,6 +135,7 @@ func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 			publishTopic:                  publishTopicKey,
 			outboxPubsub:                  outboxPubsub,
 			outboxDiscardWhenMissingState: outboxDiscardWhenMissingState,
+			internalTopic:                 internalTopic,
 		}
 	}
 }
@@ -254,7 +259,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName: c.outboxPubsub,
 				Data:       data,
-				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
+				Topic:      outboxTopic(source, c.publishTopic, o.namespace, c.internalTopic),
 			}, TransportModeGRPC)
 			if err != nil {
 				return nil, err
@@ -267,7 +272,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 	return operations, nil
 }
 
-func outboxTopic(appID, topic, namespace string) string {
+func outboxTopic(appID, topic, namespace, internalTopic string) string {
+	if internalTopic != "" {
+		return internalTopic
+	}
 	return namespace + appID + topic + "outbox"
 }
 
@@ -283,7 +291,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 		}
 
 		outboxPubsub.Subscribe(o.componentContext(ctx), contribPubsub.SubscribeRequest{
-			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
+			Topic: outboxTopic(appID, c.publishTopic, o.namespace, c.internalTopic),
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
 			// The per-message context originates from the pubsub component, so
 			// re-attach the workload's SPIFFE identity for the state operations
