@@ -263,3 +263,81 @@ func TestStartupWait(t *testing.T) {
 		assert.Empty(t, p.connector.Address())
 	})
 }
+
+type countingConnector struct {
+	addr  string
+	calls atomic.Int64
+}
+
+func (c *countingConnector) Connect(context.Context) (*grpc.ClientConn, error) {
+	c.calls.Add(1)
+	return nil, errors.New("counting connector does not dial")
+}
+func (c *countingConnector) Address() string { return c.addr }
+
+// TestLeaderlessSchedulerKeepsSchedulerPlacement asserts only an unsupported
+// signal moves a sidecar off scheduler placement, never a missing leader.
+func TestLeaderlessSchedulerKeepsSchedulerPlacement(t *testing.T) {
+	t.Parallel()
+
+	newPlacement := func(ldr *leadership.Leadership) (*placement, *countingConnector) {
+		v1 := &countingConnector{addr: "placement"}
+		return &placement{
+			id:         "test-id",
+			namespace:  "default",
+			ready:      &atomic.Bool{},
+			htarget:    healthzfake.New(),
+			actorTable: tablefake.New(),
+			inflight:   inflight.New(inflight.Options{Hostname: "localhost", Port: "3500"}),
+			leadership: ldr,
+			connector:  leaderconnector.New(leaderconnector.Options{Leadership: ldr}),
+			streamFactory: func(context.Context, *grpc.ClientConn) (transport.Transport, error) {
+				return nil, errors.New("no stream")
+			},
+			schedulerPlacement: true,
+			alt:                &Fallback{Connector: v1},
+		}, v1
+	}
+
+	t.Run("a leaderless advertisement waits on the scheduler", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("")
+		p, v1 := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*500)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Zero(t, v1.calls.Load(), "the placement service must not be tried")
+		assert.True(t, p.schedulerPlacement)
+		require.NotNil(t, p.alt)
+		assert.Equal(t, "placement", p.alt.Connector.Address())
+	})
+
+	t.Run("a leader lost to a leaderless advertisement waits on the scheduler", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.Set("127.0.0.1:1")
+		p, v1 := newPlacement(ldr)
+		go func() {
+			time.Sleep(time.Millisecond * 100)
+			ldr.Set("")
+		}()
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*800)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Zero(t, v1.calls.Load(), "the placement service must not be tried")
+		assert.True(t, p.schedulerPlacement)
+	})
+
+	t.Run("unsupported moves to the placement service", func(t *testing.T) {
+		t.Parallel()
+		ldr := leadership.New()
+		ldr.SetUnsupported()
+		p, v1 := newPlacement(ldr)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second*2)
+		t.Cleanup(cancel)
+		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
+		assert.Positive(t, v1.calls.Load())
+		assert.False(t, p.schedulerPlacement)
+	})
+}
