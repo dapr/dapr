@@ -81,7 +81,7 @@ func (x *ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
 }
 
-func (x *SetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+func (x *SetBinaryFileRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.DBNameSpanAttributeKey] = x.GetInitialRequest().GetComponentName()
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
@@ -89,11 +89,11 @@ func (x *SetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[stri
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
 }
 
-func (*SetBinaryFileRequest_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+func (*SetBinaryFileRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 
-func (x *GetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+func (x *GetBinaryFileRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.DBNameSpanAttributeKey] = x.GetComponentName()
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
@@ -101,7 +101,7 @@ func (x *GetBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[stri
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType
 }
 
-func (x *DeleteBinaryFileRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+func (x *DeleteBinaryFileRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.DBNameSpanAttributeKey] = x.GetComponentName()
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BinaryStoreBuildingBlockType

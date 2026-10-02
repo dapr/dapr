@@ -24,10 +24,10 @@ option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
 import "dapr/proto/common/v1/common.proto";
 
-// SetBinaryFileRequest is the request for SetBinaryFileAlpha1.
+// SetBinaryFileRequestAlpha1 is the request for SetBinaryFileAlpha1.
 // The first message in the stream must contain the options; subsequent
 // messages carry chunks of the binary file content via payload.
-message SetBinaryFileRequest {
+message SetBinaryFileRequestAlpha1 {
   oneof set_binary_file_request_type {
     // Request details. Must be present in the first message only.
     SetBinaryFileRequestInitialAlpha1 initial_request = 1;
@@ -49,30 +49,30 @@ message SetBinaryFileRequestInitialAlpha1 {
   optional bool overwrite = 3 [json_name="overwrite"];
 }
 
-// SetBinaryFileResponse is the response for SetBinaryFileAlpha1.
-message SetBinaryFileResponse {}
+// SetBinaryFileResponseAlpha1 is the response for SetBinaryFileAlpha1.
+message SetBinaryFileResponseAlpha1 {}
 
-// GetBinaryFileRequest is the request for GetBinaryFileAlpha1.
-message GetBinaryFileRequest {
+// GetBinaryFileRequestAlpha1 is the request for GetBinaryFileAlpha1.
+message GetBinaryFileRequestAlpha1 {
   // Name of the component. Required.
   string component_name = 1 [json_name="componentName"];
   // Name of the file to retrieve. Required.
   string file_name = 2 [json_name="fileName"];
 }
 
-// GetBinaryFileResponse is the streaming response for GetBinaryFileAlpha1.
-message GetBinaryFileResponse {
+// GetBinaryFileResponseAlpha1 is the streaming response for GetBinaryFileAlpha1.
+message GetBinaryFileResponseAlpha1 {
   // Chunk of data.
   common.v1.StreamPayload payload = 1;
 }
 
-// DeleteBinaryFileRequest is the request for DeleteBinaryFileAlpha1.
-message DeleteBinaryFileRequest {
+// DeleteBinaryFileRequestAlpha1 is the request for DeleteBinaryFileAlpha1.
+message DeleteBinaryFileRequestAlpha1 {
   // Name of the component. Required.
   string component_name = 1 [json_name="componentName"];
   // Name of the file to delete. Required.
   string file_name = 2 [json_name="fileName"];
 }
 
-// DeleteBinaryFileResponse is the response for DeleteBinaryFileAlpha1.
-message DeleteBinaryFileResponse {}
+// DeleteBinaryFileResponseAlpha1 is the response for DeleteBinaryFileAlpha1.
+message DeleteBinaryFileResponseAlpha1 {}

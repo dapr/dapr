@@ -295,13 +295,13 @@ service Dapr {
 
   // Stores a binary file using a streaming request. The first message must
   // contain the options; subsequent messages carry the file content as chunks.
-  rpc SetBinaryFileAlpha1(stream SetBinaryFileRequest) returns (SetBinaryFileResponse) {}
+  rpc SetBinaryFileAlpha1(stream SetBinaryFileRequestAlpha1) returns (SetBinaryFileResponseAlpha1) {}
 
   // Retrieves a binary file as a stream of chunks.
-  rpc GetBinaryFileAlpha1(GetBinaryFileRequest) returns (stream GetBinaryFileResponse) {}
+  rpc GetBinaryFileAlpha1(GetBinaryFileRequestAlpha1) returns (stream GetBinaryFileResponseAlpha1) {}
 
   // Deletes a binary file.
-  rpc DeleteBinaryFileAlpha1(DeleteBinaryFileRequest) returns (DeleteBinaryFileResponse) {}
+  rpc DeleteBinaryFileAlpha1(DeleteBinaryFileRequestAlpha1) returns (DeleteBinaryFileResponseAlpha1) {}
 }
 
 // ShutdownRequest is the request for Shutdown.

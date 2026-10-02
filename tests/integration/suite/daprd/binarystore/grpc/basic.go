@@ -66,8 +66,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
@@ -75,15 +75,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		}))
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{Data: []byte("hello world"), Seq: 0},
 			},
 		}))
 		_, err = stream.CloseAndRecv()
 		require.NoError(t, err)
 
-		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequest{
+		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
 			FileName:      "hello.bin",
 		})
@@ -120,8 +120,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			t.Run(test.name, func(t *testing.T) {
 				stream, err := client.SetBinaryFileAlpha1(ctx)
 				require.NoError(t, err)
-				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 						InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 							ComponentName: "mystore",
 							FileName:      test.fileName,
@@ -129,8 +129,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				}))
-				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 						Payload: &commonv1pb.StreamPayload{
 							Data: []byte("payload"),
 							Seq:  0,
@@ -148,8 +148,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "large.bin",
@@ -161,8 +161,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		var seq uint64
 		for offset := 0; offset < len(payload); offset += chunkSize {
 			end := min(offset+chunkSize, len(payload))
-			require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-				SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+			require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+				SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 					Payload: &commonv1pb.StreamPayload{
 						Data: payload[offset:end],
 						Seq:  seq,
@@ -174,7 +174,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		_, err = stream.CloseAndRecv()
 		require.NoError(t, err)
 
-		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequest{
+		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
 			FileName:      "large.bin",
 		})
@@ -196,8 +196,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "oversized-chunk.bin",
@@ -206,8 +206,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 		}))
 
-		sendErr := stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		sendErr := stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{
 					Data: bytes.Repeat([]byte{0xAB}, 5<<20),
 					Seq:  0,
@@ -228,8 +228,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "out-of-order.bin",
@@ -237,16 +237,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		}))
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{
 					Data: []byte("second"),
 					Seq:  1,
 				},
 			},
 		}))
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{
 					Data: []byte("first"),
 					Seq:  0,
@@ -264,8 +264,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// "hello.bin" already exists from the previous subtest.
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
@@ -273,8 +273,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		}))
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{Data: []byte("second"), Seq: 0},
 			},
 		}))
@@ -286,7 +286,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("get missing file returns NotFound", func(t *testing.T) {
-		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequest{
+		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
 			FileName:      "missing.bin",
 		})
@@ -301,8 +301,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	t.Run("delete then get returns NotFound", func(t *testing.T) {
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_InitialRequest{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "temp.bin",
@@ -310,21 +310,21 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		}))
-		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequest_Payload{
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 				Payload: &commonv1pb.StreamPayload{Data: []byte("temp"), Seq: 0},
 			},
 		}))
 		_, err = stream.CloseAndRecv()
 		require.NoError(t, err)
 
-		_, err = client.DeleteBinaryFileAlpha1(ctx, &rtv1.DeleteBinaryFileRequest{
+		_, err = client.DeleteBinaryFileAlpha1(ctx, &rtv1.DeleteBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
 			FileName:      "temp.bin",
 		})
 		require.NoError(t, err)
 
-		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequest{
+		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
 			FileName:      "temp.bin",
 		})
@@ -337,7 +337,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("component not found returns InvalidArgument", func(t *testing.T) {
-		_, err := client.DeleteBinaryFileAlpha1(ctx, &rtv1.DeleteBinaryFileRequest{
+		_, err := client.DeleteBinaryFileAlpha1(ctx, &rtv1.DeleteBinaryFileRequestAlpha1{
 			ComponentName: "does-not-exist",
 			FileName:      "x.bin",
 		})

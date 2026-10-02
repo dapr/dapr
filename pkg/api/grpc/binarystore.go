@@ -34,7 +34,7 @@ const binaryStoreFirstChunkTimeout = 5 * time.Second
 // SetBinaryFileAlpha1 stores a binary file uploaded as a stream of chunks.
 func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the initial request from the caller.
-	reqProto := &runtimev1pb.SetBinaryFileRequest{}
+	reqProto := &runtimev1pb.SetBinaryFileRequestAlpha1{}
 	if err = a.binaryStoreGetFirstChunk(stream, reqProto); err != nil {
 		a.logger.Debug(err)
 		return err
@@ -90,11 +90,11 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 		return err
 	}
 
-	return stream.SendAndClose(&runtimev1pb.SetBinaryFileResponse{})
+	return stream.SendAndClose(&runtimev1pb.SetBinaryFileResponseAlpha1{})
 }
 
 // GetBinaryFileAlpha1 retrieves a binary file and streams it back as chunks.
-func (a *api) GetBinaryFileAlpha1(req *runtimev1pb.GetBinaryFileRequest, stream runtimev1pb.Dapr_GetBinaryFileAlpha1Server) (err error) { //nolint:nosnakecase
+func (a *api) GetBinaryFileAlpha1(req *runtimev1pb.GetBinaryFileRequestAlpha1, stream runtimev1pb.Dapr_GetBinaryFileAlpha1Server) (err error) { //nolint:nosnakecase
 	componentName := req.GetComponentName()
 	fileName := req.GetFileName()
 
@@ -124,7 +124,7 @@ func (a *api) GetBinaryFileAlpha1(req *runtimev1pb.GetBinaryFileRequest, stream 
 
 		n, read = body.Read(buf)
 		if n > 0 {
-			sendErr := stream.Send(&runtimev1pb.GetBinaryFileResponse{
+			sendErr := stream.Send(&runtimev1pb.GetBinaryFileResponseAlpha1{
 				Payload: &commonv1pb.StreamPayload{
 					Data: append([]byte(nil), buf[:n]...),
 					Seq:  seq,
@@ -150,17 +150,17 @@ func (a *api) GetBinaryFileAlpha1(req *runtimev1pb.GetBinaryFileRequest, stream 
 }
 
 // DeleteBinaryFileAlpha1 deletes a binary file.
-func (a *api) DeleteBinaryFileAlpha1(ctx context.Context, req *runtimev1pb.DeleteBinaryFileRequest) (*runtimev1pb.DeleteBinaryFileResponse, error) { //nolint:nosnakecase
+func (a *api) DeleteBinaryFileAlpha1(ctx context.Context, req *runtimev1pb.DeleteBinaryFileRequestAlpha1) (*runtimev1pb.DeleteBinaryFileResponseAlpha1, error) { //nolint:nosnakecase
 	if err := a.Universal.DeleteBinaryFileAlpha1(ctx, req.GetComponentName(), req.GetFileName()); err != nil {
 		a.logger.Debug(err)
 		return nil, err
 	}
-	return &runtimev1pb.DeleteBinaryFileResponse{}, nil
+	return &runtimev1pb.DeleteBinaryFileResponseAlpha1{}, nil
 }
 
 // binaryStoreGetFirstChunk waits for the first message in the stream (with a
 // timeout) and decodes it into reqProto.
-func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequest) error {
+func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequestAlpha1) error {
 	firstChunkCtx, cancel := context.WithTimeout(stream.Context(), binaryStoreFirstChunkTimeout)
 	defer cancel()
 
@@ -187,7 +187,7 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 // binaryStoreReadStream drains the remaining chunks from the client stream into
 // the provided writer, enforcing sequence numbers and rejecting initial requests in
 // non-leading messages.
-func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequest, inWriter *io.PipeWriter) error {
+func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr_SetBinaryFileAlpha1Server, reqProto *runtimev1pb.SetBinaryFileRequestAlpha1, inWriter *io.PipeWriter) error {
 	var expectSeq uint64
 
 	closeWithError := func(err error) error {

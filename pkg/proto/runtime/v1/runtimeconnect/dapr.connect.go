@@ -417,11 +417,11 @@ type DaprClient interface {
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
 	// Stores a binary file using a streaming request. The first message must
 	// contain the options; subsequent messages carry the file content as chunks.
-	SetBinaryFileAlpha1(context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequest, v1.SetBinaryFileResponse]
+	SetBinaryFileAlpha1(context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1]
 	// Retrieves a binary file as a stream of chunks.
-	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequest]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponse], error)
+	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponseAlpha1], error)
 	// Deletes a binary file.
-	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequest]) (*connect.Response[v1.DeleteBinaryFileResponse], error)
+	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error)
 }
 
 // NewDaprClient constructs a client for the dapr.proto.runtime.v1.Dapr service. By default, it uses
@@ -879,19 +879,19 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
 			connect.WithClientOptions(opts...),
 		),
-		setBinaryFileAlpha1: connect.NewClient[v1.SetBinaryFileRequest, v1.SetBinaryFileResponse](
+		setBinaryFileAlpha1: connect.NewClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1](
 			httpClient,
 			baseURL+DaprSetBinaryFileAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("SetBinaryFileAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		getBinaryFileAlpha1: connect.NewClient[v1.GetBinaryFileRequest, v1.GetBinaryFileResponse](
+		getBinaryFileAlpha1: connect.NewClient[v1.GetBinaryFileRequestAlpha1, v1.GetBinaryFileResponseAlpha1](
 			httpClient,
 			baseURL+DaprGetBinaryFileAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("GetBinaryFileAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		deleteBinaryFileAlpha1: connect.NewClient[v1.DeleteBinaryFileRequest, v1.DeleteBinaryFileResponse](
+		deleteBinaryFileAlpha1: connect.NewClient[v1.DeleteBinaryFileRequestAlpha1, v1.DeleteBinaryFileResponseAlpha1](
 			httpClient,
 			baseURL+DaprDeleteBinaryFileAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("DeleteBinaryFileAlpha1")),
@@ -976,9 +976,9 @@ type daprClient struct {
 	listJobs                       *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	converseAlpha1                 *connect.Client[v1.ConversationRequest, v1.ConversationResponse]
 	converseAlpha2                 *connect.Client[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2]
-	setBinaryFileAlpha1            *connect.Client[v1.SetBinaryFileRequest, v1.SetBinaryFileResponse]
-	getBinaryFileAlpha1            *connect.Client[v1.GetBinaryFileRequest, v1.GetBinaryFileResponse]
-	deleteBinaryFileAlpha1         *connect.Client[v1.DeleteBinaryFileRequest, v1.DeleteBinaryFileResponse]
+	setBinaryFileAlpha1            *connect.Client[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1]
+	getBinaryFileAlpha1            *connect.Client[v1.GetBinaryFileRequestAlpha1, v1.GetBinaryFileResponseAlpha1]
+	deleteBinaryFileAlpha1         *connect.Client[v1.DeleteBinaryFileRequestAlpha1, v1.DeleteBinaryFileResponseAlpha1]
 }
 
 // InvokeService calls dapr.proto.runtime.v1.Dapr.InvokeService.
@@ -1378,17 +1378,17 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, req *connect.Request[v1
 }
 
 // SetBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.SetBinaryFileAlpha1.
-func (c *daprClient) SetBinaryFileAlpha1(ctx context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequest, v1.SetBinaryFileResponse] {
+func (c *daprClient) SetBinaryFileAlpha1(ctx context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1] {
 	return c.setBinaryFileAlpha1.CallClientStream(ctx)
 }
 
 // GetBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.GetBinaryFileAlpha1.
-func (c *daprClient) GetBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.GetBinaryFileRequest]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponse], error) {
+func (c *daprClient) GetBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.GetBinaryFileRequestAlpha1]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponseAlpha1], error) {
 	return c.getBinaryFileAlpha1.CallServerStream(ctx, req)
 }
 
 // DeleteBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteBinaryFileAlpha1.
-func (c *daprClient) DeleteBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.DeleteBinaryFileRequest]) (*connect.Response[v1.DeleteBinaryFileResponse], error) {
+func (c *daprClient) DeleteBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error) {
 	return c.deleteBinaryFileAlpha1.CallUnary(ctx, req)
 }
 
@@ -1575,11 +1575,11 @@ type DaprHandler interface {
 	ConverseAlpha2(context.Context, *connect.Request[v1.ConversationRequestAlpha2]) (*connect.Response[v1.ConversationResponseAlpha2], error)
 	// Stores a binary file using a streaming request. The first message must
 	// contain the options; subsequent messages carry the file content as chunks.
-	SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequest]) (*connect.Response[v1.SetBinaryFileResponse], error)
+	SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequestAlpha1]) (*connect.Response[v1.SetBinaryFileResponseAlpha1], error)
 	// Retrieves a binary file as a stream of chunks.
-	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequest], *connect.ServerStream[v1.GetBinaryFileResponse]) error
+	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1], *connect.ServerStream[v1.GetBinaryFileResponseAlpha1]) error
 	// Deletes a binary file.
-	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequest]) (*connect.Response[v1.DeleteBinaryFileResponse], error)
+	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error)
 }
 
 // NewDaprHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -2512,14 +2512,14 @@ func (UnimplementedDaprHandler) ConverseAlpha2(context.Context, *connect.Request
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ConverseAlpha2 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequest]) (*connect.Response[v1.SetBinaryFileResponse], error) {
+func (UnimplementedDaprHandler) SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequestAlpha1]) (*connect.Response[v1.SetBinaryFileResponseAlpha1], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.SetBinaryFileAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequest], *connect.ServerStream[v1.GetBinaryFileResponse]) error {
+func (UnimplementedDaprHandler) GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1], *connect.ServerStream[v1.GetBinaryFileResponseAlpha1]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetBinaryFileAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequest]) (*connect.Response[v1.DeleteBinaryFileResponse], error) {
+func (UnimplementedDaprHandler) DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteBinaryFileAlpha1 is not implemented"))
 }

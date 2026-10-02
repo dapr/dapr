@@ -64,9 +64,9 @@ func (b *blockingSetBinaryFileStream) RecvMsg(message any) error {
 		first = true
 	})
 	if first {
-		req := message.(*runtimev1pb.SetBinaryFileRequest)
-		*req = runtimev1pb.SetBinaryFileRequest{
-			SetBinaryFileRequestType: &runtimev1pb.SetBinaryFileRequest_InitialRequest{
+		req := message.(*runtimev1pb.SetBinaryFileRequestAlpha1)
+		*req = runtimev1pb.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &runtimev1pb.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "missing",
 					FileName:      "file.bin",
@@ -80,12 +80,12 @@ func (b *blockingSetBinaryFileStream) RecvMsg(message any) error {
 	return b.ctx.Err()
 }
 
-func (b *blockingSetBinaryFileStream) SendAndClose(*runtimev1pb.SetBinaryFileResponse) error {
+func (b *blockingSetBinaryFileStream) SendAndClose(*runtimev1pb.SetBinaryFileResponseAlpha1) error {
 	return nil
 }
 
-func (b *blockingSetBinaryFileStream) Recv() (*runtimev1pb.SetBinaryFileRequest, error) {
-	req := new(runtimev1pb.SetBinaryFileRequest)
+func (b *blockingSetBinaryFileStream) Recv() (*runtimev1pb.SetBinaryFileRequestAlpha1, error) {
+	req := new(runtimev1pb.SetBinaryFileRequestAlpha1)
 	err := b.RecvMsg(req)
 	return req, err
 }
