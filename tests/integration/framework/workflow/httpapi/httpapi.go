@@ -33,6 +33,7 @@ var (
 	StatusCompleted  = helpers.ToRuntimeStatusString(protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
 	StatusFailed     = helpers.ToRuntimeStatusString(protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED)
 	StatusTerminated = helpers.ToRuntimeStatusString(protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED)
+	StatusCanceled   = helpers.ToRuntimeStatusString(protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED)
 )
 
 // Status mirrors the JSON the dapr workflow HTTP API returns for a single
@@ -44,7 +45,7 @@ type Status struct {
 
 // IsTerminal reports whether the runtime status is a terminal workflow state.
 func IsTerminal(s string) bool {
-	return s == StatusCompleted || s == StatusFailed || s == StatusTerminated
+	return s == StatusCompleted || s == StatusFailed || s == StatusTerminated || s == StatusCanceled
 }
 
 // Start starts the named workflow via the HTTP API and returns the new
