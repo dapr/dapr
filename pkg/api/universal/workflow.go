@@ -18,7 +18,10 @@ import (
 	"errors"
 	"unicode"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -104,7 +107,12 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*workflows.StartResponse, error) {
-		return a.workflowEngine.Client().Start(ctx, &req)
+		resp, serr := a.workflowEngine.Client().Start(ctx, &req)
+		// A retry mints a new ExecutionId that recreates a completed instance.
+		if status.Code(serr) == codes.AlreadyExists {
+			return resp, backoff.Permanent(serr)
+		}
+		return resp, serr
 	})
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
