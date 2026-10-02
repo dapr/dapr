@@ -78,9 +78,12 @@ type Subscription struct {
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
-// drainMaxDuration caps how long Stop will wait for the drain to settle.
+// DefaultDrainMaxDuration caps how long Stop will wait for the drain to settle.
+// The runtime restart grace period must allow for this drain and shutdown overhead.
+const DefaultDrainMaxDuration = 30 * time.Second
+
 // var rather than const so tests can shorten it.
-var drainMaxDuration = 30 * time.Second
+var drainMaxDuration = DefaultDrainMaxDuration
 
 // deadLetterPublishTimeout caps the publish to the dead-letter topic when the
 // inbound message context has already been consumed by the resiliency policy's

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"go.uber.org/automaxprocs/maxprocs"
 
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/subscription"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/signals"
@@ -115,7 +117,7 @@ func Run() {
 				return
 			}
 
-			if err := runWithContext(hctx, opts); err != nil {
+			if err := runWithContext(hctx, ctx, opts); err != nil {
 				log.Fatalf("Fatal error from runtime: %s", err)
 			}
 
@@ -129,7 +131,53 @@ func Run() {
 	}
 }
 
-func runWithContext(ctx context.Context, opts *options.Options) error {
+func runWithContext(ctx, shutdownCtx context.Context, opts *options.Options) error {
+	// A SIGHUP restart must leave enough time for in-flight pub/sub handlers to
+	// drain. Keep the configured shutdown limit for SIGINT and SIGTERM, which
+	// cancel shutdownCtx as well as the current runtime context.
+	normalSeconds := opts.DaprGracefulShutdownSeconds
+	if normalSeconds < 0 {
+		normalSeconds = int(runtime.DefaultGracefulShutdownDuration / time.Second)
+	}
+	normalGrace := time.Duration(normalSeconds) * time.Second
+	shutdownStarted := make(chan struct{})
+	if normalGrace > 0 {
+		restartOpts := *opts
+		restartOpts.DaprGracefulShutdownSeconds = max(
+			normalSeconds,
+			int((subscription.DefaultDrainMaxDuration+10*time.Second)/time.Second),
+		)
+		opts = &restartOpts
+
+		shutdownDone := make(chan struct{})
+		defer close(shutdownDone)
+		go func() {
+			select {
+			case <-shutdownStarted:
+			case <-shutdownDone:
+				return
+			}
+			// A SIGHUP cancels the runtime context without cancelling the
+			// process context. Start the normal timer only if the process is
+			// also asked to shut down while the restart is draining.
+			if ctx.Err() != nil && shutdownCtx.Err() == nil {
+				select {
+				case <-shutdownCtx.Done():
+				case <-shutdownDone:
+					return
+				}
+			}
+
+			timer := time.NewTimer(normalGrace)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				log.Fatal("Graceful shutdown timeout exceeded, forcing shutdown")
+			case <-shutdownDone:
+			}
+		}()
+	}
+
 	reg := registry.NewOptions().
 		WithSecretStores(secretstoresLoader.DefaultRegistry).
 		WithStateStores(stateLoader.DefaultRegistry).
@@ -200,6 +248,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				ReadBufferSize:                opts.ReadBufferSize,
 				UnixDomainSocket:              opts.UnixDomainSocket,
 				DaprGracefulShutdownSeconds:   opts.DaprGracefulShutdownSeconds,
+				OnShutdownStart:               func() { close(shutdownStarted) },
 				DaprBlockShutdownDuration:     opts.DaprBlockShutdownDuration,
 				DisableBuiltinK8sSecretStore:  opts.DisableBuiltinK8sSecretStore,
 				EnableAppHealthCheck:          opts.EnableAppHealthCheck,
