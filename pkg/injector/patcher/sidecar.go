@@ -70,6 +70,7 @@ type SidecarConfig struct {
 	LogLevel                            string  `annotation:"dapr.io/log-level" default:"info"`
 	APITokenSecret                      string  `annotation:"dapr.io/api-token-secret"`
 	AppTokenSecret                      string  `annotation:"dapr.io/app-token-secret"`
+	AppTokenHeader                      string  `annotation:"dapr.io/app-token-header"`
 	LogAsJSON                           bool    `annotation:"dapr.io/log-as-json"`
 	AppMaxConcurrency                   *int    `annotation:"dapr.io/app-max-concurrency"`
 	EnableMetrics                       bool    `annotation:"dapr.io/enable-metrics" default:"true"`

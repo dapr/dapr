@@ -79,6 +79,7 @@ type Channel struct {
 	compStore           *compstore.ComponentStore
 	tracingSpec         *config.TracingSpec
 	appHeaderToken      string
+	appHeaderTokenName  string
 	maxResponseBodySize int
 	appHealthCheckPath  string
 	appHealth           *apphealth.AppHealth
@@ -99,6 +100,7 @@ type ChannelConfiguration struct {
 	TLSRootCA          string
 	TLSRenegotiation   string
 	AppAPIToken        string
+	AppAPITokenHeader  string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
@@ -110,6 +112,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		baseAddress:         config.Endpoint,
 		tracingSpec:         config.TracingSpec,
 		appHeaderToken:      config.AppAPIToken,
+		appHeaderTokenName:  config.AppAPITokenHeader,
 		maxResponseBodySize: config.MaxRequestBodySize,
 	}
 
@@ -236,9 +239,7 @@ func (h *Channel) constructJobRequest(ctx context.Context, name string, data *an
 	}
 
 	// Set any additional headers or tokens required
-	if h.appHeaderToken != "" {
-		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
-	}
+	h.setAppToken(channelReq.Header)
 
 	return channelReq, nil
 }
@@ -665,11 +666,23 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(diagConsts.BaggageHeader, b.String())
 	}
 
-	if h.appHeaderToken != "" {
-		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
-	}
+	h.setAppToken(channelReq.Header)
 
 	return channelReq, nil
+}
+
+func (h *Channel) setAppToken(header http.Header) {
+	headerName := h.appHeaderTokenName
+	if headerName == "" {
+		headerName = securityConsts.APITokenHeader
+	}
+	header.Del(securityConsts.APITokenHeader)
+	header.Del(headerName)
+
+	if h.appHeaderToken == "" {
+		return
+	}
+	header.Set(headerName, h.appHeaderToken)
 }
 
 func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
