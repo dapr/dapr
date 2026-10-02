@@ -51,7 +51,7 @@ func (b *builtin) Setup(t *testing.T) []framework.Option {
 	b.logline = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Failed to init component kubernetes (secretstores.kubernetes/v1)",
-			"Error processing component, daprd will exit gracefully: process component kubernetes error",
+			"Error processing component 'kubernetes' (type: secretstores.kubernetes), daprd will exit gracefully: process component kubernetes (type: secretstores.kubernetes) error",
 		),
 	)
 
