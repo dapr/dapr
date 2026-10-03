@@ -327,14 +327,25 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
-	traceparent := SpanContextToW3CString(spanContext)
-	ctx = grpcMetadata.AppendToOutgoingContext(ctx, contribpubsub.TraceParentField, traceparent)
-	ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
-	// grpc-trace-bin carries no room for tracestate, so it must travel as its own header.
-	if tracestate := TraceStateToW3CString(spanContext); tracestate != "" {
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.TracestateHeader, tracestate)
+	// gRPC metadata is multi-valued: Append would leave two traceparent headers when the caller's
+	// is already on the outgoing context. Set replaces instead, keeping a single one. (#10563)
+	md, ok := grpcMetadata.FromOutgoingContext(ctx)
+	if !ok {
+		md = grpcMetadata.MD{}
+	} else {
+		md = md.Copy()
 	}
-	return ctx
+	md.Set(contribpubsub.TraceParentField, SpanContextToW3CString(spanContext))
+	md.Set(diagConsts.GRPCTraceContextKey, string(traceContextBinary))
+	// grpc-trace-bin carries no room for tracestate, so it must travel as its own header.
+	// Clear any existing tracestate when the current span has none, so a stale value from
+	// the caller is not left behind next to the replaced traceparent.
+	if tracestate := TraceStateToW3CString(spanContext); tracestate != "" {
+		md.Set(diagConsts.TracestateHeader, tracestate)
+	} else {
+		md.Delete(diagConsts.TracestateHeader)
+	}
+	return grpcMetadata.NewOutgoingContext(ctx, md)
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
