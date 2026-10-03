@@ -82,20 +82,18 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		WithCustomHTTPMetadata(msg.Metadata)
 	defer req.Close()
 
-	iTraceID := cloudEvent[contribpubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[contribpubsub.TraceIDField]
+	// A zero parent starts a new root span, so a message delivered without
+	// inbound trace context is still traced. No ops if tracing is off.
+	sc := pubsub.ParentSpanContextFromCloudEvent(cloudEvent, log)
+	ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
+
+	if span != nil {
+		// Every return path below must end the span, including the ones that
+		// bail out before the status is known. Ending a span twice is a no-op,
+		// so the success path can still set the status first.
+		defer span.End()
 	}
 
-	if traceID, ok := iTraceID.(string); ok {
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
-			sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
-		}
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
-	} else if iTraceID != nil {
-		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
-	}
 	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
 		// Forward the raw string: re-serializing parsed baggage loses member order.
 		// Drop any ctx baggage, which the HTTP channel would otherwise prefer.
@@ -250,26 +248,16 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	n := 0
 
 	for _, pubsubMsg := range psm.PubSubMessages {
-		cloudEvent := pubsubMsg.CloudEvent
+		// A zero parent starts a new root span, so an entry delivered without
+		// inbound trace context is still traced. No ops if tracing is off.
+		sc := pubsub.ParentSpanContextFromCloudEvent(pubsubMsg.CloudEvent, log)
 
-		iTraceID := cloudEvent[contribpubsub.TraceParentField]
-		if iTraceID == nil {
-			iTraceID = cloudEvent[contribpubsub.TraceIDField]
-		}
-
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
-				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
-			}
-
-			_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
-			if span != nil {
-				spans[n] = span
-				n++
-			}
-		} else if iTraceID != nil {
-			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+		// The returned context is discarded: each entry gets its own span and
+		// the batch is delivered under one call.
+		_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+		if span != nil {
+			spans[n] = span
+			n++
 		}
 	}
 
