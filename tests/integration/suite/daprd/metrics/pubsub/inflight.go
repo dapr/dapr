@@ -15,7 +15,6 @@ package pubsub
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -115,7 +114,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	metricFor := func(topic string) string {
-		return fmt.Sprintf("dapr_component_pubsub_ingress_in_flight|app_id:myapp|component:foo|namespace:|topic:%s", topic)
+		return "dapr_component_pubsub_ingress_in_flight|app_id:myapp|component:foo|namespace:|topic:" + topic
 	}
 
 	client := i.daprd.GRPCClient(t, ctx)
