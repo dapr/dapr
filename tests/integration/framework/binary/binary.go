@@ -37,6 +37,9 @@ type options struct {
 
 var buildTags = []string{
 	"stablecomponents",
+	// binarystore_fake provides the in-process binary store used by the
+	// binary-store integration tests.
+	"binarystore_fake",
 	"state_etcd",
 	"crypto_localstorage",
 	"middleware_http_routeralias",

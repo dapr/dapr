@@ -31,7 +31,7 @@ func interrupt(_ *testing.T, cmd *exec.Cmd) {
 }
 
 func kill(_ *testing.T, cmd *exec.Cmd) {
-	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
+	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)) //nolint:gosec // taskkill is invoked only with a numeric PID for the spawned process.
 	kill.Stdout = os.Stdout
 	kill.Stderr = os.Stderr
 	kill.Run()
