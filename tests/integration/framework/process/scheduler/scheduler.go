@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,9 @@ type Scheduler struct {
 	ports      *ports.Ports
 	httpClient *http.Client
 
+	clientLock sync.Mutex
+	client     schedulerv1pb.SchedulerClient
+
 	port        int
 	healthzPort int
 	metricsPort int
@@ -73,6 +77,7 @@ type Scheduler struct {
 	userpass bool
 
 	runOnce sync.Once
+	fopts   []Option
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -204,7 +209,23 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		namespace:          opts.namespace,
 		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
 		embed:              opts.embed == nil || *opts.embed,
+		fopts:              fopts,
 	}
+}
+
+// Clone returns a new, not yet running, Scheduler with the same options,
+// identity, ports, initial cluster and data dir, with opts applied on top.
+func (s *Scheduler) Clone(t *testing.T, opts ...Option) *Scheduler {
+	t.Helper()
+	return New(t, slices.Concat(s.fopts, []Option{
+		WithID(s.id),
+		WithPort(s.port),
+		WithHealthzPort(s.healthzPort),
+		WithMetricsPort(s.metricsPort),
+		WithEtcdClientPort(s.etcdClientPort),
+		WithInitialCluster(s.etcdInitialCluster),
+		WithDataDir(s.dataDir),
+	}, opts)...)
 }
 
 func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
@@ -255,9 +276,9 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			return
 		}
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+		assert.NoError(c, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
 
 	if s.embed && !s.userpass {
@@ -266,7 +287,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			if assert.NoError(c, err) {
 				assert.Len(c, resp.Kvs, 1)
 			}
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 20*time.Second, 10*time.Millisecond)
 	}
 }
 
@@ -334,8 +355,17 @@ func (s *Scheduler) DataDir() string {
 	return s.dataDir
 }
 
+// Client returns a cached client so pollers can call it from assertion
+// goroutines: only the first call, on the test goroutine, dials and
+// registers cleanup.
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	t.Helper()
+
+	s.clientLock.Lock()
+	defer s.clientLock.Unlock()
+	if s.client != nil {
+		return s.client
+	}
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
@@ -344,9 +374,15 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	t.Cleanup(func() {
+		s.clientLock.Lock()
+		s.client = nil
+		s.clientLock.Unlock()
+		require.NoError(t, conn.Close())
+	})
 
-	return schedulerv1pb.NewSchedulerClient(conn)
+	s.client = schedulerv1pb.NewSchedulerClient(conn)
+	return s.client
 }
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
@@ -434,10 +470,11 @@ func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metric
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
-	client, err := clientv3.New(clientv3.Config{
+	client, err := clientv3.New(client.WithEtcdLogger(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
-	})
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
+	}))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -607,11 +644,13 @@ func (s *Scheduler) JobKeyCount(t *testing.T, ctx context.Context, substr string
 func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
 	t.Helper()
 
+	// Bound by ctx: a dial that outlives the test panics the process.
 	resp, err := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return resp
 }

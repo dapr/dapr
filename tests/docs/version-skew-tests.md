@@ -34,3 +34,16 @@ export DAPR_INTEGRATION_OPERATOR_PATH=/path/to/sentry
 ``` 
 
 Then you check out the new branch and run the tests. In the very first few log lines you should be able to see that the binaries are being used from the paths you set.
+
+## In-flight workflow upgrade tests
+
+The tests under `tests/integration/suite/daprd/workflow/upgrade` start a workflow on one daprd binary, kill that daprd while the workflow is parked on an activity, a timer or an external event, and finish the workflow on a second daprd built from a different version, sharing the same app ID and actor state store. They run in both directions (latest release to master, and master to latest release). The `integration-tests-workflow-upgrade` job in `dapr.yml` runs them against the latest release on every PR.
+
+The release binary is passed with `DAPR_INTEGRATION_DAPRD_LEGACY_PATH`; when it is unset the suite is skipped. To run it locally:
+
+```bash
+curl -sSfLo daprd.tar.gz https://github.com/dapr/dapr/releases/download/v1.18.4/daprd_linux_amd64.tar.gz
+tar xzf daprd.tar.gz
+export DAPR_INTEGRATION_DAPRD_LEGACY_PATH=$(pwd)/daprd
+go test -v --race --tags integration ./tests/integration/. --focus daprd/workflow/upgrade
+```

@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,23 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
+	if len(opts.features) > 0 {
+		var sb strings.Builder
+		sb.WriteString(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureconfig
+spec:
+  features:
+`)
+		for _, f := range slices.Compact(slices.Sorted(slices.Values(opts.features))) {
+			sb.WriteString("  - name: " + f + "\n    enabled: true\n")
+		}
+		f := filepath.Join(t.TempDir(), "features.yaml")
+		require.NoError(t, os.WriteFile(f, []byte(sb.String()), 0o600))
+		opts.configs = append(opts.configs, f)
+	}
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
@@ -158,6 +176,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.actorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout="+opts.actorsDisseminateTimeout.String())
 	}
+	if opts.placementStartupTimeout != nil {
+		args = append(args, "--actors-placement-startup-timeout="+opts.placementStartupTimeout.String())
+	}
 	if opts.hotReloadReconcileInterval != nil {
 		args = append(args, "--hot-reload-reconcile-interval="+opts.hotReloadReconcileInterval.String())
 	}
@@ -186,8 +207,13 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
 	}
 
+	execPath := opts.execPath
+	if execPath == "" {
+		execPath = binary.EnvValue("daprd")
+	}
+
 	return &Daprd{
-		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		exec:             exec.New(t, execPath, args, opts.execOpts...),
 		ports:            fp,
 		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
