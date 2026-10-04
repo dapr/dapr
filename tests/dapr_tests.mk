@@ -447,6 +447,10 @@ ifeq ($(DAPR_PERF_TEST),)
 			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
+	# gotestsum truncates its report files, so each package writes its own
+	# report and the JSON is appended to _perf.json. A run of several
+	# packages then keeps the results of all of them.
+	rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf.json
 	for app in $(DAPR_PERF_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
 		DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
@@ -457,12 +461,16 @@ else
 		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
 		NO_API_LOGGING=true \
 			gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
-			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
-		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+		status=$$? ; \
+		cat $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json >> $(TEST_OUTPUT_FILE_PREFIX)_perf.json ; \
+		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json | strings ; \
+		rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json ; \
+		[ $$status -eq 0 ] || exit -1 ; \
 	done
 endif
 
