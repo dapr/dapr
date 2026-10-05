@@ -15,6 +15,7 @@ package pool
 
 import (
 	"context"
+	"net"
 	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
@@ -39,10 +40,19 @@ type Options struct {
 	// Consumers re-read the counts when handling.
 	OnSchedulerPlacementCapabilityChange func()
 
+	// OnPlacementAddressesChange is called when the set of placement
+	// addresses reported by connected sidecars gains or loses an address.
+	// added is true when an address not tracked before appeared, false when
+	// the last sidecar reporting an address went away.
+	OnPlacementAddressesChange func(added bool)
 	// PlacementEnabled gates the incapable sidecars: on a scheduler
 	// not serving placement every sidecar counts as incapable
 	PlacementEnabled bool
 }
+
+// maxAddressesPerReport bounds a client-supplied report, so one client
+// cannot grow the address set without limit.
+const maxAddressesPerReport = 8
 
 // Pool represents a connection pool for namespace/appID separation of sidecars
 // to schedulers.
@@ -53,13 +63,20 @@ type Pool struct {
 	readyCh chan struct{}
 
 	// incapable/capable count connected sidecars by whether they reported
-	// supports_scheduler_placement, for gating and latching the placement
+	// supports_scheduler_placement, for gating the placement
 	// advertisement.
 	capLock                     sync.Mutex
 	incapable                   int
 	capable                     int
 	onPlacementCapabilityChange func()
-	placementEnabled            bool
+
+	// addrs counts the connected sidecars reporting each placement address,
+	// so an address is reported only while a sidecar reporting it is
+	// connected.
+	addrLock                   sync.Mutex
+	addrs                      map[string]int
+	onPlacementAddressesChange func(added bool)
+	placementEnabled           bool
 }
 
 func New(opts Options) *Pool {
@@ -67,6 +84,8 @@ func New(opts Options) *Pool {
 		readyCh:                     make(chan struct{}),
 		cron:                        opts.Cron,
 		onPlacementCapabilityChange: opts.OnSchedulerPlacementCapabilityChange,
+		addrs:                       make(map[string]int),
+		onPlacementAddressesChange:  opts.OnPlacementAddressesChange,
 		placementEnabled:            opts.PlacementEnabled,
 	}
 }
@@ -102,6 +121,7 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
 
+	p.trackAddresses(ctx, req.GetPlacementAddresses())
 	p.trackCapability(ctx, req.GetSupportsSchedulerPlacement())
 
 	p.nsLoop.Enqueue(&loops.ConnAdd{
@@ -156,6 +176,74 @@ func (p *Pool) trackCapability(ctx context.Context, capable bool) {
 			p.onPlacementCapabilityChange()
 		}
 	})
+}
+
+// trackAddresses counts the placement addresses a sidecar reported for the
+// lifetime of its stream. Malformed addresses and oversized reports are
+// dropped, since the report is client supplied.
+func (p *Pool) trackAddresses(ctx context.Context, reported []string) {
+	if len(reported) == 0 {
+		return
+	}
+	if len(reported) > maxAddressesPerReport {
+		log.Warnf("Probing only the first %d of %d reported placement addresses", maxAddressesPerReport, len(reported))
+		reported = reported[:maxAddressesPerReport]
+	}
+
+	addrs := make([]string, 0, len(reported))
+	seen := make(map[string]struct{}, len(reported))
+	for _, addr := range reported {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			continue
+		}
+		if _, dup := seen[addr]; dup {
+			continue
+		}
+		seen[addr] = struct{}{}
+		addrs = append(addrs, addr)
+	}
+	if len(addrs) == 0 {
+		return
+	}
+
+	p.addrLock.Lock()
+	changed := false
+	for _, addr := range addrs {
+		p.addrs[addr]++
+		changed = changed || p.addrs[addr] == 1
+	}
+	p.addrLock.Unlock()
+	if changed && p.onPlacementAddressesChange != nil {
+		p.onPlacementAddressesChange(true)
+	}
+
+	context.AfterFunc(ctx, func() {
+		p.addrLock.Lock()
+		changed := false
+		for _, addr := range addrs {
+			p.addrs[addr]--
+			if p.addrs[addr] == 0 {
+				delete(p.addrs, addr)
+				changed = true
+			}
+		}
+		p.addrLock.Unlock()
+		if changed && p.onPlacementAddressesChange != nil {
+			p.onPlacementAddressesChange(false)
+		}
+	})
+}
+
+// PlacementAddresses returns the placement addresses reported by the
+// connected sidecars.
+func (p *Pool) PlacementAddresses() []string {
+	p.addrLock.Lock()
+	defer p.addrLock.Unlock()
+	addrs := make([]string, 0, len(p.addrs))
+	for addr := range p.addrs {
+		addrs = append(addrs, addr)
+	}
+	return addrs
 }
 
 // HasSchedulerPlacementIncapableSidecars reports whether any connected sidecar does

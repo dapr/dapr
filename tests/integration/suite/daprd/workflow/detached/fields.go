@@ -58,7 +58,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 	scheduledStart := time.Now().Add(2 * time.Second).UTC()
 
 	f.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("Spawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			task.WithDetachedWorkflowStartTime(scheduledStart),
 		)

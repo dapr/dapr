@@ -207,8 +207,13 @@ spec:
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
 	}
 
+	execPath := opts.execPath
+	if execPath == "" {
+		execPath = binary.EnvValue("daprd")
+	}
+
 	return &Daprd{
-		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		exec:             exec.New(t, execPath, args, opts.execOpts...),
 		ports:            fp,
 		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
@@ -592,6 +597,34 @@ func (d *Daprd) ActorRemindersURL(actorType, actorID string) string {
 
 func (d *Daprd) ActorTimerURL(actorType, actorID, name string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers/%s", d.HTTPAddress(), actorType, actorID, name)
+}
+
+// ActorStateGet returns the value stored under an actor state key. A key
+// which is not set returns an empty string.
+func (d *Daprd) ActorStateGet(t assert.TestingT, ctx context.Context, actorType, actorID, key string) string {
+	url := fmt.Sprintf("http://%s/v1.0/actors/%s/%s/state/%s", d.HTTPAddress(), actorType, actorID, key)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return ""
+	}
+
+	resp, err := d.httpClient.Do(req)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return ""
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.NoError(t, resp.Body.Close())
+
+	if resp.StatusCode == http.StatusNoContent {
+		return ""
+	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, string(b))
+
+	return string(b)
 }
 
 func (d *Daprd) ActorTimersURL(actorType, actorID string) string {

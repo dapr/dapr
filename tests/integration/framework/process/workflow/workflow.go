@@ -379,13 +379,13 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 
 func (w *Workflow) WorkflowClient(t *testing.T, ctx context.Context) *workflow.Client {
 	t.Helper()
-	return workflow.NewClient(w.Dapr().GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.Dapr().GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) WorkflowClientN(t *testing.T, ctx context.Context, index int) *workflow.Client {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
-	return workflow.NewClient(w.DaprN(index).GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.DaprN(index).GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
@@ -469,14 +469,14 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
+func (w *Workflow) ClusteredDeployment() bool {
+	return w.clustered
+}
+
 // SchedulerPlacement reports whether the scheduler serves actor placement
 // for this harness, in which case Placement returns nil.
 func (w *Workflow) SchedulerPlacement() bool {
 	return w.schedulerPlacement
-}
-
-func (w *Workflow) ClusteredDeployment() bool {
-	return w.clustered
 }
 
 // FastPath reports whether every daprd in this workflow runs with the
