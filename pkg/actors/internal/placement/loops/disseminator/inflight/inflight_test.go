@@ -324,6 +324,45 @@ func TestCancelClaimsForTypes_EmptyTypesNoop(t *testing.T) {
 	i.Close(nil)
 }
 
+func TestCancelClaimsForTypes_FailedLookupHoldsNoClaim(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"a": {"h:1": 1},
+	}), 1)
+	drain := true
+	timeout := 5 * time.Second
+	i.SetDrainOngoingCallTimeout(&drain, &timeout)
+	i.Open(ctx)
+
+	// Type "b" has no table yet, so the lookup fails. The request context
+	// stays alive, as it does while the actor router retries the lookup.
+	respCh := make(chan *loops.LookupResponse, 1)
+	i.AcquireLookup(&loops.LookupRequest{
+		Request:  &api.LookupActorRequest{ActorType: "b", ActorID: "x"},
+		Context:  ctx,
+		Response: respCh,
+	})
+	select {
+	case resp := <-respCh:
+		require.Error(t, resp.Error)
+	case <-time.After(time.Second):
+		require.Fail(t, "AcquireLookup should resolve")
+	}
+
+	// A dissemination round that adds type "b" drains the claims of "b". The
+	// failed lookup must not hold a claim, or the drain waits for the full
+	// timeout.
+	start := time.Now()
+	i.CancelClaimsForTypes([]string{"b"}, errors.New("placement table updated"))
+	assert.Less(t, time.Since(start), time.Second)
+
+	cancel()
+	i.Close(nil)
+}
+
 func TestIsActorHostedNoLock(t *testing.T) {
 	i := New(Options{Hostname: "h", Port: "1"})
 	i.Set(newTables(100, map[string]map[string]int64{
