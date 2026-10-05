@@ -225,7 +225,9 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 	ctx, cancel := context.WithTimeout(context.Background(), onCompletionClaimTimeout)
 	defer cancel()
 
-	if be.executorLocal(ctx, key) {
+	if forceWatchFallbackForTest() {
+		log.Warnf("TEST INJECTION: using the watch-stream fallback for %s task '%s'", taskType, key)
+	} else if be.executorLocal(ctx, key) {
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
 
 		// Drain a parked stale payload WITHOUT consuming the registration:
