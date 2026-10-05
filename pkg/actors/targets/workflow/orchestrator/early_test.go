@@ -165,6 +165,33 @@ func TestStripUnmatchedResolutions(t *testing.T) {
 		assert.Empty(t, rs.GetNewEvents())
 	})
 
+	t.Run("drops a result whose event ID a non-scheduling event has taken", func(t *testing.T) {
+		t.Parallel()
+		o := &orchestrator{actorID: "wf"}
+		state := testState(t)
+		state.AddToHistory(startedEvent())
+		state.AddToHistory(timerCreatedEvent(0))
+		state.AddToHistory(&protos.HistoryEvent{EventId: 1, EventType: &protos.HistoryEvent_DetachedWorkflowInstanceCreated{
+			DetachedWorkflowInstanceCreated: &protos.DetachedWorkflowInstanceCreatedEvent{InstanceId: "detached"},
+		}})
+		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{taskCompletedWithExecID(1, "")}}
+
+		assert.Empty(t, o.stripUnmatchedResolutions(state, rs), "id 1 is a detached workflow creation: the result can never be consumed")
+		assert.Empty(t, rs.GetNewEvents())
+	})
+
+	t.Run("drops a result whose event ID this turn's events have passed", func(t *testing.T) {
+		t.Parallel()
+		o := &orchestrator{actorID: "wf"}
+		state := testState(t)
+		state.AddToHistory(startedEvent())
+		scheduled := taskScheduledEvent(2)
+		rs := &backend.WorkflowRuntimeState{NewEvents: []*backend.HistoryEvent{scheduled, taskCompletedWithExecID(1, "")}}
+
+		assert.Empty(t, o.stripUnmatchedResolutions(state, rs), "the turn scheduled id 2 without scheduling id 1")
+		assert.Equal(t, []*backend.HistoryEvent{scheduled}, rs.GetNewEvents())
+	})
+
 	t.Run("keeps nothing for a turn that completed or continued as new", func(t *testing.T) {
 		t.Parallel()
 		for name, rs := range map[string]*backend.WorkflowRuntimeState{

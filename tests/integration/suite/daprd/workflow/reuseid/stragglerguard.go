@@ -154,20 +154,21 @@ func (s *stragglerguard) Run(t *testing.T, ctx context.Context) {
 
 	count := func(needle string) int { return logline.CountAll(needle, s.logline[:]...) }
 	// Each gate counts a line only the result it waits on can write. While
-	// the workflow runs, only the orphan resolves a superseded scheduling;
+	// the workflow runs, only the orphan was dispatched by a previous
+	// execution;
 	// once it is terminated, "the workflow has completed" is reachable only
 	// by the current scheduling's own result. That line is written after the
 	// same critical section clears the ID-reuse guard, so observing it
 	// orders the reuse below.
-	superseded := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it resolves a superseded scheduling of task 0", id)
+	superseded := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created under a previous execution", id)
 	settled := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): the workflow has completed", id)
 
-	// The orphan's result is a straggler of the superseded scheduling and is
+	// The orphan's result is a straggler of the previous generation and is
 	// dropped; the workflow is then terminated with the current scheduling's
 	// result still outstanding.
 	releaseOrphanOnce()
 	require.Eventually(t, func() bool { return count(superseded) >= 1 }, time.Second*20, time.Millisecond*10,
-		"the orphan's result must be acknowledged and dropped as superseded")
+		"the orphan's result must be acknowledged and dropped as coming from a previous execution")
 	require.NoError(t, client.TerminateWorkflow(ctx, id))
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)

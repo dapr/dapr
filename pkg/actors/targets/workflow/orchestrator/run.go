@@ -924,18 +924,16 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 // that save fails a resolution can arrive before the event that schedules it
 // is saved, and the workflow may schedule the step again only in a later
 // turn. A resolution is dropped instead once it can never be consumed: the
-// workflow completed or continued as new, or this generation's history has
-// already reached the event ID it resolves (event IDs are assigned in
-// sequence per generation, so its step would have been scheduled by now; this
-// is also how a straggler from a previous generation is told apart).
+// workflow completed or continued as new, or this generation has already
+// passed the event ID it resolves, the rule admission applies (activityDrop).
+// A straggler from a previous generation is dropped at admission by the
+// execution ID it carries back.
 func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) (early []*backend.HistoryEvent) {
 	scheduled := make(map[scheduling]struct{})
-	maxID := int32(-1)
 	index := func(events []*backend.HistoryEvent) {
 		for _, e := range events {
 			if k, ok := schedules(e); ok {
 				scheduled[k] = struct{}{}
-				maxID = max(maxID, k.id)
 			}
 		}
 	}
@@ -973,7 +971,7 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 			log.Warnf("Workflow actor '%s': dropping the firing of timer %d, which the workflow has not created; it fires again when the workflow creates it", o.actorID, k.id)
 			continue
 		}
-		if keep && k.id > maxID {
+		if keep && !passedID(state.History, k.id) && !passedID(events, k.id) {
 			log.Warnf("Workflow actor '%s': keeping the resolution of %s %d in the inbox until the workflow schedules it", o.actorID, k.kind, k.id)
 			early = append(early, ev)
 			continue

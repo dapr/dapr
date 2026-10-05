@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -93,6 +94,31 @@ func Test_classifyEvent_absentSchedulingTakesTheInbox(t *testing.T) {
 		a := h.orch.classifyEvent(early, h.orch.state, completionSender{}, canFold)
 		assert.Equal(t, admitInbox, a.outcome, "canFold=%v", canFold)
 		assert.Empty(t, a.reason, "canFold=%v", canFold)
+	}
+}
+
+func Test_classifyEvent_activityFromAnotherExecution(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-other-execution"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.orch.getExecutionStartedEvent(h.orch.state).WorkflowInstance.ExecutionId = wrapperspb.String("gen-2")
+
+	// Task IDs restart on ContinueAsNew, so a result dispatched by another
+	// execution is dropped even while this generation has not reached its
+	// task ID, where it would otherwise be held as an early result.
+	result := taskCompletedWithExecID(8, "exec-C")
+	for _, canFold := range []bool{false, true} {
+		a := h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-1"}, canFold)
+		assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
+		assert.Contains(t, a.reason, "previous execution", "canFold=%v", canFold)
+
+		a = h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-2"}, canFold)
+		assert.Equal(t, admitInbox, a.outcome, "this execution's result: canFold=%v", canFold)
+
+		a = h.orch.classifyEvent(result, h.orch.state, completionSender{}, canFold)
+		assert.Equal(t, admitInbox, a.outcome, "a sender that predates the stamp: canFold=%v", canFold)
 	}
 }
 

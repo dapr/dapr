@@ -147,7 +147,8 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
+		sender := completionSender{parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name)}
+		err := o.addWorkflowEvent(ctx, &ev, sender)
 		if common.IsSchedulingNotDurable(err) {
 			// This reminder IS the retry chain for the refusal, and it
 			// retries forever, so each fire drops the cache and reads again
@@ -168,7 +169,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// Past the bound this fire is the last word, and the refusal was
 			// judged on whatever history the actor held: judge once more on
 			// the reload the invalidate above forces before giving up.
-			err = o.addWorkflowEvent(ctx, &ev, completionSender{})
+			err = o.addWorkflowEvent(ctx, &ev, sender)
 			if common.IsSchedulingNotDurable(err) {
 				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not become durable: %v", o.actorID, reminder.Name, err)
 				return nil

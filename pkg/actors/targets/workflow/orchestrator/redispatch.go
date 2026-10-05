@@ -71,7 +71,9 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 	// unresolved events come from state.History, so History is non-empty;
 	// mirror callActivities' dueTime derivation.
 	dueTime := state.History[0].GetTimestamp().AsTime()
-	wfName := o.getExecutionStartedEvent(state).GetName()
+	started := o.getExecutionStartedEvent(state)
+	wfName := started.GetName()
+	executionID := started.GetWorkflowInstance().GetExecutionId().GetValue()
 
 	// Rebuild the propagated history chunks the original dispatch carried:
 	// the propagation scope is persisted on the TaskScheduled event, so the
@@ -164,7 +166,7 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		defer o.wakeWG.Done()
 		for _, e := range unresolved {
 			cctx, cancel := context.WithTimeout(wakeCtx, redispatchCallTimeout)
-			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, elide && !durable[e.GetEventId()], true)
+			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
 			cancel()
 			switch {
 			case cerr == nil && durable[e.GetEventId()]:

@@ -55,6 +55,17 @@ func InjectInboxEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, dapr
 	db.WriteStateValue(t, ctx, key, updated)
 }
 
+// InboxLength returns the number of inbox events the workflow actor's
+// persisted metadata records.
+func InboxLength(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) uint64 {
+	t.Helper()
+
+	_, metaRaw := db.ReadStateValue(t, ctx, instanceID, "metadata")
+	var metadata backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(metaRaw, &metadata))
+	return metadata.GetInboxLength()
+}
+
 // InsertHistoryEvent inserts evt into the workflow actor's persisted history
 // immediately before the first event matching pred, shifting that event and
 // all later history-* keys up by one. The metadata's HistoryLength is
@@ -223,6 +234,12 @@ func IsTimerCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
 func IsChildCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
 	return func(e *protos.HistoryEvent) bool {
 		return e.GetChildWorkflowInstanceCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+func IsDetachedCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetDetachedWorkflowInstanceCreated() != nil && e.GetEventId() == eventID
 	}
 }
 

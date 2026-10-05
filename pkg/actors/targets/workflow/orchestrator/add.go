@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
@@ -105,7 +106,8 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 
 	// A child re-sends its completion on stray fires and after failures, and
 	// task ids restart on ContinueAsNew: a completion for task N from any
-	// instance other than the child this generation created for N is a
+	// instance other than the child this generation created for N, or from a
+	// child or activity a different execution created or dispatched, is a
 	// straggler from a previous generation and is acked without effect.
 	if sender.instanceID != "" {
 		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
@@ -358,17 +360,20 @@ func activityDrop(state *wfenginestate.State, taskID int32, execID string, isRes
 		if execID != "" && scheduled.GetTaskExecutionId() != "" && scheduled.GetTaskExecutionId() != execID {
 			return fmt.Sprintf("it resolves a superseded scheduling of task %d", taskID)
 		}
-	} else {
-		for _, h := range state.History {
-			if h.GetEventId() >= taskID {
-				return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID)
-			}
-		}
+	} else if passedID(state.History, taskID) {
+		return fmt.Sprintf("this generation passed id %d without scheduling a task", taskID)
 	}
 	if state.IsCompleted() {
 		return "the workflow has completed"
 	}
 	return ""
+}
+
+// passedID reports whether events hold an event ID at or beyond id. IDs are
+// assigned in sequence per generation, so a generation that has passed id
+// without scheduling the step it names never will.
+func passedID(events []*backend.HistoryEvent, id int32) bool {
+	return slices.ContainsFunc(events, func(e *backend.HistoryEvent) bool { return e.GetEventId() >= id })
 }
 
 // childCreatedFor returns the ChildWorkflowInstanceCreated event this
@@ -391,8 +396,8 @@ func childCreatedFor(history []*backend.HistoryEvent, e *backend.HistoryEvent) *
 	return nil
 }
 
-// senderFromMetadata extracts the delivering child's identity from request
-// metadata; zero for senders that do not carry it.
+// senderFromMetadata extracts the delivering child's or activity's identity
+// from request metadata; zero for senders that do not carry it.
 func senderFromMetadata(md map[string]*internalsv1pb.ListStringValue) completionSender {
 	first := func(key string) string {
 		if v, ok := md[key]; ok && len(v.GetValues()) > 0 {
