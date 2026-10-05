@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -190,4 +191,16 @@ func (e *etcdleader) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"job0", "job1"}, got)
+
+	// The scheduler deletes a one-shot job's keys after the trigger, and the
+	// delete retries until it commits. Teardown stops both survivors at once,
+	// so a delete still in flight when the first one exits has no quorum and
+	// the last scheduler never exits. Wait for the deletes before returning.
+	etcd := e.cluster.SchedulerN(t, survivors[0]).ETCDClient(t, ctx)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix(), clientv3.WithCountOnly())
+		if assert.NoError(c, err) {
+			assert.Zero(c, resp.Count)
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 }
