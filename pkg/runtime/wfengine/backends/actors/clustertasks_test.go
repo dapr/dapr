@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -40,13 +41,15 @@ import (
 // and placement always resolves the executor actor locally, mirroring the
 // co-located steady state under WorkflowsClusteredDeployment.
 func newClusterTasksTestBackend(t *testing.T) *ClusterTasksBackend {
-	return newClusterTasksTestBackendPlaced(t, true)
+	be, _ := newClusterTasksTestBackendPlaced(t, true)
+	return be
 }
 
 // newClusterTasksTestBackendPlaced is newClusterTasksTestBackend with control
 // over whether placement resolves the executor actor locally; local=false
-// exercises the watch-stream fallback.
-func newClusterTasksTestBackendPlaced(t *testing.T, local bool) *ClusterTasksBackend {
+// exercises the watch-stream fallback. It also returns the executor actor
+// factory, so a test can observe executor actor deactivation.
+func newClusterTasksTestBackendPlaced(t *testing.T, local bool) (*ClusterTasksBackend, targets.Factory) {
 	t.Helper()
 
 	const executorType = "dapr.internal.default.test.executor"
@@ -82,7 +85,7 @@ func newClusterTasksTestBackendPlaced(t *testing.T, local bool) *ClusterTasksBac
 		Pending:           p,
 	})
 	require.NoError(t, err)
-	return be
+	return be, execFactory
 }
 
 // Test_onCompletion covers the event-driven registration path behind
@@ -247,7 +250,7 @@ func Test_onCompletion(t *testing.T) {
 
 	t.Run("non-local placement falls back to the watch stream", func(t *testing.T) {
 		t.Parallel()
-		be := newClusterTasksTestBackendPlaced(t, false)
+		be, _ := newClusterTasksTestBackendPlaced(t, false)
 
 		respCh := make(chan *protos.WorkflowResponse, 1)
 		errCh := make(chan error, 1)
@@ -272,5 +275,66 @@ func Test_onCompletion(t *testing.T) {
 			require.Fail(t, "timed out waiting for the watch-stream delivery")
 		}
 		assert.Equal(t, "w2", (<-respCh).GetInstanceId())
+	})
+
+	t.Run("watch fallback keeps watching after a stale delivery", func(t *testing.T) {
+		t.Parallel()
+		be, execFactory := newClusterTasksTestBackendPlaced(t, false)
+
+		// A superseded attempt's completion is parked on the executor actor
+		// before the new attempt registers, so the watch stream serves it
+		// first.
+		require.NoError(t, be.CompleteActivityTask(ctx, &protos.ActivityResponse{
+			InstanceId: "a6",
+			TaskId:     0,
+			Result:     wrapperspb.String("stale"),
+		}))
+
+		respCh := make(chan *protos.ActivityResponse, 2)
+		errCh := make(chan error, 2)
+		proceed := make(chan struct{})
+		dereg := be.OnActivityCompletion(&protos.ActivityRequest{
+			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "a6"},
+			TaskId:           0,
+		}, func(r *protos.ActivityResponse, err error) {
+			respCh <- r
+			errCh <- err
+			<-proceed
+		})
+		t.Cleanup(dereg)
+
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-ctx.Done():
+			require.Fail(t, "timed out waiting for the stale delivery")
+		}
+		assert.Equal(t, "stale", (<-respCh).GetResult().GetValue())
+
+		// The stream that served the stale completion deactivates its
+		// executor actor. Let the deactivation finish before the callback
+		// returns, so the next watch lands on a fresh actor.
+		actorID := common.ActivityActorID("a6", 0)
+		assert.Eventually(t, func() bool {
+			return !execFactory.Exists(actorID)
+		}, 5*time.Second, 10*time.Millisecond)
+
+		// durabletask discards the stale delivery by its completion token and
+		// keeps the registration armed: the genuine completion must still
+		// reach the callback.
+		close(proceed)
+		require.NoError(t, be.CompleteActivityTask(ctx, &protos.ActivityResponse{
+			InstanceId: "a6",
+			TaskId:     0,
+			Result:     wrapperspb.String("genuine"),
+		}))
+
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "the genuine completion did not reach the callback after a stale delivery")
+		}
+		assert.Equal(t, "genuine", (<-respCh).GetResult().GetValue())
 	})
 }

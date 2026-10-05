@@ -203,6 +203,13 @@ func (be *ClusterTasksBackend) OnWorkflowTaskCompletion(req *protos.WorkflowRequ
 // abandoned; the durable retry converges.
 const onCompletionClaimTimeout = 30 * time.Second
 
+// watchRewatchDelay is the pause before a waiter on the watch-stream fallback
+// opens another stream after a delivery that did not settle it. The executor
+// actor that served the previous stream deactivates once the stream ends; the
+// pause lets that finish, so the next stream lands on a fresh actor. It also
+// gives a settlement that raced the registration time to cancel the watch.
+const watchRewatchDelay = 100 * time.Millisecond
+
 func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() proto.Message, cb func(proto.Message, error)) func() {
 	deliver := func(res pending.Result) {
 		if res.Cancelled {
@@ -242,8 +249,27 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 	wctx, wcancel := context.WithCancel(context.Background())
 	go func() {
 		defer wcancel()
-		m := newMsg()
-		cb(m, be.watchCompletion(wctx, taskType, key, m))
+		for {
+			m := newMsg()
+			err := be.watchCompletion(wctx, taskType, key, m)
+			if wctx.Err() != nil {
+				return
+			}
+			cb(m, err)
+			if err != nil {
+				return
+			}
+			// A watch stream serves one completion. If it was a superseded
+			// attempt's, durabletask discards it by completion token and
+			// keeps the registration armed, so watch again: the genuine
+			// completion parks on the executor actor with nothing else to
+			// consume it. Settlement deregisters, which cancels wctx.
+			select {
+			case <-wctx.Done():
+				return
+			case <-time.After(watchRewatchDelay):
+			}
+		}
 	}()
 	return wcancel
 }
