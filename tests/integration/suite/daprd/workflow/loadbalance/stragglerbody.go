@@ -167,7 +167,7 @@ func (s *stragglerbody) run(t *testing.T, ctx context.Context) {
 	// The verdict is observed through the drop the orphan alone can cause:
 	// only its result was dispatched by a previous execution, so nothing
 	// else, the "proceed" event included, can satisfy the gate.
-	dropped := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created under a previous execution", id)
+	dropped := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created or dispatched under another execution", id)
 	count := func(needle string) int { return logline.CountAll(needle, s.logline[:]...) }
 	releaseOrphanOnce()
 	require.Eventually(t, func() bool { return count(dropped) >= 1 }, time.Second*20, time.Millisecond*10,

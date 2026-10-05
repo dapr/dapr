@@ -116,7 +116,7 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	}
 	if sender.parentExecutionID != "" {
 		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
-			return admission{reason: "it was created under a previous execution"}
+			return admission{reason: "it was created or dispatched under another execution"}
 		}
 	}
 

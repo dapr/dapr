@@ -58,6 +58,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2/escalationreap"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2/handoff"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/fold"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/keptinbox"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/localwake"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/pendingstart"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/startdriver"

@@ -119,7 +119,7 @@ func (s *stampedreminder) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 
-	dropped := "Workflow actor '" + id + "': dropping completion (sender ''): it was created under a previous execution"
+	dropped := "Workflow actor '" + id + "': dropping completion (sender ''): it was created or dispatched under another execution"
 	require.Eventually(t, func() bool { return s.logline.Count(dropped) >= 1 }, time.Second*20, time.Millisecond*10,
 		"a result stamped with another execution must be dropped")
 

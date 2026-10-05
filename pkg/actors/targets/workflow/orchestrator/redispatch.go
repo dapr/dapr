@@ -52,8 +52,10 @@ func (o *orchestrator) redispatchSuppressed() bool {
 // TaskScheduled event plus this re-dispatch restore exactly the coverage the
 // elided run-activity reminder provided, within one janitor period. It also
 // recovers pre-existing exposures of the reminder path (scheduler job loss,
-// a completion publish terminally lost after the reminder was acked), so it
-// runs on every janitor fire regardless of the activity gate.
+// a completion publish terminally lost after the reminder was acked), so the
+// janitor runs it regardless of the activity gate on every fire that finds
+// nothing for a turn to consume: an empty inbox, or one holding only early
+// results kept until their step is scheduled.
 //
 // Re-dispatch is at-least-once safe: the same persisted event is sent, so
 // the activity actor ID and inflight key line up (a concurrent execution on

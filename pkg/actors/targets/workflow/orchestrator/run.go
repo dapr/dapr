@@ -1023,6 +1023,22 @@ func unscheduledLast(history, events []*backend.HistoryEvent) []*backend.History
 	return append(out, last...)
 }
 
+// onlyUnscheduled reports whether every event in events is a resolution whose
+// step history has not scheduled. A turn only keeps such events in the inbox
+// again, so an inbox holding nothing else gives a turn nothing to consume.
+func onlyUnscheduled(history, events []*backend.HistoryEvent) bool {
+	for _, e := range events {
+		k, ok := resolves(e)
+		if !ok || slices.ContainsFunc(history, func(h *backend.HistoryEvent) bool {
+			hk, isScheduling := schedules(h)
+			return isScheduling && hk == k
+		}) {
+			return false
+		}
+	}
+	return true
+}
+
 // resolutionsAfterScheduling returns history with each activity result,
 // timer firing or child workflow result that precedes the event scheduling
 // its step moved to just after that event. A worker that does not buffer an

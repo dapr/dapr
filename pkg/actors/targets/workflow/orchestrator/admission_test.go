@@ -112,7 +112,7 @@ func Test_classifyEvent_activityFromAnotherExecution(t *testing.T) {
 	for _, canFold := range []bool{false, true} {
 		a := h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-1"}, canFold)
 		assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
-		assert.Contains(t, a.reason, "previous execution", "canFold=%v", canFold)
+		assert.Contains(t, a.reason, "another execution", "canFold=%v", canFold)
 
 		a = h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-2"}, canFold)
 		assert.Equal(t, admitInbox, a.outcome, "this execution's result: canFold=%v", canFold)

@@ -68,6 +68,20 @@ func TestUnscheduledLast(t *testing.T) {
 	})
 }
 
+func TestOnlyUnscheduled(t *testing.T) {
+	t.Parallel()
+
+	history := []*backend.HistoryEvent{startedEvent(), taskScheduledEvent(0)}
+	early := taskCompletedWithExecID(1, "")
+	earlyChild := childCompletedEvent(2)
+	other := &protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "go"}}}
+
+	assert.True(t, onlyUnscheduled(history, nil))
+	assert.True(t, onlyUnscheduled(history, []*backend.HistoryEvent{early, earlyChild}))
+	assert.False(t, onlyUnscheduled(history, []*backend.HistoryEvent{early, taskCompletedWithExecID(0, "")}))
+	assert.False(t, onlyUnscheduled(history, []*backend.HistoryEvent{early, other}))
+}
+
 func TestResolutionsAfterScheduling(t *testing.T) {
 	t.Parallel()
 

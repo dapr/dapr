@@ -160,7 +160,7 @@ func (s *stragglerguard) Run(t *testing.T, ctx context.Context) {
 	// by the current scheduling's own result. That line is written after the
 	// same critical section clears the ID-reuse guard, so observing it
 	// orders the reuse below.
-	superseded := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created under a previous execution", id)
+	superseded := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created or dispatched under another execution", id)
 	settled := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): the workflow has completed", id)
 
 	// The orphan's result is a straggler of the previous generation and is
