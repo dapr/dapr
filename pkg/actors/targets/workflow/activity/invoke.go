@@ -54,6 +54,11 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
 	}
+	// Carried on the invocation so it persists with the activity reminder
+	// and is sent back with the result, however late that is.
+	if v := req.GetMetadata()[todo.MetadataParentExecutionID].GetValues(); len(v) > 0 && v[0] != "" {
+		invocation.ParentExecutionId = &v[0]
+	}
 
 	// A janitor re-dispatch may race a body still live on the previous
 	// placement owner, so it is gated on the durable execution-claim record
