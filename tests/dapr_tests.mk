@@ -158,6 +158,14 @@ WINDOWS_VERSION=ltsc2022
 endif
 endif
 
+# The actor_sdks e2e test does not deploy actorphp on Windows (see
+# https://github.com/dapr/dapr/issues/2953), and the app's dependencies need
+# PHP 8.4 while the Windows PHP base image has PHP 8.0. Do not build it for
+# Windows.
+ifeq ($(TARGET_OS),windows)
+E2E_TEST_APPS := $(filter-out actorphp,$(E2E_TEST_APPS))
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
