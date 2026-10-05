@@ -84,16 +84,6 @@ func TestEngine_WorkItemConnectionFailurePairing(t *testing.T) {
 	assert.Equal(t, int32(0), wfe.getWorkItemsCount.Load())
 }
 
-// doneAfterCheckContext models a work-item stream context whose transport
-// closes just after onWorkItemDisconnection checks it: Err still reports nil,
-// but Done is already closed.
-type doneAfterCheckContext struct {
-	context.Context
-	done chan struct{}
-}
-
-func (c doneAfterCheckContext) Done() <-chan struct{} { return c.done }
-
 // TestEngine_WorkItemDisconnectionStreamCancelled pins that the last worker's
 // disconnect removes the workflow actor types even when the transport cancels
 // the stream's context during the call. The actors runtime can fail the table
@@ -121,9 +111,11 @@ func TestEngine_WorkItemDisconnectionStreamCancelled(t *testing.T) {
 	require.NoError(t, wfe.onWorkItemConnection(t.Context()))
 	require.True(t, wfe.actorsRegistered)
 
+	// The transport closes just after onWorkItemDisconnection checks the
+	// stream context: Err still reports nil, but Done is already closed.
 	done := make(chan struct{})
 	close(done)
-	ctx := doneAfterCheckContext{Context: context.Background(), done: done}
+	ctx := closingContext{Context: context.Background(), done: done}
 	require.NoError(t, wfe.onWorkItemDisconnection(ctx))
 	assert.True(t, unregistered.Load(), "the workflow actor types must be removed from the table")
 	assert.False(t, wfe.actorsRegistered)

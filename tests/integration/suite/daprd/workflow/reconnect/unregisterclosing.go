@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -49,11 +50,14 @@ const unregisterclosingCycles = 10
 // workflows to a daprd that has no worker to run them.
 type unregisterclosing struct {
 	workflow *workflow.Workflow
+	logline  *logline.LogLine
 }
 
 func (u *unregisterclosing) Setup(t *testing.T) []framework.Option {
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
+
+	u.logline = logline.New(t, logline.WithCaptureAll())
 
 	// Both daprds are replicas of one app, so they host the same workflow
 	// actor types.
@@ -61,15 +65,19 @@ func (u *unregisterclosing) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprds(2),
 		workflow.WithDaprdOptions(0,
 			daprd.WithAppID(uid.String()),
-			daprd.WithExecOptions(exec.WithEnvVars(t,
-				"DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT", strconv.Itoa(unregisterclosingCycles),
-			)),
+			daprd.WithExecOptions(
+				exec.WithEnvVars(t,
+					"DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT", strconv.Itoa(unregisterclosingCycles),
+				),
+				exec.WithStdout(u.logline.Stdout()),
+				exec.WithStderr(u.logline.Stderr()),
+			),
 		),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(uid.String())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(u.workflow),
+		framework.WithProcesses(u.logline, u.workflow),
 	}
 }
 
@@ -97,6 +105,15 @@ func (u *unregisterclosing) Run(t *testing.T, ctx context.Context) {
 
 		worker.Disconnect(t)
 		u.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
+
+		// Each cycle must run the disconnect callback with a closing context.
+		// Otherwise the cycle depends on the real transport timing again and
+		// almost never covers the race.
+		require.Eventually(t, func() bool {
+			return u.logline.Count("TEST INJECTION: closing the work-item stream context") >= i+1
+		}, time.Second*10, time.Millisecond*10,
+			"cycle %d: the disconnect callback did not run with a closing context", i)
+
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			md := u.workflow.DaprN(0).GetMetadata(c, ctx)
 			if !assert.NotNil(c, md) || !assert.NotNil(c, md.ActorRuntime) {
