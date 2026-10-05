@@ -53,7 +53,10 @@ const (
 //     it as non-retryable.
 type Invoker interface {
 	Invoke(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	InvokeReminder(ctx context.Context, reminder *api.Reminder) error
-	InvokeTimer(ctx context.Context, reminder *api.Reminder) error
+	// InvokeReminder and InvokeTimer take the metadata the lock stamped on
+	// the request (notably "Dapr-Reentrancy-Id") so callbacks reach the
+	// app with the same headers a method invocation carries.
+	InvokeReminder(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
+	InvokeTimer(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
 	Deactivate(ctx context.Context, actorType, actorID string) error
 }
