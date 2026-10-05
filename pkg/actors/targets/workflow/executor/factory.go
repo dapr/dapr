@@ -108,7 +108,7 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	defer f.lock.Unlock()
 
 	f.table.Range(func(key, val any) bool {
-		val.(*executor).Deactivate(ctx)
+		val.(*executor).halt(ctx)
 		return true
 	})
 	f.table.Clear()
@@ -124,8 +124,10 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorType: f.actorType,
 			ActorID:   key.(string),
 		}) {
-			val.(*executor).Deactivate(ctx)
-			f.table.Delete(key)
+			val.(*executor).halt(ctx)
+			// Only this actor: the halt's forward can already have created
+			// a fresh actor for the key when the key resolves back here.
+			f.table.CompareAndDelete(key, val)
 		}
 		return true
 	})

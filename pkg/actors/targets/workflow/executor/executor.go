@@ -69,7 +69,10 @@ type executor struct {
 
 	closed       atomic.Bool
 	cancelClosed atomic.Bool
-	wg           sync.WaitGroup
+	// cancelType is the task type of the recorded cancellation, so a halt
+	// can forward it with its type. Guarded by mu.
+	cancelType string
+	wg         sync.WaitGroup
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -116,6 +119,11 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 		Message: &commonv1pb.InvokeResponse{
 			Data: req.GetMessage().GetData(),
 		},
+	}
+	// A forwarded completion (a sibling copy, or one forwarded after a halt)
+	// keeps its marker while parked, so a halt does not forward it again.
+	if isForwarded(req) {
+		d.Headers[MetadataForwarded] = &internalsv1pb.ListStringValue{Values: []string{forwardedValue}}
 	}
 
 	// The waiter for this task normally lives on this host (it shares this
@@ -288,7 +296,9 @@ func (e *executor) claimed(d *internalsv1pb.InternalInvokeResponse) *internalsv1
 		case e.completeCh <- d:
 		default:
 		}
-	} else if e.displaced == nil {
+	} else if e.displaced == nil && len(e.completeCh) == 0 {
+		// A completer blocked on the full channel refilled the slot the
+		// drain freed: keep the actor for that completion's waiter.
 		e.tryDeactivate()
 	}
 	return d
@@ -325,6 +335,7 @@ func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) (func(), err
 	// miss and the close are one mu critical section, mirroring complete's
 	// miss-then-park, so a claim can never run between them.
 	if e.cancelClosed.CompareAndSwap(false, true) {
+		e.cancelType = taskTypeOf(req, e.actorID)
 		close(e.cancelCh)
 	}
 	e.mu.Unlock()
@@ -351,8 +362,29 @@ func (e *executor) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 func (e *executor) Deactivate(_ context.Context) error {
+	e.deactivate()
+	return nil
+}
+
+// halt deactivates an actor that this host no longer serves: placement moved
+// its key, or the type left this host. A completion or cancellation still
+// parked on it was waiting for a watcher that has not attached yet, often one
+// whose stream the rebalance drain cancelled and that is retrying. That
+// watcher attaches on the key's new owner, so the parked result is forwarded
+// there instead of being dropped with the actor.
+func (e *executor) halt(ctx context.Context) {
+	parked, cancelType := e.deactivate()
+	if len(parked) > 0 || cancelType != "" {
+		e.forwardParked(ctx, parked, cancelType)
+	}
+}
+
+// deactivate closes the actor and returns what was still parked on it: the
+// completions in the channel and the displaced slot, and the task type of a
+// recorded cancellation ("" when there is none).
+func (e *executor) deactivate() ([]*internalsv1pb.InternalInvokeResponse, string) {
 	if !e.closed.CompareAndSwap(false, true) {
-		return nil
+		return nil, ""
 	}
 
 	// Close under mu so complete's closed-check-then-park cannot straddle
@@ -361,9 +393,31 @@ func (e *executor) Deactivate(_ context.Context) error {
 	e.mu.Lock()
 	close(e.closeCh)
 	e.table.Delete(e.actorID)
+	var parked []*internalsv1pb.InternalInvokeResponse
+	if e.displaced != nil {
+		parked = append(parked, e.displaced)
+		e.displaced = nil
+	}
+	parked = e.drainParked(parked)
+	cancelType := e.cancelType
 	e.mu.Unlock()
 	e.wg.Wait()
-	return nil
+
+	// A completer blocked on the full channel (the only sender outside mu)
+	// can still land its payload in the slot the drain above freed. It holds
+	// wg, so it has finished by now.
+	return e.drainParked(parked), cancelType
+}
+
+func (e *executor) drainParked(parked []*internalsv1pb.InternalInvokeResponse) []*internalsv1pb.InternalInvokeResponse {
+	for {
+		select {
+		case d := <-e.completeCh:
+			parked = append(parked, d)
+		default:
+			return parked
+		}
+	}
 }
 
 func (e *executor) InvokeStream(ctx context.Context,
@@ -384,13 +438,18 @@ func (e *executor) InvokeStream(ctx context.Context,
 func (e *executor) watchComplete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
 	defer func() {
 		// A displaced completion still needs the actor alive for its own
-		// waiter; skip deactivation until it is consumed. Non-blocking: a
-		// blocking send can deadlock when the queue is full and its consumer
-		// is waiting on this actor's wait group, which this stream holds.
+		// waiter; skip deactivation until it is consumed. So does a
+		// completion that parked while this stream served the previous one:
+		// a completer blocked on the full channel refills the slot the
+		// moment the stream takes it, and that completion often is the
+		// current attempt's, which the waiter watches again for.
+		// Non-blocking: a blocking send can deadlock when the queue is full
+		// and its consumer is waiting on this actor's wait group, which this
+		// stream holds.
 		e.mu.Lock()
-		displaced := e.displaced != nil
+		keep := e.displaced != nil || len(e.completeCh) > 0
 		e.mu.Unlock()
-		if !displaced {
+		if !keep {
 			e.tryDeactivate()
 		}
 	}()

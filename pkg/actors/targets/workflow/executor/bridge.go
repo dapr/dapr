@@ -28,6 +28,10 @@ import (
 // sibling-format rendezvous actor, so it is never forwarded again.
 const MetadataForwarded = "forwarded"
 
+// forwardedValue is the MetadataForwarded value of a forwarded request, and
+// of the header a parked forwarded completion keeps.
+const forwardedValue = "true"
+
 const (
 	// MetadataTaskType carries the task type of a Complete/Cancel call so
 	// the receiving executor actor can deliver into the correctly
@@ -176,6 +180,60 @@ func (e *executor) callSibling(ctx context.Context, sibling string, data []byte)
 	if _, err = router.Call(ctx, freq); err != nil {
 		log.Debugf("Executor actor '%s': failed to forward completion to sibling rendezvous '%s': %s", e.actorID, sibling, err)
 	}
+}
+
+// forwardParked sends what a halted actor still held to the actor's new
+// owner: each parked completion, then the cancellation if one was recorded
+// (cancelType is its task type, "" when there is none). The requests carry
+// the forwarded marker, so the new owner does not forward them to the
+// sibling-format key, and a later halt does not forward them again. Best
+// effort, with the same goroutine and timeout rules as forwardSibling.
+func (e *executor) forwardParked(ctx context.Context, parked []*internalsv1pb.InternalInvokeResponse, cancelType string) {
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), forwardTimeout)
+	go func() {
+		defer cancel()
+		router, err := e.actors.Router(fctx)
+		if err != nil {
+			log.Debugf("Executor actor '%s': unable to forward its parked results after a halt: %s", e.actorID, err)
+			return
+		}
+
+		for _, d := range parked {
+			if v, ok := d.GetHeaders()[MetadataForwarded]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] == forwardedValue {
+				// Already forwarded once: a sibling copy, or a completion that
+				// a halt moved before. Forwarding again would let a payload
+				// that nothing consumes follow every rebalance forever.
+				continue
+			}
+			md := map[string][]string{MetadataForwarded: {forwardedValue}}
+			if taskType := parkedTaskType(d); taskType != "" {
+				md[MetadataTaskType] = []string{taskType}
+			}
+			freq := internalsv1pb.
+				NewInternalInvokeRequest(MethodComplete).
+				WithActor(e.actorType, e.actorID).
+				WithData(d.GetMessage().GetData().GetValue()).
+				WithContentType(invokev1.ProtobufContentType).
+				WithMetadata(md)
+			if _, err = router.Call(fctx, freq); err != nil {
+				log.Debugf("Executor actor '%s': failed to forward a parked completion after a halt: %s", e.actorID, err)
+			}
+		}
+
+		if cancelType != "" {
+			freq := internalsv1pb.
+				NewInternalInvokeRequest(MethodCancel).
+				WithActor(e.actorType, e.actorID).
+				WithContentType(invokev1.ProtobufContentType).
+				WithMetadata(map[string][]string{
+					MetadataForwarded: {forwardedValue},
+					MetadataTaskType:  {cancelType},
+				})
+			if _, err = router.Call(fctx, freq); err != nil {
+				log.Debugf("Executor actor '%s': failed to forward a parked cancellation after a halt: %s", e.actorID, err)
+			}
+		}
+	}()
 }
 
 func isForwarded(req *internalsv1pb.InternalInvokeRequest) bool {
