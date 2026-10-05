@@ -49,6 +49,10 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	}
 
 	workflowName := o.getExecutionStartedEvent(state).GetName()
+	// Read from the turn's runtime state, not the persisted history: a
+	// ContinueAsNew turn dispatches the new generation's activities before it
+	// saves, and its pinned execution ID is only in rs until then.
+	executionID := rs.GetStartEvent().GetWorkflowInstance().GetExecutionId().GetValue()
 
 	var result messages.DispatchResult
 	for _, e := range es {
@@ -64,7 +68,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, elide, false)
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, executionID, elide, false)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -79,7 +83,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName string, elide, redispatch bool) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName, executionID string, elide, redispatch bool) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -124,6 +128,9 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	}
 	if redispatch {
 		meta[todo.MetadataActivityJanitorRedispatch] = []string{"true"}
+	}
+	if executionID != "" {
+		meta[todo.MetadataParentExecutionID] = []string{executionID}
 	}
 
 	if o.fastPath {
