@@ -105,5 +105,9 @@ func (f *failedlookup) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { f.host.Cleanup(t) })
 	f.host.WaitUntilRunning(t, ctx)
 
-	assert.Eventually(t, succeeded.Load, time.Second*5, time.Millisecond*10)
+	// The window covers host registration, the dissemination round and the
+	// router's 1s retry backoff. Without the fix, the round waits for the
+	// caller's 20s drain timeout (WithDrainOngoingCallTimeout in Setup), so
+	// the window must stay well below that.
+	assert.Eventually(t, succeeded.Load, time.Second*10, time.Millisecond*10)
 }

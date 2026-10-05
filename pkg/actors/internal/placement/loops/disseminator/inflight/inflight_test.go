@@ -347,7 +347,10 @@ func TestCancelClaimsForTypes_FailedLookupHoldsNoClaim(t *testing.T) {
 	})
 	select {
 	case resp := <-respCh:
+		// No claim: placement.LookupActor has nothing to release on error.
 		require.Error(t, resp.Error)
+		require.Nil(t, resp.Context)
+		require.Nil(t, resp.Cancel)
 	case <-time.After(time.Second):
 		require.Fail(t, "AcquireLookup should resolve")
 	}
@@ -357,6 +360,78 @@ func TestCancelClaimsForTypes_FailedLookupHoldsNoClaim(t *testing.T) {
 	// timeout.
 	start := time.Now()
 	i.CancelClaimsForTypes([]string{"b"}, errors.New("placement table updated"))
+	assert.Less(t, time.Since(start), time.Second)
+
+	cancel()
+	i.Close(nil)
+}
+
+func TestCancelClaimsForTypes_QueuedFailedLookupHoldsNoClaim(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Open(ctx)
+
+	// The lookup queues while a round blocks its type, then UnlockTypes
+	// flushes it. Type "b" has no table, so it fails and must take no claim.
+	i.LockTypes([]string{"b"})
+	respCh := make(chan *loops.LookupResponse, 1)
+	i.AcquireLookup(&loops.LookupRequest{
+		Request:  &api.LookupActorRequest{ActorType: "b", ActorID: "x"},
+		Context:  ctx,
+		Response: respCh,
+	})
+	require.Empty(t, respCh)
+	i.UnlockTypes([]string{"b"})
+
+	select {
+	case resp := <-respCh:
+		require.Error(t, resp.Error)
+		require.Nil(t, resp.Context)
+		require.Nil(t, resp.Cancel)
+	case <-time.After(time.Second):
+		require.Fail(t, "queued AcquireLookup should resolve after UnlockTypes")
+	}
+
+	cancel()
+	i.Close(nil)
+}
+
+func TestCancelClaimsForTypes_SuccessfulLookupHoldsClaim(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"a": {"h:1": 1},
+	}), 1)
+	drain := true
+	timeout := 5 * time.Second
+	i.SetDrainOngoingCallTimeout(&drain, &timeout)
+	i.Open(ctx)
+
+	// Control case: a successful lookup takes a claim, and the drain waits
+	// until the caller releases it.
+	respCh := make(chan *loops.LookupResponse, 1)
+	i.AcquireLookup(&loops.LookupRequest{
+		Request:  &api.LookupActorRequest{ActorType: "a", ActorID: "x"},
+		Context:  ctx,
+		Response: respCh,
+	})
+	var resp *loops.LookupResponse
+	select {
+	case resp = <-respCh:
+	case <-time.After(time.Second):
+		require.Fail(t, "AcquireLookup should resolve")
+	}
+	require.NoError(t, resp.Error)
+	require.NotNil(t, resp.Cancel)
+
+	time.AfterFunc(200*time.Millisecond, func() { resp.Cancel(nil) })
+	start := time.Now()
+	i.CancelClaimsForTypes([]string{"a"}, errors.New("placement table updated"))
+	assert.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond)
 	assert.Less(t, time.Since(start), time.Second)
 
 	cancel()
