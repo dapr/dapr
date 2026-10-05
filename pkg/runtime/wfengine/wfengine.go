@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -302,6 +304,11 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
+	if closeDisconnectContextForTest() {
+		log.Warn("TEST INJECTION: closing the work-item stream context during the disconnect callback")
+		ctx = closingContext{Context: context.WithoutCancel(ctx), done: closedCh}
+	}
+
 	// The stream's transport can cancel ctx at any point during this call.
 	// A cancelled ctx fails UnRegisterActors before any type is removed,
 	// while actorsRegistered is still reset below: the host would keep
@@ -331,6 +338,48 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 
 	return nil
 }
+
+// closeDisconnectContextForTest is a test-only fault injection: the first N
+// work-item disconnect callbacks run with a stream context whose Done channel
+// is already closed while Err still reports nil, the state the callback sees
+// when the stream's transport closes just after the callback starts. Not a
+// supported production knob.
+var closeDisconnectContextForTest = func() func() bool {
+	const env = "DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT"
+	var used atomic.Int64
+	budget := sync.OnceValue(func() int64 {
+		v := os.Getenv(env)
+		if v == "" {
+			return 0
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			log.Warnf("Ignoring invalid %s %q", env, v)
+			return 0
+		}
+		return n
+	})
+	return func() bool {
+		n := budget()
+		return n != 0 && used.Add(1) <= n
+	}
+}()
+
+var closedCh = func() chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
+// closingContext is a context whose transport is closing: Done is closed,
+// but Err does not report it yet. It keeps the values of the context it
+// wraps, but not its cancellation.
+type closingContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func (c closingContext) Done() <-chan struct{} { return c.done }
 
 // syncExecutorAvailable pushes current executor connectivity to the backend's
 // pending-tasks tracker. Must be called with actorRegLock held. Flipping to
