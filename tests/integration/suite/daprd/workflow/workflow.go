@@ -33,6 +33,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/externalevent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/get"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/globalmaxconcurrent"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/healthping"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/hotreload"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/list"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/listener"
