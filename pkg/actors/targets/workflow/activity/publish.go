@@ -179,7 +179,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	// TODO: @joshvanl: remove `workflowsRemoteActivityReminder` check in later
 	// version.
 	if f.workflowsRemoteActivityReminder && f.actorNotReachable(ctx, wfActorType, ex.workflowID) {
-		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.wi.Result)
+		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result)
 	} else {
 		// publish the result back to the workflow actor as a new event to be processed
 		var resultData []byte
@@ -195,6 +195,9 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			WithActor(wfActorType, ex.workflowID).
 			WithData(resultData).
 			WithContentType(invokev1.ProtobufContentType)
+		if ex.parentExecutionID != "" {
+			req = req.WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {ex.parentExecutionID}})
+		}
 		_, err = f.router.Call(ctx, req)
 	}
 
@@ -207,7 +210,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		}
 
 		if f.workflowsRemoteActivityReminder {
-			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.wi.Result); cerr == nil {
+			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result); cerr == nil {
 				return nil
 			}
 		}

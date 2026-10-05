@@ -113,6 +113,11 @@ func (u *Upgrade) Scheduler() *scheduler.Scheduler {
 	return u.sched
 }
 
+// DB returns the actor state store both daprds share.
+func (u *Upgrade) DB() *sqlite.SQLite {
+	return u.db
+}
+
 // Start runs d, connects a worker serving reg to it and returns the client
 // once d has registered the workflow actor types and sees the worker.
 func (u *Upgrade) Start(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *task.TaskRegistry) *client.TaskHubGrpcClient {
@@ -123,6 +128,23 @@ func (u *Upgrade) Start(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *
 	d.Run(t, ctx)
 	t.Cleanup(func() { d.Cleanup(t) })
 	d.WaitUntilRunning(t, ctx)
+
+	return u.connect(t, ctx, d, reg)
+}
+
+// Restart restarts d, dropping its in-memory actor state so it reloads what
+// a test wrote to the store, and returns a client with a worker serving reg
+// reconnected to it.
+func (u *Upgrade) Restart(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *task.TaskRegistry) *client.TaskHubGrpcClient {
+	t.Helper()
+
+	d.Restart(t, ctx)
+	d.WaitUntilRunning(t, ctx)
+	return u.connect(t, ctx, d, reg)
+}
+
+func (u *Upgrade) connect(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *task.TaskRegistry) *client.TaskHubGrpcClient {
+	t.Helper()
 
 	cl := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, reg))
