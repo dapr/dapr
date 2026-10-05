@@ -15,7 +15,6 @@ package admission
 
 import (
 	"context"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -106,10 +105,7 @@ func (s *stampedreminder) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for the activity to start")
 	}
 
-	hist, err := client.GetInstanceHistory(ctx, id)
-	require.NoError(t, err)
-	events := hist.GetEvents()
-	scheduled := events[slices.IndexFunc(events, fworkflow.IsTaskScheduledFor(0))].GetTaskScheduled()
+	scheduled := fworkflow.WaitForHistoryEvent(t, ctx, client, id, fworkflow.IsTaskScheduledFor(0)).GetTaskScheduled()
 
 	fworkflow.PlantReminder(t, ctx, s.workflow, id, common.ActivityResultReminderName("stamped", "another-execution"), &protos.HistoryEvent{
 		EventId:   -1,

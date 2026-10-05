@@ -15,7 +15,6 @@ package upgrade
 
 import (
 	"context"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -87,11 +86,8 @@ func (s *stampedresultreminder) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for the activity to start")
 	}
 
-	hist, err := legacy.GetInstanceHistory(ctx, id)
-	require.NoError(t, err)
-	events := hist.GetEvents()
-	scheduled := events[slices.IndexFunc(events, fworkflow.IsTaskScheduledFor(0))].GetTaskScheduled()
-	execID := events[slices.IndexFunc(events, func(e *protos.HistoryEvent) bool { return e.GetExecutionStarted() != nil })].
+	scheduled := fworkflow.WaitForHistoryEvent(t, ctx, legacy, id, fworkflow.IsTaskScheduledFor(0)).GetTaskScheduled()
+	execID := fworkflow.WaitForHistoryEvent(t, ctx, legacy, id, func(e *protos.HistoryEvent) bool { return e.GetExecutionStarted() != nil }).
 		GetExecutionStarted().GetWorkflowInstance().GetExecutionId().GetValue()
 	require.NotEmpty(t, execID)
 

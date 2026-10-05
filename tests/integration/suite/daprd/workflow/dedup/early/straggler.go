@@ -145,9 +145,10 @@ func (s *straggler) Run(t *testing.T, ctx context.Context) {
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "can"))
 	wait(s.gateStarted, "generation 2 never started gate")
-	require.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, func(e *protos.HistoryEvent) bool {
+	// gate is dispatched before the turn that continued as new saves.
+	fworkflow.WaitForHistoryEvent(t, ctx, cl, id, func(e *protos.HistoryEvent) bool {
 		return e.GetExecutionStarted().GetInput().GetValue() == "2"
-	}), "gate must run in generation 2")
+	})
 
 	// Deliver slow's result while generation 2's history is below id 1, and
 	// wait for its run-activity reminder to settle so the result has been

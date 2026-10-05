@@ -16,8 +16,11 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -180,6 +183,26 @@ func CountHistoryEventsMatching(t *testing.T, ctx context.Context, cl *client.Ta
 		}
 	}
 	return count
+}
+
+// WaitForHistoryEvent waits until the workflow's persisted history holds an
+// event matching pred and returns that event. A turn dispatches its work
+// before it saves, so seeing an activity or child start does not mean its
+// scheduling is in the history yet.
+func WaitForHistoryEvent(t *testing.T, ctx context.Context, cl *client.TaskHubGrpcClient, id api.InstanceID, pred func(*protos.HistoryEvent) bool) *protos.HistoryEvent {
+	t.Helper()
+	var found *protos.HistoryEvent
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		hist, err := cl.GetInstanceHistory(ctx, id)
+		if !assert.NoError(c, err) {
+			return
+		}
+		i := slices.IndexFunc(hist.GetEvents(), pred)
+		if assert.GreaterOrEqual(c, i, 0, "no matching event in the persisted history yet") {
+			found = hist.GetEvents()[i]
+		}
+	}, 20*time.Second, 10*time.Millisecond)
+	return found
 }
 
 // IsTaskCompletedFor returns a predicate that matches a TaskCompleted event
