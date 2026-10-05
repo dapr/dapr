@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
@@ -130,3 +131,31 @@ var testDropActivityCompletions = sync.OnceValue(func() int64 {
 	}
 	return n
 })
+
+// testForceWatchFallback is a test-only fault injection: under
+// WorkflowsClusteredDeployment, the first N completion waits use the
+// watch-stream fallback even when placement resolves the executor actor to
+// this daprd. It models a placement table in which a waiter and its executor
+// actor resolve to different hosts, as during a rebalance. Not a supported
+// production knob.
+var testForceWatchFallback = sync.OnceValue(func() int64 {
+	v := os.Getenv("DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK")
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		log.Warnf("Ignoring invalid DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK %q", v)
+		return 0
+	}
+	return n
+})
+
+var forcedWatchFallbacks atomic.Int64
+
+// forceWatchFallbackForTest reports whether this completion wait must use the
+// watch-stream fallback under DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK.
+func forceWatchFallbackForTest() bool {
+	budget := testForceWatchFallback()
+	return budget != 0 && forcedWatchFallbacks.Add(1) <= budget
+}
