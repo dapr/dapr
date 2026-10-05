@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -60,6 +61,22 @@ type ClusterTasksBackend struct {
 	actors            actors.Interface
 	executorActorType string
 	pending           *pending.Pending
+
+	// forcedWatchFallbacks counts DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK
+	// injections.
+	forcedWatchFallbacks atomic.Int64
+}
+
+// errWrongTaskType reports a watch delivery for the colliding other task type
+// (a workflow instance ID equal to an activity actor ID). It is not for this
+// waiter, whose own completion can still come.
+var errWrongTaskType = errors.New("completion for another task type")
+
+// forceWatchFallbackForTest reports whether this completion wait must use the
+// watch-stream fallback under DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK.
+func (be *ClusterTasksBackend) forceWatchFallbackForTest() bool {
+	budget := testForceWatchFallback()
+	return budget != 0 && be.forcedWatchFallbacks.Add(1) <= budget
 }
 
 func NewClusterTasksBackend(opts ClusterTasksBackendOptions) (*ClusterTasksBackend, error) {
@@ -205,9 +222,11 @@ const onCompletionClaimTimeout = 30 * time.Second
 
 // watchRewatchDelay is the pause before a waiter on the watch-stream fallback
 // opens another stream after a delivery that did not settle it. The executor
-// actor that served the previous stream deactivates once the stream ends; the
-// pause lets that finish, so the next stream lands on a fresh actor. It also
-// gives a settlement that raced the registration time to cancel the watch.
+// actor that served the previous stream deactivates once the stream ends. A
+// stream that attaches to it before it closes gets a closed error, which the
+// router retries on a fresh actor, so the pause is not needed for
+// correctness: it avoids most of those retries. It also gives a settlement
+// that raced the registration time to cancel the watch.
 const watchRewatchDelay = 100 * time.Millisecond
 
 func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() proto.Message, cb func(proto.Message, error)) func() {
@@ -225,7 +244,7 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 	ctx, cancel := context.WithTimeout(context.Background(), onCompletionClaimTimeout)
 	defer cancel()
 
-	if forceWatchFallbackForTest() {
+	if be.forceWatchFallbackForTest() {
 		log.Warnf("TEST INJECTION: using the watch-stream fallback for %s task '%s'", taskType, key)
 	} else if be.executorLocal(ctx, key) {
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
@@ -257,9 +276,13 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 			if wctx.Err() != nil {
 				return
 			}
-			cb(m, err)
-			if err != nil {
-				return
+			if errors.Is(err, errWrongTaskType) {
+				log.Debugf("Watch stream for %s task '%s' served a completion of the other task type; watching again", taskType, key)
+			} else {
+				cb(m, err)
+				if err != nil {
+					return
+				}
 			}
 			// A watch stream serves one completion. If it was a superseded
 			// attempt's, durabletask discards it by completion token and
@@ -365,7 +388,7 @@ func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, ke
 		}
 
 		if v, ok := res.GetHeaders()[executor.MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != taskType {
-			return false, fmt.Errorf("received completion for task type %q while watching %q", v.GetValues()[0], taskType)
+			return false, fmt.Errorf("%w: received completion for task type %q while watching %q", errWrongTaskType, v.GetValues()[0], taskType)
 		}
 
 		if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp); err != nil {
