@@ -1025,6 +1025,49 @@ func unscheduledLast(history, events []*backend.HistoryEvent) []*backend.History
 	return append(out, last...)
 }
 
+// resolutionsAfterScheduling returns history with each activity result,
+// timer firing or child workflow result that precedes the event scheduling
+// its step moved to just after that event. A worker that does not buffer an
+// early resolution ignores one replayed before the workflow has scheduled
+// the step, so a history persisted in that shape (release 1.17 could persist
+// a completion ahead of the event that led the workflow to schedule the
+// step) would never resolve it. Only the replayed view is reordered; the
+// persisted rows are untouched. A resolution of a step the history never
+// schedules stays where it is. The slice is returned as is when nothing has
+// to move.
+func resolutionsAfterScheduling(history []*backend.HistoryEvent) []*backend.HistoryEvent {
+	var at map[scheduling]int
+	var out []*backend.HistoryEvent
+	var moved map[int][]*backend.HistoryEvent
+	for i, e := range history {
+		if k, ok := resolves(e); ok {
+			if at == nil {
+				at = make(map[scheduling]int)
+				for j, h := range history {
+					if sk, isScheduling := schedules(h); isScheduling {
+						at[sk] = j
+					}
+				}
+			}
+			if j, found := at[k]; found && j > i {
+				if out == nil {
+					out = append(make([]*backend.HistoryEvent, 0, len(history)), history[:i]...)
+					moved = make(map[int][]*backend.HistoryEvent)
+				}
+				moved[j] = append(moved[j], e)
+				continue
+			}
+		}
+		if out != nil {
+			out = append(append(out, e), moved[i]...)
+		}
+	}
+	if out == nil {
+		return history
+	}
+	return out
+}
+
 // scheduling names a step of a workflow by its kind and the event ID of the
 // history event that scheduled it.
 type scheduling struct {

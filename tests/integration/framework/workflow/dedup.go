@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -210,6 +212,56 @@ func IsTaskScheduledFor(eventID int32) func(*protos.HistoryEvent) bool {
 	return func(e *protos.HistoryEvent) bool {
 		return e.GetTaskScheduled() != nil && e.GetEventId() == eventID
 	}
+}
+
+func IsTimerCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetTimerCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+func IsChildCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetChildWorkflowInstanceCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+// TaskCompletedEvent returns a TaskCompleted resolution for the activity
+// scheduled at taskScheduledID, as a sender would deliver it (EventId -1),
+// for planting into an inbox or a history.
+func TaskCompletedEvent(taskScheduledID int32, result string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{
+		TaskScheduledId: taskScheduledID,
+		Result:          wrapperspb.String(result),
+	}}}
+}
+
+func TaskFailedEvent(taskScheduledID int32, message string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{
+		TaskScheduledId: taskScheduledID,
+		FailureDetails:  &protos.TaskFailureDetails{ErrorType: "TestError", ErrorMessage: message},
+	}}}
+}
+
+func TimerFiredEvent(timerID int32) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TimerFired{TimerFired: &protos.TimerFiredEvent{
+		TimerId: timerID,
+		FireAt:  timestamppb.Now(),
+	}}}
+}
+
+func ChildCompletedEvent(taskScheduledID int32, result string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+		TaskScheduledId: taskScheduledID,
+		Result:          wrapperspb.String(result),
+	}}}
+}
+
+func ChildFailedEvent(taskScheduledID int32, message string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
+		TaskScheduledId: taskScheduledID,
+		FailureDetails:  &protos.TaskFailureDetails{ErrorType: "TestError", ErrorMessage: message},
+	}}}
 }
 
 func workflowActorKeyPrefix(daprd *daprd.Daprd, instanceID string) string {

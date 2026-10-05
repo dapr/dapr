@@ -68,6 +68,51 @@ func TestUnscheduledLast(t *testing.T) {
 	})
 }
 
+func TestResolutionsAfterScheduling(t *testing.T) {
+	t.Parallel()
+
+	started := startedEvent()
+	raised := &protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "go"}}}
+
+	t.Run("a resolution ahead of its scheduling follows it", func(t *testing.T) {
+		t.Parallel()
+		early, scheduled := taskCompletedWithExecID(1, ""), taskScheduledEvent(1)
+		got := resolutionsAfterScheduling([]*backend.HistoryEvent{started, early, raised, scheduled})
+		assert.Equal(t, []*backend.HistoryEvent{started, raised, scheduled, early}, got)
+	})
+
+	t.Run("an ordered history is returned as it is", func(t *testing.T) {
+		t.Parallel()
+		history := []*backend.HistoryEvent{started, taskScheduledEvent(0), taskCompletedWithExecID(0, ""), raised}
+		got := resolutionsAfterScheduling(history)
+		assert.Equal(t, history, got)
+		assert.Same(t, &history[0], &got[0], "nothing to move: the slice is not copied")
+	})
+
+	t.Run("a resolution with no scheduling, or of another kind, stays put", func(t *testing.T) {
+		t.Parallel()
+		orphan := taskCompletedWithExecID(7, "")
+		forTimer := taskCompletedWithExecID(1, "")
+		history := []*backend.HistoryEvent{started, orphan, forTimer, timerCreatedEvent(1), taskScheduledEvent(2)}
+		assert.Equal(t, history, resolutionsAfterScheduling(history))
+	})
+
+	t.Run("each kind follows its own scheduling, order within a step kept", func(t *testing.T) {
+		t.Parallel()
+		fired := firedEvent(1)
+		child := childCompletedEvent(2)
+		result := taskCompletedWithExecID(3, "")
+		failed := &protos.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: 3}}}
+		timer, created, scheduled := timerCreatedEvent(1), childCreatedEvent(2), taskScheduledEvent(3)
+		got := resolutionsAfterScheduling([]*backend.HistoryEvent{
+			started, result, child, failed, fired, raised, timer, created, scheduled,
+		})
+		assert.Equal(t, []*backend.HistoryEvent{
+			started, raised, timer, fired, created, child, scheduled, result, failed,
+		}, got)
+	})
+}
+
 func TestStripUnmatchedResolutions(t *testing.T) {
 	t.Parallel()
 
