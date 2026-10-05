@@ -302,9 +302,11 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
-	if ctx.Err() != nil {
-		ctx = context.Background()
-	}
+	// The stream's transport can cancel ctx at any point during this call.
+	// A cancelled ctx fails UnRegisterActors before any type is removed,
+	// while actorsRegistered is still reset below: the host would keep
+	// advertising the workflow actor types with no worker to run them.
+	ctx = context.WithoutCancel(ctx)
 
 	last := wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0
 	if last {
