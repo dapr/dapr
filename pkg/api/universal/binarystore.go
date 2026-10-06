@@ -20,11 +20,23 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
+
+type cancelOnCloseReadCloser struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (c *cancelOnCloseReadCloser) Close() error {
+	c.once.Do(c.cancel)
+	return c.ReadCloser.Close()
+}
 
 func validateBinaryStoreFileName(fileName string) error {
 	switch {
@@ -73,9 +85,17 @@ func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, file
 
 	// The request body is a one-shot stream and cannot be rewound for retries.
 	// Invoke the component directly so a partially-consumed reader cannot be
-	// replayed and produce a truncated or empty file on retry.
+	// replayed and produce a truncated or empty file on retry. This also bypasses
+	// the circuit breaker because it is currently coupled to the Runner.
 	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
-	err = component.Set(policyDef.ComponentContext(ctx), req)
+	ctx = policyDef.ComponentContext(ctx)
+	if timeout := policyDef.Timeout(); timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	err = component.Set(ctx, req)
 	if err != nil {
 		return mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreSet)
 	}
@@ -100,17 +120,37 @@ func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, file
 
 	// The response body is read after this method returns, so it must not use a
 	// Runner context that is canceled as soon as the component call completes.
+	// This also bypasses retries and the circuit breaker because both are
+	// currently coupled to the Runner.
 	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
-	resp, err := component.Get(policyDef.ComponentContext(ctx), req)
+	ctx = policyDef.ComponentContext(ctx)
+	var cancel context.CancelFunc
+	if timeout := policyDef.Timeout(); timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+	}
+
+	resp, err := component.Get(ctx, req)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreGet)
 	}
 	if resp == nil || resp.Data == nil {
+		if cancel != nil {
+			cancel()
+		}
 		// Defensive: a nil reader should never be returned for an existing file,
 		// but treat it as not-found rather than returning nil to the caller.
 		err := messages.ErrBinaryStoreFileNotFound.WithFormat(fileName, componentName)
 		a.logger.Debug(err)
 		return nil, err
+	}
+	if cancel != nil {
+		return &cancelOnCloseReadCloser{
+			ReadCloser: resp.Data,
+			cancel:     cancel,
+		}, nil
 	}
 	return resp.Data, nil
 }
