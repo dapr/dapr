@@ -788,3 +788,180 @@ func Test_armDetachedOnCreateError_classification(t *testing.T) {
 		})
 	}
 }
+
+func withExecutionID(execID string, more ...func(*protos.ExecutionStartedEvent)) func(*protos.ExecutionStartedEvent) {
+	return func(es *protos.ExecutionStartedEvent) {
+		if execID != "" {
+			es.WorkflowInstance.ExecutionId = wrapperspb.String(execID)
+		}
+		for _, m := range more {
+			m(es)
+		}
+	}
+}
+
+// primeHistory primes a started instance with the given history.
+func (h *createHarness) primeHistory(events ...*backend.HistoryEvent) *wfenginestate.State {
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range events {
+		state.AddToHistory(e)
+	}
+	h.orch.state = state
+	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
+	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, events[0].GetExecutionStarted())
+	return state
+}
+
+func completedEvent() *backend.HistoryEvent {
+	return &backend.HistoryEvent{
+		EventId: -1, Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{
+			WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+		}},
+	}
+}
+
+func Test_createWorkflowInstance_sameExecutionRetryPending(t *testing.T) {
+	const instanceID = "test-retry-pending"
+
+	t.Run("armed reminder answers success without re-driving", func(t *testing.T) {
+		saved := startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1"))
+		h := newCreateHarness(t, instanceID)
+		h.primePendingStart(saved)
+		h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
+
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, saved)))
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Empty(t, h.ops, "a retry of the committed create must not save or re-arm")
+	})
+
+	t.Run("missing reminder is re-asserted from the saved event", func(t *testing.T) {
+		savedTS := time.Now().Add(-time.Minute)
+		saved := startEventFor(instanceID, savedTS, withExecutionID("exec-1"))
+		h := newCreateHarness(t, instanceID)
+		h.primePendingStart(saved)
+
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, saved)))
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		wantName := "start-es-" + strconv.Itoa(int(savedTS.UnixNano()))
+		assert.Equal(t, []string{"create:" + wantName}, h.ops)
+	})
+}
+
+func Test_createWorkflowInstance_pendingDifferentExecutionAlreadyExists(t *testing.T) {
+	const instanceID = "test-retry-pending-other"
+
+	h := newCreateHarness(t, instanceID)
+	h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")))
+	h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
+
+	incoming := startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
+	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, status.Code(err))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Empty(t, h.ops)
+}
+
+func Test_createWorkflowInstance_sameExecutionRetryRunning(t *testing.T) {
+	const instanceID = "test-retry-running"
+
+	start := startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1"))
+	h := newCreateHarness(t, instanceID)
+	h.primeHistory(start)
+
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Empty(t, h.ops)
+}
+
+func Test_createWorkflowInstance_sameExecutionRetryCompletedNoop(t *testing.T) {
+	const instanceID = "test-retry-completed"
+
+	start := startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1"))
+	h := newCreateHarness(t, instanceID)
+	state := h.primeHistory(start, completedEvent())
+
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Empty(t, h.ops, "a retry of the committed create must not recreate the completed workflow")
+	assert.Len(t, state.History, 2, "the completed history must not be reset")
+}
+
+func Test_createWorkflowInstance_completedDifferentExecutionRecreates(t *testing.T) {
+	const instanceID = "test-recreate-completed"
+
+	for name, execID := range map[string]string{
+		"different execution ID": "exec-2",
+		"no execution ID":        "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newCreateHarness(t, instanceID)
+			h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")), completedEvent())
+
+			newTS := time.Now()
+			incoming := startEventFor(instanceID, newTS, withExecutionID(execID))
+			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			wantName := "start-es-" + strconv.Itoa(int(newTS.UnixNano()))
+			assert.Equal(t, []string{"save", "create:" + wantName}, h.ops)
+		})
+	}
+}
+
+func Test_createWorkflowInstance_completedChildSameExecutionNotifiesParent(t *testing.T) {
+	const instanceID = "test-retry-child"
+
+	start := startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("child-1", parentWithExec("exec-a")))
+	h := newCreateHarness(t, instanceID)
+	h.primeHistory(start, completedEvent())
+
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	assert.Equal(t, []string{"save", "create:" + reminderNameParentNotify}, h.ops,
+		"a child retry must still owe the parent its completion")
+}
+
+func Test_isSameExecutionRetry(t *testing.T) {
+	es := func(execID string) *protos.ExecutionStartedEvent {
+		return startEventFor("test-same-exec", time.Now(), withExecutionID(execID)).GetExecutionStarted()
+	}
+
+	tests := map[string]struct {
+		saved    string
+		incoming string
+		want     bool
+	}{
+		"both nil":     {saved: "", incoming: "", want: false},
+		"saved nil":    {saved: "", incoming: "x", want: false},
+		"incoming nil": {saved: "x", incoming: "", want: false},
+		"equal":        {saved: "x", incoming: "x", want: true},
+		"different":    {saved: "x", incoming: "y", want: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			h := newCreateHarness(t, "test-same-exec")
+			state := h.primePendingStart(startEventFor("test-same-exec", time.Now(), withExecutionID(tc.saved)))
+			assert.Equal(t, tc.want, h.orch.isSameExecutionRetry(state, es(tc.incoming)))
+		})
+	}
+}
