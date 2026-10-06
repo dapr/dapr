@@ -511,12 +511,12 @@ github.com/cyphar/filepath-securejoin v0.6.1 h1:5CeZ1jPXEiYt3+Z6zqprSAgSWiggmpVy
 github.com/cyphar/filepath-securejoin v0.6.1/go.mod h1:A8hd4EnAeyujCJRrICiOWqjS1AX0a9kM5XL+NwKoYSc=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.18.0-rc.1.0.20260924175451-6a7838d26286 h1:t787Xb8DsSVKB5QNJ0oS2KKtqS7CcBIiGTAWRltkfoM=
-github.com/dapr/components-contrib v1.18.0-rc.1.0.20260924175451-6a7838d26286/go.mod h1:Lf4sZAFKBbPeoM7LJjPAlLg2wvZhzxe6msjYsrafeko=
+github.com/dapr/components-contrib v1.18.0-rc.1.0.20261006091320-becc86bd2da2 h1:AzrQS95tAEANahN/7ltAgRCp46KEu6XcpoVLEHB3oZA=
+github.com/dapr/components-contrib v1.18.0-rc.1.0.20261006091320-becc86bd2da2/go.mod h1:G64uggv731H4t6YkE9XS/TiaXMeeidjG8wPLlRFks3o=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.14.2-0.20260930152504-a90f95c3898d h1:kORW2IlJpYBxCe/f4/oxxx5RG9drvZl+/6IsCJNPTq0=
-github.com/dapr/durabletask-go v0.14.2-0.20260930152504-a90f95c3898d/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
+github.com/dapr/durabletask-go v0.14.2-0.20261005165523-fe0e70b7fa16 h1:6+6IyRuueJhOeKrJT8bxxte66JtcQsj1v/BTuehmNIw=
+github.com/dapr/durabletask-go v0.14.2-0.20261005165523-fe0e70b7fa16/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/dapr/kit v0.18.3-0.20261002162430-f2a7561ba0de h1:cPKdan1H2cRGjxVvwKNAK4Y6KcNHVmrvhYmCNz/qMbQ=
 github.com/dapr/kit v0.18.3-0.20261002162430-f2a7561ba0de/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1678,8 +1678,8 @@ github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.3.128 h1:+TCKLZO
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.3.128/go.mod h1:dBnD/cAlrtjPfpJslNfXH2j7TEklwTBhnYgoMdkZ7HE=
 github.com/testcontainers/testcontainers-go v0.42.0 h1:He3IhTzTZOygSXLJPMX7n44XtK+qhjat1nI9cneBbUY=
 github.com/testcontainers/testcontainers-go v0.42.0/go.mod h1:vZjdY1YmUA1qEForxOIOazfsrdyORJAbhi0bp8plN30=
-github.com/tetratelabs/wazero v1.8.0 h1:iEKu0d4c2Pd+QSRieYbnQC9yiFlMS9D+Jr0LsRmcF4g=
-github.com/tetratelabs/wazero v1.8.0/go.mod h1:yAI0XTsMBhREkM/YDAK/zNou3GoiAce1P6+rp/wQhjs=
+github.com/tetratelabs/wazero v1.12.0 h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=
+github.com/tetratelabs/wazero v1.12.0/go.mod h1:LvKtzl2RqO4gyF27BiXU+nKAjcV8f38U+kP/q2vgxh0=
 github.com/tevid/gohamcrest v1.1.1/go.mod h1:3UvtWlqm8j5JbwYZh80D/PVBt0mJ1eJiYgZMibh0H/k=
 github.com/tidwall/gjson v1.2.1/go.mod h1:c/nTNbUr0E0OrXEhq1pwa8iEgc2DOt4ZZqAt1HtCkPA=
 github.com/tidwall/gjson v1.13.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
