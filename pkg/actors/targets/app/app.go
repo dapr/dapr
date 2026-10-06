@@ -77,7 +77,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	a.touchIdle()
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
-	if err := a.transport.InvokeReminder(ctx, reminder); err != nil {
+	if err := a.transport.InvokeReminder(ctx, reminder, lockReq.GetMetadata()); err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing reminder for actor %s: %v", reminder.Key(), err)
 		}
@@ -101,7 +101,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	a.touchIdle()
 	log.Debug("Executing timer for actor " + reminder.Key())
 
-	if err := a.transport.InvokeTimer(ctx, reminder); err != nil {
+	if err := a.transport.InvokeTimer(ctx, reminder, lockReq.GetMetadata()); err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing timer for actor %s: %v", reminder.Key(), err)
 		}

@@ -126,7 +126,7 @@ func Test_reapEscalatedCompletions(t *testing.T) {
 			assert.Equal(t, "run-activity", req.Name)
 			assert.Equal(t, "dapr.internal.default.otherapp.activity", req.ActorType,
 				"a cross-app activity's reminder lives on the remote app's actor type")
-			assert.Equal(t, instanceID+"::7", req.ActorID)
+			assert.Equal(t, instanceID+"::7::0", req.ActorID)
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "the reap delete never reached the reminder store")
 		}

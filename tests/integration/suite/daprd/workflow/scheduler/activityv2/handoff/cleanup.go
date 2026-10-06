@@ -24,12 +24,12 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -60,12 +60,15 @@ func (a *cleanup) Setup(t *testing.T) []framework.Option {
 	// The joiners trigger the mid-run placement rebalance: deliberately not
 	// in WithProcesses, Run starts them at the churn moment.
 	newDaprd := func() *daprd.Daprd {
-		return daprd.New(t, append([]daprd.Option{
+		dopts := []daprd.Option{
 			daprd.WithAppID(a.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(a.workflow.DB().GetComponent(t)),
-			daprd.WithPlacementAddresses(a.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(a.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}
+		if a.workflow.HasPlacement() {
+			dopts = append(dopts, daprd.WithPlacementAddresses(a.workflow.Placement().Address()))
+		}
+		return daprd.New(t, append(dopts, append(fp, a.workflow.JoinOptions(t)...)...)...)
 	}
 	for i := range a.joiners {
 		a.joiners[i] = newDaprd()
@@ -139,9 +142,9 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 	require.Zero(t, wf.CountClaimRecords(t, ctx, a.workflow.DB()),
 		"no records may exist before any placement churn")
 
-	version := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
 	join := func(d *daprd.Daprd) {
 		t.Helper()
+		version := a.workflow.PlacementVersion(t, ctx)
 		d.Run(t, ctx)
 		t.Cleanup(func() { d.Cleanup(t) })
 		d.WaitUntilRunning(t, ctx)
@@ -149,16 +152,12 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("HandoffCleanup", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 
-		version++
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-			if !assert.NotNil(c, table) {
-				return
-			}
-			assert.GreaterOrEqual(c, table.Version, version)
+			assert.Greater(c, a.workflow.PlacementVersion(t, ctx), version,
+				"dissemination must advance for each new daprd")
 		}, time.Second*15, time.Millisecond*10)
 	}
 

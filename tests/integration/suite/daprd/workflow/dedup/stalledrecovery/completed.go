@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dedup
+package stalledrecovery
 
 import (
 	"context"
@@ -32,31 +32,35 @@ import (
 )
 
 func init() {
-	suite.Register(new(stalledrecovery))
+	suite.Register(new(completed))
 }
 
-// stalledrecovery asserts that a history shaped like the pre-buffering-fix
-// stall recovers: a TaskCompleted persisted BEFORE the event that gates the
-// matching CallActivity, with the TaskScheduled persisted after. On replay
-// the completion arrives while the workflow is still blocked, is buffered,
-// and is delivered when the activity is scheduled; the late TaskScheduled in
-// history then matches the retained pending action without a nondeterminism
-// error. The activity itself blocks forever, so completion proves the
-// history resolution was used rather than a re-execution.
-type stalledrecovery struct {
+// completed asserts that a history shaped like the stall older releases
+// could persist recovers: a TaskCompleted persisted BEFORE the event
+// that gates the matching CallActivity, with the TaskScheduled persisted
+// after. daprd replays the history to the worker with the completion moved
+// after its TaskScheduled, so the workflow schedules the activity first and
+// the completion resolves it; the TaskScheduled matches the pending action
+// without a nondeterminism error. The activity itself blocks forever, so
+// completion proves the history resolution was used rather than a
+// re-execution.
+type completed struct {
 	workflow *workflow.Workflow
 	blockCh  chan struct{}
 }
 
-func (s *stalledrecovery) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.New(t)
+func (s *completed) Setup(t *testing.T) []framework.Option {
+	s.workflow = workflow.New(t,
+		// Signing mode opt-out: the crafted unsigned history event would be rejected by signing verification.
+		workflow.WithSigning(false),
+	)
 	s.blockCh = make(chan struct{})
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),
 	}
 }
 
-func (s *stalledrecovery) Run(t *testing.T, ctx context.Context) {
+func (s *completed) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() { close(s.blockCh) })
 
