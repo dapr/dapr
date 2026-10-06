@@ -19,11 +19,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -43,16 +45,22 @@ func init() {
 // stream for the genuine completion, or the workflow stops.
 type stalewatch struct {
 	workflow *workflow.Workflow
+	logline  *logline.LogLine
 }
 
 func (s *stalewatch) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.NewClustered(t, 1, daprd.WithExecOptions(exec.WithEnvVars(t,
-		"DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK", "1000000",
-		"DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS", "1000000",
-	)))
+	s.logline = logline.New(t, logline.WithCaptureAll())
+	s.workflow = workflow.NewClustered(t, 1, daprd.WithExecOptions(
+		exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK", "1000000",
+			"DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS", "1000000",
+		),
+		exec.WithStdout(s.logline.Stdout()),
+		exec.WithStderr(s.logline.Stderr()),
+	))
 
 	return []framework.Option{
-		framework.WithProcesses(s.workflow),
+		framework.WithProcesses(s.logline, s.workflow),
 	}
 }
 
@@ -87,4 +95,11 @@ func (s *stalewatch) Run(t *testing.T, ctx context.Context) {
 	wctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 	fworkflow.WaitForAllCompleted(t, wctx, cl, ids...)
+
+	// The completions alone would also pass if no stale copy reached a watch
+	// stream any more, for example when a slow host shifts the 150ms
+	// re-delivery relative to the activity. This pins that the re-watch path
+	// ran.
+	assert.Positive(t, s.logline.Count("discarding stale workflow task response"),
+		"no stale copy reached a watch stream")
 }

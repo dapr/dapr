@@ -16,6 +16,7 @@ package actors
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -293,6 +294,9 @@ func Test_onCompletion(t *testing.T) {
 		respCh := make(chan *protos.ActivityResponse, 2)
 		errCh := make(chan error, 2)
 		proceed := make(chan struct{})
+		// Release the callback even if an assertion below fails first.
+		closeProceed := sync.OnceFunc(func() { close(proceed) })
+		t.Cleanup(closeProceed)
 		dereg := be.OnActivityCompletion(&protos.ActivityRequest{
 			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "a6"},
 			TaskId:           0,
@@ -322,7 +326,7 @@ func Test_onCompletion(t *testing.T) {
 		// durabletask discards the stale delivery by its completion token and
 		// keeps the registration armed: the genuine completion must still
 		// reach the callback.
-		close(proceed)
+		closeProceed()
 		require.NoError(t, be.CompleteActivityTask(ctx, &protos.ActivityResponse{
 			InstanceId: "a6",
 			TaskId:     0,
@@ -334,6 +338,50 @@ func Test_onCompletion(t *testing.T) {
 			require.NoError(t, err)
 		case <-time.After(5 * time.Second):
 			require.Fail(t, "the genuine completion did not reach the callback after a stale delivery")
+		}
+		assert.Equal(t, "genuine", (<-respCh).GetResult().GetValue())
+	})
+
+	t.Run("watch fallback skips a completion of the other task type", func(t *testing.T) {
+		t.Parallel()
+		be, _ := newClusterTasksTestBackendPlaced(t, false)
+
+		// A workflow instance whose ID equals an activity actor ID shares
+		// that activity's executor actor. Its completion parks first, so
+		// the activity's watch stream serves it.
+		key := common.ActivityActorID("a7", 0)
+		require.NoError(t, be.CompleteWorkflowTask(ctx, &protos.WorkflowResponse{InstanceId: key}))
+
+		respCh := make(chan *protos.ActivityResponse, 2)
+		errCh := make(chan error, 2)
+		dereg := be.OnActivityCompletion(&protos.ActivityRequest{
+			WorkflowInstance: &protos.WorkflowInstance{InstanceId: "a7"},
+			TaskId:           0,
+		}, func(r *protos.ActivityResponse, err error) {
+			respCh <- r
+			errCh <- err
+		})
+		t.Cleanup(dereg)
+
+		// The other type's completion is not for this waiter: it must not
+		// settle the wait, with or without an error.
+		select {
+		case err := <-errCh:
+			require.Failf(t, "the other task type's completion settled the wait", "err: %v", err)
+		case <-time.After(500 * time.Millisecond):
+		}
+
+		require.NoError(t, be.CompleteActivityTask(ctx, &protos.ActivityResponse{
+			InstanceId: "a7",
+			TaskId:     0,
+			Result:     wrapperspb.String("genuine"),
+		}))
+
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "the activity completion did not reach the callback")
 		}
 		assert.Equal(t, "genuine", (<-respCh).GetResult().GetValue())
 	})
