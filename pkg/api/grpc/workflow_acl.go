@@ -31,7 +31,7 @@ import (
 // stamps identity for the in-actor check.
 func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb.InternalInvokeRequest) error {
 	if _, isWorkflowOrActivityActor := workflowacl.ParseActorType(in.GetActor().GetActorType()); !isWorkflowOrActivityActor {
-		return nil
+		return a.validateSameAppInternalActor(ctx, in.GetActor().GetActorType(), "invoke")
 	}
 
 	policies := a.workflowAccessPolicies.Load()
@@ -63,7 +63,7 @@ func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb
 // permitted to invoke workflow/activity reminders.
 func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *internalv1pb.Reminder) error {
 	if _, isWorkflowOrActivityActor := workflowacl.ParseActorType(in.GetActorType()); !isWorkflowOrActivityActor {
-		return nil
+		return a.validateSameAppInternalActor(ctx, in.GetActorType(), "reminder")
 	}
 
 	policies := a.workflowAccessPolicies.Load()
@@ -90,6 +90,38 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 	return nil
 }
 
+// Reserved internal actor types other than workflow and activity (executor,
+// retentioner) are only ever called by daprds of the same app, so callers
+// from another app or namespace are denied whether or not policies are
+// loaded. Without mTLS there is no caller identity to check.
+func (a *api) validateSameAppInternalActor(ctx context.Context, actorType, operation string) error {
+	if !workflowacl.IsInternalActorType(actorType) {
+		return nil
+	}
+
+	if _, ok, err := spiffe.FromGRPCContext(ctx); err == nil && !ok {
+		return nil
+	}
+
+	callerAppID, callerNamespace, err := a.extractCallerIdentity(ctx)
+	if err != nil {
+		return err
+	}
+
+	if nsErr := a.checkNamespace(callerNamespace); nsErr != nil {
+		return nsErr
+	}
+
+	if callerAppID != a.AppID() {
+		a.logger.Warnf("Workflow access policy denied cross-app call to internal actor type '%s' from app '%s'", actorType, callerAppID)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "internal", operation)
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
+	}
+
+	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "internal", operation)
+	return nil
+}
+
 // extractCallerIdentity extracts the caller's app ID and namespace from the
 // SPIFFE ID in the mTLS peer certificate.
 func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace string, err error) {
@@ -105,7 +137,7 @@ func (a *api) extractCallerIdentity(ctx context.Context) (appID, namespace strin
 	return spiffeID.AppID(), spiffeID.Namespace(), nil
 }
 
-// checkNamespace denies cross-namespace calls when policies are active.
+// checkNamespace denies calls from a namespace other than this daprd's.
 func (a *api) checkNamespace(callerNamespace string) error {
 	if callerNamespace != "" && callerNamespace != a.Namespace() {
 		a.logger.Warnf("Workflow access policy denied cross-namespace call (caller namespace '%s' != target namespace '%s')", callerNamespace, a.Namespace())

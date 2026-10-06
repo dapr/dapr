@@ -1244,6 +1244,10 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 }
 
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	response := &runtimev1pb.InvokeActorResponse{}
 
 	router, err := a.ActorRouter(ctx)

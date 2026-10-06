@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
@@ -220,32 +221,32 @@ func (p *peroperation) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Cross-sidecar terminate/raise/etc aren't exposed by the durabletask client
-	// (it targets the local daprd), so we bypass the SDK and craft raw
-	// InvokeActor calls.
+	// (it targets the local daprd), so we bypass the SDK and craft raw actor
+	// calls. The public actor invoke API rejects reserved actor types, so they
+	// go to the target's internal API with the caller's identity.
 	callerActorClient := runtimev1pb.NewDaprClient(p.caller.GRPCConn(t, ctx))
+	callerInternalClient := p.target.InternalGRPCClient(t, ctx, p.sentry, p.caller.AppID(), p.caller.Namespace())
 	targetWorkflowActorType := "dapr.internal.default." + peropTargetAppID + ".workflow"
 
 	t.Run("schedule allowed", func(t *testing.T) {
 		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "schedule")
 		payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-1")
-		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   "remote-schedule-1",
-			Method:    "CreateWorkflowInstance",
-			Data:      payload,
-		})
+		_, err := callerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("CreateWorkflowInstance").
+				WithActor(targetWorkflowActorType, "remote-schedule-1").
+				WithData(payload),
+		)
 		require.NoError(t, err, "remote schedule must succeed when policy allows it")
 	})
 
 	t.Run("schedule denied when only terminate is allowed", func(t *testing.T) {
 		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "terminate")
 		payload := mustMarshalCreate(t, "PerOpWF", "remote-schedule-2")
-		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   "remote-schedule-2",
-			Method:    "CreateWorkflowInstance",
-			Data:      payload,
-		})
+		_, err := callerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("CreateWorkflowInstance").
+				WithActor(targetWorkflowActorType, "remote-schedule-2").
+				WithData(payload),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
@@ -258,12 +259,11 @@ func (p *peroperation) Run(t *testing.T, ctx context.Context) {
 				ExecutionTerminated: &protos.ExecutionTerminatedEvent{},
 			},
 		})
-		_, err := callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   string(id),
-			Method:    "AddWorkflowEvent",
-			Data:      payload,
-		})
+		_, err := callerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+				WithActor(targetWorkflowActorType, string(id)).
+				WithData(payload),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
@@ -275,11 +275,10 @@ func (p *peroperation) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		p.applyPolicyOnlyAllowOp(t, ctx, peropCallerAppID, "get")
-		_, err = callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   string(id),
-			Method:    "PurgeWorkflowState",
-		})
+		_, err = callerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("PurgeWorkflowState").
+				WithActor(targetWorkflowActorType, string(id)),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
