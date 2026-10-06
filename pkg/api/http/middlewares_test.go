@@ -38,7 +38,7 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.ReadAll(r.Body)
 		if err != nil {
-			require.ErrorIs(t, err, streams.ErrStreamTooLarge)
+			assert.ErrorIs(t, err, streams.ErrStreamTooLarge)
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
