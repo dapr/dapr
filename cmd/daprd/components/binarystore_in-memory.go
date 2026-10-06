@@ -1,4 +1,4 @@
-//go:build allcomponents || binarystore_in_memory
+//go:build allcomponents || stablecomponents
 
 /*
 Copyright 2026 The Dapr Authors

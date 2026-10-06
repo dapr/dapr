@@ -37,7 +37,6 @@ type options struct {
 
 var buildTags = []string{
 	"stablecomponents",
-	"binarystore_in_memory",
 	"state_etcd",
 	"crypto_localstorage",
 	"middleware_http_routeralias",
