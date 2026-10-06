@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/streams"
 )
 
 type cancelOnCloseReadCloser struct {
@@ -192,6 +193,8 @@ func mapBinaryStoreError(err error, componentName, fileName string, fallback mes
 		return messages.ErrBinaryStoreFileExists.WithFormat(fileName, componentName)
 	case errors.Is(err, binarystore.ErrMissingFileName):
 		return messages.ErrBinaryStoreNameMissing
+	case errors.Is(err, streams.ErrStreamTooLarge):
+		return messages.ErrBinaryStoreTooLarge.WithFormat(fileName, componentName)
 	default:
 		return fallback.WithFormat(fileName, componentName, err.Error())
 	}

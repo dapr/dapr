@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/streams"
 )
 
 type contextReaderBinaryStore struct {
@@ -350,4 +351,14 @@ func TestBinaryStore_mapBinaryStoreErrorWrapsUnknown(t *testing.T) {
 	apiErr, ok := err.(messages.APIError)
 	require.True(t, ok, "expected an APIError for unknown errors")
 	assert.Equal(t, messages.ErrBinaryStoreSet.Tag(), apiErr.Tag())
+}
+
+func TestBinaryStore_mapBinaryStoreErrorTooLarge(t *testing.T) {
+	err := mapBinaryStoreError(streams.ErrStreamTooLarge, "c", "f", messages.ErrBinaryStoreSet)
+	require.Error(t, err)
+	apiErr, ok := err.(messages.APIError)
+	require.True(t, ok, "expected an APIError for oversized streams")
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.Tag(), apiErr.Tag())
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.HTTPCode(), apiErr.HTTPCode())
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.GRPCStatus().Code(), apiErr.GRPCStatus().Code())
 }

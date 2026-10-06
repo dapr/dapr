@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -28,7 +29,70 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/streams"
 )
+
+func TestMaxBodySizeMiddleware(t *testing.T) {
+	const maxSize = 4
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			require.ErrorIs(t, err, streams.ErrStreamTooLarge)
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h := MaxBodySizeMiddleware(maxSize)(handler)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		statusCode int
+	}{
+		{
+			name:       "regular route is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/state/store",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "binary store PUT is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "binary store POST is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "binary store GET is limited",
+			method:     http.MethodGet,
+			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "binary store prefix is limited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/state/binarystore/store/file.bin/extra",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest(test.method, test.path, strings.NewReader("large"))
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			assert.Equal(t, test.statusCode, w.Code)
+		})
+	}
+}
 
 func TestAPITokenAuthMiddleware(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

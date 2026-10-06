@@ -158,4 +158,5 @@ var (
 	ErrBinaryStoreDelete       = APIError{"failed deleting binary file %q from component %s: %s", errorcodes.BinaryStoreDelete, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBinaryStoreFileNotFound = APIError{"binary file %q not found in component %s", errorcodes.BinaryStoreFileNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrBinaryStoreFileExists   = APIError{"binary file %q already exists in component %s", errorcodes.BinaryStoreFileExists, http.StatusConflict, grpcCodes.AlreadyExists}
+	ErrBinaryStoreTooLarge     = APIError{"binary file %q in component %s exceeds the maximum request size", errorcodes.BinaryStoreTooLarge, http.StatusRequestEntityTooLarge, grpcCodes.ResourceExhausted}
 )

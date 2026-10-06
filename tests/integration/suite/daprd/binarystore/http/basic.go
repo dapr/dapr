@@ -161,7 +161,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	t.Run("upload larger than default body limit fails", func(t *testing.T) {
+	t.Run("upload larger than default body limit succeeds", func(t *testing.T) {
 		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, base+"/large.bin", bytes.NewReader(payload))
@@ -169,7 +169,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/large.bin", nil)
+		require.NoError(t, err)
+		resp, err = httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		got, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, payload, got)
 	})
 
 	t.Run("POST without overwrite conflicts on existing file", func(t *testing.T) {
