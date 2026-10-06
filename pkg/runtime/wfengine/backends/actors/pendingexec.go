@@ -17,6 +17,8 @@ import (
 	"os"
 	"strconv"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
 
 // activityExecutions tracks, per (workflow instance, task id), how many
@@ -38,7 +40,7 @@ func newActivityExecutions() *activityExecutions {
 }
 
 func activityExecutionKey(instanceID string, taskID int32) string {
-	return instanceID + "::" + strconv.FormatInt(int64(taskID), 10)
+	return common.ActivityActorID(instanceID, taskID)
 }
 
 // add records a registration and returns its idempotent release.

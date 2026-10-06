@@ -71,7 +71,7 @@ func Test_ReminderPayload_PreservesPropagation(t *testing.T) {
 		},
 	}
 
-	// Simulate createReminder: marshal the ActivityInvocation
+	// Simulate createActivityReminder: marshal the ActivityInvocation
 	data, err := anypb.New(original)
 	require.NoError(t, err, "marshal to anypb.Any should succeed")
 
@@ -170,7 +170,7 @@ func Test_ReminderData_LegacyHistoryEventPayload(t *testing.T) {
 			TaskScheduled: &protos.TaskScheduledEvent{Name: "staleActivity"},
 		},
 	}
-	// Simulate what pre-propagation createReminder would have written to
+	// Simulate what pre-propagation createActivityReminder would have written to
 	// reminder.Data: anypb.Any wrapping a HistoryEvent (not ActivityInvocation).
 	legacyData, err := anypb.New(legacyEvent)
 	require.NoError(t, err)
@@ -256,9 +256,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 		reminders:         sched,
 	}
 
-	a := newActivity()
-	a.factory = f
-	a.actorID = "activity-1"
+	const actorID = "activity-1"
 
 	invocation := &protos.ActivityInvocation{
 		HistoryEvent: &protos.HistoryEvent{
@@ -268,7 +266,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 
 	result := &backend.HistoryEvent{
 		EventId: -1,
@@ -276,16 +274,18 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1},
 		},
 	}
-	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", result))
+	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", "exec-1", result))
 
 	// Repeated creates so the decorrelation assertion below has enough draws.
 	for range 50 {
-		require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+		require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 	}
 
 	sched.mu.Lock()
 	defer sched.mu.Unlock()
 	require.Len(t, sched.creates, 52)
+	assert.Equal(t, "exec-1", common.ActivityResultParentExecutionID(sched.creates[1].Name),
+		"the result reminder carries the dispatching execution ID")
 
 	seen := make(map[time.Duration]struct{})
 	for _, req := range sched.creates {

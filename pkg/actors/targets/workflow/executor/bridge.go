@@ -15,9 +15,11 @@ package executor
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -69,20 +71,26 @@ func taskTypeOf(req *internalsv1pb.InternalInvokeRequest, actorID string) string
 // daprd version for the same activity task, or "" when actorID is not an
 // activity rendezvous key. Pre-upgrade daprds key the activity rendezvous on
 // the durabletask execution key "<instanceID>/<taskID>"; current daprds use
-// the activity actor ID "<instanceID>::<taskID>". Workflow rendezvous keys
-// (the bare instance ID) are format-stable across versions and translate to
-// "" unless the instance ID itself happens to end in "::<digits>", in which
-// case the spurious forward parks on an unwatched actor and is harmless.
-// Instance IDs cannot contain "/" (the scheduler rejects such job names), so
-// the first form only ever matches genuine pre-upgrade activity keys.
+// the activity actor ID "<instanceID>::<taskID>::<generation>". Workflow
+// rendezvous keys (the bare instance ID) are format-stable across versions
+// and translate to "" unless the instance ID itself happens to end in
+// "::<digits>::<digits>", in which case the spurious forward parks on an
+// unwatched actor and is harmless. Instance IDs cannot contain "/" (the
+// scheduler rejects such job names), so the first form only ever matches
+// genuine pre-upgrade activity keys.
 func siblingRendezvousKey(actorID string) string {
 	if iid, taskID, ok := legacyActivityKey(actorID); ok {
-		return iid + "::" + taskID
+		return common.ActivityActorID(iid, taskID)
 	}
-	if i := strings.LastIndex(actorID, "::"); i > 0 && isTaskID(actorID[i+2:]) {
-		return actorID[:i] + "/" + actorID[i+2:]
+	i := strings.LastIndex(actorID, common.ActivityIDSeparator)
+	if i <= 0 || !isTaskID(actorID[i+2:]) {
+		return ""
 	}
-	return ""
+	j := strings.LastIndex(actorID[:i], common.ActivityIDSeparator)
+	if j <= 0 || !isTaskID(actorID[j+2:i]) {
+		return ""
+	}
+	return actorID[:j] + "/" + actorID[j+2:i]
 }
 
 // legacyActivityKey reports whether actorID is a pre-upgrade activity
@@ -90,11 +98,13 @@ func siblingRendezvousKey(actorID string) string {
 // unambiguous: the scheduler rejects job names containing "/", so no
 // workflow instance ID (and hence no current-format rendezvous key) can
 // match it.
-func legacyActivityKey(actorID string) (string, string, bool) {
-	if i := strings.LastIndex(actorID, "/"); i > 0 && isTaskID(actorID[i+1:]) {
-		return actorID[:i], actorID[i+1:], true
+func legacyActivityKey(actorID string) (string, int32, bool) {
+	if i := strings.LastIndex(actorID, "/"); i > 0 {
+		if taskID, err := strconv.ParseInt(actorID[i+1:], 10, 32); err == nil {
+			return actorID[:i], int32(taskID), true
+		}
 	}
-	return "", "", false
+	return "", 0, false
 }
 
 // isTaskID reports whether s is a base-10 integer as produced by task ID

@@ -16,6 +16,7 @@ package childnotify
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ type recreate struct {
 }
 
 func (r *recreate) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	r.workflow = workflow.New(t, workflow.WithSigning(false))
 	return []framework.Option{framework.WithProcesses(r.workflow)}
 }
 
@@ -64,19 +65,30 @@ func (r *recreate) Run(t *testing.T, ctx context.Context) {
 
 	db := r.workflow.DB().GetConnection(t)
 	table := r.workflow.DB().TableName()
-	markerRows := func() int {
+	markerRows := func() (int, error) {
 		var n int
-		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE key LIKE ?", "%||"+childID+"||parent-notify").Scan(&n))
-		return n
+		qerr := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE key LIKE ?", "%||"+childID+"||parent-notify").Scan(&n)
+		return n, qerr
 	}
-	assert.Zero(t, markerRows(), "the acknowledged completion cleared the marker")
+	// The child clears the marker only after the parent acknowledges its
+	// notification, and that acknowledgement is what releases the parent's
+	// own completion turn. The two saves are concurrent, so observing the
+	// parent completed does not order the child's write.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		n, qerr := markerRows()
+		if assert.NoError(c, qerr) {
+			assert.Zero(c, n, "the acknowledged completion must clear the marker")
+		}
+	}, time.Second*20, time.Millisecond*10)
 
 	// Reuse the id for a root workflow: the recreate resets the state.
 	_, err = cl.ScheduleNewWorkflow(ctx, "quick", api.WithInstanceID(childID))
 	require.NoError(t, err)
 	_, err = cl.WaitForWorkflowCompletion(ctx, childID)
 	require.NoError(t, err)
-	assert.Zero(t, markerRows(), "a recreated instance without a parent carries no marker")
+	n, qerr := markerRows()
+	require.NoError(t, qerr)
+	assert.Zero(t, n, "a recreated instance without a parent carries no marker")
 
 	r.workflow.StrayFire(t, ctx, 0, childID, false)
 	completed, _ := wf.ChildCompletions(t, ctx, cl, api.InstanceID(string(id)), 0)
