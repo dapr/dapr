@@ -19,12 +19,15 @@ package grpc
 
 import (
 	"context"
+	"io"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/kit/logger"
 
@@ -36,8 +39,9 @@ import (
 )
 
 type blockingSetBinaryFileStream struct {
-	ctx  context.Context
-	once sync.Once
+	ctx     context.Context
+	recvErr error
+	once    sync.Once
 }
 
 func (b *blockingSetBinaryFileStream) SetHeader(metadata.MD) error {
@@ -59,6 +63,10 @@ func (b *blockingSetBinaryFileStream) SendMsg(any) error {
 }
 
 func (b *blockingSetBinaryFileStream) RecvMsg(message any) error {
+	if b.recvErr != nil {
+		return b.recvErr
+	}
+
 	first := false
 	b.once.Do(func() {
 		first = true
@@ -124,4 +132,18 @@ func TestSetBinaryFileReturnsAPIClosed(t *testing.T) {
 
 	err := a.SetBinaryFileAlpha1(&blockingSetBinaryFileStream{ctx: context.Background()})
 	require.ErrorIs(t, err, errAPIClosed)
+}
+
+func TestSetBinaryFileRejectsEmptyStream(t *testing.T) {
+	a := &api{
+		logger: logger.NewLogger("dapr.runtime.grpc.test"),
+	}
+	defer a.wg.Wait()
+
+	err := a.SetBinaryFileAlpha1(&blockingSetBinaryFileStream{
+		ctx:     context.Background(),
+		recvErr: io.EOF,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid request: error receiving the first message: EOF", status.Convert(err).Message())
 }

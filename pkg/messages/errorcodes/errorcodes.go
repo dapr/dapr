@@ -149,6 +149,7 @@ var (
 
 	// ### Binary Store API
 	BinaryStoreNotFound     = ErrorCode{"ERR_BINARY_STORE_NOT_FOUND", "", CategoryBinaryStore}           // Binary store component not found
+	BinaryStoreNameMissing  = ErrorCode{"ERR_BINARY_STORE_NAME_MISSING", "", CategoryBinaryStore}        // Binary file name missing
 	BinaryStoreSet          = ErrorCode{"ERR_BINARY_STORE_SET", "", CategoryBinaryStore}                 // Error storing binary file
 	BinaryStoreGet          = ErrorCode{"ERR_BINARY_STORE_GET", "", CategoryBinaryStore}                 // Error retrieving binary file
 	BinaryStoreDelete       = ErrorCode{"ERR_BINARY_STORE_DELETE", "", CategoryBinaryStore}              // Error deleting binary file

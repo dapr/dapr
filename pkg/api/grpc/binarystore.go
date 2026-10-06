@@ -183,7 +183,7 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 		return messages.ErrBadRequest.WithFormat(fmt.Errorf("error waiting for first message: %w", firstChunkCtx.Err()))
 	case err := <-firstMsgCh:
 		if err != nil {
-			return messages.ErrBinaryStoreSet.WithFormat("", "", fmt.Errorf("error receiving the first message: %w", err).Error())
+			return messages.ErrBadRequest.WithFormat(fmt.Errorf("error receiving the first message: %w", err))
 		}
 	}
 

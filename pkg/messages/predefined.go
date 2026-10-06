@@ -152,7 +152,7 @@ var (
 
 	// Binary Store
 	ErrBinaryStoreNotFound     = APIError{"failed finding binary store component %s", errorcodes.BinaryStoreNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrBinaryStoreNameMissing  = APIError{"file name is required", errorcodes.CommonBadRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBinaryStoreNameMissing  = APIError{"file name is required", errorcodes.BinaryStoreNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrBinaryStoreSet          = APIError{"failed storing binary file %q in component %s: %s", errorcodes.BinaryStoreSet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBinaryStoreGet          = APIError{"failed retrieving binary file %q from component %s: %s", errorcodes.BinaryStoreGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBinaryStoreDelete       = APIError{"failed deleting binary file %q from component %s: %s", errorcodes.BinaryStoreDelete, http.StatusInternalServerError, grpcCodes.Internal}
