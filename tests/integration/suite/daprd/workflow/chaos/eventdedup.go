@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -104,12 +105,11 @@ func (e *eventdedup) Run(t *testing.T, ctx context.Context) {
 
 	// Redeliver the byte-identical event. With the dedup it is dropped (and the
 	// wake-up reminder re-asserted); the second wait stays unsatisfied.
-	_, err = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: actorType,
-		ActorId:   wfID,
-		Method:    "AddWorkflowEvent",
-		Data:      dupBytes,
-	})
+	_, err = e.workflow.InternalGRPCClient(t, ctx).CallActor(ctx,
+		internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+			WithActor(actorType, wfID).
+			WithData(dupBytes),
+	)
 	require.NoError(t, err)
 
 	// The redelivery must NOT complete the workflow: it is the same single
