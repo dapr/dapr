@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -64,7 +65,16 @@ func (q *quota) Run(t *testing.T, ctx context.Context) {
 		}
 	}, 10*time.Second, 10*time.Millisecond)
 
-	_, err := sched.Client(t, ctx).ScheduleJob(ctx,
+	// In signing mode the control plane runs mTLS, so the scheduler only
+	// accepts TLS client connections.
+	var schedClient schedulerv1pb.SchedulerClient
+	if q.wf.Signing() {
+		schedClient = sched.ClientMTLS(t, ctx, q.wf.Dapr().AppID())
+	} else {
+		schedClient = sched.Client(t, ctx)
+	}
+
+	_, err := schedClient.ScheduleJob(ctx,
 		sched.JobNowJob("test-job-after-quota", "default", q.wf.Dapr().AppID()))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "database space exceeded")

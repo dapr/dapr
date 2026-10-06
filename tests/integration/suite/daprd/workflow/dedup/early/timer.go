@@ -43,7 +43,10 @@ type timer struct {
 }
 
 func (e *timer) Setup(t *testing.T) []framework.Option {
-	e.workflow = workflow.New(t)
+	e.workflow = workflow.New(t,
+		// Signing mode opt-out: the injected unsigned resolution event would be rejected by signing verification.
+		workflow.WithSigning(false),
+	)
 	return []framework.Option{
 		framework.WithProcesses(e.workflow),
 	}
@@ -98,7 +101,9 @@ func (e *timer) Run(t *testing.T, ctx context.Context) {
 	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 	assert.Equal(t, `"timer-done"`, meta.GetOutput().GetValue())
 
-	assert.Equal(t, 0, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, func(ev *protos.HistoryEvent) bool {
+	assert.Equal(t, 1, fworkflow.CountHistoryEventsMatching(t, ctx, cl, id, func(ev *protos.HistoryEvent) bool {
 		return ev.GetTimerCreated() != nil && ev.GetEventId() == 1
-	}), "the resolved timer must not be created durably")
+	}), "the resolved timer's creation must be recorded")
+	assert.Zero(t, e.workflow.Scheduler().JobKeyCount(t, ctx, string(id)+"||timer-1"),
+		"the resolved timer must not be created durably")
 }

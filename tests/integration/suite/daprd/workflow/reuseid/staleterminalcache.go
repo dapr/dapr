@@ -42,7 +42,7 @@ type staleterminalcache struct {
 }
 
 func (s *staleterminalcache) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.New(t, workflow.WithDaprds(2))
+	s.workflow = workflow.New(t, workflow.WithDaprds(2), workflow.WithSigning(false))
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),
 	}

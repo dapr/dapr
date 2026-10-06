@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/informer"
 	cryptopem "github.com/dapr/kit/crypto/pem"
@@ -229,7 +230,7 @@ func parseCRDs(t *testing.T) map[string][]byte {
 
 	dir, ok := os.LookupEnv(EnvVarCRDDirectory)
 	if !ok {
-		t.Logf("environment variable %s not set, using default CRD location %s", EnvVarCRDDirectory, defaultPath)
+		iowriter.Eventf(t, "environment variable %s not set, using default CRD location %s", EnvVarCRDDirectory, defaultPath)
 		dir = defaultPath
 	}
 

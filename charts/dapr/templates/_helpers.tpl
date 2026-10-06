@@ -56,3 +56,14 @@ Validates podAntiAffinityPolicy is one of the allowed values.
 {{- fail "global.ha.podAntiAffinityPolicy must be either 'preferredDuringSchedulingIgnoredDuringExecution' or 'requiredDuringSchedulingIgnoredDuringExecution'" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Returns "true" when actor placement is served by the Scheduler, else "false".
+global.scheduler.placement is absent from values of releases installed before
+1.19, which helm upgrade --reuse-values renders without the new chart defaults.
+*/}}
+{{- define "dapr.schedulerPlacementEnabled" -}}
+{{- $scheduler := .Values.global.scheduler | default dict -}}
+{{- $placement := $scheduler.placement | default dict -}}
+{{- $placement.enabled | default false | toString -}}
+{{- end -}}

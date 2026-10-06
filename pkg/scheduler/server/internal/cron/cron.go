@@ -30,6 +30,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/concurrency"
@@ -43,6 +44,14 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 const BackendEtcd = etcdcron.BackendEtcd
 
+// PlacementLeader consumes placement leadership changes derived from the cron
+// leadership table.
+type PlacementLeader interface {
+	SetLeader(leader bool)
+	HasPlacementStreams() bool
+	SetOnStreamsChange(fn func())
+}
+
 type Options struct {
 	ID   string
 	Host *schedulerv1pb.Host
@@ -54,6 +63,13 @@ type Options struct {
 	BackendConfig any
 
 	Workers uint32
+
+	// Placement, when non-nil, is notified whether this scheduler is the
+	// current placement leader on every leadership table change.
+	Placement PlacementLeader
+
+	// Handoff is this scheduler's own view of the placement handoff facts.
+	Handoff *handoff.Handoff
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -76,11 +92,13 @@ type cron struct {
 	id string
 
 	host            *schedulerv1pb.Host
+	placement       PlacementLeader
+	handoff         *handoff.Handoff
 	connectionPool  *pool.Pool
 	etcdcron        api.Interface
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            sync.RWMutex
-	currHosts       []*schedulerv1pb.Host
+	broadcastHosts  []*schedulerv1pb.Host
 	etcd            etcd.Interface
 	backend         *string
 	backendConfig   any
@@ -94,6 +112,8 @@ func New(opts Options) Interface {
 	return &cron{
 		id:              opts.ID,
 		host:            opts.Host,
+		placement:       opts.Placement,
+		handoff:         opts.Handoff,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
 		workers:         opts.Workers,
 		readyCh:         make(chan struct{}),
@@ -139,8 +159,22 @@ func (c *cron) Run(ctx context.Context) error {
 		return fmt.Errorf("fail to create cron: %s", err)
 	}
 
+	var leaderLoop loop.Interface[[]*anypb.Any]
 	c.connectionPool = pool.New(pool.Options{
-		Cron: c.etcdcron,
+		Cron:             c.etcdcron,
+		PlacementEnabled: c.host.GetSchedulerPlacementEnabled(),
+		// A nil event re-broadcasts the last leadership table with its
+		// placement fields recomputed under the new capability state.
+		OnSchedulerPlacementCapabilityChange: func() {
+			c.handoff.SetLocalCapabilities(
+				c.connectionPool.HasSchedulerPlacementIncapableSidecars(),
+				c.connectionPool.HasSchedulerPlacementCapableSidecars(),
+			)
+			leaderLoop.Enqueue(nil)
+		},
+		OnPlacementAddressesChange: func(added bool) {
+			c.handoff.RequestDetection(added)
+		},
 	})
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
@@ -149,14 +183,34 @@ func (c *cron) Run(ctx context.Context) error {
 	// subscribers. Without this, a blocked send can race with elected context
 	// cancellation during quorum changes, causing the cron module to exit
 	// silently.
-	leaderLoop := loop.New[[]*anypb.Any](64).NewLoop(&leadership{
+	leaderLoop = loop.New[[]*anypb.Any](64).NewLoop(&leadership{
 		hostBroadcaster: c.hostBroadcaster,
 		lock:            &c.lock,
-		currHosts:       &c.currHosts,
+		broadcastHosts:  &c.broadcastHosts,
 		readyCh:         c.readyCh,
 		ownAddress:      c.host.GetAddress(),
 		pool:            c.connectionPool,
+		placement:       c.placement,
+		handoff:         c.handoff,
 	})
+
+	// A placement stream connecting or closing recomputes the gate and the
+	// advertisement right away, not on the next unrelated event.
+	if c.placement != nil {
+		c.placement.SetOnStreamsChange(func() {
+			leaderLoop.Enqueue(nil)
+		})
+	}
+
+	// The handoff is already running: its callbacks register only once the
+	// loop they enqueue to exists.
+	c.handoff.SetPlacementAddresses(c.connectionPool.PlacementAddresses)
+	c.handoff.SetOnChange(func() {
+		leaderLoop.Enqueue(nil)
+	})
+	// The handoff may have completed its first detection before the
+	// callback existed, so pick up whatever state it already reached.
+	leaderLoop.Enqueue(nil)
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
@@ -167,6 +221,9 @@ func (c *cron) Run(ctx context.Context) error {
 			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
 			defer leaderLoop.Close(nil)
+			if c.placement != nil {
+				defer c.placement.SetLeader(false)
+			}
 
 			for {
 				select {
@@ -175,6 +232,11 @@ func (c *cron) Run(ctx context.Context) error {
 				case anyhosts, ok := <-watchLeadershipCh:
 					if !ok {
 						return nil
+					}
+					// nil on the loop is reserved for the pool's
+					// capability signal.
+					if anyhosts == nil {
+						continue
 					}
 					leaderLoop.Enqueue(anyhosts)
 				}
@@ -218,7 +280,7 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	hosts := slices.Clone(c.currHosts)
+	hosts := slices.Clone(c.broadcastHosts)
 	c.lock.RUnlock()
 	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
 		Hosts: hosts,
