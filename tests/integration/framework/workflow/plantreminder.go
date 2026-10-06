@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api/protos"
 )
@@ -37,13 +38,7 @@ import (
 func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, instanceID, name string, ev *protos.HistoryEvent) {
 	t.Helper()
 
-	data, err := anypb.New(ev)
-	require.NoError(t, err)
-
 	sched, appID := w.Scheduler(), w.Dapr().AppID()
-	req := sched.JobNowActor(name, "default", appID, "dapr.internal.default."+appID+".workflow", instanceID)
-	req.Job.Data = data
-	req.Job.FailurePolicy = common.RetryForeverPolicy()
 
 	// Only the client actually needed is built: a scheduler running with
 	// sentry refuses the insecure one, and dialling it blocks until the
@@ -54,6 +49,21 @@ func PlantReminder(t *testing.T, ctx context.Context, w *procworkflow.Workflow, 
 	} else {
 		client = sched.Client(t, ctx)
 	}
+	PlantActorReminder(t, ctx, sched, client, appID, instanceID, name, ev)
+}
+
+// PlantActorReminder is PlantReminder against any scheduler and app ID, for
+// deployments not built with the workflow process, such as the upgrade
+// harness.
+func PlantActorReminder(t *testing.T, ctx context.Context, sched *scheduler.Scheduler, client schedulerv1pb.SchedulerClient, appID, instanceID, name string, ev *protos.HistoryEvent) {
+	t.Helper()
+
+	data, err := anypb.New(ev)
+	require.NoError(t, err)
+
+	req := sched.JobNowActor(name, "default", appID, "dapr.internal.default."+appID+".workflow", instanceID)
+	req.Job.Data = data
+	req.Job.FailurePolicy = common.RetryForeverPolicy()
 	_, err = client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 }
