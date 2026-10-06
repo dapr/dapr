@@ -364,6 +364,15 @@ func (be *ClusterTasksBackend) executorLocal(ctx context.Context, key string) bo
 // reminder retry converges), while completions parked by pre-upgrade daprds
 // carry no header and are accepted as before.
 func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, key string, resp proto.Message) error {
+	if d := testActivityWatchDelay(); d > 0 && taskType == executor.TaskTypeActivity {
+		log.Warnf("TEST INJECTION: holding the watch stream for activity task '%s' back for %s", key, d)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(d):
+		}
+	}
+
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
