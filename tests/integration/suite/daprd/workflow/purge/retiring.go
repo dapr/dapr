@@ -16,16 +16,12 @@ package purge
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -35,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -52,10 +47,11 @@ func init() {
 // a backstop, due one redrive grace out, and that grace is raised here so a
 // start left to it does not complete inside the test.
 //
-// DAPR_WORKFLOW_TEST_ARM_HOLD keeps the create's turn on the actor lock after
-// it posts the wake, so the wake always reaches the retiring object before
-// the queued deactivation can take the lock: the ordering is forced, not
-// raced.
+// The ordering is forced, not raced: the purge is let go only once the
+// pending actor calls gauge shows the create waiting on the actor lock, and
+// DAPR_WORKFLOW_TEST_ARM_HOLD keeps the create's turn on that lock after it
+// posts the wake, so the wake always reaches the retiring object before the
+// queued deactivation can take the lock.
 type retiring struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
@@ -110,32 +106,24 @@ func (r *retiring) Run(t *testing.T, ctx context.Context) {
 
 	client := r.workflow.BackendClient(t, ctx)
 
-	// The create is issued on a connection that reports it in flight; from
-	// there only in-process dispatch separates it from the actor lock, while
-	// the purge it must queue behind is held at its commit.
-	var inflight atomic.Int32
-	conn, err := grpc.NewClient(r.workflow.Dapr().GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-			inflight.Add(1)
-			defer inflight.Add(-1)
-			return invoker(ctx, method, req, reply, cc, opts...)
-		}),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	creator := dtclient.NewTaskHubGrpcClient(conn, logger.New(t))
-
 	const id = api.InstanceID("purge-retiring")
 	refused := func() float64 {
 		return r.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:failed")
 	}
+	// Calls waiting on the workflow actor lock. The purge holding the lock
+	// has left the gauge; the create queued behind it is the only entry.
+	waiting := func() float64 {
+		return r.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_actor_pending_actor_calls", "actor_type:"+r.workflow.WorkflowActorType(0))
+	}
 	for i := range 3 {
-		refusedBefore := refused()
 		_, err := client.ScheduleNewWorkflow(ctx, "retiring", api.WithInstanceID(id))
 		require.NoError(t, err, "iteration %d", i)
 		_, err = client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err, "iteration %d", i)
+
+		// Taken once the instance is settled, so only the recreate's wake
+		// can move it.
+		refusedBefore := refused()
 
 		arrived, release, _ := r.store.ArmMultiDeleteHold(string(id) + "||metadata")
 		t.Cleanup(release)
@@ -149,15 +137,12 @@ func (r *retiring) Run(t *testing.T, ctx context.Context) {
 
 		createErr := make(chan error, 1)
 		go func() {
-			_, cerr := creator.ScheduleNewWorkflow(ctx, "retiring", api.WithInstanceID(id))
+			_, cerr := client.ScheduleNewWorkflow(ctx, "retiring", api.WithInstanceID(id))
 			createErr <- cerr
 		}()
-		require.Eventually(t, func() bool { return inflight.Load() > 0 }, time.Second*10, time.Millisecond, "iteration %d: the create must be in flight", i)
-		// In flight means sent; give the in-process dispatch (well under a
-		// millisecond) time to park the create on the actor lock before the
-		// purge is let go, so the create runs behind the purge and ahead of
-		// the deactivation the purge queues.
-		time.Sleep(time.Millisecond * 100)
+		// Queued on the actor lock behind the purge: it runs as soon as the
+		// purge returns, ahead of the deactivation the purge queued.
+		require.Eventually(t, func() bool { return waiting() >= 1 }, time.Second*10, time.Millisecond*10, "iteration %d: the create must be waiting on the actor lock", i)
 		release()
 
 		require.NoError(t, <-purgeErr, "iteration %d", i)
