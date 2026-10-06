@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
@@ -116,6 +117,16 @@ var testDropActivityCompletions = envBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_CO
 // actor resolve to different hosts, as during a rebalance. Not a supported
 // production knob.
 var testForceWatchFallback = envBudget("DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK")
+
+// testActivityWatchDelay is a test-only fault injection: on the watch-stream
+// fallback, an activity completion wait holds each stream back for the given
+// duration before it opens it. A completion that arrives in the meantime
+// parks on the executor actor, as it does while a placement round drains and
+// reconnects the stream. Zero (the default) opens the stream at once. Not a
+// supported production knob.
+var testActivityWatchDelay = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ACTIVITY_WATCH_DELAY", 0)
+})
 
 // envBudget returns the budget of a test-only fault injection, read once from
 // the named environment variable. Unset or 0 disables the injection.
