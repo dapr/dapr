@@ -47,6 +47,26 @@ func TestNormalizeMethod(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("rejects percent-encoded slash, backslash and dot", func(t *testing.T) {
+		for _, m := range []string{
+			"admin%2Fsecret", "admin%2fsecret",
+			"admin%5Csecret", "admin%5csecret",
+			"admin%2Esecret", "admin%2esecret",
+			"%2E%2E/admin", "public/x%2F..%2F..%2Fadmin",
+		} {
+			_, err := NormalizeMethod(m)
+			require.Errorf(t, err, "method %q", m)
+		}
+	})
+
+	t.Run("allows other percent-encoded sequences", func(t *testing.T) {
+		for _, m := range []string{"test%20stream", "test%252Fstream", "test%252Estream"} {
+			got, err := NormalizeMethod(m)
+			require.NoError(t, err)
+			assert.Equal(t, m, got)
+		}
+	})
+
 	t.Run("allows percent", func(t *testing.T) {
 		got, err := NormalizeMethod("test%stream")
 		require.NoError(t, err)
@@ -71,10 +91,9 @@ func TestNormalizeMethod(t *testing.T) {
 		assert.Equal(t, "test*stream", got)
 	})
 
-	t.Run("allows backslash", func(t *testing.T) {
-		got, err := NormalizeMethod(`test\stream`)
-		require.NoError(t, err)
-		assert.Equal(t, `test\stream`, got)
+	t.Run("rejects backslash", func(t *testing.T) {
+		_, err := NormalizeMethod(`admin\secret`)
+		require.Error(t, err)
 	})
 
 	t.Run("resolves traversal", func(t *testing.T) {

@@ -40,12 +40,22 @@ func ValidateName(name string) error {
 }
 
 // NormalizeMethod validates and cleans a service invocation method name.
-// It rejects methods containing '#', '?', null bytes, or control characters
-// (bytes 0x01-0x1f and 0x7f), then resolves path traversal via path.Clean.
+// It rejects methods containing '#', '?', '\', null bytes, control characters
+// (bytes 0x01-0x1f and 0x7f), or a percent-encoded '/', '\' or '.' (%2F, %5C,
+// %2E in any case), then resolves path traversal via path.Clean.
 // The caller is responsible for percent-decoding (for HTTP) before calling.
+// Encoded separators and dots are rejected because the ACL matches them as
+// literal characters, while an HTTP app decodes them into path segments. A
+// literal backslash is rejected because it is re-encoded to %5C on the wire
+// to the app, which decodes it back into a character the ACL did not split on.
 func NormalizeMethod(method string) (string, error) {
-	if strings.ContainsAny(method, "#?\x00") {
+	if strings.ContainsAny(method, "#?\x00\\") {
 		return "", fmt.Errorf("method contains forbidden character: %q", method)
+	}
+
+	lower := strings.ToLower(method)
+	if strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2e") {
+		return "", fmt.Errorf("method contains percent-encoded '/', '\\' or '.': %q", method)
 	}
 
 	// Reject control characters (0x01-0x1f and 0x7f DEL).
