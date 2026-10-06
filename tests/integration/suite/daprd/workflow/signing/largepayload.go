@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -91,7 +92,7 @@ func (l *largepayload) Run(tt *testing.T, ctx context.Context) {
 		return strings.Repeat("x", 100000), nil
 	})
 
-	client := dworkflow.NewClient(l.daprd.GRPCConn(tt, ctx))
+	client := dworkflow.NewClientWithLogger(l.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-large")

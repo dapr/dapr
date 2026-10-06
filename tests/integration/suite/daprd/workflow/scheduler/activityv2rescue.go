@@ -25,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -93,7 +93,7 @@ func (a *activityv2rescue) Run(t *testing.T, ctx context.Context) {
 		return "rescued", nil
 	}))
 
-	cl := client.NewTaskHubGrpcClient(a.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	cl := client.NewTaskHubGrpcClient(a.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, registry))
 
 	resp, err := a.daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{

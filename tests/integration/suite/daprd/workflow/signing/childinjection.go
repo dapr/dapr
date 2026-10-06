@@ -27,6 +27,7 @@ import (
 
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -106,7 +107,7 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 		return "child-done", nil
 	})
 
-	client := dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
+	client := dworkflow.NewClientWithLogger(i.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-child-inject-parent")
@@ -154,7 +155,7 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 	i.daprd.Restart(tt, ctx)
 	i.daprd.WaitUntilRunning(tt, ctx)
 
-	client = dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
+	client = dworkflow.NewClientWithLogger(i.daprd.GRPCConn(tt, ctx), logger.New(tt))
 	require.NoError(tt, client.StartWorker(ctx, reg))
 
 	// Inbox injection is treated as state store tampering: the next operation

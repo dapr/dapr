@@ -77,6 +77,8 @@ const (
 	metadataPrefix       = "metadata."
 )
 
+var errAPIClosed = status.Error(codes.Unavailable, "api server closed")
+
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
 	io.Closer
@@ -103,8 +105,9 @@ type api struct {
 	processor              *processor.Processor
 	wg                     sync.WaitGroup
 
-	closeCh chan struct{}
-	closed  atomic.Bool
+	closeLock sync.RWMutex
+	closeCh   chan struct{}
+	closed    bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -176,6 +179,30 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
+func baggageFromContext(ctx context.Context) string {
+	baggage := otelbaggage.FromContext(ctx)
+	if baggage.Len() > 0 {
+		return baggage.String()
+	}
+
+	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	baggageValues := md.Get(diagConsts.BaggageHeader)
+	if len(baggageValues) == 0 {
+		return ""
+	}
+
+	baggageString := strings.Join(baggageValues, ",")
+	_, err := otelbaggage.Parse(baggageString)
+	if err != nil {
+		return ""
+	}
+	return baggageString
+}
+
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 	if validationErr != nil {
@@ -191,6 +218,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 	span := diagUtils.SpanFromContext(ctx)
 	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+	baggage := baggageFromContext(ctx)
 	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -200,6 +228,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Data:            body,
 			TraceID:         traceID,
 			TraceState:      traceState,
+			Baggage:         baggage,
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
@@ -224,6 +253,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	} else {
 		md[pubsub.TraceIDField] = traceID
 		md[pubsub.TraceStateField] = traceState
+		if baggage != "" {
+			md[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.PublishRequest{
@@ -444,6 +476,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
+				Baggage:         baggageFromContext(ctx),
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -465,6 +498,17 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
+			}
+		}
+	}
+	if rawPayload {
+		baggage := baggageFromContext(ctx)
+		if baggage != "" {
+			for i := range entries {
+				if entries[i].Metadata == nil {
+					entries[i].Metadata = map[string]string{}
+				}
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
 			}
 		}
 	}
@@ -1523,11 +1567,29 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 func (a *api) Close() error {
 	defer a.wg.Wait()
 
-	if a.closed.CompareAndSwap(false, true) {
+	a.closeLock.Lock()
+	if !a.closed {
+		a.closed = true
 		close(a.closeCh)
 	}
+	a.closeLock.Unlock()
 
 	a.CompStore().DeleteAllConfigurationSubscribe()
+
+	return nil
+}
+
+func (a *api) goUnlessClosed(fns ...func()) error {
+	a.closeLock.RLock()
+	defer a.closeLock.RUnlock()
+
+	if a.closed {
+		return errAPIClosed
+	}
+
+	for _, fn := range fns {
+		a.wg.Go(fn)
+	}
 
 	return nil
 }

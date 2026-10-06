@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -34,10 +35,6 @@ import (
 // execution reminder. One reminder per actor: retries and the drive-failure
 // escalation collapse onto a single scheduler entry (overwrite-by-name).
 const activityReminderName = todo.ActivityReminderName
-
-func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
-	return a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
-}
 
 // createActivityReminder lives on the factory (with an explicit actorID)
 // rather than the *activity because the drive-failure escalation path may
@@ -71,14 +68,14 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 	})
 }
 
-func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID, parentExecutionID string, result *backend.HistoryEvent) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := common.ActivityResultReminderName(base64.RawURLEncoding.EncodeToString(b), parentExecutionID)
 
 	anydata, err := anypb.New(result)
 	if err != nil {
@@ -88,10 +85,26 @@ func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType,
 	return common.CreateReminderWithRetry(ctx, f.reminders, &actorapi.CreateReminderRequest{
 		ActorType: wfActorType,
 		ActorID:   wfActorID,
-		DueTime:   "0s",
+		DueTime:   activityResultDueTime(),
 		Name:      reminderName,
 		// One shot, retry forever, jittered interval.
 		FailurePolicy: common.RetryForeverPolicy(),
 		Data:          anydata,
 	})
+}
+
+// testActivityResultDelay holds a result reminder back for the configured
+// duration so tests can observe the window between an activity settling its
+// outcome and the parent receiving it. Zero (the default) is due now.
+var testActivityResultDelay = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ACTIVITY_RESULT_DELAY", 0)
+})
+
+func activityResultDueTime() string {
+	delay := testActivityResultDelay()
+	if delay <= 0 {
+		return "0s"
+	}
+	log.Warnf("TEST INJECTION: holding the activity result reminder for %s", delay)
+	return time.Now().Add(delay).UTC().Format(time.RFC3339Nano)
 }

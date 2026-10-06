@@ -47,7 +47,8 @@ const (
 	numberOfMessagesToPublish = 60
 	publishRateLimitRPS       = 25
 
-	receiveMessageRetries = 5
+	// Validation polls every 2s up to this many attempts (~50s budget)
+	receiveMessageRetries = 25
 
 	publisherAppName  = "pubsub-publisher-routing"
 	subscriberAppName = "pubsub-subscriber-routing"
@@ -173,7 +174,7 @@ func testPublishSubscribeRouting(t *testing.T, publisherExternalURL, subscriberE
 	callInitialize(t, publisherExternalURL, protocol)
 	sentMessages := testPublishRouting(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateMessagesRouted(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
@@ -238,7 +239,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -246,7 +247,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -267,7 +268,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 			len(appResp.RouteE) != len(sentMessages.RouteE) ||
 			len(appResp.RouteF) != len(sentMessages.RouteF) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}
