@@ -96,6 +96,7 @@ func (f *factory) initExecutor(a any, actorID string) *executor {
 	act.closed.Store(false)
 	act.cancelClosed.Store(false)
 	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
+	act.slotFreed = make(chan struct{})
 	act.cancelCh = make(chan struct{})
 	act.closeCh = make(chan struct{})
 	act.watchLock = make(chan struct{}, 1)

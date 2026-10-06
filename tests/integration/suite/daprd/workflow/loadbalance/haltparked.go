@@ -20,12 +20,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -46,16 +48,36 @@ func init() {
 // completion to the key's new owner, where the late watch stream attaches.
 type haltparked struct {
 	workflow *workflow.Workflow
+	logline  *logline.LogLine
 }
 
 func (h *haltparked) Setup(t *testing.T) []framework.Option {
-	h.workflow = workflow.NewClustered(t, 2, daprd.WithExecOptions(exec.WithEnvVars(t,
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+
+	env := exec.WithEnvVars(t,
 		"DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK", "1000000",
 		"DAPR_WORKFLOW_TEST_ACTIVITY_WATCH_DELAY", "5s",
-	)))
+	)
+
+	// daprd 0 is the host whose executor actors retire at the rebalance. Its
+	// log shows whether they handed off their parked completions.
+	h.logline = logline.New(t, logline.WithCaptureAll())
+	h.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+		workflow.WithClusteredDeployment(true),
+		workflow.WithDaprdOptions(0,
+			daprd.WithAppID(uid.String()),
+			daprd.WithExecOptions(env, exec.WithStdout(h.logline.Stdout()), exec.WithStderr(h.logline.Stderr())),
+		),
+		workflow.WithDaprdOptions(1,
+			daprd.WithAppID(uid.String()),
+			daprd.WithExecOptions(env),
+		),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.workflow),
+		framework.WithProcesses(h.logline, h.workflow),
 	}
 }
 
@@ -100,4 +122,10 @@ func (h *haltparked) Run(t *testing.T, ctx context.Context) {
 	wctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 	fworkflow.WaitForAllCompleted(t, wctx, cl, ids...)
+
+	// The completions alone would also pass if no retirement handed anything
+	// off, for example when the rebalance lands after the late watch
+	// streams opened on daprd 0. This pins that the handoff path ran.
+	assert.Positive(t, h.logline.Count("handed off a parked completion to the owner of its key"),
+		"no executor actor on daprd 0 handed off a parked completion")
 }
