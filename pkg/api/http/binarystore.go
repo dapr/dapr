@@ -113,36 +113,38 @@ func (a *api) onBinaryStoreGet() http.HandlerFunc {
 		}
 		defer func() { _ = body.Close() }()
 
-		// Headers must be set before the first Write; any error from the
-		// provider is surfaced before streaming begins, so the correct status
-		// code can be returned. Errors that occur mid-stream cannot change the
-		// status code, which is an accepted trade-off for streaming responses.
-		w.Header().Set(headerContentType, "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
+		streamBinaryFile(w, body, componentName, fileName)
+	}
+}
 
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
+func streamBinaryFile(w http.ResponseWriter, body io.Reader, componentName, fileName string) {
+	// Headers must be set before the first Write. Errors that occur mid-stream
+	// cannot change the status code, so the response is aborted to ensure the
+	// client can detect a truncated body.
+	w.Header().Set(headerContentType, "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := body.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
 		}
-
-		buf := make([]byte, 32*1024)
-		for {
-			n, readErr := body.Read(buf)
-			if n > 0 {
-				if _, werr := w.Write(buf[:n]); werr != nil {
-					return
-				}
-				if f, ok := w.(http.Flusher); ok {
-					f.Flush()
-				}
-			}
-			if readErr == io.EOF {
-				return
-			}
-			if readErr != nil {
-				// Status code already sent; best-effort log only.
-				log.Debugf("error streaming binary file %q from component %s: %s", fileName, componentName, readErr)
-				return
-			}
+		if readErr == io.EOF {
+			return
+		}
+		if readErr != nil {
+			log.Debugf("error streaming binary file %q from component %s: %s", fileName, componentName, readErr)
+			panic(http.ErrAbortHandler)
 		}
 	}
 }
