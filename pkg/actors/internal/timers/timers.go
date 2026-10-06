@@ -25,4 +25,8 @@ type Storage interface {
 	Create(ctx context.Context, reminder *api.Reminder) error
 	Delete(ctx context.Context, timerKey string)
 	DeleteFunc(ctx context.Context, fn func(actorType, actorID string) bool)
+	// Get returns the timer with the given key, or nil if it is not registered.
+	Get(ctx context.Context, timerKey string) *api.Reminder
+	// List returns the timers registered for the given actor, sorted by name.
+	List(ctx context.Context, actorType, actorID string) []*api.Reminder
 }

@@ -45,6 +45,7 @@ type foldpublish struct {
 
 func (u *foldpublish) Setup(t *testing.T) []framework.Option {
 	u.workflow = workflow.New(t,
+		workflow.WithSigning(false),
 		workflow.WithDaprdOptions(0,
 			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		),
@@ -79,7 +80,7 @@ func (u *foldpublish) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	job := u.workflow.Scheduler().JobNowActor("run-activity", "default",
-		u.workflow.Dapr().AppID(), u.workflow.ActivityActorType(0), instanceID+"::0")
+		u.workflow.Dapr().AppID(), u.workflow.ActivityActorType(0), instanceID+"::0::0")
 	job.GetJob().Data = invocation
 	_, err = u.workflow.Scheduler().Client(t, ctx).ScheduleJob(ctx, job)
 	require.NoError(t, err)

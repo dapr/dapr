@@ -23,13 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -131,8 +131,8 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.daprd2.Run(t, daprd2Ctx)
 	a.daprd2.WaitUntilRunning(t, daprd2Ctx)
 
-	client1 := client.NewTaskHubGrpcClient(a.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(a.daprd1.GRPCConn(t, ctx), logger.New(t))
+	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, ctx), logger.New(t))
 
 	// Start listeners for each app
 	err := client1.StartWorkItemListener(t.Context(), a.registry1)

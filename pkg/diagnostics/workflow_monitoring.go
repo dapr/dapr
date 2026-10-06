@@ -36,18 +36,12 @@ var (
 const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
-	// Local-wake fast path outcomes beyond success/failed: a failed drive
-	// escalated to a durable reminder (or that escalation itself failed,
-	// leaving the janitor as the net), and a janitor fire that found and
-	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated       = "escalated"
-	StatusEscalateFailed  = "escalate_failed"
-	StatusEscalateSkipped = "escalate_skipped_shutdown"
-	// A failed drive against an instance that shows recent life was NOT
-	// escalated to a durable reminder: the janitor covers it within one
-	// period instead of the scheduler re-driving a merely-slow actor.
-	StatusEscalateSuppressed = "escalate_suppressed"
-	StatusJanitorRecovered   = "janitor_recovered"
+	// The activity actor's escalation of a lost local drive to its durable
+	// run-activity reminder.
+	StatusEscalated        = "escalated"
+	StatusEscalateFailed   = "escalate_failed"
+	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusJanitorRecovered = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
@@ -389,8 +383,8 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
-		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution()),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution()),
 		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()),
 		// Sum of per-event 1s, not Count: identical exposition (cumulative
 		// int64 exports as a Prometheus counter either way), but Sum lets

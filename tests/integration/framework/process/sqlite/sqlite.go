@@ -35,6 +35,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 // Option is a function that configures the process.
@@ -85,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 }
 
 func (s *SQLite) Run(t *testing.T, ctx context.Context) {
-	t.Logf("Storing SQLite database at %s", s.dbPath)
+	iowriter.Eventf(t, "storing SQLite database at %s", s.dbPath)
 
 	s.runOnce.Do(func() {
 		for _, migration := range s.migrations {
@@ -115,7 +116,14 @@ func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
 	if s.conn != nil {
 		return s.conn
 	}
-	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	// Match the daprds' journal mode: a database cannot leave WAL while
+	// another connection holds it open (SQLITE_BUSY, no busy wait), so a WAL
+	// connection here makes a daprd started with disableWAL fatal at init.
+	journalMode := "WAL"
+	if s.metadata["disableWAL"] == "true" {
+		journalMode = "DELETE"
+	}
+	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode("+journalMode+")")
 	require.NoError(t, err, "Failed to connect to SQLite database")
 	s.conn = conn
 	return conn

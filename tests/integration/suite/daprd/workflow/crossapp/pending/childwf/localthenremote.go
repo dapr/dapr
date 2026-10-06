@@ -23,13 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -125,7 +125,7 @@ func (l *localthenremote) Run(t *testing.T, ctx context.Context) {
 	l.place.WaitUntilRunning(t, ctx)
 	l.daprd1.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(l.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(l.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, l.registry1))
 
 	id, err := client1.ScheduleNewWorkflow(ctx, "ParentWorkflow", api.WithInput("hello"))
@@ -139,7 +139,7 @@ func (l *localthenremote) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { l.daprd2.Cleanup(t) })
 	l.daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := client.NewTaskHubGrpcClient(l.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(l.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, l.registry2))
 
 	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))

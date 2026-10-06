@@ -67,8 +67,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.18.4"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.17.14"
 
 jobs:
   deploy-infrastructure:
@@ -608,7 +608,7 @@ jobs:
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
         uses: artursouza/sticky-pull-request-comment@v2.2.0
