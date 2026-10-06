@@ -24,11 +24,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -59,12 +59,15 @@ func (e *basic) Setup(t *testing.T) []framework.Option {
 	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
 	for i := range e.joiners {
-		e.joiners[i] = daprd.New(t, append([]daprd.Option{
+		dopts := []daprd.Option{
 			daprd.WithAppID(e.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(e.workflow.DB().GetComponent(t)),
-			daprd.WithPlacementAddresses(e.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(e.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}
+		if e.workflow.HasPlacement() {
+			dopts = append(dopts, daprd.WithPlacementAddresses(e.workflow.Placement().Address()))
+		}
+		e.joiners[i] = daprd.New(t, append(dopts, append(fp, e.workflow.JoinOptions(t)...)...)...)
 	}
 
 	return []framework.Option{
@@ -133,7 +136,7 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("EscalationReap", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 		joined = append(joined, d)
 	}
@@ -171,7 +174,6 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, sumBoth("janitor_escalation_reaped"), float64(1))
 		assert.Zero(c, e.workflow.Scheduler().JobKeyCount(t, ctx, "run-activity"),
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*50)

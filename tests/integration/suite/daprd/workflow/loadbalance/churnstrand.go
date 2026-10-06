@@ -29,10 +29,10 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fgrpc "github.com/dapr/dapr/tests/integration/framework/grpc"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -145,7 +145,7 @@ func (c *churnstrand) Run(t *testing.T, ctx context.Context) {
 		conns := dialAll()
 		lctx, lcancel := context.WithCancel(ctx)
 		cl := client.NewTaskHubGrpcClient(fgrpc.LoadBalance(t,
-			conns[0], conns[1], conns[2]), backend.DefaultLogger())
+			conns[0], conns[1], conns[2]), logger.New(t))
 		require.NoError(t, cl.StartWorkItemListener(lctx, newRegistry()))
 		wait := time.Millisecond * 300
 		if cycle%2 == 0 {
@@ -179,7 +179,7 @@ func (c *churnstrand) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 	cl := client.NewTaskHubGrpcClient(fgrpc.LoadBalance(t,
-		conns[0], conns[1], conns[2]), backend.DefaultLogger())
+		conns[0], conns[1], conns[2]), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, newRegistry()))
 
 	// Sweep with whatever remains of the suite context, leaving grace for a

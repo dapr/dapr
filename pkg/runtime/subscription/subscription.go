@@ -29,6 +29,7 @@ import (
 	pluggablepubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -234,6 +235,10 @@ func New(opts Options) (*Subscription, error) {
 				cloudEvent[contribpubsub.TraceStateField] = tracestate
 			}
 
+			if baggage, ok := msg.Metadata[diagConsts.BaggageHeader]; ok {
+				cloudEvent[diagConsts.BaggageHeader] = baggage
+			}
+
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
@@ -303,6 +308,12 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceStateField] = tracestate
 				}
 			}
+
+			if _, ok := cloudEvent[diagConsts.BaggageHeader]; !ok {
+				if baggage, ok := msg.Metadata[diagConsts.BaggageHeader]; ok {
+					cloudEvent[diagConsts.BaggageHeader] = baggage
+				}
+			}
 		}
 
 		if contribpubsub.HasExpired(cloudEvent) {
@@ -355,7 +366,7 @@ func New(opts Options) (*Subscription, error) {
 			PubSub:       name,
 			SubscriberID: s.connectionID,
 		}
-		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			pErr := s.postman.Deliver(ctx, sm)
 
