@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.18.0-rc.1.0.20260924175451-6a7838d26286
+	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261006091320-becc86bd2da2
 	github.com/dapr/durabletask-go v0.14.2-0.20261005165523-fe0e70b7fa16
 	github.com/dapr/kit v0.18.3-0.20261002162430-f2a7561ba0de
 	github.com/diagridio/go-etcd-cron v0.12.10
@@ -429,7 +429,7 @@ require (
 	github.com/tchap/go-patricia/v2 v2.3.2 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.128 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.3.128 // indirect
-	github.com/tetratelabs/wazero v1.8.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -541,5 +541,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/components-contrib => github.com/nelson-parente/components-contrib v0.0.0-20260925201353-8f7e9767afb4
