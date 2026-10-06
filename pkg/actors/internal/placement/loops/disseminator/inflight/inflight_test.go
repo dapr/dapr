@@ -428,8 +428,8 @@ func TestCancelClaimsForTypes_SuccessfulLookupHoldsClaim(t *testing.T) {
 	require.NoError(t, resp.Error)
 	require.NotNil(t, resp.Cancel)
 
-	time.AfterFunc(200*time.Millisecond, func() { resp.Cancel(nil) })
 	start := time.Now()
+	time.AfterFunc(200*time.Millisecond, func() { resp.Cancel(nil) })
 	i.CancelClaimsForTypes([]string{"a"}, errors.New("placement table updated"))
 	assert.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond)
 	assert.Less(t, time.Since(start), time.Second)

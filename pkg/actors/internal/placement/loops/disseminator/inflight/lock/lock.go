@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dapr/kit/events/loop"
@@ -161,35 +160,27 @@ func (l *lock) handleAcquire(event *Acquire) {
 	idx := l.idx
 	l.idx++
 
-	// The closures can run after this lock closes and goes back to the pool,
-	// so they use the loop of this lock, not l.loop.
+	// The release can run after this lock closes and goes back to the pool,
+	// so it uses the loop of this lock, not l.loop.
 	lp := l.loop
-
-	// The drain goroutine in handleCancelTypes and the request goroutine can
-	// call Cancel at the same time.
-	var done atomic.Bool
 
 	ctx, cancel := context.WithCancelCause(event.Context)
 	claim := &Claim{
 		ActorType: event.ActorType,
 		Context:   ctx,
+		// CancelCauseFunc is idempotent and safe to call from several
+		// goroutines: the drain goroutine in handleCancelTypes and the
+		// request goroutine can call it at the same time.
+		Cancel: cancel,
 	}
-	// A caller whose context ends without a call to Cancel (it stopped
-	// waiting for a queued response, or it returned on a done claim context)
-	// would otherwise keep its claim in acquires until the lock closes. The
-	// drain already treats such a claim as released, because its Context
-	// derives from the request context; this also removes the entry.
-	stop := context.AfterFunc(event.Context, func() {
+	// The claim ends when Cancel is called or when the caller's context ends
+	// (it stopped waiting for a queued response, or it returned on a done
+	// claim context). Either way, remove the entry. The drain waits on
+	// claim.Context, not on the entry, so it does not depend on when the
+	// release runs.
+	context.AfterFunc(ctx, func() {
 		lp.Enqueue(&releaseClaim{idx: idx, claim: claim})
 	})
-	claim.Cancel = func(err error) {
-		if !done.CompareAndSwap(false, true) {
-			return
-		}
-		stop()
-		cancel(err)
-		lp.Enqueue(&releaseClaim{idx: idx, claim: claim})
-	}
 
 	l.acquires[idx] = claim
 	event.RespCh <- claim
