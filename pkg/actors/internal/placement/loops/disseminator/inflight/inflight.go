@@ -397,6 +397,17 @@ func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 }
 
 func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupResponse {
+	// A failed lookup takes no claim: the caller gets no claim to release. A
+	// held claim would keep the next drain of this actor type waiting until
+	// the request ends, while the retry of that same request queues behind
+	// the round that runs the drain. Tables change only while no lookup is
+	// being resolved (on this loop, or in ResetSession after this loop has
+	// stopped), so resolving before the claim gives the same result.
+	resp, err := i.resolve(lu.Request)
+	if err != nil {
+		return &loops.LookupResponse{Error: err}
+	}
+
 	aq := aquireCache.Get().(*lock.Acquire)
 	aq.ActorType = lu.Request.ActorType
 	aq.Context = lu.Context
@@ -405,12 +416,10 @@ func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupRespo
 	claim := <-aq.RespCh
 	aquireCache.Put(aq)
 
-	resp, err := i.resolve(lu.Request)
 	return &loops.LookupResponse{
 		Context:  claim.Context,
 		Cancel:   claim.Cancel,
 		Response: resp,
-		Error:    err,
 	}
 }
 
