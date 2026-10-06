@@ -48,7 +48,7 @@ kind: Component
 metadata:
   name: mystore
 spec:
-  type: binarystore.fake
+  type: binarystore.in-memory
   version: v1
 `
 
