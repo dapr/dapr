@@ -17,6 +17,7 @@ package binarystore
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	contribbinarystore "github.com/dapr/components-contrib/binarystore"
@@ -58,7 +59,9 @@ func (b *binarystoremgr) Init(ctx context.Context, comp compapi.Component) error
 	}
 
 	if store == nil {
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName,
+			fmt.Errorf("binary store %s/%s returned a nil store", comp.Spec.Type, comp.Spec.Version))
 	}
 
 	meta, err := b.meta.ToBaseMetadata(comp)
