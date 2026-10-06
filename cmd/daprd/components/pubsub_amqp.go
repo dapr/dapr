@@ -1,7 +1,7 @@
 //go:build allcomponents
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -20,10 +20,6 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 )
 
-// pubsub.solace.amqp is superseded by pubsub.amqp, which speaks the same
-// protocol without the Solace addressing defaults. It stays registered so that
-// existing configurations keep loading. The docs describe it as the
-// compatibility name and point new components at pubsub.amqp.
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(amqp.NewSolaceAMQPPubsub, "solace.amqp")
+	pubsubLoader.DefaultRegistry.RegisterComponent(amqp.NewAMQPPubsub, "amqp")
 }
