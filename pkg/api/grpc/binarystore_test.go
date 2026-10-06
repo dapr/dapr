@@ -115,3 +115,13 @@ func TestSetBinaryFileReturnsComponentErrorBeforeClientClosesStream(t *testing.T
 		t.Fatal("SetBinaryFileAlpha1 waited for the client to close the stream")
 	}
 }
+
+func TestSetBinaryFileReturnsAPIClosed(t *testing.T) {
+	a := &api{
+		logger: logger.NewLogger("dapr.runtime.grpc.test"),
+		closed: true,
+	}
+
+	err := a.SetBinaryFileAlpha1(&blockingSetBinaryFileStream{ctx: context.Background()})
+	require.ErrorIs(t, err, errAPIClosed)
+}

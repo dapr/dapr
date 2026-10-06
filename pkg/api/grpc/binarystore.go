@@ -68,9 +68,13 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	ctx := stream.Context()
 
 	writerDone := make(chan error, 1)
-	a.wg.Go(func() {
+	if gerr := a.goUnlessClosed(func() {
 		writerDone <- a.binaryStoreReadStream(ctx, stream, reqProto, inWriter)
-	})
+	}); gerr != nil {
+		_ = inReader.CloseWithError(gerr)
+		_ = inWriter.CloseWithError(gerr)
+		return gerr
+	}
 
 	setErr := a.Universal.SetBinaryFileAlpha1(ctx, componentName, fileName, overwrite, inReader)
 	// Closing the reader unblocks the writer goroutine if it is still waiting
@@ -165,12 +169,14 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 	defer cancel()
 
 	firstMsgCh := make(chan error, 1)
-	a.wg.Go(func() {
+	if gerr := a.goUnlessClosed(func() {
 		select {
 		case firstMsgCh <- stream.RecvMsg(reqProto):
 		case <-firstChunkCtx.Done():
 		}
-	})
+	}); gerr != nil {
+		return gerr
+	}
 
 	select {
 	case <-firstChunkCtx.Done():
