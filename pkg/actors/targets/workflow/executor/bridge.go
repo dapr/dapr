@@ -15,10 +15,14 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -27,6 +31,21 @@ import (
 // MetadataForwarded marks a Complete call that was already forwarded from a
 // sibling-format rendezvous actor, so it is never forwarded again.
 const MetadataForwarded = "forwarded"
+
+// forwardedValue is the MetadataForwarded value of a forwarded request, and
+// of the header a parked forwarded completion keeps.
+const forwardedValue = "true"
+
+// MetadataHandoffs counts how many times a parked completion or cancellation
+// moved to a fresh executor actor because the actor that held it retired. A
+// request that carries it also carries the forwarded marker.
+const MetadataHandoffs = "handoffs"
+
+// maxHandoffs is the handoff budget of a parked result. During worker churn,
+// several placement rounds can move a key before its watcher attaches. The
+// budget still stops a result that nothing consumes from following every
+// retirement.
+const maxHandoffs = 3
 
 const (
 	// MetadataTaskType carries the task type of a Complete/Cancel call so
@@ -169,7 +188,7 @@ func (e *executor) callSibling(ctx context.Context, sibling string, data []byte)
 		WithData(data).
 		WithContentType(invokev1.ProtobufContentType).
 		WithMetadata(map[string][]string{
-			MetadataForwarded: {"true"},
+			MetadataForwarded: {forwardedValue},
 			MetadataTaskType:  {TaskTypeActivity},
 		})
 
@@ -178,7 +197,148 @@ func (e *executor) callSibling(ctx context.Context, sibling string, data []byte)
 	}
 }
 
+// parkedCancel is a cancellation recorded on an actor that nothing served
+// yet: its task type ("" when there is none) and its handoff count.
+type parkedCancel struct {
+	taskType string
+	handoffs int
+}
+
+// handOff sends what a retiring actor still held to the actor that now owns
+// its key: each parked completion, then the recorded cancellation. After a
+// rebalance the owner is another host. After an idle deactivation it is this
+// host, where the call creates a fresh actor, which is where the next watch
+// stream attaches. Each request carries the forwarded marker, so the receiver
+// does not forward it to the sibling-format key, and the next handoff count,
+// so a result that nothing consumes stops after maxHandoffs moves. A copy of
+// a completion that the pending map already delivered, and a sibling copy,
+// carry the marker without a count and never move. Best effort, in a
+// background goroutine like forwardSibling, with its own forwardTimeout per
+// call.
+func (e *executor) handOff(ctx context.Context, parked []*internalsv1pb.InternalInvokeResponse, canc parkedCancel) {
+	type handoff struct {
+		req  *internalsv1pb.InternalInvokeRequest
+		what string
+	}
+
+	var calls []handoff
+	for _, d := range parked {
+		n, ok := nextHandoff(d.GetHeaders())
+		if !ok {
+			continue
+		}
+		md := map[string][]string{
+			MetadataForwarded: {forwardedValue},
+			MetadataHandoffs:  {strconv.Itoa(n)},
+		}
+		if taskType := parkedTaskType(d); taskType != "" {
+			md[MetadataTaskType] = []string{taskType}
+		}
+		calls = append(calls, handoff{
+			what: "completion",
+			req: internalsv1pb.
+				NewInternalInvokeRequest(MethodComplete).
+				WithActor(e.actorType, e.actorID).
+				WithData(d.GetMessage().GetData().GetValue()).
+				WithContentType(invokev1.ProtobufContentType).
+				WithMetadata(md),
+		})
+	}
+	if canc.taskType != "" && canc.handoffs < maxHandoffs {
+		calls = append(calls, handoff{
+			what: "cancellation",
+			req: internalsv1pb.
+				NewInternalInvokeRequest(MethodCancel).
+				WithActor(e.actorType, e.actorID).
+				WithContentType(invokev1.ProtobufContentType).
+				WithMetadata(map[string][]string{
+					MetadataForwarded: {forwardedValue},
+					MetadataHandoffs:  {strconv.Itoa(canc.handoffs + 1)},
+					MetadataTaskType:  {canc.taskType},
+				}),
+		})
+	}
+	if len(calls) == 0 {
+		return
+	}
+
+	log.Debugf("Executor actor '%s': handing off %d parked result(s) to the owner of its key", e.actorID, len(calls))
+	hctx := context.WithoutCancel(ctx)
+	go func() {
+		// One after another: they go to the same key, and the receiver
+		// parks one completion at a time.
+		for _, c := range calls {
+			e.handOffOne(hctx, c.req, c.what)
+		}
+	}()
+}
+
+// handOffOne makes one handoff call within its own forwardTimeout. HaltAll
+// runs after the type left this host's table, but placement resolves the key
+// here until the type change is disseminated, which happens only after every
+// HaltAll returns. The call then fails with ErrCreatingActor, so it is retried
+// until the key resolves elsewhere.
+func (e *executor) handOffOne(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, what string) {
+	hctx, cancel := context.WithTimeout(ctx, forwardTimeout)
+	defer cancel()
+
+	err := backoff.Retry(func() error {
+		router, err := e.actors.Router(hctx)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if _, err = router.Call(hctx, req); err != nil {
+			if errors.Is(err, actorerrors.ErrCreatingActor) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return nil
+	}, backoff.WithContext(backoff.NewConstantBackOff(handOffRetryInterval), hctx))
+	if err != nil {
+		log.Debugf("Executor actor '%s': failed to hand off a parked %s: %s", e.actorID, what, err)
+		return
+	}
+	log.Debugf("Executor actor '%s': handed off a parked %s to the owner of its key", e.actorID, what)
+}
+
+// handOffRetryInterval is the pause between handoff attempts while the key
+// still resolves to a host that no longer registers the type.
+const handOffRetryInterval = 100 * time.Millisecond
+
+// nextHandoff returns the handoff count for the next move of a parked result
+// with the given headers, and whether it may move at all.
+func nextHandoff(headers map[string]*internalsv1pb.ListStringValue) (int, bool) {
+	if n, ok := handoffsIn(headers); ok {
+		return n + 1, n < maxHandoffs
+	}
+	if forwardedIn(headers) {
+		return 0, false
+	}
+	return 1, true
+}
+
+// handoffsIn reads the handoff count of a request's metadata or a parked
+// result's headers.
+func handoffsIn(m map[string]*internalsv1pb.ListStringValue) (int, bool) {
+	v, ok := m[MetadataHandoffs]
+	if !ok || len(v.GetValues()) == 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(v.GetValues()[0])
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// forwardedIn reports whether a request's metadata or a parked result's
+// headers carry the forwarded marker.
+func forwardedIn(m map[string]*internalsv1pb.ListStringValue) bool {
+	v, ok := m[MetadataForwarded]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == forwardedValue
+}
+
 func isForwarded(req *internalsv1pb.InternalInvokeRequest) bool {
-	v, ok := req.GetMetadata()[MetadataForwarded]
-	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
+	return forwardedIn(req.GetMetadata())
 }
