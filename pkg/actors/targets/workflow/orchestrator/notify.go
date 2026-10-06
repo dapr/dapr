@@ -61,7 +61,7 @@ func (o *orchestrator) deliverParentNotify(ctx context.Context, state *wfengines
 	if len(pn.msgs) == 0 {
 		return nil
 	}
-	cctx, cancel := context.WithTimeout(ctx, escalateTimeout)
+	cctx, cancel := context.WithTimeout(ctx, detachedReminderTimeout)
 	defer cancel()
 	res := o.messages.CallAddEventStateMessage(cctx, pn.msgs, pn.md)
 	if res.Err == nil {
@@ -170,10 +170,9 @@ func (o *orchestrator) parentNotification(ctx context.Context, state *wfenginest
 // assertParentNotifyReminder arms the durable driver for a pending parent
 // notification; the fixed name makes re-asserts idempotent. The turn context
 // may already be cancelled (a notify parked behind the parent's lock past
-// the local wake timeout), so the create runs on the actor's root context
-// like an escalation.
+// the local wake timeout), so the create runs on the actor's root context.
 func (o *orchestrator) assertParentNotifyReminder(workflowName string) error {
-	ctx, cancel := context.WithTimeout(o.rootCtx, escalateTimeout)
+	ctx, cancel := context.WithTimeout(o.rootCtx, detachedReminderTimeout)
 	defer cancel()
 	return o.createWorkflowReminderForever(ctx, reminderNameParentNotify, nil, time.Now(), o.appID, &workflowName)
 }

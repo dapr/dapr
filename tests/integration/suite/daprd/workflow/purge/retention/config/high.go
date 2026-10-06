@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -66,7 +67,7 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(h.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(h.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")
@@ -79,8 +80,14 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 
 	db := h.workflow.DB().GetConnection(t)
 	tableName := h.workflow.DB().TableName()
+	// Signing mode stores one signature row per history save plus a sigcert row.
+	retainedCount := 8
+	if h.workflow.Signing() {
+		retainedCount = 12
+	}
+
 	var count int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 8, count)
+	assert.Equal(t, retainedCount, count)
 	assert.Len(t, h.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
 }

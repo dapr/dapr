@@ -56,7 +56,7 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		healthTarget:     ht,
 		inflight:         inf,
 		streamLoop:       streamLoop,
-		currentOperation: v1pb.HostOperation_LOCK,
+		currentOperation: loops.OrderLock,
 		currentVersion:   0,
 		timeout:          time.Second * 30,
 		ready:            new(atomic.Bool),
@@ -113,9 +113,9 @@ func TestHandleOrder_UpdateVersionMismatch(t *testing.T) {
 
 		diss.currentVersion = 10
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUpdate,
-				Version:   5,
+			Order: &loops.Order{
+				Op:      loops.OrderUpdate,
+				Version: 5,
 			},
 		})
 		require.NoError(t, err)
@@ -134,8 +134,8 @@ func TestHandleOrder_UnknownOperation(t *testing.T) {
 			})
 
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: "invalid",
+			Order: &loops.Order{
+				Op: loops.OrderOp(99),
 			},
 		})
 		require.NoError(t, err)
@@ -154,18 +154,18 @@ func TestHandleTimeout_UpdateDequeuesTimeout(t *testing.T) {
 			})
 
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationLock,
-				Version:   5,
+			Order: &loops.Order{
+				Op:      loops.OrderLock,
+				Version: 5,
 			},
 		})
 		require.NoError(t, err)
 
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUpdate,
-				Version:   5,
-				Tables:    &v1pb.PlacementTables{},
+			Order: &loops.Order{
+				Op:       loops.OrderUpdate,
+				Version:  5,
+				V1Tables: &v1pb.PlacementTables{},
 			},
 		})
 		require.NoError(t, err)
@@ -184,9 +184,9 @@ func TestHandleOrder_UnlockVersionMismatch(t *testing.T) {
 
 		// Simulate a LOCK at version 10.
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationLock,
-				Version:   10,
+			Order: &loops.Order{
+				Op:      loops.OrderLock,
+				Version: 10,
 			},
 		})
 		require.NoError(t, err)
@@ -194,28 +194,28 @@ func TestHandleOrder_UnlockVersionMismatch(t *testing.T) {
 
 		// Simulate an UPDATE at version 10.
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUpdate,
-				Version:   10,
-				Tables:    &v1pb.PlacementTables{},
+			Order: &loops.Order{
+				Op:       loops.OrderUpdate,
+				Version:  10,
+				V1Tables: &v1pb.PlacementTables{},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, v1pb.HostOperation_UPDATE, diss.currentOperation)
+		assert.Equal(t, loops.OrderUpdate, diss.currentOperation)
 
 		// Attempt UNLOCK with version 5 (lower than currentVersion=10).
 		// This should be ignored and currentVersion should remain 10.
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUnlock,
-				Version:   5,
+			Order: &loops.Order{
+				Op:      loops.OrderUnlock,
+				Version: 5,
 			},
 		})
 		require.NoError(t, err)
 
 		assert.Equal(t, uint64(10), diss.currentVersion,
 			"currentVersion should not be updated when unlock version is lower")
-		assert.Equal(t, v1pb.HostOperation_UPDATE, diss.currentOperation,
+		assert.Equal(t, loops.OrderUpdate, diss.currentOperation,
 			"operation should remain UPDATE when unlock is ignored")
 		assert.False(t, ht.ReadyCalled(),
 			"health target should not be marked ready when unlock is ignored")
@@ -226,33 +226,33 @@ func TestHandleOrder_UnlockVersionMismatch(t *testing.T) {
 
 		// LOCK -> UPDATE -> UNLOCK at version 10.
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationLock,
-				Version:   10,
+			Order: &loops.Order{
+				Op:      loops.OrderLock,
+				Version: 10,
 			},
 		})
 		require.NoError(t, err)
 
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUpdate,
-				Version:   10,
-				Tables:    &v1pb.PlacementTables{},
+			Order: &loops.Order{
+				Op:       loops.OrderUpdate,
+				Version:  10,
+				V1Tables: &v1pb.PlacementTables{},
 			},
 		})
 		require.NoError(t, err)
 
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUnlock,
-				Version:   10,
+			Order: &loops.Order{
+				Op:      loops.OrderUnlock,
+				Version: 10,
 			},
 		})
 		require.NoError(t, err)
 
 		assert.Equal(t, uint64(10), diss.currentVersion,
 			"currentVersion should be set to matching unlock version")
-		assert.Equal(t, v1pb.HostOperation_UNLOCK, diss.currentOperation)
+		assert.Equal(t, loops.OrderUnlock, diss.currentOperation)
 		assert.True(t, ht.ReadyCalled(),
 			"health target should be marked ready on successful unlock")
 	})
@@ -262,33 +262,33 @@ func TestHandleOrder_UnlockVersionMismatch(t *testing.T) {
 
 		// LOCK -> UPDATE at version 5, UNLOCK at version 10.
 		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationLock,
-				Version:   5,
+			Order: &loops.Order{
+				Op:      loops.OrderLock,
+				Version: 5,
 			},
 		})
 		require.NoError(t, err)
 
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUpdate,
-				Version:   5,
-				Tables:    &v1pb.PlacementTables{},
+			Order: &loops.Order{
+				Op:       loops.OrderUpdate,
+				Version:  5,
+				V1Tables: &v1pb.PlacementTables{},
 			},
 		})
 		require.NoError(t, err)
 
 		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
-			Order: &v1pb.PlacementOrder{
-				Operation: operationUnlock,
-				Version:   10,
+			Order: &loops.Order{
+				Op:      loops.OrderUnlock,
+				Version: 10,
 			},
 		})
 		require.NoError(t, err)
 
 		assert.Equal(t, uint64(10), diss.currentVersion,
 			"currentVersion should advance to higher unlock version")
-		assert.Equal(t, v1pb.HostOperation_UNLOCK, diss.currentOperation)
+		assert.Equal(t, loops.OrderUnlock, diss.currentOperation)
 		assert.True(t, ht.ReadyCalled())
 	})
 }

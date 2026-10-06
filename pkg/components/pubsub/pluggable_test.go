@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -281,5 +282,58 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		assert.Equal(t, int64(len(messages)), handleCalled.Load())
 		assert.Equal(t, int64(1), totalAckErrors.Load()) // at least one message should be an error
+	})
+
+	t.Run("subscribe should dispatch messages concurrently", func(t *testing.T) {
+		const fakeTopic = "fakeTopic"
+		const numMessages = 2
+
+		messageChan := make(chan *proto.PullMessagesResponse, numMessages)
+		defer close(messageChan)
+
+		for i := range numMessages {
+			messageChan <- &proto.PullMessagesResponse{
+				Data:        fmt.Appendf(nil, "fakeData%d", i),
+				TopicName:   fakeTopic,
+				Metadata:    map[string]string{},
+				ContentType: "",
+			}
+		}
+
+		ps, cleanup, err := getPubSub(&server{pullChan: messageChan})
+		require.NoError(t, err)
+		defer cleanup()
+
+		var (
+			inFlight    atomic.Int64
+			closeOnce   sync.Once
+			allInFlight = make(chan struct{})
+		)
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second*10)
+		defer cancel()
+
+		// Every handler blocks until all of them are in flight, so the
+		// subscription can only make progress if messages are dispatched
+		// concurrently. Handling one at a time never gets past the first.
+		err = ps.Subscribe(ctx, pubsub.SubscribeRequest{
+			Topic: fakeTopic,
+		}, func(ctx context.Context, _ *pubsub.NewMessage) error {
+			if inFlight.Add(1) == numMessages {
+				closeOnce.Do(func() { close(allInFlight) })
+			}
+			select {
+			case <-allInFlight:
+			case <-ctx.Done():
+			}
+			return nil
+		})
+		require.NoError(t, err)
+
+		select {
+		case <-allInFlight:
+		case <-ctx.Done():
+			t.Fatalf("expected %d messages to be in flight at once, got %d", numMessages, inFlight.Load())
+		}
 	})
 }

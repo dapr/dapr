@@ -80,8 +80,12 @@ func TestActorState(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Wait until runtime finds the leader of placements.
-	time.Sleep(15 * time.Second)
+	// Wait until the actor runtime is ready (placement leader found) by
+	// polling an actor state read with a throwaway actor ID
+	require.Eventually(t, func() bool {
+		_, code, errp := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/warmup-probe-myActorID", initActorURL))
+		return errp == nil && code == http.StatusOK
+	}, 60*time.Second, time.Second, "actor runtime was not ready in time")
 
 	t.Run("http", func(t *testing.T) {
 		t.Run("getting state which does not exist should error", func(t *testing.T) {

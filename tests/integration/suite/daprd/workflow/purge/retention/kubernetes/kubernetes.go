@@ -26,6 +26,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -129,7 +130,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(b.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(b.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")
