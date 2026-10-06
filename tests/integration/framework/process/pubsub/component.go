@@ -48,6 +48,15 @@ type component struct {
 	// pausable opts in to Pause/Resume; default is non-pausable
 	// (returns codes.Unimplemented), matching most pubsub components.
 	pausable bool
+
+	// dropStreamCh, when closed, makes PullMessages return so the gRPC
+	// stream ends underneath the runtime while a message may still be in
+	// flight. This is the pluggable equivalent of a Kafka consumer group
+	// rebalance pulling a partition assignment out from under a consumer:
+	// the context the component gave the inbound handler is cancelled, and
+	// the runtime must stop retrying that message.
+	dropStreamCh  chan struct{}
+	dropStreamOnc sync.Once
 }
 
 func newComponent(t *testing.T, opts options) *component {
@@ -57,6 +66,7 @@ func newComponent(t *testing.T, opts options) *component {
 		pmrRespCh:    opts.pmrRespCh,
 		pauseStartCh: make(chan struct{}),
 		pausable:     opts.pausable,
+		dropStreamCh: make(chan struct{}),
 	}
 }
 
@@ -146,10 +156,17 @@ func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
 			return c.waitForStreamEnd(req, recvErr)
 		case err := <-recvErr:
 			return cleanShutdown(err)
+		case <-c.dropStreamCh:
+			return nil
 		case <-req.Context().Done():
 			return nil
 		}
 	}
+}
+
+// dropStream ends the PullMessages stream, simulating a rebalance.
+func (c *component) dropStream() {
+	c.dropStreamOnc.Do(func() { close(c.dropStreamCh) })
 }
 
 // waitForStreamEnd is the paused state — no more pmrRespCh forwards;
