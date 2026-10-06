@@ -19,7 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -398,7 +397,7 @@ func (e *executor) watchComplete(ctx context.Context, req *internalsv1pb.Interna
 	select {
 	case e.watchLock <- struct{}{}:
 	case <-e.closeCh:
-		return backoff.Permanent(errors.New("closed"))
+		return targeterrors.NewClosed("executor")
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -429,7 +428,7 @@ func (e *executor) watchComplete(ctx context.Context, req *internalsv1pb.Interna
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.closeCh:
-		return backoff.Permanent(errors.New("closed"))
+		return targeterrors.NewClosed("executor")
 	case <-e.cancelCh:
 		_, err := stream(&internalsv1pb.InternalInvokeResponse{
 			Status: &internalsv1pb.Status{

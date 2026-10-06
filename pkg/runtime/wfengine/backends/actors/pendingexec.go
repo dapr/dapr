@@ -97,18 +97,7 @@ func (a *activityExecutions) resolve(key string) {
 // workflow-turn completions are re-delivered once after a short delay,
 // modeling a retried executor-actor forward whose first attempt landed but
 // whose ack was lost. Not a supported production knob.
-var testDuplicateTurnCompletions = sync.OnceValue(func() int64 {
-	v := os.Getenv("DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS")
-	if v == "" {
-		return 0
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		log.Warnf("Ignoring invalid DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS %q", v)
-		return 0
-	}
-	return n
-})
+var testDuplicateTurnCompletions = envBudget("DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS")
 
 // testDropActivityCompletions is a test-only fault injection: the first N
 // activity completion deliveries are silently swallowed after their
@@ -118,15 +107,29 @@ var testDuplicateTurnCompletions = sync.OnceValue(func() int64 {
 // callback that never fires while the engine has forgotten the work item:
 // exactly the stranded-activity condition the janitor rescue exists for.
 // Not a supported production knob.
-var testDropActivityCompletions = sync.OnceValue(func() int64 {
-	v := os.Getenv("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS")
-	if v == "" {
-		return 0
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		log.Warnf("Ignoring invalid DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS %q", v)
-		return 0
-	}
-	return n
-})
+var testDropActivityCompletions = envBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_COMPLETIONS")
+
+// testForceWatchFallback is a test-only fault injection: under
+// WorkflowsClusteredDeployment, the first N completion waits use the
+// watch-stream fallback even when placement resolves the executor actor to
+// this daprd. It models a placement table in which a waiter and its executor
+// actor resolve to different hosts, as during a rebalance. Not a supported
+// production knob.
+var testForceWatchFallback = envBudget("DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK")
+
+// envBudget returns the budget of a test-only fault injection, read once from
+// the named environment variable. Unset or 0 disables the injection.
+func envBudget(name string) func() int64 {
+	return sync.OnceValue(func() int64 {
+		v := os.Getenv(name)
+		if v == "" {
+			return 0
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			log.Warnf("Ignoring invalid %s %q", name, v)
+			return 0
+		}
+		return n
+	})
+}
