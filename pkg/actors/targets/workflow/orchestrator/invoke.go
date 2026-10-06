@@ -147,7 +147,8 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
+		sender := completionSender{parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name)}
+		err := o.addWorkflowEvent(ctx, &ev, sender)
 		if common.IsSchedulingNotDurable(err) {
 			// This reminder IS the retry chain for the refusal, and it
 			// retries forever, so each fire drops the cache and reads again
@@ -168,7 +169,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// Past the bound this fire is the last word, and the refusal was
 			// judged on whatever history the actor held: judge once more on
 			// the reload the invalidate above forces before giving up.
-			err = o.addWorkflowEvent(ctx, &ev, completionSender{})
+			err = o.addWorkflowEvent(ctx, &ev, sender)
 			if common.IsSchedulingNotDurable(err) {
 				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not become durable: %v", o.actorID, reminder.Name, err)
 				return nil
@@ -195,9 +196,10 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 // runJanitor handles a fire of the per-instance janitor backstop reminder
 // (WorkflowsFastPath). Semantics: self-delete against purged or
 // terminal instances; cheap no-op (WITHOUT deactivating, so idle instances
-// do not thrash the activation cache every period) when the inbox is empty;
-// drive a normal turn when inbox rows are pending, which is the recovery
-// event the janitor exists for.
+// do not thrash the activation cache every period) when the inbox holds
+// nothing a turn can consume (it may hold early results kept until their step
+// is scheduled); drive a normal turn when inbox rows are pending, which is
+// the recovery event the janitor exists for.
 func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Reminder) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
@@ -219,7 +221,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 		return nil
 	}
 
-	if len(state.Inbox) == 0 {
+	if onlyUnscheduled(state.History, state.Inbox) {
 		// Mirror the empty-inbox stale-cache guard of runWorkflow: a peer
 		// host may have written an inbox row since this cache was loaded
 		// (a zombie writer racing an activation). Only a store read can see
@@ -244,8 +246,8 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 		}
 	}
 
-	if len(state.Inbox) == 0 {
-		// No pending inbox rows, but the instance may have in-flight
+	if onlyUnscheduled(state.History, state.Inbox) {
+		// No inbox row a turn can consume, but the instance may have in-flight
 		// activities whose only durable re-driver is this janitor (their
 		// run-activity reminder is elided under
 		// WorkflowsFastPath). Stalled workflows are excluded:
