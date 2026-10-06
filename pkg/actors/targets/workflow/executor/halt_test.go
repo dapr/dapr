@@ -459,3 +459,29 @@ func Test_haltAllHandOffRetriesUntilKeyMoves(t *testing.T) {
 		"the handoff did not retry until the key moved")
 	assert.GreaterOrEqual(t, attempts.Load(), int32(4))
 }
+
+// Test_cancelAfterRetirementIsRetried covers a cancellation that reaches an
+// actor after a retirement closed it and took its snapshot. It must not be
+// recorded on the closed actor, where nothing hands it off: the caller gets a
+// closed error and retries on a fresh actor.
+func Test_cancelAfterRetirementIsRetried(t *testing.T) {
+	t.Parallel()
+
+	f := newQueuedDeactivationHaltFactory(pending.New())
+	const key = "wf9"
+
+	e := f.GetOrCreate(key).(*executor)
+	parked, canc := e.deactivate()
+	require.Empty(t, parked)
+	require.Empty(t, canc.taskType)
+
+	_, err := e.InvokeMethod(t.Context(), cancelReq(TaskTypeWorkflow))
+	require.True(t, targeterrors.IsClosed(err), "err: %v", err)
+
+	// The retry reaches a fresh actor and records it there.
+	_, err = f.GetOrCreate(key).InvokeMethod(t.Context(), cancelReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+	res, err := f.GetOrCreate(key).InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+	assert.Equal(t, int32(codes.Aborted), res.GetStatus().GetCode())
+}

@@ -393,6 +393,15 @@ func (e *executor) cancel(req *internalsv1pb.InternalInvokeRequest) (func(), err
 		return run, nil
 	}
 
+	// A retirement took its snapshot of the recorded cancellation under mu
+	// when it closed the actor, so a cancellation recorded after the close
+	// would be dropped. As in complete(), a closed actor errors instead, and
+	// the caller's closed-actor retry records it on a fresh actor.
+	if e.closedLocked() {
+		e.mu.Unlock()
+		return nil, targeterrors.NewClosed("executor")
+	}
+
 	// Cancels are at-least-once (stream disconnect cleanup and executor
 	// shutdown can both cancel the same task); only the first closes. The
 	// miss and the close are one mu critical section, mirroring complete's
