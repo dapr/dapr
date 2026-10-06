@@ -57,8 +57,8 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.18.4"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.17.14"
       # Container registry where to cache e2e test images. The packages under
       # this path are public, so pull requests (including from forks) can read
       # the cache anonymously. Only the e2e-cache-populate workflow writes to
