@@ -197,6 +197,9 @@ spec:
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
 	}
+	if opts.trustAnchorsFile != nil {
+		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
+	}
 	if len(opts.disableInitEndpoints) > 0 {
 		args = append(args, "--disable-init-endpoints="+strings.Join(opts.disableInitEndpoints, ","))
 	}
