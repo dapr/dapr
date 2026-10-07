@@ -58,10 +58,13 @@ type wakeHarness struct {
 	ops   []string
 
 	callReminderErr error
-	deleteErr       error
-	createErrFor    map[string]error
-	dues            map[string]string // reminder name -> DueTime of its last create
-	reminderGate    chan struct{}     // when non-nil, CallReminder blocks on it (or ctx)
+	// callReminderErrs are returned by CallReminder one per attempt, ahead of
+	// callReminderErr, so a test can fail an attempt and succeed the next.
+	callReminderErrs []error
+	deleteErr        error
+	createErrFor     map[string]error
+	dues             map[string]string // reminder name -> DueTime of its last create
+	reminderGate     chan struct{}     // when non-nil, CallReminder blocks on it (or ctx)
 
 	attempts atomic.Int64 // CallReminder invocations, successful or not
 	calls    []*actorapi.Reminder
@@ -136,7 +139,13 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		}
 		h.lock.Lock()
 		defer h.lock.Unlock()
-		if h.callReminderErr != nil {
+		if len(h.callReminderErrs) > 0 {
+			err := h.callReminderErrs[0]
+			h.callReminderErrs = h.callReminderErrs[1:]
+			if err != nil {
+				return err
+			}
+		} else if h.callReminderErr != nil {
 			return h.callReminderErr
 		}
 		h.ops = append(h.ops, "callReminder:"+rem.Name)
@@ -331,26 +340,32 @@ func Test_localWake_failureLeavesJanitor(t *testing.T) {
 		"a failed drive must leave the janitor as the only driver")
 }
 
-func Test_localWake_closedActorStopsRetrying(t *testing.T) {
+func Test_localWake_closedActorRetriesAtOnce(t *testing.T) {
 	const instanceID = "test-wake-closed"
 
 	h := newWakeHarness(t, instanceID, true)
-	h.fact.driveRetryBackoffs = []time.Duration{time.Millisecond * 5, time.Millisecond * 5, time.Millisecond * 5}
-	h.callReminderErr = targeterrors.NewClosed("test")
+	// A slept retry would take a second; the closed retry must not sleep.
+	h.fact.driveRetryBackoffs = []time.Duration{time.Second}
+	h.callReminderErrs = []error{targeterrors.NewClosed("test")}
 	h.primeRunning(t, instanceID, 7)
 
 	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
 
-	// A closed actor is the migration/teardown path: the drive is lost, not
-	// slow, so the loop exits without retrying; the janitor drives the turn
-	// on the new owner.
+	// A closed lock means the orchestrator object was retired under the wake
+	// (a deactivation queued before the arming turn ran): the instance is
+	// still this host's, and the router resolves a fresh object, so the
+	// drive is retried immediately rather than left to the janitor.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(2), h.attempts.Load(), "the closed attempt must be retried once, at once")
 		assert.False(c, h.orch.driveRunning.Load(), "the drive loop must wind down")
-	}, time.Second*5, time.Millisecond*5)
+	}, time.Millisecond*500, time.Millisecond*5)
 
 	time.Sleep(time.Millisecond * 100)
-	assert.Equal(t, int64(1), h.attempts.Load(), "a lost drive must not be retried in place")
-	assert.Equal(t, []string{"save", "create:new-event-janitor"}, h.snapshotOps())
+	assert.Equal(t, int64(2), h.attempts.Load())
+	ops := h.snapshotOps()
+	require.Len(t, ops, 3)
+	assert.Equal(t, []string{"save", "create:new-event-janitor"}, ops[:2])
+	assert.Contains(t, ops[2], "callReminder:new-event-")
 }
 
 func Test_redispatchSuppressedSignals(t *testing.T) {
