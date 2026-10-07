@@ -29,10 +29,26 @@ import (
 func MaxBodySizeMiddleware(maxSize int64) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			if !isRouteExcludedFromMaxBodySize(r.Method, r.URL) {
+				r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func isRouteExcludedFromMaxBodySize(method string, u *url.URL) bool {
+	if method != http.MethodPut && method != http.MethodPost {
+		return false
+	}
+
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	return len(parts) == 5 &&
+		parts[0] == apiVersionV1alpha1 &&
+		parts[1] == "state" &&
+		parts[2] == "binarystore" &&
+		parts[3] != "" &&
+		parts[4] != ""
 }
 
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.

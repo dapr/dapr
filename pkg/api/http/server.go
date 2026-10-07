@@ -415,7 +415,12 @@ func (s *server) unescapeRequestParametersHandler(next http.Handler) http.Handle
 
 func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err error) {
 	for i, key := range chiCtx.URLParams.Keys {
-		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
+		unescape := url.QueryUnescape
+		if key == binaryStoreFileNameParam {
+			unescape = url.PathUnescape
+		}
+
+		chiCtx.URLParams.Values[i], err = unescape(chiCtx.URLParams.Values[i])
 		if err != nil {
 			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
 		}

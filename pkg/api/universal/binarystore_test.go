@@ -1,0 +1,364 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package universal
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/components-contrib/binarystore"
+	"github.com/dapr/components-contrib/binarystore/fake"
+	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/streams"
+)
+
+type contextReaderBinaryStore struct {
+	binarystore.BinaryStore
+}
+
+type binaryStoreContextKey struct{}
+
+type contextCheckingBinaryStore struct {
+	binarystore.BinaryStore
+	t *testing.T
+}
+
+type blockingSetBinaryStore struct {
+	binarystore.BinaryStore
+	ctxErr chan error
+}
+
+func (c *contextCheckingBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
+	require.Equal(c.t, "identity", ctx.Value(binaryStoreContextKey{}))
+	return nil
+}
+
+func (b *blockingSetBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
+	<-ctx.Done()
+	b.ctxErr <- ctx.Err()
+	return ctx.Err()
+}
+
+func (c *contextReaderBinaryStore) Get(ctx context.Context, req *binarystore.GetRequest) (*binarystore.GetResponse, error) {
+	return &binarystore.GetResponse{
+		Data: &contextReadCloser{
+			ctx:    ctx,
+			reader: strings.NewReader("payload"),
+		},
+	}, nil
+}
+
+type contextReadCloser struct {
+	ctx    context.Context
+	reader *strings.Reader
+}
+
+func (c *contextReadCloser) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.reader.Read(p)
+}
+
+func (*contextReadCloser) Close() error {
+	return nil
+}
+
+func newBinaryTestUniversal(t *testing.T) (*Universal, binarystore.BinaryStore) {
+	t.Helper()
+	compStore := compstore.New()
+	store := fake.NewFake(testLogger)
+	compStore.AddBinaryStore("mystore", store)
+	u := &Universal{
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
+	}
+	return u, store
+}
+
+func newContextReaderTestUniversal(timeout string) *Universal {
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", &contextReaderBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+	})
+	return &Universal{
+		logger: testLogger,
+		resiliency: resiliency.FromConfigurations(testLogger, &v1alpha1.Resiliency{
+			Spec: v1alpha1.ResiliencySpec{
+				Policies: v1alpha1.Policies{
+					Timeouts: map[string]string{"getTimeout": timeout},
+				},
+				Targets: v1alpha1.Targets{
+					Components: map[string]v1alpha1.ComponentPolicyNames{
+						"mystore": {
+							Outbound: v1alpha1.PolicyNames{Timeout: "getTimeout"},
+						},
+					},
+				},
+			},
+		}),
+		compStore: compStore,
+	}
+}
+
+func TestBinaryStore_SetGetDeleteRoundTrip(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "file.bin", true, bytes.NewReader([]byte("payload"))))
+
+	body, err := u.GetBinaryFileAlpha1(ctx, "mystore", "file.bin")
+	require.NoError(t, err)
+	defer body.Close()
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("payload"), got)
+
+	require.NoError(t, u.DeleteBinaryFileAlpha1(ctx, "mystore", "file.bin"))
+
+	_, err = u.GetBinaryFileAlpha1(ctx, "mystore", "file.bin")
+	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+}
+
+func TestBinaryStore_SetNoOverwriteConflicts(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "f", true, bytes.NewReader([]byte("a"))))
+	err := u.SetBinaryFileAlpha1(ctx, "mystore", "f", false, bytes.NewReader([]byte("b")))
+	require.ErrorIs(t, err, messages.ErrBinaryStoreFileExists)
+}
+
+func TestBinaryStore_SetAppliesComponentContext(t *testing.T) {
+	store := &contextCheckingBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+		t:           t,
+	}
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", store)
+	res := resiliency.New(nil)
+	res.SetComponentContextDecorator(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, binaryStoreContextKey{}, "identity")
+	})
+	u := &Universal{
+		logger:     testLogger,
+		resiliency: res,
+		compStore:  compStore,
+	}
+
+	require.NoError(t, u.SetBinaryFileAlpha1(
+		context.Background(),
+		"mystore",
+		"file.bin",
+		true,
+		bytes.NewReader([]byte("payload")),
+	))
+}
+
+func TestBinaryStore_SetAppliesTimeout(t *testing.T) {
+	store := &blockingSetBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+		ctxErr:      make(chan error, 1),
+	}
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", store)
+	u := &Universal{
+		logger: testLogger,
+		resiliency: resiliency.FromConfigurations(testLogger, &v1alpha1.Resiliency{
+			Spec: v1alpha1.ResiliencySpec{
+				Policies: v1alpha1.Policies{
+					Timeouts: map[string]string{"setTimeout": "10ms"},
+				},
+				Targets: v1alpha1.Targets{
+					Components: map[string]v1alpha1.ComponentPolicyNames{
+						"mystore": {
+							Outbound: v1alpha1.PolicyNames{Timeout: "setTimeout"},
+						},
+					},
+				},
+			},
+		}),
+		compStore: compStore,
+	}
+
+	err := u.SetBinaryFileAlpha1(
+		context.Background(),
+		"mystore",
+		"file.bin",
+		true,
+		bytes.NewReader([]byte("payload")),
+	)
+	require.ErrorIs(t, err, messages.ErrBinaryStoreSet)
+	require.ErrorIs(t, <-store.ctxErr, context.DeadlineExceeded)
+}
+
+func TestBinaryStore_OverwriteReplaces(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "f", true, bytes.NewReader([]byte("a"))))
+	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "f", true, bytes.NewReader([]byte("bb"))))
+	body, err := u.GetBinaryFileAlpha1(ctx, "mystore", "f")
+	require.NoError(t, err)
+	defer body.Close()
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("bb"), got)
+}
+
+func TestBinaryStore_GetMissingReturnsNotFound(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	_, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "nope")
+	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+}
+
+func TestBinaryStore_GetReaderContextRemainsActive(t *testing.T) {
+	u := newContextReaderTestUniversal("1s")
+
+	body, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
+	require.NoError(t, err)
+	defer body.Close()
+
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("payload"), got)
+}
+
+func TestBinaryStore_GetReaderAppliesTimeout(t *testing.T) {
+	u := newContextReaderTestUniversal("10ms")
+
+	body, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
+	require.NoError(t, err)
+	defer body.Close()
+
+	time.Sleep(50 * time.Millisecond)
+	_, err = body.Read(make([]byte, 1))
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestBinaryStore_GetReaderCloseCancelsTimeoutContext(t *testing.T) {
+	u := newContextReaderTestUniversal(time.Minute.String())
+
+	body, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+
+	_, err = body.Read(make([]byte, 1))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestBinaryStore_DeleteMissingReturnsNotFound(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	err := u.DeleteBinaryFileAlpha1(context.Background(), "mystore", "nope")
+	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+}
+
+func TestBinaryStore_MissingFileName(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	require.ErrorIs(t, u.SetBinaryFileAlpha1(ctx, "mystore", "", true, bytes.NewReader([]byte("x"))), messages.ErrBinaryStoreNameMissing)
+	_, err := u.GetBinaryFileAlpha1(ctx, "mystore", "")
+	require.ErrorIs(t, err, messages.ErrBinaryStoreNameMissing)
+	require.ErrorIs(t, u.DeleteBinaryFileAlpha1(ctx, "mystore", ""), messages.ErrBinaryStoreNameMissing)
+}
+
+func TestBinaryStore_InvalidFileName(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	for _, fileName := range []string{
+		"a/b.bin",
+		`a\b.bin`,
+		"../x.bin",
+		"/x.bin",
+		"a*.bin",
+		"a?.bin",
+		"a[1].bin",
+		"a#1.bin",
+		".",
+		"..",
+	} {
+		t.Run(fileName, func(t *testing.T) {
+			require.ErrorIs(t, u.SetBinaryFileAlpha1(ctx, "mystore", fileName, true, bytes.NewReader(nil)), messages.ErrBadRequest)
+			_, err := u.GetBinaryFileAlpha1(ctx, "mystore", fileName)
+			require.ErrorIs(t, err, messages.ErrBadRequest)
+			require.ErrorIs(t, u.DeleteBinaryFileAlpha1(ctx, "mystore", fileName), messages.ErrBadRequest)
+		})
+	}
+}
+
+func TestBinaryStore_ComponentNotFound(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	err := u.SetBinaryFileAlpha1(ctx, "missing", "f", true, bytes.NewReader([]byte("x")))
+	require.ErrorIs(t, err, messages.ErrBinaryStoreNotFound)
+}
+
+func TestBinaryStore_LargeStreamingRoundTrip(t *testing.T) {
+	u, _ := newBinaryTestUniversal(t)
+	ctx := context.Background()
+
+	// 1 MiB payload exercises the streaming io.Reader path without buffering.
+	size := 1024 * 1024
+	payload := make([]byte, size)
+	for i := range payload {
+		payload[i] = byte(i % 256)
+	}
+
+	require.NoError(t, u.SetBinaryFileAlpha1(ctx, "mystore", "big.bin", true, bytes.NewReader(payload)))
+	body, err := u.GetBinaryFileAlpha1(ctx, "mystore", "big.bin")
+	require.NoError(t, err)
+	defer body.Close()
+	got, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Len(t, got, size)
+	assert.True(t, bytes.Equal(payload, got))
+}
+
+// mapBinaryStoreError should wrap unknown errors with the fallback APIError
+// (preserving the operation-specific tag/HTTP code) rather than passing them
+// through verbatim.
+func TestBinaryStore_mapBinaryStoreErrorWrapsUnknown(t *testing.T) {
+	err := mapBinaryStoreError(errors.New("boom"), "c", "f", messages.ErrBinaryStoreSet)
+	require.Error(t, err)
+	apiErr, ok := err.(messages.APIError)
+	require.True(t, ok, "expected an APIError for unknown errors")
+	assert.Equal(t, messages.ErrBinaryStoreSet.Tag(), apiErr.Tag())
+}
+
+func TestBinaryStore_mapBinaryStoreErrorTooLarge(t *testing.T) {
+	err := mapBinaryStoreError(streams.ErrStreamTooLarge, "c", "f", messages.ErrBinaryStoreSet)
+	require.Error(t, err)
+	apiErr, ok := err.(messages.APIError)
+	require.True(t, ok, "expected an APIError for oversized streams")
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.Tag(), apiErr.Tag())
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.HTTPCode(), apiErr.HTTPCode())
+	assert.Equal(t, messages.ErrBinaryStoreTooLarge.GRPCStatus().Code(), apiErr.GRPCStatus().Code())
+}
