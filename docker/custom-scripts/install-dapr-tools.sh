@@ -12,7 +12,7 @@
 # limitations under the License.
 #
 #
-# Syntax: ./install-dapr-tools.sh [USERNAME] [GOROOT] [GOPATH] [DAPR_CLI_VERSION] [PROTOC_VERSION] [PROTOC_GEN_GO_VERSION] [PROTOC_GEN_GO_GRPC_VERSION] [GOLANGCI_LINT_VERSION]
+# Syntax: ./install-dapr-tools.sh [USERNAME] [GOROOT] [GOPATH] [DAPR_CLI_VERSION] [PROTOC_VERSION] [PROTOC_GEN_GO_VERSION] [PROTOC_GEN_GO_GRPC_VERSION] [GOLANGCI_LINT_VERSION] [PROTOC_GEN_CONNECT_GO_VERSION]
 
 USERNAME=${1:-"dapr"}
 GOROOT=${2:-"/usr/local/go"}
@@ -21,8 +21,8 @@ DAPR_CLI_VERSION=${4:-""}
 PROTOC_VERSION=${5:-"25.4"}
 PROTOC_GEN_GO_VERSION=${6:-"1.32.0"}
 PROTOC_GEN_GO_GRPC_VERSION=${7:-"1.3.0"}
-PROTOC_GEN_CONNECT_GO_VERSION=${7:-"1.9.1"}
 GOLANGCI_LINT_VERSION=${8:-"1.64.6"}
+PROTOC_GEN_CONNECT_GO_VERSION=${9:-"1.18.1"}
 
 set -e
 
@@ -66,7 +66,7 @@ sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
 sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
     go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@v${PROTOC_GEN_GO_GRPC_VERSION}"
 sudo -u ${USERNAME} --preserve-env=GOPATH,GOBIN,GOROOT \
-    go install "google.golang.org/grpc/cmd/protoc-gen-connect_go@v${PROTOC_GEN_CONNECT_GO_VERSION}"
+    go install "connectrpc.com/connect/cmd/protoc-gen-connect-go@v${PROTOC_GEN_CONNECT_GO_VERSION}"
 
 # Install golangci-lint using the recommended method (best to avoid using go install according to their docs)
 # Must be installed as the non-root user
