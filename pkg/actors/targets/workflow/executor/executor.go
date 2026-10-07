@@ -79,11 +79,11 @@ type executor struct {
 	// cancelHandoffs is its handoff count. Guarded by mu.
 	cancelType     string
 	cancelHandoffs int
-	wg             sync.WaitGroup
+	calls          callGroup
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	e.wg.Add(1)
+	e.calls.add()
 
 	var res *internalsv1pb.InternalInvokeResponse
 	var run func()
@@ -94,7 +94,7 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 			run()
 		}
 	}()
-	defer e.wg.Done()
+	defer e.calls.done()
 
 	switch req.GetMessage().GetMethod() {
 	case MethodComplete:
@@ -487,7 +487,7 @@ func (e *executor) deactivate() ([]*internalsv1pb.InternalInvokeResponse, parked
 	parked = e.drainParked(parked)
 	canc := parkedCancel{taskType: e.cancelType, handoffs: e.cancelHandoffs}
 	e.mu.Unlock()
-	e.wg.Wait()
+	e.calls.wait()
 
 	return parked, canc
 }
@@ -507,8 +507,8 @@ func (e *executor) InvokeStream(ctx context.Context,
 	req *internalsv1pb.InternalInvokeRequest,
 	stream func(*internalsv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	e.wg.Add(1)
-	defer e.wg.Done()
+	e.calls.add()
+	defer e.calls.done()
 
 	switch req.GetMessage().GetMethod() {
 	case MethodWatchComplete:

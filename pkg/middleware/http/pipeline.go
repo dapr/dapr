@@ -16,6 +16,7 @@ package http
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/middleware"
@@ -30,6 +31,20 @@ type pipeline struct {
 	spec  *config.PipelineSpec
 	store *store.Store[middleware.HTTP]
 	wrap  middleware.HTTP
+	gen   atomic.Uint64
+}
+
+type chain struct {
+	gen     uint64
+	handler http.Handler
+}
+
+// rootHandler caches the chain built for its root until the pipeline is rebuilt.
+type rootHandler struct {
+	p     *pipeline
+	root  http.Handler
+	first chain
+	chain atomic.Pointer[chain]
 }
 
 // newPipeline creates a new HTTP Middleware Pipeline.
@@ -55,13 +70,25 @@ func (p *pipeline) http() middleware.HTTP {
 	p.buildChain()
 
 	return func(root http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			p.lock.RLock()
-			wrap := p.wrap
-			p.lock.RUnlock()
-			wrap(root).ServeHTTP(w, r)
-		})
+		p.lock.RLock()
+		wrap, gen := p.wrap, p.gen.Load()
+		p.lock.RUnlock()
+		h := &rootHandler{p: p, root: root, first: chain{gen: gen, handler: wrap(root)}}
+		h.chain.Store(&h.first)
+		return h
 	}
+}
+
+func (h *rootHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := h.chain.Load()
+	if c.gen != h.p.gen.Load() {
+		h.p.lock.RLock()
+		wrap, gen := h.p.wrap, h.p.gen.Load()
+		h.p.lock.RUnlock()
+		c = &chain{gen: gen, handler: wrap(h.root)}
+		h.chain.Store(c)
+	}
+	c.handler.ServeHTTP(w, r)
 }
 
 // buildChain builds and updates the middleware chain from root using the set
@@ -69,6 +96,7 @@ func (p *pipeline) http() middleware.HTTP {
 func (p *pipeline) buildChain() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	p.gen.Add(1)
 
 	// If no spec or no handlers defined, use root.
 	if p.spec == nil || len(p.spec.Handlers) == 0 {
