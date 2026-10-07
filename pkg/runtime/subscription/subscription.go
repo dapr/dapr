@@ -31,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
@@ -417,6 +418,22 @@ func New(opts Options) (*Subscription, error) {
 			}
 
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
+			// A bounded retry policy that has run out, with no dead letter
+			// topic to divert the message to, is a decision to stop trying.
+			// Tell the component so it can record the message as handled
+			// rather than redelivering it on the next reconnect, where it
+			// would only exhaust the same budget again. Components that
+			// cannot act on the sentinel are unaffected: it wraps the error
+			// they already received.
+			//
+			// Only a bounded policy qualifies. Without one the delivery made
+			// a single attempt and a retriable failure still means retry, and
+			// an open circuit breaker rejected the message without the
+			// application ever seeing it.
+			if route.DeadLetterTopic == "" && policyDef != nil && policyDef.HasBoundedRetries() && !breaker.IsErrorPermanent(err) {
+				return fmt.Errorf("%w: %w", contribpubsub.ErrRetriesExhausted, err)
+			}
 
 			return err
 		}
