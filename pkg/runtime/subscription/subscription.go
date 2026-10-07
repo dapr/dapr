@@ -427,11 +427,30 @@ func New(opts Options) (*Subscription, error) {
 			// cannot act on the sentinel are unaffected: it wraps the error
 			// they already received.
 			//
-			// Only a bounded policy qualifies. Without one the delivery made
-			// a single attempt and a retriable failure still means retry, and
-			// an open circuit breaker rejected the message without the
-			// application ever seeing it.
-			if route.DeadLetterTopic == "" && policyDef != nil && policyDef.HasBoundedRetries() && !breaker.IsErrorPermanent(err) {
+			// Everything below has to hold, because a component acting on the
+			// sentinel stops redelivering the message for good:
+			//
+			//   - the policy can run out on its own. Without one configured
+			//     the delivery made a single attempt, and a retriable failure
+			//     still means retry.
+			//   - the handler context is still live. A context cancelled by a
+			//     rebalance or shutdown, or a component handler timeout such
+			//     as Azure Service Bus's handlerTimeoutInSec, interrupted the
+			//     delivery rather than exhausting it, and the message has to
+			//     go back. A per-attempt timeout from the policy does not
+			//     cancel this context, so retries that time out their way
+			//     through the budget still qualify.
+			//   - the retry condition did not exclude the error. A status the
+			//     policy's `matching` rules leave out stops the loop after one
+			//     attempt, which is not a budget running out.
+			//   - the circuit breaker was closed. An open breaker rejected the
+			//     message before the application ever saw it.
+			if route.DeadLetterTopic == "" &&
+				policyDef != nil &&
+				policyDef.HasBoundedRetries() &&
+				ctx.Err() == nil &&
+				!policyDef.RetryExcluded(err) &&
+				!breaker.IsErrorPermanent(err) {
 				return fmt.Errorf("%w: %w", contribpubsub.ErrRetriesExhausted, err)
 			}
 

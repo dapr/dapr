@@ -436,3 +436,65 @@ func TestPolicyDisposer(t *testing.T) {
 	slices.Sort(disposed)
 	assert.Equal(t, []int32{1, 2, 3}, disposed)
 }
+
+func TestHasBoundedRetries(t *testing.T) {
+	t.Run("no retry configured", func(t *testing.T) {
+		assert.False(t, PolicyDefinition{}.HasBoundedRetries())
+	})
+
+	t.Run("bounded by attempt count", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 3}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries())
+	})
+
+	t.Run("try once then give up", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 0}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries(), "maxRetries 0 is an explicit give-up after one attempt")
+	})
+
+	t.Run("constant with unlimited retries", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: -1}, RetryConditionMatch{})}
+		assert.False(t, p.HasBoundedRetries(), "a constant policy with no attempt cap never runs out")
+	})
+
+	t.Run("exponential bounded by elapsed time", func(t *testing.T) {
+		// backoff enforces MaxElapsedTime independently of the attempt count,
+		// so this policy runs out even though MaxRetries is negative.
+		p := PolicyDefinition{r: NewRetry(retry.Config{
+			Policy:         retry.PolicyExponential,
+			MaxRetries:     -1,
+			MaxElapsedTime: time.Minute,
+		}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries())
+	})
+
+	t.Run("exponential with no elapsed time limit", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{
+			Policy:     retry.PolicyExponential,
+			MaxRetries: -1,
+		}, RetryConditionMatch{})}
+		assert.False(t, p.HasBoundedRetries())
+	})
+}
+
+func TestRetryExcluded(t *testing.T) {
+	match, err := ParseRetryConditionMatch(&resiliencyV1alpha.RetryMatching{HTTPStatusCodes: "500"})
+	require.NoError(t, err)
+	p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 3}, match)}
+
+	t.Run("status the policy retries", func(t *testing.T) {
+		assert.False(t, p.RetryExcluded(NewCodeError(500, errors.New("server error"))))
+	})
+
+	t.Run("status the policy leaves out", func(t *testing.T) {
+		assert.True(t, p.RetryExcluded(NewCodeError(404, errors.New("not found"))))
+	})
+
+	t.Run("an error carrying no status code", func(t *testing.T) {
+		assert.False(t, p.RetryExcluded(errors.New("plain failure")))
+	})
+
+	t.Run("no retry configured", func(t *testing.T) {
+		assert.False(t, PolicyDefinition{}.RetryExcluded(NewCodeError(404, errors.New("not found"))))
+	})
+}

@@ -104,12 +104,35 @@ func (p PolicyDefinition) HasRetries() bool {
 }
 
 // HasBoundedRetries reports whether a retry policy is configured and can run
-// out of attempts. MaxRetries 0 counts: it is an explicit "try once, then give
-// up". A negative MaxRetries retries until the context is done and never
-// exhausts, and a nil retry means no policy was configured for this operation
-// at all.
+// out of attempts on its own. A nil retry means no policy was configured for
+// this operation at all.
+//
+// A non-negative MaxRetries bounds the attempt count; 0 counts, because it is
+// an explicit "try once, then give up". An exponential policy is also bounded
+// by MaxElapsedTime, which backoff enforces independently of the attempt
+// count, so it exhausts even when MaxRetries is negative.
 func (p PolicyDefinition) HasBoundedRetries() bool {
-	return p.r != nil && p.r.MaxRetries >= 0
+	if p.r == nil {
+		return false
+	}
+	if p.r.MaxRetries >= 0 {
+		return true
+	}
+	return p.r.Policy == retry.PolicyExponential && p.r.MaxElapsedTime > 0
+}
+
+// RetryExcluded reports whether err is one the policy's retry condition
+// excludes, which stops the retry loop after a single attempt. That is a
+// decision not to retry this particular failure, not a budget that ran out.
+func (p PolicyDefinition) RetryExcluded(err error) bool {
+	if p.r == nil {
+		return false
+	}
+	var cErr CodeError
+	if !errors.As(err, &cErr) {
+		return false
+	}
+	return !p.r.ErrorNeedRetry(cErr)
 }
 
 type RunnerOpts[T any] struct {
