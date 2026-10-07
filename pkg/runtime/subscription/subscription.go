@@ -31,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
@@ -417,6 +418,41 @@ func New(opts Options) (*Subscription, error) {
 			}
 
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
+			// A bounded retry policy that has run out, with no dead letter
+			// topic to divert the message to, is a decision to stop trying.
+			// Tell the component so it can record the message as handled
+			// rather than redelivering it on the next reconnect, where it
+			// would only exhaust the same budget again. Components that
+			// cannot act on the sentinel are unaffected: it wraps the error
+			// they already received.
+			//
+			// Everything below has to hold, because a component acting on the
+			// sentinel stops redelivering the message for good:
+			//
+			//   - the policy can run out on its own. Without one configured
+			//     the delivery made a single attempt, and a retriable failure
+			//     still means retry.
+			//   - the handler context is still live. A context cancelled by a
+			//     rebalance or shutdown, or a component handler timeout such
+			//     as Azure Service Bus's handlerTimeoutInSec, interrupted the
+			//     delivery rather than exhausting it, and the message has to
+			//     go back. A per-attempt timeout from the policy does not
+			//     cancel this context, so retries that time out their way
+			//     through the budget still qualify.
+			//   - the retry condition did not exclude the error. A status the
+			//     policy's `matching` rules leave out stops the loop after one
+			//     attempt, which is not a budget running out.
+			//   - the circuit breaker was closed. An open breaker rejected the
+			//     message before the application ever saw it.
+			if route.DeadLetterTopic == "" &&
+				policyDef != nil &&
+				policyDef.HasBoundedRetries() &&
+				ctx.Err() == nil &&
+				!policyDef.RetryExcluded(err) &&
+				!breaker.IsErrorPermanent(err) {
+				return fmt.Errorf("%w: %w", contribpubsub.ErrRetriesExhausted, err)
+			}
 
 			return err
 		}
