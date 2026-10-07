@@ -133,9 +133,8 @@ func (i *Inflight) Close(err error) {
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
 	})
 	i.wg.Wait()
-	lo := i.lock
+	// Not cached for reuse: see lock.New.
 	i.lock = nil
-	lock.LoopFactory.CacheLoop(lo)
 }
 
 // Open ensures the claim-tracking loop is running and flushes any queued

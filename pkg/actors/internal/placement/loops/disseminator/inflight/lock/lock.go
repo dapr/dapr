@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/kit/events/loop"
@@ -27,13 +28,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.actors.loops.disseminator.inflight.lock")
 
 	LoopFactory = loop.New[Event](1024)
-	lockCache   = sync.Pool{
-		New: func() any {
-			return &lock{
-				acquires: make(map[uint64]*Claim),
-			}
-		},
-	}
 )
 
 type Event any
@@ -84,8 +78,12 @@ type lock struct {
 	loop loop.Interface[Event]
 }
 
+// New returns a new lock loop. Never reuse a closed lock or loop: a late
+// claim Cancel would release an unrelated claim in the next lock.
 func New() loop.Interface[Event] {
-	l := lockCache.Get().(*lock)
+	l := &lock{
+		acquires: make(map[uint64]*Claim),
+	}
 	l.loop = LoopFactory.NewLoop(l)
 	return l.loop
 }
@@ -109,8 +107,11 @@ func (l *lock) Handle(_ context.Context, event Event) error {
 
 func (l *lock) handleClose(closeLock *CloseLock) {
 	defer func() {
+		// Mark remaining claims done so a late Cancel is a no-op.
+		for _, claim := range l.acquires {
+			claim.Cancel(closeLock.Error)
+		}
 		clear(l.acquires)
-		lockCache.Put(l)
 	}()
 
 	// If drainRebalancedActors is false, immediately cancel all claims without
@@ -154,17 +155,17 @@ func (l *lock) handleAcquire(event *Acquire) {
 	idx := l.idx
 	l.idx++
 
-	var done bool
+	// Cancel is called by the claim holder and by this loop concurrently.
+	var done atomic.Bool
 
 	ctx, cancel := context.WithCancelCause(event.Context)
 	claim := &Claim{
 		ActorType: event.ActorType,
 		Context:   ctx,
 		Cancel: func(err error) {
-			if done {
+			if !done.CompareAndSwap(false, true) {
 				return
 			}
-			done = true
 			cancel(err)
 			l.loop.Enqueue(&releaseClaim{idx: idx})
 		},
