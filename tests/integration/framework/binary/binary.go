@@ -40,6 +40,7 @@ var buildTags = []string{
 	"state_etcd",
 	"crypto_localstorage",
 	"middleware_http_routeralias",
+	"middleware_http_wasm",
 	"conversation_echo",
 	// state_spiffeprobe compiles in an integration-test-only state store that
 	// reports whether the SPIFFE identity reached the component operation
