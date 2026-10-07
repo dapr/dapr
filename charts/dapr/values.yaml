@@ -24,6 +24,15 @@ global:
   priorityClassName: ""
   nodeSelector: {}
   tolerations: []
+  # Topology spread constraints added to every control plane pod. A constraint
+  # without a labelSelector is scoped to the pods of its own component (for
+  # example app: dapr-sidecar-injector). Independent of ha.enabled, and can be
+  # combined with the ha pod anti-affinity. For example:
+  # topologySpreadConstraints:
+  #   - maxSkew: 1
+  #     topologyKey: topology.kubernetes.io/zone
+  #     whenUnsatisfiable: ScheduleAnyway
+  topologySpreadConstraints: []
   rbac:
     namespaced: false
   ha:
