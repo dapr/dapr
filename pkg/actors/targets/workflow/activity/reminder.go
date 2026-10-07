@@ -68,14 +68,14 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 	})
 }
 
-func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID, parentExecutionID string, result *backend.HistoryEvent) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := common.ActivityResultReminderName(base64.RawURLEncoding.EncodeToString(b), parentExecutionID)
 
 	anydata, err := anypb.New(result)
 	if err != nil {
