@@ -44,8 +44,11 @@ type Acquire struct {
 	RespCh    chan *Claim
 }
 
+// releaseClaim removes a claim from acquires. It carries the claim itself, so
+// it can never remove a different claim with the same idx.
 type releaseClaim struct {
-	idx uint64
+	idx   uint64
+	claim *Claim
 }
 
 type CloseLock struct {
@@ -148,27 +151,43 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 }
 
 func (l *lock) handleRelease(release *releaseClaim) {
-	delete(l.acquires, release.idx)
+	if claim, ok := l.acquires[release.idx]; ok && claim == release.claim {
+		delete(l.acquires, release.idx)
+	}
 }
 
 func (l *lock) handleAcquire(event *Acquire) {
 	idx := l.idx
 	l.idx++
 
-	// Cancel is called by the claim holder and by this loop concurrently.
+	// The closures can run after this lock has closed, so they capture its
+	// loop, which then drops their releases.
+	lp := l.loop
+
+	// The drain goroutine in handleCancelTypes and the request goroutine can
+	// call Cancel at the same time.
 	var done atomic.Bool
 
 	ctx, cancel := context.WithCancelCause(event.Context)
 	claim := &Claim{
 		ActorType: event.ActorType,
 		Context:   ctx,
-		Cancel: func(err error) {
-			if !done.CompareAndSwap(false, true) {
-				return
-			}
-			cancel(err)
-			l.loop.Enqueue(&releaseClaim{idx: idx})
-		},
+	}
+	// A caller whose context ends without a call to Cancel (it stopped
+	// waiting for a queued response, or it returned on a done claim context)
+	// would otherwise keep its claim in acquires until the lock closes. The
+	// drain already treats such a claim as released, because its Context
+	// derives from the request context; this also removes the entry.
+	stop := context.AfterFunc(event.Context, func() {
+		lp.Enqueue(&releaseClaim{idx: idx, claim: claim})
+	})
+	claim.Cancel = func(err error) {
+		if !done.CompareAndSwap(false, true) {
+			return
+		}
+		stop()
+		cancel(err)
+		lp.Enqueue(&releaseClaim{idx: idx, claim: claim})
 	}
 
 	l.acquires[idx] = claim

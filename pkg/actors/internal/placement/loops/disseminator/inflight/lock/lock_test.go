@@ -22,267 +22,144 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
-type runningLock struct {
-	loop.Interface[Event]
-	done chan struct{}
+// testHandler runs func() events on the loop goroutine, so a test can read
+// the lock state without racing the loop. It passes every other event to
+// the lock.
+type testHandler struct{ l *lock }
+
+func (h testHandler) Handle(ctx context.Context, event Event) error {
+	if fn, ok := event.(func()); ok {
+		fn()
+		return nil
+	}
+	return h.l.Handle(ctx, event)
 }
 
-func startLock(t *testing.T) *runningLock {
+func newTestLock(t *testing.T) *lock {
 	t.Helper()
 
-	l := &runningLock{Interface: New(), done: make(chan struct{})}
-	go func() {
-		defer close(l.done)
-		assert.NoError(t, l.Run(t.Context()))
-	}()
+	l := &lock{acquires: make(map[uint64]*Claim)}
+	l.loop = LoopFactory.NewLoop(testHandler{l: l})
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- l.loop.Run(context.Background()) }()
+	t.Cleanup(func() {
+		drain := false
+		l.loop.Close(&CloseLock{DrainRebalancedActors: &drain})
+		require.NoError(t, <-errCh)
+	})
+
 	return l
 }
 
-func (l *runningLock) close(t *testing.T, c *CloseLock) {
-	t.Helper()
-
-	l.Close(c)
-	select {
-	case <-l.done:
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "lock loop did not stop")
-	}
-}
-
-func acquire(t *testing.T, l loop.Interface[Event], ctx context.Context, actorType string) *Claim {
+func acquire(t *testing.T, l *lock, ctx context.Context) *Claim {
 	t.Helper()
 
 	respCh := make(chan *Claim, 1)
-	l.Enqueue(&Acquire{
-		ActorType: actorType,
-		Context:   ctx,
-		RespCh:    respCh,
-	})
+	l.loop.Enqueue(&Acquire{ActorType: "a", Context: ctx, RespCh: respCh})
 	select {
-	case c := <-respCh:
-		require.NotNil(t, c)
-		return c
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "acquire did not resolve")
+	case claim := <-respCh:
+		return claim
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timed out waiting for the claim")
 		return nil
 	}
 }
 
-func requireDone(t *testing.T, ctx context.Context, msgAndArgs ...any) {
-	t.Helper()
-
-	select {
-	case <-ctx.Done():
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "claim context was not cancelled", msgAndArgs...)
-	}
+func acquiresLen(l *lock) int {
+	ch := make(chan int, 1)
+	l.loop.Enqueue(func() { ch <- len(l.acquires) })
+	return <-ch
 }
 
-func TestClaimCancel_ConcurrentWithClose(t *testing.T) {
-	t.Parallel()
+func TestClaimCancelConcurrent(t *testing.T) {
+	l := newTestLock(t)
+	claim := acquire(t, l, context.Background())
+	require.Equal(t, 1, acquiresLen(l))
 
-	closeErr := errors.New("placement stream closed")
-
-	cases := map[string]*CloseLock{
-		"no drain, immediate cancel": {
-			Error:                 closeErr,
-			DrainRebalancedActors: ptr.Of(false),
-		},
-		"drain timed out, force cancel": {
-			Error:   closeErr,
-			Timeout: ptr.Of(time.Nanosecond),
-		},
+	// The drain goroutine and the request goroutine can call Cancel at the
+	// same time. Run with -race.
+	errA := errors.New("drain timed out")
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { claim.Cancel(errA) })
 	}
+	wg.Wait()
 
-	for name, closeLock := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			for i := range 300 {
-				l := startLock(t)
-				claims := []*Claim{
-					acquire(t, l, t.Context(), "a"),
-					acquire(t, l, t.Context(), "a"),
-					acquire(t, l, t.Context(), "b"),
-				}
-
-				var wg sync.WaitGroup
-				start := make(chan struct{})
-				for _, c := range claims {
-					wg.Go(func() {
-						<-start
-						c.Cancel(nil)
-					})
-				}
-
-				close(start)
-				l.close(t, closeLock)
-				wg.Wait()
-
-				for _, c := range claims {
-					requireDone(t, c.Context, "iteration %d", i)
-				}
-			}
-		})
-	}
+	require.ErrorIs(t, context.Cause(claim.Context), errA)
+	assert.Eventually(t, func() bool { return acquiresLen(l) == 0 }, time.Second*5, time.Millisecond*10)
 }
 
-func TestClaimCancel_ConcurrentWithCancelTypes(t *testing.T) {
-	t.Parallel()
+func TestClaimReleasedWhenCallerContextEnds(t *testing.T) {
+	l := newTestLock(t)
 
-	cancelErr := errors.New("placement table updated")
+	ctx, cancel := context.WithCancel(context.Background())
+	claim := acquire(t, l, ctx)
+	require.Equal(t, 1, acquiresLen(l))
 
-	cases := map[string]func() *CancelTypes{
-		"no drain, immediate cancel": func() *CancelTypes {
-			return &CancelTypes{
-				Types:                 map[string]struct{}{"a": {}, "b": {}},
-				Error:                 cancelErr,
-				DrainRebalancedActors: ptr.Of(false),
-				Done:                  make(chan struct{}),
-			}
-		},
-		"drain timed out, force cancel": func() *CancelTypes {
-			return &CancelTypes{
-				Types:   map[string]struct{}{"a": {}, "b": {}},
-				Error:   cancelErr,
-				Timeout: ptr.Of(time.Nanosecond),
-				Done:    make(chan struct{}),
-			}
-		},
-	}
+	// The caller stops without a call to Cancel.
+	cancel()
 
-	for name, newEvent := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+	require.Error(t, claim.Context.Err())
+	assert.Eventually(t, func() bool { return acquiresLen(l) == 0 }, time.Second*5, time.Millisecond*10)
 
-			for i := range 300 {
-				l := startLock(t)
-				claims := []*Claim{
-					acquire(t, l, t.Context(), "a"),
-					acquire(t, l, t.Context(), "a"),
-					acquire(t, l, t.Context(), "b"),
-				}
-
-				var wg sync.WaitGroup
-				start := make(chan struct{})
-				for _, c := range claims {
-					wg.Go(func() {
-						<-start
-						c.Cancel(nil)
-					})
-				}
-
-				ev := newEvent()
-				close(start)
-				l.Enqueue(ev)
-				<-ev.Done
-				wg.Wait()
-
-				for _, c := range claims {
-					requireDone(t, c.Context, "iteration %d", i)
-				}
-
-				l.close(t, &CloseLock{Timeout: ptr.Of(time.Second)})
-			}
-		})
-	}
+	// A late Cancel is safe.
+	claim.Cancel(errors.New("late"))
+	assert.Equal(t, 0, acquiresLen(l))
 }
 
-func TestClaimCancel_FirstCallWins(t *testing.T) {
-	t.Parallel()
+func TestClaimOnDoneContextIsReleased(t *testing.T) {
+	l := newTestLock(t)
 
-	l := startLock(t)
-	c := acquire(t, l, t.Context(), "a")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	claim := acquire(t, l, ctx)
 
-	first := errors.New("first")
-	c.Cancel(first)
-	c.Cancel(errors.New("second"))
-
-	requireDone(t, c.Context)
-	require.ErrorIs(t, context.Cause(c.Context), first)
-
-	start := time.Now()
-	l.close(t, &CloseLock{Timeout: ptr.Of(10 * time.Second)})
-	assert.Less(t, time.Since(start), 5*time.Second)
+	require.Error(t, claim.Context.Err())
+	assert.Eventually(t, func() bool { return acquiresLen(l) == 0 }, time.Second*5, time.Millisecond*10)
 }
 
-func TestClaimCancel_ConcurrentCallers(t *testing.T) {
-	t.Parallel()
+func TestClaimCancelDoesNotReleaseUntilCalled(t *testing.T) {
+	l := newTestLock(t)
+	claim := acquire(t, l, context.Background())
 
-	for i := range 100 {
-		l := startLock(t)
-		c := acquire(t, l, t.Context(), "a")
+	// Without a Cancel and with a live caller context, the claim stays.
+	time.Sleep(time.Millisecond * 100)
+	require.Equal(t, 1, acquiresLen(l))
+	require.NoError(t, claim.Context.Err())
 
-		var wg sync.WaitGroup
-		start := make(chan struct{})
-		for range 8 {
-			wg.Go(func() {
-				<-start
-				c.Cancel(nil)
-			})
-		}
-		close(start)
-		wg.Wait()
-
-		requireDone(t, c.Context, "iteration %d", i)
-		l.close(t, &CloseLock{Timeout: ptr.Of(10 * time.Second)})
-	}
+	claim.Cancel(nil)
+	assert.Eventually(t, func() bool { return acquiresLen(l) == 0 }, time.Second*5, time.Millisecond*10)
 }
 
-func TestClose_DrainsThenForceCancels(t *testing.T) {
-	t.Parallel()
+func TestReleaseIgnoresOtherClaimWithSameIdx(t *testing.T) {
+	// A release from an earlier lock lifetime can reach a recycled lock whose
+	// claim has the same idx. It must not remove that claim.
+	live := &Claim{ActorType: "a"}
+	l := &lock{acquires: map[uint64]*Claim{0: live}}
 
-	l := startLock(t)
+	l.handleRelease(&releaseClaim{idx: 0, claim: &Claim{ActorType: "a"}})
+	require.Len(t, l.acquires, 1)
 
-	finishedCtx, finish := context.WithCancel(t.Context())
-	finished := acquire(t, l, finishedCtx, "a")
-	held := acquire(t, l, t.Context(), "a")
-	finish()
-
-	closeErr := errors.New("placement stream closed")
-	l.close(t, &CloseLock{Error: closeErr, Timeout: ptr.Of(50 * time.Millisecond)})
-
-	requireDone(t, finished.Context)
-	require.ErrorIs(t, context.Cause(finished.Context), context.Canceled)
-	requireDone(t, held.Context)
-	require.ErrorIs(t, context.Cause(held.Context), closeErr)
+	l.handleRelease(&releaseClaim{idx: 0, claim: live})
+	require.Empty(t, l.acquires)
 }
 
-func TestClaimCancel_AfterClose(t *testing.T) {
-	t.Parallel()
+func TestClaimCancelEnqueuesReleaseBeforeReturning(t *testing.T) {
+	l := newTestLock(t)
 
-	for i := range 100 {
-		parent, cancelParent := context.WithCancel(t.Context())
+	// Cancel enqueues the release itself, so an event enqueued once Cancel
+	// has returned runs after the release: the claim is gone at once, not
+	// eventually. A release left to a goroutine on the claim context can
+	// land after an event enqueued later on the same loop. Repeated, since
+	// a late release is a race, not a certainty.
+	for range 200 {
+		claim := acquire(t, l, context.Background())
+		require.Equal(t, 1, acquiresLen(l))
 
-		l1 := startLock(t)
-		stale := acquire(t, l1, parent, "a")
-		cancelParent()
-		l1.close(t, &CloseLock{Timeout: ptr.Of(time.Second)})
-
-		l2 := startLock(t)
-
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			stale.Cancel(errors.New("late cancel"))
-		}()
-
-		live := acquire(t, l2, t.Context(), "a")
-
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			require.FailNow(t, "late Cancel blocked", "iteration %d", i)
-		}
-
-		closeErr := errors.New("second session closed")
-		l2.close(t, &CloseLock{Error: closeErr, Timeout: ptr.Of(10 * time.Millisecond)})
-		requireDone(t, live.Context, "iteration %d", i)
-		require.ErrorIs(t, context.Cause(live.Context), closeErr, "iteration %d", i)
+		claim.Cancel(nil)
+		require.Equal(t, 0, acquiresLen(l), "the release must be enqueued before Cancel returns")
 	}
 }

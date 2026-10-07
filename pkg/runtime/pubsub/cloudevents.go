@@ -18,6 +18,7 @@ import (
 
 	contribContenttype "github.com/dapr/components-contrib/contenttype"
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 )
 
 // CloudEvent is a request object to create a Dapr compliant cloudevent.
@@ -30,6 +31,7 @@ type CloudEvent struct {
 	DataContentType string `mapstructure:"-"` // cannot be overridden
 	TraceID         string `mapstructure:"cloudevent.traceid"`
 	TraceState      string `mapstructure:"cloudevent.tracestate"`
+	Baggage         string `mapstructure:"cloudevent.baggage"`
 	Source          string `mapstructure:"cloudevent.source"`
 	Type            string `mapstructure:"cloudevent.type"`
 	TraceParent     string `mapstructure:"cloudevent.traceparent"`
@@ -39,7 +41,14 @@ type CloudEvent struct {
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
 func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]any, error) {
 	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
-		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
+		envelope, err := contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
+		if err != nil {
+			return nil, err
+		}
+		if req.Baggage != "" {
+			envelope[diagConsts.BaggageHeader] = req.Baggage
+		}
+		return envelope, nil
 	}
 
 	// certain metadata beginning with "cloudevent." are considered overrides to the cloudevent envelope
@@ -54,6 +63,11 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]any,
 		req.TraceID = req.TraceParent
 	}
 
-	return contribPubsub.NewCloudEventsEnvelope(req.ID, req.Source, req.Type,
-		req.Subject, req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
+	envelope := contribPubsub.NewCloudEventsEnvelope(req.ID, req.Source, req.Type,
+		req.Subject, req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState)
+	if req.Baggage != "" {
+		envelope[diagConsts.BaggageHeader] = req.Baggage
+	}
+
+	return envelope, nil
 }
