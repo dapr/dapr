@@ -100,10 +100,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 			],
 			"parameters": {
-				"max_tokens": {
-					"@type": "type.googleapis.com/google.protobuf.Int64Value",
-					"value": "100"
-				},
 				"model": {
 					"@type": "type.googleapis.com/google.protobuf.StringValue",
 					"value": "test-model"
@@ -115,6 +111,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			"scrubPii": true,
 			"temperature": 0.7,
+			"maxTokens": 100,
 			"responseFormat": {
 				"type": "object",
 				"properties": {
@@ -181,6 +178,58 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						"completionTokens": "8",
 						"promptTokens": "8",
 						"totalTokens": "16"
+					}
+				}
+			]
+		}`
+		require.JSONEq(t, expectedResponse, string(respBody))
+	})
+
+	t.Run("max tokens truncates output", func(t *testing.T) {
+		body := `{
+			"name": "test-alpha2-echo",
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofUser": {
+								"content": [
+									{
+										"text": "one two three four five"
+									}
+								]
+							}
+						}
+					]
+				}
+			],
+			"maxTokens": 2
+		}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		expectedResponse := `{
+			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "length",
+							"message": {
+								"content": "one two"
+							}
+						}
+					],
+					"usage": {
+						"completionTokens": "2",
+						"promptTokens": "5",
+						"totalTokens": "7"
 					}
 				}
 			]
