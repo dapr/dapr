@@ -146,3 +146,20 @@ func TestReleaseIgnoresOtherClaimWithSameIdx(t *testing.T) {
 	l.handleRelease(&releaseClaim{idx: 0, claim: live})
 	require.Empty(t, l.acquires)
 }
+
+func TestClaimCancelEnqueuesReleaseBeforeReturning(t *testing.T) {
+	l := newTestLock(t)
+
+	// Cancel enqueues the release itself, so an event enqueued once Cancel
+	// has returned runs after the release: the claim is gone at once, not
+	// eventually. A release left to a goroutine on the claim context can
+	// land after an event enqueued later on the same loop. Repeated, since
+	// a late release is a race, not a certainty.
+	for range 200 {
+		claim := acquire(t, l, context.Background())
+		require.Equal(t, 1, acquiresLen(l))
+
+		claim.Cancel(nil)
+		require.Equal(t, 0, acquiresLen(l), "the release must be enqueued before Cancel returns")
+	}
+}
