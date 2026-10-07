@@ -78,8 +78,8 @@ type lock struct {
 	loop loop.Interface[Event]
 }
 
-// New returns a new lock loop. Never reuse a closed lock or loop: a late
-// claim Cancel would release an unrelated claim in the next lock.
+// New returns a new lock loop. Locks and loops are never reused, so a late
+// claim Cancel cannot reach another lock.
 func New() loop.Interface[Event] {
 	l := &lock{
 		acquires: make(map[uint64]*Claim),

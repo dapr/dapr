@@ -29,8 +29,7 @@ type pipeline struct {
 	name  string
 	spec  *config.PipelineSpec
 	store *store.Store[middleware.HTTP]
-	root  http.Handler
-	chain http.Handler
+	wrap  middleware.HTTP
 }
 
 // newPipeline creates a new HTTP Middleware Pipeline.
@@ -43,6 +42,7 @@ func newPipeline(
 		name:  name,
 		spec:  spec,
 		store: store,
+		wrap:  func(next http.Handler) http.Handler { return next },
 	}
 }
 
@@ -52,17 +52,14 @@ func newPipeline(
 // effect.
 // The pipeline root handler will be set once the middleware is invoked.
 func (p *pipeline) http() middleware.HTTP {
-	return func(root http.Handler) http.Handler {
-		p.lock.Lock()
-		p.root = root
-		p.lock.Unlock()
-		p.buildChain()
+	p.buildChain()
 
+	return func(root http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p.lock.RLock()
-			next := p.chain
+			wrap := p.wrap
 			p.lock.RUnlock()
-			next.ServeHTTP(w, r)
+			wrap(root).ServeHTTP(w, r)
 		})
 	}
 }
@@ -75,24 +72,29 @@ func (p *pipeline) buildChain() {
 
 	// If no spec or no handlers defined, use root.
 	if p.spec == nil || len(p.spec.Handlers) == 0 {
-		p.chain = p.root
+		p.wrap = func(next http.Handler) http.Handler { return next }
 		return
 	}
 
 	log.Infof("Building pipeline %s", p.name)
 
-	next := p.root
-	for i := len(p.spec.Handlers) - 1; i >= 0; i-- {
+	var handlers []middleware.HTTP
+	for _, spec := range p.spec.Handlers {
 		handler, ok := p.store.Get(store.Metadata{
-			Name:    p.spec.Handlers[i].Name,
-			Type:    p.spec.Handlers[i].Type,
-			Version: p.spec.Handlers[i].Version,
+			Name:    spec.Name,
+			Type:    spec.Type,
+			Version: spec.Version,
 		})
 		if !ok {
 			continue
 		}
-		next = handler(next)
+		handlers = append(handlers, handler)
 	}
 
-	p.chain = next
+	p.wrap = func(next http.Handler) http.Handler {
+		for i := len(handlers) - 1; i >= 0; i-- {
+			next = handlers[i](next)
+		}
+		return next
+	}
 }

@@ -172,8 +172,8 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 	}
 }
 
-// close waits for the stream goroutine to exit before closing the streamer,
-// since that goroutine replaces the stream on every reconnect.
+// close waits for the stream goroutine, which replaces the stream on
+// reconnect, before closing the streamer.
 func (r *resource[T]) close() error {
 	if r.closed.CompareAndSwap(false, true) {
 		close(r.closeCh)

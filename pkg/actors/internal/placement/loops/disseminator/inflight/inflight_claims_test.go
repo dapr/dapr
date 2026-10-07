@@ -97,7 +97,6 @@ func TestClose_StaleClaimDoesNotReleaseNextSessionClaim(t *testing.T) {
 		endReq()
 		i.Close(errors.New("first session closed"))
 
-		// Stale cancel from the first session, concurrent with the second.
 		staleDone := make(chan struct{})
 		go func() {
 			defer close(staleDone)
