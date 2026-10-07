@@ -133,6 +133,7 @@ if [ "${PACKAGES_ALREADY_INSTALLED}" != "true" ]; then
         init-system-helpers"
 
     # bookworm renamed liblttng-ust0 to liblttng-ust1
+    apt_get_update_if_needed
     if [ -n "$(apt-cache --names-only search '^liblttng-ust1$')" ]; then
         package_list="${package_list} liblttng-ust1"
     else
