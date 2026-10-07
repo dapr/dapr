@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -51,6 +52,19 @@ spec:
   metadata:
   - name: key
     value: testkey
+`, `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-alpha2-echo-maxtokens
+spec:
+  type: conversation.echo
+  version: v1
+  metadata:
+  - name: key
+    value: testkey
+  - name: maxTokens
+    value: "2"
 `))
 
 	return []framework.Option{
@@ -86,9 +100,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
+		// max_tokens is a first-class field now; parameters only carries the
+		// legacy pass-through entry until the field is removed at stable.
+		modelParam, err := anypb.New(wrapperspb.String("test-model"))
+		require.NoError(t, err)
 		parameters := map[string]*anypb.Any{
-			"max_tokens": {Value: []byte(`100`)},
-			"model":      {Value: []byte(`"test-model"`)},
+			"model": modelParam,
 		}
 		metadata := map[string]string{
 			"api_key": "test-key",
@@ -151,6 +168,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Metadata:             metadata,
 			ScrubPii:             new(true),
 			Temperature:          new(0.7),
+			MaxTokens:            new(int64(100)),
 			Tools:                []*rtv1.ConversationTools{tool},
 			ToolChoice:           new("auto"),
 			ResponseFormat:       responseFormat,
@@ -180,6 +198,153 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
 		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
 		require.Equal(t, uint64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
+	})
+
+	t.Run("max tokens truncates output", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "one two three four five",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			MaxTokens: new(int64(2)),
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choice := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "one two", choice.GetMessage().GetContent())
+		require.Equal(t, "length", choice.GetFinishReason())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, uint64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, uint64(5), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, uint64(7), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
+	})
+
+	t.Run("max tokens metadata default applies", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo-maxtokens",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "one two three four five",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choice := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "one two", choice.GetMessage().GetContent())
+		require.Equal(t, "length", choice.GetFinishReason())
+	})
+
+	t.Run("request max tokens overrides metadata default", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo-maxtokens",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "one two three four five",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			MaxTokens: new(int64(100)),
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choice := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "one two three four five", choice.GetMessage().GetContent())
+		require.Equal(t, "stop", choice.GetFinishReason())
+	})
+
+	t.Run("max tokens must be positive", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "hello",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			MaxTokens: new(int64(0)),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("max tokens must fit in int32", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "hello",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			// math.MaxInt32 + 1: would wrap to a negative int on 32-bit builds
+			// if it reached a component, so the API rejects it up front.
+			MaxTokens: new(int64(2147483648)),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {
