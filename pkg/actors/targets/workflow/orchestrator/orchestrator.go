@@ -153,8 +153,12 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 
 // contextLockMeasured acquires the per-actor turn lock and records the wait
 // as the lock_wait histogram (sampled 1-in-16), splitting observed
-// invocation latency into queueing vs turn body.
+// invocation latency into queueing vs turn body. While it waits it counts in
+// the pending actor calls gauge, as the app actor lock does.
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
+	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
+	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)
 		if err != nil {
