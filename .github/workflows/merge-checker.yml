@@ -1,0 +1,108 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Reports on every pull request whether the scheduled test workflows are
+# currently green on master. It does not test the pull request itself, and it
+# is not a required check: a red result means master's scheduled tests are
+# failing, so reviewers can see that before merging.
+
+name: merge-checker
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+      - release-*
+
+permissions: {}
+
+jobs:
+  workflows:
+    name: Workflows on master
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Workflow files to check, as <file> or <file>:<event>. The latest
+      # completed run on master with that event counts; the default event is
+      # schedule. repository_dispatch runs test a pull request's code, not
+      # master, so they never count.
+      WORKFLOWS: >-
+        dapr-test.yml
+        dapr-test-sdk.yml
+        dapr-perf.yml
+        dapr-perf-components.yml
+        dapr-dev-container.yml
+        version-skew.yaml:push
+    steps:
+      - name: Check the latest run of each workflow
+        run: |
+          total=0
+          failed=0
+          missing=0
+          rows=""
+          printf '%-28s %-10s %-9s %-10s %s\n' WORKFLOW RESULT AGE EVENT RUN
+          for entry in $WORKFLOWS; do
+            wf=${entry%%:*}
+            event=schedule
+            if [ "$entry" != "$wf" ]; then
+              event=${entry#*:}
+            fi
+            total=$((total + 1))
+            # Filter with jq rather than the API's event, status and branch query
+            # parameters, which sometimes return runs that are weeks old.
+            run=$(gh api "repos/${{ github.repository }}/actions/workflows/$wf/runs?per_page=100" --jq "
+              [.workflow_runs[] | select(.event == \"$event\" and .status == \"completed\" and .head_branch == \"master\")][0] // empty
+              | (now - (.created_at | fromdateiso8601)) as \$s
+              | (if \$s < 3600 then \"\\(\$s / 60 | floor)m ago\" elif \$s < 172800 then \"\\(\$s / 3600 | floor)h ago\" else \"\\(\$s / 86400 | floor)d ago\" end) as \$age
+              | [.conclusion, \$age, .html_url, .name] | join(\"\\t\")")
+            if [ -z "$run" ]; then
+              missing=$((missing + 1))
+              echo "::warning::$wf has no completed $event run on master"
+              printf '%-28s %-10s %-9s %-10s %s\n' "$wf" none - "$event" -
+              rows+="| \`$wf\` | ⚠️ no run | | $event |"$'\n'
+              continue
+            fi
+            IFS=$'\t' read -r conclusion age url name <<< "$run"
+            if [ "$conclusion" = "success" ]; then
+              icon="✅ success"
+            else
+              icon="❌ $conclusion"
+              failed=$((failed + 1))
+              echo "::error title=$name::latest $event run on master ($age) is $conclusion: $url"
+            fi
+            printf '%-28s %-10s %-9s %-10s %s\n' "$name" "$conclusion" "$age" "$event" "$url"
+            rows+="| $name | $icon | [$age]($url) | $event |"$'\n'
+          done
+          if [ "$failed" -eq 0 ] && [ "$missing" -eq 0 ]; then
+            title="✅ All $total workflows are green on master"
+          elif [ "$failed" -eq 0 ]; then
+            title="⚠️ $((total - missing)) of $total workflows are green on master, $missing with no run"
+          else
+            title="❌ $failed of $total workflows are not green on master"
+          fi
+          {
+            echo "## $title"
+            echo
+            echo "| Workflow | Result | Last run | Event |"
+            echo "| --- | --- | --- | --- |"
+            printf '%s' "$rows"
+            echo
+            echo "_Latest completed run of each workflow on \`master\`. This check does not test the pull request._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo
+          echo "$title"
+          [ "$failed" -eq 0 ]
