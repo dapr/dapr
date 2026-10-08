@@ -15,12 +15,15 @@ package accesspolicy
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -53,7 +56,9 @@ func init() {
 // is not the app the activity was dispatched to; a payload that is not an
 // activity result (a termination, a timer firing) is dropped before it can
 // reach the inbox; a result for a task the workflow has not scheduled yet is
-// refused until the task is scheduled and then dropped by the creator check.
+// refused until the task is scheduled and then dropped by the creator check,
+// unless its creator stamped it outside the retry window, in which case it
+// is dropped on the first fire.
 // Every forged reminder is acked and deleted, the sidecar stays up, and the
 // workflow completes with the real activity outputs.
 type forgedresult struct {
@@ -73,6 +78,7 @@ func (f *forgedresult) Setup(t *testing.T) []framework.Option {
 		"dropping completion (sender ''): it was sent by app 'other' but the task was dispatched to 'target'",
 		"dropping activity-result reminder 'activity-result-forged-terminate' from app 'other': payload is not an activity result",
 		"dropping activity-result reminder 'activity-result-forged-timer' from app 'other': payload is not an activity result",
+		"dropping activity-result reminder 'activity-result-forged-ahead-future', its scheduling did not become durable",
 	))
 
 	f.target = daprd.New(t,
@@ -163,7 +169,12 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
 			},
 		},
 		"activity-result-forged-ahead": completed(1, `"FORGED1"`),
+		// The creator picks the stamp that bounds the retry of a refused
+		// result: one far in the future must expire like an ancient one, not
+		// keep the reminder refiring forever.
+		"activity-result-forged-ahead-future": completed(1, `"FORGED1"`),
 	}
+	forged["activity-result-forged-ahead-future"].Timestamp = timestamppb.New(time.Now().Add(time.Hour))
 
 	other := f.sched.ClientMTLS(t, ctx, "other")
 	for name, ev := range forged {
@@ -192,19 +203,30 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err, "the scheduler allows creating activity result reminders on another app's workflow actor: %s", name)
 	}
 
-	jobs := func() string { return strings.Join(f.sched.ListAllKeys(t, ctx, "dapr/jobs"), "\n") }
+	// Polled from EventuallyWithT goroutines, so no require on t here.
+	etcd := f.sched.ETCDClient(t, ctx)
+	hasJob := func(c assert.TestingT, name string) bool {
+		resp, gerr := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		if gerr != nil {
+			c.Errorf("listing jobs: %v", gerr)
+			return false
+		}
+		// Keys end in `||<reminder name>`, so match the exact name.
+		return slices.ContainsFunc(resp.Kvs, func(kv *mvccpb.KeyValue) bool {
+			return strings.HasSuffix(string(kv.Key), "||"+name)
+		})
+	}
 
 	f.dropped.EventuallyFoundAll(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys := jobs()
-		for _, name := range []string{"activity-result-forged||", "activity-result-forged-terminate", "activity-result-forged-timer"} {
-			assert.NotContains(c, keys, name, "the forged reminder must be acked and deleted, not retried")
+		for _, name := range []string{"activity-result-forged", "activity-result-forged-terminate", "activity-result-forged-timer", "activity-result-forged-ahead-future"} {
+			assert.False(c, hasJob(c, name), "the forged reminder %q must be acked and deleted, not retried", name)
 		}
 	}, time.Second*20, time.Millisecond*10)
 	// The result for the not yet scheduled task is refused, not acked, so
 	// the Scheduler keeps re-delivering it while its scheduling could still
 	// be committing.
-	assert.Contains(t, jobs(), "activity-result-forged-ahead")
+	assert.True(t, hasJob(t, "activity-result-forged-ahead"))
 
 	meta, err := cl.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
@@ -219,6 +241,6 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
 	// Once task 1 is scheduled the re-delivered result fails the creator
 	// check and is acked, so the one-shot reminder goes away.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NotContains(c, jobs(), "activity-result-forged-ahead")
+		assert.False(c, hasJob(c, "activity-result-forged-ahead"))
 	}, time.Second*20, time.Millisecond*10)
 }

@@ -71,6 +71,9 @@ type admission struct {
 	reason  string     // acked drop: why the completion is never consumed
 	err     error      // rejected drop: returned to the sender instead of an ack
 	pending *foldEntry // duplicate of a held completion: the entry a retry joins
+	// unauthorized marks a reason-drop of a result from an app that did not
+	// run the task: it says nothing about the real result still in flight.
+	unauthorized bool
 }
 
 // classifyEvent decides how e is admitted against the loaded state. It does
@@ -148,7 +151,7 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 			expected = o.appID
 		}
 		if sender.appID != expected {
-			return admission{reason: "it was sent by app '" + sender.appID + "' but the task was dispatched to '" + expected + "'"}
+			return admission{reason: "it was sent by app '" + sender.appID + "' but the task was dispatched to '" + expected + "'", unauthorized: true}
 		}
 	}
 
@@ -225,7 +228,10 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		}
 		// The result is no longer in flight, whether this workflow consumed
 		// it or dropped it, so a completed instance's ID becomes reusable.
-		if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+		// Not for a forged one: the task's real result is still in flight,
+		// and releasing the guard here would let the forger recreate the
+		// instance under it.
+		if !a.unauthorized && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
 			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)

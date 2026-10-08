@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -175,4 +176,76 @@ func Test_classifyEvent_crossAppResultAheadOfScheduling(t *testing.T) {
 		require.NoError(t, h.orch.addWorkflowEvent(t.Context(), ahead(), completionSender{appID: "other"}), "a drop is acked")
 		assert.Empty(t, h.orch.state.Inbox)
 	})
+}
+
+// The event timestamp bounds the retry of a cross-app result refused as not
+// durable, and the creator chooses it: a stamp far in the future must read as
+// expired, not as never expiring, or the retry-forever reminder would refire
+// every second for good.
+func Test_handleReminder_crossAppResultAheadOfSchedulingRetryWindow(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "test-ahead-window"
+	fire := func(t *testing.T, stamp time.Time) error {
+		t.Helper()
+		h := newWakeHarness(t, instanceID, true)
+		h.primeRunning(t, instanceID, 7)
+		// The fire drops the cache and reloads, so the store must serve
+		// the same history.
+		h.orch.actorState = fakeStoreServingState(t, 1, h.orch.state.History, nil)
+		ev := taskCompletedEvent(9)
+		ev.Timestamp = timestamppb.New(stamp)
+		data, err := anypb.New(ev)
+		require.NoError(t, err)
+		err = h.orch.handleReminder(t.Context(), &actorapi.Reminder{
+			Name: "activity-result-ahead", ActorType: h.orch.actorType, ActorID: h.orch.actorID, Data: data, SourceAppID: "other",
+		})
+		assert.NotContains(t, h.snapshotOps(), "save", "nothing is persisted either way")
+		return err
+	}
+
+	t.Run("a current stamp is retried", func(t *testing.T) {
+		t.Parallel()
+		err := fire(t, time.Now())
+		require.Error(t, err)
+		assert.True(t, common.IsSchedulingNotDurable(err), "%v", err)
+	})
+
+	t.Run("a stamp an hour ahead is dropped and acked", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, fire(t, time.Now().Add(time.Hour)))
+	})
+
+	t.Run("a stamp an hour behind is dropped and acked", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, fire(t, time.Now().Add(-time.Hour)))
+	})
+}
+
+// A forged result dropped by the creator check must not release the
+// instance-ID reuse guard: the real result it impersonates is still in
+// flight, and the guard is what refuses recreating the completed instance
+// under it (createIfCompleted).
+func Test_admitEvent_unauthorizedDropKeepsTheAwait(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "test-admit-forged-await"
+	h := newWakeHarness(t, instanceID, true)
+	h.primeRunning(t, instanceID, 7)
+	h.saved = true
+	appB := "appB"
+	h.orch.state.FindHistoryEventByID(7).Router = &protos.TaskRouter{SourceAppID: "testapp", TargetAppID: &appB}
+	h.orch.activityResultAwaited.Store(true)
+
+	entry, err := h.orch.admitEvent(t.Context(), taskCompletedEvent(7), completionSender{appID: "evil"}, false)
+	require.NoError(t, err, "the forged result is acked and dropped")
+	assert.Nil(t, entry)
+	assert.Empty(t, h.orch.state.Inbox)
+	assert.True(t, h.orch.activityResultAwaited.Load(), "a forged result must not release the reuse guard")
+
+	entry, err = h.orch.admitEvent(t.Context(), taskCompletedEvent(7), completionSender{appID: appB}, false)
+	require.NoError(t, err)
+	assert.Nil(t, entry)
+	assert.Len(t, h.orch.state.Inbox, 1)
+	assert.False(t, h.orch.activityResultAwaited.Load(), "the real result settles the await")
 }

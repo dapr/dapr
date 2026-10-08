@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -160,10 +161,21 @@ func (f *forgedforward) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
+	// Polled from EventuallyWithT goroutines, so no require on t here.
+	etcd := f.workflow.Scheduler().ETCDClient(t, ctx)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, logline.CountAll("it was sent by app 'other' but the task was dispatched to 'acthost'", f.dropped[0], f.dropped[1]), forgedCount)
-		assert.NotContains(c, strings.Join(f.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), "\n"), "activity-result-forged",
-			"every forged reminder must be acked and deleted, not retried")
+		resp, gerr := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		if !assert.NoError(c, gerr) {
+			return
+		}
+		// Keys end in `||<reminder name>`, so match the exact names.
+		for _, kv := range resp.Kvs {
+			for i := range forgedCount {
+				assert.False(c, strings.HasSuffix(string(kv.Key), fmt.Sprintf("||activity-result-forged-%d", i)),
+					"every forged reminder must be acked and deleted, not retried: %s", kv.Key)
+			}
+		}
 	}, time.Second*30, time.Millisecond*10)
 
 	meta, err := cl.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))

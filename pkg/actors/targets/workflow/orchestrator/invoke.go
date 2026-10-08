@@ -177,9 +177,15 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// The timestamp is stamped by the host that ran the activity, so
 			// it is read against another clock; at this granularity skew is
 			// noise, and an event carrying none reads as ancient and is
-			// dropped, which is the safe direction.
+			// dropped, which is the safe direction. The creator chooses the
+			// stamp, though, and any app in the namespace may create this
+			// reminder: a stamp far in the future would otherwise never
+			// leave the window and keep the storm going forever, so one more
+			// than the window ahead of this clock is as expired as one more
+			// than the window behind it.
 			o.invalidateCachedState()
-			if time.Since(ev.GetTimestamp().AsTime()) < common.SchedulingDurableWindow() {
+			window := common.SchedulingDurableWindow()
+			if age := time.Since(ev.GetTimestamp().AsTime()); -window < age && age < window {
 				return err
 			}
 			// Past the bound this fire is the last word, and the refusal was
