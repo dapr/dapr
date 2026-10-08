@@ -44,9 +44,11 @@ type Input struct {
 	binding bindings.InputBinding
 	handler func(context.Context, string, []byte, map[string]string) ([]byte, error)
 
-	cancel   func()
+	cancel func()
+
+	// Handlers hold lock for reading, so Stop waits for in-flight events.
+	lock     sync.RWMutex
 	closed   atomic.Bool
-	wg       sync.WaitGroup
 	inflight atomic.Int64
 }
 
@@ -71,7 +73,8 @@ func (i *Input) Stop() {
 	i.closed.Store(true)
 	inflight := i.inflight.Load() > 0
 
-	i.wg.Wait()
+	i.lock.Lock()
+	defer i.lock.Unlock()
 
 	// If there were in-flight requests then wait some time for the result to be
 	// sent to the binding. This is because the message result context is
@@ -85,14 +88,17 @@ func (i *Input) Stop() {
 
 func (i *Input) read(ctx context.Context) error {
 	return i.binding.Read(ctx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
-		i.wg.Add(1)
 		i.inflight.Add(1)
+		defer i.inflight.Add(-1)
 
-		defer func() {
-			i.wg.Done()
-			i.inflight.Add(-1)
-		}()
+		if i.closed.Load() {
+			return nil, errors.New("input binding is closed")
+		}
 
+		i.lock.RLock()
+		defer i.lock.RUnlock()
+
+		// Stop may have run between the check above and RLock.
 		if i.closed.Load() {
 			return nil, errors.New("input binding is closed")
 		}
