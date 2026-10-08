@@ -14,22 +14,28 @@ limitations under the License.
 package grpc
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/api/universal"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
 func TestCallLocal(t *testing.T) {
@@ -98,6 +104,158 @@ func TestCallLocal(t *testing.T) {
 
 		_, err := client.CallLocal(t.Context(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("drops non-lowercase identity headers without mTLS", func(t *testing.T) {
+		got := make(map[string][]string)
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod",
+			mock.MatchedBy(matchContextInterface),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).Run(func(args mock.Arguments) {
+			for k, v := range args.Get(1).(*invokev1.InvokeMethodRequest).Metadata() {
+				got[k] = v.GetValues()
+			}
+		}).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		fakeAPI := &api{
+			Universal: universal.New(universal.Options{
+				AppID: "fakeAPI",
+			}),
+			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
+		}
+		server, lis := startInternalServer(fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		request := invokev1.NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{
+				"Dapr-Caller-App-Id":           {"admin"},
+				"Dapr-Caller-Namespace":        {"kube-system"},
+				"Dapr-Callee-App-Id":           {"other"},
+				invokev1.CallerIDHeader:        {"caller"},
+				invokev1.CallerNamespaceHeader: {"caller-ns"},
+				invokev1.CalleeIDHeader:        {"fakeAPI"},
+				"other":                        {"kept"},
+			})
+		defer request.Close()
+
+		_, err := client.CallLocal(t.Context(), request.Proto())
+		require.NoError(t, err)
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerIDHeader:        {"caller"},
+			invokev1.CallerNamespaceHeader: {"caller-ns"},
+			invokev1.CalleeIDHeader:        {"fakeAPI"},
+			"other":                        {"kept"},
+		}, got)
+	})
+}
+
+func TestCallActorIdentityMetadata(t *testing.T) {
+	spoofed := func() map[string]*internalv1pb.ListStringValue {
+		return internalv1pb.MetadataToInternalMetadata(map[string][]string{
+			"Dapr-Caller-App-Id":           {"admin"},
+			"Dapr-Caller-Namespace":        {"kube-system"},
+			"DAPR-CALLER-APP-ID":           {"admin"},
+			invokev1.CallerIDHeader:        {"caller"},
+			invokev1.CallerNamespaceHeader: {"caller-ns"},
+			"Dapr-Callee-App-Id":           {"other"},
+			"other":                        {"kept"},
+		})
+	}
+	values := func(md map[string]*internalv1pb.ListStringValue) map[string][]string {
+		got := make(map[string][]string, len(md))
+		for k, v := range md {
+			got[k] = v.GetValues()
+		}
+		return got
+	}
+
+	t.Run("drops non-lowercase caller identity without mTLS", func(t *testing.T) {
+		var got map[string][]string
+		fakeAPI := &api{
+			Universal: universal.New(universal.Options{
+				AppID: "fakeAPI",
+				Actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+					return routerfake.New().WithCallFn(func(_ context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+						got = values(req.GetMetadata())
+						return &internalv1pb.InternalInvokeResponse{Status: &internalv1pb.Status{Code: 200}}, nil
+					}), nil
+				}),
+			}),
+		}
+		server, lis := startInternalServer(fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		_, err := internalv1pb.NewServiceInvocationClient(clientConn).CallActor(t.Context(), &internalv1pb.InternalInvokeRequest{
+			Ver:      internalv1pb.APIVersion_V1,
+			Actor:    &internalv1pb.Actor{ActorType: "mytype", ActorId: "1"},
+			Message:  &commonv1pb.InvokeRequest{Method: "method"},
+			Metadata: spoofed(),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerIDHeader:        {"caller"},
+			invokev1.CallerNamespaceHeader: {"caller-ns"},
+			"Dapr-Callee-App-Id":           {"other"},
+			"other":                        {"kept"},
+			"X-Dapr-Remote":                {"true"},
+		}, got)
+	})
+
+	t.Run("stamps caller identity from the SPIFFE ID", func(t *testing.T) {
+		id, err := spiffe.FromStrings(spiffeid.RequireTrustDomainFromString("public"), "peer-ns", "peer")
+		require.NoError(t, err)
+		req := &internalv1pb.InternalInvokeRequest{Metadata: spoofed()}
+		setIdentityMetadata(req, id, "")
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerIDHeader:        {"peer"},
+			invokev1.CallerNamespaceHeader: {"peer-ns"},
+			"Dapr-Callee-App-Id":           {"other"},
+			"other":                        {"kept"},
+		}, values(req.GetMetadata()))
+	})
+}
+
+func TestSetIdentityMetadata(t *testing.T) {
+	id, err := spiffe.FromStrings(spiffeid.RequireTrustDomainFromString("public"), "caller-ns", "caller")
+	require.NoError(t, err)
+
+	t.Run("replaces all identity headers from the SPIFFE ID", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{
+				"Dapr-Caller-App-Id":           {"admin"},
+				"Dapr-Caller-Namespace":        {"kube-system"},
+				"Dapr-Callee-App-Id":           {"other"},
+				invokev1.CallerIDHeader:        {"not-caller"},
+				invokev1.CallerNamespaceHeader: {"not-caller-ns"},
+				invokev1.CalleeIDHeader:        {"not-callee"},
+				"other":                        {"kept"},
+			})
+		defer req.Close()
+
+		setIdentityMetadata(req.Proto(), id, "callee")
+		got := make(map[string][]string)
+		for k, v := range req.Metadata() {
+			got[k] = v.GetValues()
+		}
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerIDHeader:        {"caller"},
+			invokev1.CallerNamespaceHeader: {"caller-ns"},
+			invokev1.CalleeIDHeader:        {"callee"},
+			"other":                        {"kept"},
+		}, got)
+	})
+
+	t.Run("stamps a request with no metadata", func(t *testing.T) {
+		req := &internalv1pb.InternalInvokeRequest{}
+		setIdentityMetadata(req, id, "callee")
+		assert.Equal(t, []string{"caller"}, req.GetMetadata()[invokev1.CallerIDHeader].GetValues())
+		assert.Equal(t, []string{"caller-ns"}, req.GetMetadata()[invokev1.CallerNamespaceHeader].GetValues())
+		assert.Equal(t, []string{"callee"}, req.GetMetadata()[invokev1.CalleeIDHeader].GetValues())
 	})
 }
 
