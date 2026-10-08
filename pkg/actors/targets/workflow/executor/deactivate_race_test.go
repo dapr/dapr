@@ -25,11 +25,6 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-func unknownReq() *internalsv1pb.InternalInvokeRequest {
-	return internalsv1pb.NewInternalInvokeRequest("unknown").
-		WithActor("dapr.internal.default.test.executor", "abc")
-}
-
 func Test_Deactivate_concurrentInvocations(t *testing.T) {
 	t.Parallel()
 
@@ -41,10 +36,8 @@ func Test_Deactivate_concurrentInvocations(t *testing.T) {
 		for range 4 {
 			wg.Go(func() {
 				<-start
-				_, err := e.InvokeMethod(t.Context(), unknownReq())
-				if !targeterrors.IsClosed(err) {
-					assert.EqualError(t, err, "unknown method: unknown", "iteration %d", i)
-				}
+				_, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+				assert.NoError(t, err, "iteration %d", i)
 			})
 		}
 		wg.Go(func() {
@@ -66,11 +59,27 @@ func Test_Deactivate_refusesLaterCalls(t *testing.T) {
 	e, _ := newClaimTestExecutor(t)
 	require.NoError(t, e.Deactivate(t.Context()))
 
-	_, err := e.InvokeMethod(t.Context(), unknownReq())
+	unknown := internalsv1pb.NewInternalInvokeRequest("unknown").
+		WithActor("dapr.internal.default.test.executor", "abc")
+
+	_, err := e.InvokeMethod(t.Context(), unknown)
 	assert.True(t, targeterrors.IsClosed(err), "got %v", err)
 
-	err = e.InvokeStream(t.Context(), unknownReq(), nil)
+	err = e.InvokeStream(t.Context(), unknown, nil)
 	assert.True(t, targeterrors.IsClosed(err), "got %v", err)
+}
+
+// A cancellation recorded before deactivation is handed off, so a claim on the
+// closed actor must not also serve it.
+func Test_Deactivate_claimDoesNotServeHandedOffCancel(t *testing.T) {
+	t.Parallel()
+
+	e, _ := newClaimTestExecutor(t)
+	_, err := e.InvokeMethod(t.Context(), cancelReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+
+	_, canc := e.deactivate()
+	require.Equal(t, TaskTypeWorkflow, canc.taskType)
 
 	res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
 	require.NoError(t, err)

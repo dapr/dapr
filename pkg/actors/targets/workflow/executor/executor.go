@@ -83,16 +83,16 @@ type executor struct {
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	// claim never blocks, so it is not tracked by wg and still answers on a
-	// closed actor.
-	if req.GetMessage().GetMethod() == MethodClaim {
-		return e.claim(req), nil
-	}
-
 	if err := e.enter(); err != nil {
+		if req.GetMessage().GetMethod() == MethodClaim {
+			return &internalsv1pb.InternalInvokeResponse{
+				Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
+			}, nil
+		}
 		return nil, err
 	}
 
+	var res *internalsv1pb.InternalInvokeResponse
 	var run func()
 	var err error
 
@@ -108,11 +108,13 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		run, err = e.complete(ctx, req)
 	case MethodCancel:
 		run, err = e.cancel(req)
+	case MethodClaim:
+		res = e.claim(req)
 	default:
 		err = errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
 
-	return nil, err
+	return res, err
 }
 
 func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (func(), error) {
