@@ -161,7 +161,8 @@ func (f *forgedforward) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	// Polled from EventuallyWithT goroutines, so no require on t here.
+	// Polled from EventuallyWithT goroutines, so no require on t here. Keys
+	// end in `||<reminder name>`: compare the exact name, not a substring.
 	etcd := f.workflow.Scheduler().ETCDClient(t, ctx)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, logline.CountAll("it was sent by app 'other' but the task was dispatched to 'acthost'", f.dropped[0], f.dropped[1]), forgedCount)
@@ -169,12 +170,14 @@ func (f *forgedforward) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(c, gerr) {
 			return
 		}
-		// Keys end in `||<reminder name>`, so match the exact names.
+		names := make([]string, 0, len(resp.Kvs))
 		for _, kv := range resp.Kvs {
-			for i := range forgedCount {
-				assert.False(c, strings.HasSuffix(string(kv.Key), fmt.Sprintf("||activity-result-forged-%d", i)),
-					"every forged reminder must be acked and deleted, not retried: %s", kv.Key)
-			}
+			key := string(kv.Key)
+			names = append(names, key[strings.LastIndex(key, "||")+2:])
+		}
+		for i := range forgedCount {
+			assert.NotContains(c, names, fmt.Sprintf("activity-result-forged-%d", i),
+				"every forged reminder must be acked and deleted, not retried")
 		}
 	}, time.Second*30, time.Millisecond*10)
 

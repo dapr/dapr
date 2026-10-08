@@ -15,14 +15,12 @@ package accesspolicy
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -203,30 +201,38 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err, "the scheduler allows creating activity result reminders on another app's workflow actor: %s", name)
 	}
 
-	// Polled from EventuallyWithT goroutines, so no require on t here.
+	// Polled from EventuallyWithT goroutines, so no require on t here. Keys
+	// end in `||<reminder name>`: compare the exact name, not a substring.
 	etcd := f.sched.ETCDClient(t, ctx)
-	hasJob := func(c assert.TestingT, name string) bool {
+	jobNames := func() ([]string, error) {
 		resp, gerr := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 		if gerr != nil {
-			c.Errorf("listing jobs: %v", gerr)
-			return false
+			return nil, gerr
 		}
-		// Keys end in `||<reminder name>`, so match the exact name.
-		return slices.ContainsFunc(resp.Kvs, func(kv *mvccpb.KeyValue) bool {
-			return strings.HasSuffix(string(kv.Key), "||"+name)
-		})
+		names := make([]string, 0, len(resp.Kvs))
+		for _, kv := range resp.Kvs {
+			key := string(kv.Key)
+			names = append(names, key[strings.LastIndex(key, "||")+2:])
+		}
+		return names, nil
 	}
 
 	f.dropped.EventuallyFoundAll(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		names, jerr := jobNames()
+		if !assert.NoError(c, jerr) {
+			return
+		}
 		for _, name := range []string{"activity-result-forged", "activity-result-forged-terminate", "activity-result-forged-timer", "activity-result-forged-ahead-future"} {
-			assert.False(c, hasJob(c, name), "the forged reminder %q must be acked and deleted, not retried", name)
+			assert.NotContains(c, names, name, "the forged reminder must be acked and deleted, not retried")
 		}
 	}, time.Second*20, time.Millisecond*10)
 	// The result for the not yet scheduled task is refused, not acked, so
 	// the Scheduler keeps re-delivering it while its scheduling could still
 	// be committing.
-	assert.True(t, hasJob(t, "activity-result-forged-ahead"))
+	names, err := jobNames()
+	require.NoError(t, err)
+	assert.Contains(t, names, "activity-result-forged-ahead")
 
 	meta, err := cl.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
@@ -241,6 +247,9 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
 	// Once task 1 is scheduled the re-delivered result fails the creator
 	// check and is acked, so the one-shot reminder goes away.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(c, hasJob(c, "activity-result-forged-ahead"))
+		names, jerr := jobNames()
+		if assert.NoError(c, jerr) {
+			assert.NotContains(c, names, "activity-result-forged-ahead")
+		}
 	}, time.Second*20, time.Millisecond*10)
 }
