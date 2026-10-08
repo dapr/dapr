@@ -350,7 +350,11 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	}
 
 	if s.proxy != nil {
-		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))
+		handler := s.proxy.InternalHandler()
+		if s.kind == apiServer {
+			handler = s.proxy.Handler()
+		}
+		opts = append(opts, grpcGo.UnknownServiceHandler(handler))
 	}
 
 	return grpcGo.NewServer(opts...), nil

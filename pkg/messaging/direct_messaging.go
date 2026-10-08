@@ -277,6 +277,10 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
+	// A self-invocation bypasses invokeRemote, so stamp the caller/callee
+	// identity headers here too. caller == callee == this app.
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, d.appID, req)
+
 	return appChannel.InvokeMethod(ctx, req, "")
 }
 
@@ -557,13 +561,23 @@ func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req 
 }
 
 func (d *directMessaging) addCallerAndCalleeAppIDHeaderToMetadata(callerNamespace, callerAppID, calleeAppID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[invokev1.CallerNamespaceHeader] = &internalv1pb.ListStringValue{
+	// Strip any caller-supplied identity headers before stamping. The strip is
+	// case-insensitive because HTTP-origin metadata retains the request's
+	// original header casing.
+	md := req.Metadata()
+	for k := range md {
+		switch strings.ToLower(k) {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader, invokev1.CalleeIDHeader:
+			delete(md, k)
+		}
+	}
+	md[invokev1.CallerNamespaceHeader] = &internalv1pb.ListStringValue{
 		Values: []string{callerNamespace},
 	}
-	req.Metadata()[invokev1.CallerIDHeader] = &internalv1pb.ListStringValue{
+	md[invokev1.CallerIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{callerAppID},
 	}
-	req.Metadata()[invokev1.CalleeIDHeader] = &internalv1pb.ListStringValue{
+	md[invokev1.CalleeIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{calleeAppID},
 	}
 }

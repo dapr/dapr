@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -37,6 +38,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sse"
 )
 
@@ -55,6 +57,11 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	err = a.setPeerIdentityMetadata(ctx, req.Proto(), a.AppID())
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +131,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	err = a.setPeerIdentityMetadata(ctx, req.Proto(), a.AppID())
 	if err != nil {
 		return err
 	}
@@ -299,6 +311,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := a.setPeerIdentityMetadata(ctx, in, ""); err != nil {
+		return nil, err
+	}
+
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
 	router, err := a.ActorRouter(ctx)
@@ -353,6 +369,10 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	if err := a.setPeerIdentityMetadata(stream.Context(), req, ""); err != nil {
+		return err
+	}
+
 	router, err := a.ActorRouter(stream.Context())
 	if err != nil {
 		return err
@@ -408,6 +428,56 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	return nil
+}
+
+// setPeerIdentityMetadata replaces the caller/callee identity metadata of a
+// request received from another daprd before it reaches the app. With mTLS,
+// the caller is taken from the peer's SPIFFE ID and the callee is
+// calleeAppID, so values an older caller daprd forwarded from its app are
+// discarded. Without mTLS, the lowercase values stamped by the caller daprd
+// are kept and other casings, which can only have come from the calling app,
+// are dropped. Actor invocations pass an empty calleeAppID: Dapr does not set
+// dapr-callee-app-id for actors, so it is left as received.
+func (a *api) setPeerIdentityMetadata(ctx context.Context, req *internalv1pb.InternalInvokeRequest, calleeAppID string) error {
+	id, _, err := spiffe.FromGRPCContext(ctx)
+	if err != nil {
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
+	setIdentityMetadata(req, id, calleeAppID)
+	return nil
+}
+
+func setIdentityMetadata(req *internalv1pb.InternalInvokeRequest, id *spiffe.Parsed, calleeAppID string) {
+	for k := range req.GetMetadata() {
+		lk := strings.ToLower(k)
+		switch lk {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader:
+		case invokev1.CalleeIDHeader:
+			if calleeAppID == "" {
+				continue
+			}
+		default:
+			continue
+		}
+		if id != nil || k != lk {
+			delete(req.GetMetadata(), k)
+		}
+	}
+	if id == nil {
+		return
+	}
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 2)
+	}
+	if appID := id.AppID(); appID != "" {
+		req.Metadata[invokev1.CallerIDHeader] = &internalv1pb.ListStringValue{Values: []string{appID}}
+	}
+	if namespace := id.Namespace(); namespace != "" {
+		req.Metadata[invokev1.CallerNamespaceHeader] = &internalv1pb.ListStringValue{Values: []string{namespace}}
+	}
+	if calleeAppID != "" {
+		req.Metadata[invokev1.CalleeIDHeader] = &internalv1pb.ListStringValue{Values: []string{calleeAppID}}
+	}
 }
 
 // Internal function that records the received request for diagnostics
