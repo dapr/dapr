@@ -113,9 +113,9 @@ func (a *api) validateSameAppInternalActor(ctx context.Context, actorType, opera
 	}
 
 	if callerAppID != a.AppID() {
-		a.logger.Warnf("Workflow access policy denied cross-app call to internal actor type '%s' from app '%s'", actorType, callerAppID)
+		a.logger.Warnf("Denied cross-app call to reserved internal actor type '%s' from app '%s'", actorType, callerAppID)
 		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, "internal", operation)
-		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedMessageBase)
+		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedInternalActorMessage, actorType)
 	}
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "internal", operation)

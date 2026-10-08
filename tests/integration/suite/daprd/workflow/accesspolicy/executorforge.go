@@ -234,10 +234,14 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
 		assert.Equal(t, `"`+output+`"`, meta.GetOutput().GetValue(), id)
 	}
-	denied := func(t *testing.T, err error) {
+	deniedWith := func(t *testing.T, err error, msg string) {
 		t.Helper()
 		require.Equal(t, codes.PermissionDenied, status.Code(err), "err: %v", err)
-		assert.ErrorContains(t, err, "access denied by workflow access policy")
+		assert.ErrorContains(t, err, msg)
+	}
+	denied := func(t *testing.T, err error) {
+		t.Helper()
+		deniedWith(t, err, "reserved internal actor type '"+executorActorType+"' can only be called by a sidecar with the same app ID and namespace")
 	}
 
 	const (
@@ -310,7 +314,7 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("same app from another namespace is denied", func(t *testing.T) {
 		_, err := otherNS.CallActor(ctx, req(executor.MethodComplete, liveActorID, executor.TaskTypeActivity, activityResult(t, live, "OTHER_NAMESPACE")))
-		denied(t, err)
+		deniedWith(t, err, "access denied by workflow access policy")
 	})
 
 	t.Run("same app peer is allowed and its result consumed", func(t *testing.T) {

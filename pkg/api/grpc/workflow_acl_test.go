@@ -19,6 +19,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -53,14 +54,15 @@ func TestCallActorInternalActorTypeSameApp(t *testing.T) {
 		ctx       context.Context
 		actorType string
 		expCode   codes.Code
+		expMsg    string
 	}{
 		"executor: same app is allowed":          {ctx: sameApp, actorType: "dapr.internal.ns1.app1.executor", expCode: codes.OK},
-		"executor: other app is denied":          {ctx: otherApp, actorType: "dapr.internal.ns1.app1.executor", expCode: codes.PermissionDenied},
-		"executor: other namespace is denied":    {ctx: otherNamespace, actorType: "dapr.internal.ns1.app1.executor", expCode: codes.PermissionDenied},
+		"executor: other app is denied":          {ctx: otherApp, actorType: "dapr.internal.ns1.app1.executor", expCode: codes.PermissionDenied, expMsg: "reserved internal actor type 'dapr.internal.ns1.app1.executor' can only be called by a sidecar with the same app ID and namespace"},
+		"executor: other namespace is denied":    {ctx: otherNamespace, actorType: "dapr.internal.ns1.app1.executor", expCode: codes.PermissionDenied, expMsg: "access denied by workflow access policy"},
 		"executor: no identity is allowed":       {ctx: t.Context(), actorType: "dapr.internal.ns1.app1.executor", expCode: codes.OK},
 		"retentioner: same app is allowed":       {ctx: sameApp, actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.OK},
-		"retentioner: other app is denied":       {ctx: otherApp, actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.PermissionDenied},
-		"retentioner: other namespace is denied": {ctx: otherNamespace, actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.PermissionDenied},
+		"retentioner: other app is denied":       {ctx: otherApp, actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.PermissionDenied, expMsg: "reserved internal actor type 'dapr.internal.ns1.app1.retentioner' can only be called by a sidecar with the same app ID and namespace"},
+		"retentioner: other namespace is denied": {ctx: otherNamespace, actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.PermissionDenied, expMsg: "access denied by workflow access policy"},
 		"retentioner: no identity is allowed":    {ctx: t.Context(), actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.OK},
 		"user actor type is not checked":         {ctx: otherApp, actorType: "myactortype", expCode: codes.OK},
 	}
@@ -71,6 +73,9 @@ func TestCallActorInternalActorTypeSameApp(t *testing.T) {
 				internalv1pb.NewInternalInvokeRequest("Complete").WithActor(tc.actorType, "id"),
 			)
 			assert.Equal(t, tc.expCode, status.Code(err), "CallActor: %v", err)
+			if tc.expMsg != "" {
+				require.ErrorContains(t, err, tc.expMsg)
+			}
 
 			err = a.callActorReminderValidateWorkflowACL(tc.ctx, &internalv1pb.Reminder{
 				ActorType: tc.actorType,
@@ -78,6 +83,9 @@ func TestCallActorInternalActorTypeSameApp(t *testing.T) {
 				Name:      "reminder",
 			})
 			assert.Equal(t, tc.expCode, status.Code(err), "CallActorReminder: %v", err)
+			if tc.expMsg != "" {
+				require.ErrorContains(t, err, tc.expMsg)
+			}
 		})
 	}
 }
