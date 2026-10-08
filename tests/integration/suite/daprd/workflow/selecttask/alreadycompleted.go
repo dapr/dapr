@@ -78,7 +78,10 @@ func (a *alreadycompleted) Run(t *testing.T, ctx context.Context) {
 	})
 	a.workflow.Registry().AddActivityN("noop", func(ctx task.ActivityContext) (any, error) {
 		var in string
-		return in, ctx.GetInput(&in)
+		if err := ctx.GetInput(&in); err != nil {
+			return nil, err
+		}
+		return in, nil
 	})
 
 	cl := a.workflow.BackendClient(t, ctx)

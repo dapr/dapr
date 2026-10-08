@@ -89,7 +89,5 @@ func (s *straytimerafterwin) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 	assert.JSONEq(t, `"early"`, meta.GetOutput().GetValue())
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, s.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
-	}, time.Second*10, time.Millisecond*10)
+	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, "timer-", func(n int) bool { return n == 0 })
 }

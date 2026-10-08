@@ -88,7 +88,10 @@ func (a *alreadycompletedchild) Run(t *testing.T, ctx context.Context) {
 	})
 	a.workflow.Registry().AddActivityN("noop", func(ctx task.ActivityContext) (any, error) {
 		var in string
-		return in, ctx.GetInput(&in)
+		if err := ctx.GetInput(&in); err != nil {
+			return nil, err
+		}
+		return in, nil
 	})
 
 	cl := a.workflow.BackendClient(t, ctx)
@@ -100,5 +103,5 @@ func (a *alreadycompletedchild) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 	assert.JSONEq(t, `[0,0]`, meta.GetOutput().GetValue())
 	assert.Equal(t, 1, fworkflow.CountHistoryEventsOfType[protos.HistoryEvent_TaskScheduled](t, ctx, cl, id))
-	assert.Equal(t, 2, fworkflow.CountHistoryEventsOfType[protos.HistoryEvent_SubOrchestrationInstanceCreated](t, ctx, cl, id))
+	assert.Equal(t, 2, fworkflow.CountHistoryEventsOfType[protos.HistoryEvent_ChildWorkflowInstanceCreated](t, ctx, cl, id))
 }

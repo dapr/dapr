@@ -15,7 +15,6 @@ package selecttask
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -59,16 +58,7 @@ func (r *terminate) Run(t *testing.T, ctx context.Context) {
 	id, err := cl.ScheduleNewWorkflow(ctx, "terminate")
 	require.NoError(t, err)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
-		var timers int
-		for _, k := range keys {
-			if strings.Contains(k, "timer-") {
-				timers++
-			}
-		}
-		assert.Positive(c, timers)
-	}, time.Second*20, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "timer-", func(n int) bool { return n > 0 })
 
 	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 
@@ -76,7 +66,5 @@ func (r *terminate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
-	}, time.Second*20, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "timer-", func(n int) bool { return n == 0 })
 }

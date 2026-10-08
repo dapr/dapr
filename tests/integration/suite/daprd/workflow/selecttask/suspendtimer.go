@@ -67,8 +67,11 @@ func (s *suspendtimer) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, cl.SuspendWorkflow(ctx, id, "hold"))
 	fworkflow.WaitForRuntimeStatus(t, ctx, cl, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_SUSPENDED)
 
-	// Outlive the timer while suspended. The instance must stay suspended.
-	time.Sleep(time.Second * 2)
+	// The timer fires while suspended: its TimerFired is persisted but the
+	// instance must stay suspended until resumed.
+	fworkflow.WaitForHistoryEvent(t, ctx, cl, id, func(e *protos.HistoryEvent) bool {
+		return e.GetTimerFired() != nil
+	})
 	meta, err := cl.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_SUSPENDED", meta.GetRuntimeStatus().String())

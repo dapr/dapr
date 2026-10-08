@@ -16,7 +16,9 @@ package selecttask
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +41,7 @@ func init() {
 // first task and the second raise completes the one that lost.
 type sameeventname struct {
 	workflow *workflow.Workflow
+	consumed atomic.Bool
 }
 
 func (s *sameeventname) Setup(t *testing.T) []framework.Option {
@@ -67,6 +70,12 @@ func (s *sameeventname) Run(t *testing.T, ctx context.Context) {
 		if err = first.Await(&a); err != nil {
 			return nil, err
 		}
+		// Signal the test that the first event was consumed, so the second
+		// event is raised only once the losing wait is carried into a later
+		// turn rather than buffered alongside the first.
+		if err = ctx.CallActivity("consumed").Await(nil); err != nil {
+			return nil, err
+		}
 
 		winner, err = ctx.Select(second)
 		if err != nil {
@@ -82,15 +91,18 @@ func (s *sameeventname) Run(t *testing.T, ctx context.Context) {
 		return []int{a, b}, nil
 	})
 
+	s.workflow.Registry().AddActivityN("consumed", func(task.ActivityContext) (any, error) {
+		s.consumed.Store(true)
+		return nil, nil
+	})
+
 	cl := s.workflow.BackendClient(t, ctx)
 	id, err := cl.ScheduleNewWorkflow(ctx, "sameeventname")
 	require.NoError(t, err)
 	fworkflow.WaitForWorkflowStartedEvent(t, ctx, cl, id)
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "ping", api.WithEventPayload(1)))
-	// Wait for the first raise to be consumed so the second one cannot be
-	// buffered ahead of it.
-	fworkflow.WaitForHistoryEvent(t, ctx, cl, id, fworkflow.IsEventRaisedFor("ping"))
+	require.Eventually(t, s.consumed.Load, time.Second*20, time.Millisecond*10)
 	require.NoError(t, cl.RaiseEvent(ctx, id, "ping", api.WithEventPayload(2)))
 
 	meta, err := cl.WaitForWorkflowCompletion(ctx, id)

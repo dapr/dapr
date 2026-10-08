@@ -16,6 +16,7 @@ package selecttask
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,7 +26,9 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -33,16 +36,20 @@ func init() {
 	suite.Register(new(activityvstimer))
 }
 
-// activityvstimer races a slow activity against a short timer. The timer
-// wins, and the losing activity is then awaited in a later turn and its
-// result returned, so losers stay awaitable after Select.
+// activityvstimer races a blocked activity against a short timer. The
+// activity is released only after the timer has fired, so the timer always
+// wins; the losing activity is then awaited in a later turn and its result
+// returned, so losers stay awaitable after Select.
 type activityvstimer struct {
 	workflow *workflow.Workflow
 	calls    atomic.Int64
+	release  chan struct{}
+	once     sync.Once
 }
 
 func (a *activityvstimer) Setup(t *testing.T) []framework.Option {
 	a.workflow = workflow.New(t)
+	a.release = make(chan struct{})
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),
@@ -72,13 +79,21 @@ func (a *activityvstimer) Run(t *testing.T, ctx context.Context) {
 	})
 	a.workflow.Registry().AddActivityN("slow", func(task.ActivityContext) (any, error) {
 		a.calls.Add(1)
-		time.Sleep(time.Second * 3)
+		<-a.release
 		return "slow-done", nil
 	})
+
+	release := func() { a.once.Do(func() { close(a.release) }) }
+	t.Cleanup(release)
 
 	cl := a.workflow.BackendClient(t, ctx)
 	id, err := cl.ScheduleNewWorkflow(ctx, "activityvstimer")
 	require.NoError(t, err)
+
+	fworkflow.WaitForHistoryEvent(t, ctx, cl, id, func(e *protos.HistoryEvent) bool {
+		return e.GetTimerFired() != nil
+	})
+	release()
 
 	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)

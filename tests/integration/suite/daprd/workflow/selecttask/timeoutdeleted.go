@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
-	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -81,17 +80,19 @@ func (s *timeoutdeleted) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	// timer-0 is the first wait's timeout, timer-1 the plain Select loser.
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		fworkflow.AssertScheduledTimers(t, c, ctx, s.workflow, false, "timer-0", "timer-1")
-	}, time.Second*20, time.Millisecond*10)
+	sched := s.workflow.Scheduler()
+	one := func(n int) bool { return n == 1 }
+	none := func(n int) bool { return n == 0 }
+	sched.WaitJobKeyCount(t, ctx, "timer-0", one)
+	sched.WaitJobKeyCount(t, ctx, "timer-1", one)
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "x", api.WithEventPayload(1)))
 
 	// The won wait's timeout is gone, the losing timer is kept, and the
 	// second wait armed timer-2.
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		fworkflow.AssertScheduledTimers(t, c, ctx, s.workflow, true, "timer-1", "timer-2")
-	}, time.Second*20, time.Millisecond*10)
+	sched.WaitJobKeyCount(t, ctx, "timer-0", none)
+	sched.WaitJobKeyCount(t, ctx, "timer-2", one)
+	sched.WaitJobKeyCount(t, ctx, "timer-1", one)
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "x", api.WithEventPayload(2)))
 
@@ -100,7 +101,5 @@ func (s *timeoutdeleted) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 	assert.JSONEq(t, `[1,2]`, meta.GetOutput().GetValue())
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, s.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
-	}, time.Second*20, time.Millisecond*10)
+	sched.WaitJobKeyCount(t, ctx, "timer-", none)
 }

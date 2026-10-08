@@ -15,14 +15,15 @@ package selecttask
 
 import (
 	"context"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/concurrency/slice"
@@ -32,16 +33,24 @@ func init() {
 	suite.Register(new(loopremaining))
 }
 
-// loopremaining fans out activities with different durations and repeatedly
-// Selects over the ones still pending, removing each winner. Every winner is
-// a new turn, so a shrinking Select is replayed over real history each time.
+// loopremaining fans out blocked activities and repeatedly Selects over the
+// ones still pending, removing each winner. The test releases the activities
+// one at a time, so every winner is a new turn and a shrinking Select is
+// replayed over real history each time.
 type loopremaining struct {
 	workflow *workflow.Workflow
 	called   slice.Slice[int]
+	release  [loopremainingN]chan struct{}
+	once     [loopremainingN]sync.Once
 }
+
+const loopremainingN = 5
 
 func (l *loopremaining) Setup(t *testing.T) []framework.Option {
 	l.called = slice.New[int]()
+	for i := range l.release {
+		l.release[i] = make(chan struct{})
+	}
 	l.workflow = workflow.New(t)
 
 	return []framework.Option{
@@ -52,13 +61,10 @@ func (l *loopremaining) Setup(t *testing.T) []framework.Option {
 func (l *loopremaining) Run(t *testing.T, ctx context.Context) {
 	l.workflow.WaitUntilRunning(t, ctx)
 
-	const n = 5
 	l.workflow.Registry().AddWorkflowN("loopremaining", func(ctx *task.WorkflowContext) (any, error) {
-		pending := make([]task.Task, n)
-		inputs := make([]int, n)
-		for i := range n {
-			pending[i] = ctx.CallActivity("sleep", task.WithActivityInput(i))
-			inputs[i] = i
+		pending := make([]task.Task, loopremainingN)
+		for i := range pending {
+			pending[i] = ctx.CallActivity("blocked", task.WithActivityInput(i))
 		}
 
 		var order []int
@@ -73,23 +79,37 @@ func (l *loopremaining) Run(t *testing.T, ctx context.Context) {
 			}
 			order = append(order, got)
 			pending = append(pending[:winner], pending[winner+1:]...)
-			inputs = append(inputs[:winner], inputs[winner+1:]...)
 		}
 		return order, nil
 	})
-	l.workflow.Registry().AddActivityN("sleep", func(ctx task.ActivityContext) (any, error) {
+	l.workflow.Registry().AddActivityN("blocked", func(ctx task.ActivityContext) (any, error) {
 		var i int
 		if err := ctx.GetInput(&i); err != nil {
 			return nil, err
 		}
 		l.called.Append(i)
-		time.Sleep(time.Duration(i) * 400 * time.Millisecond)
+		<-l.release[i]
 		return i, nil
+	})
+
+	release := func(i int) { l.once[i].Do(func() { close(l.release[i]) }) }
+	t.Cleanup(func() {
+		for i := range l.release {
+			release(i)
+		}
 	})
 
 	cl := l.workflow.BackendClient(t, ctx)
 	id, err := cl.ScheduleNewWorkflow(ctx, "loopremaining")
 	require.NoError(t, err)
+
+	// Release the activities in index order, waiting for each completion to
+	// be persisted before releasing the next, so the completion order is
+	// fixed. Activity i was scheduled as task i.
+	for i := range loopremainingN {
+		release(i)
+		fworkflow.WaitForHistoryEvent(t, ctx, cl, id, fworkflow.IsTaskCompletedFor(int32(i)))
+	}
 
 	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
