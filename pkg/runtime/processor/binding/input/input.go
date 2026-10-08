@@ -74,8 +74,7 @@ func (i *Input) Stop() {
 	inflight := i.inflight.Load() > 0
 
 	i.lock.Lock()
-	//nolint:staticcheck
-	i.lock.Unlock()
+	defer i.lock.Unlock()
 
 	// If there were in-flight requests then wait some time for the result to be
 	// sent to the binding. This is because the message result context is
