@@ -49,6 +49,7 @@ type proxy struct {
 	remoteAppFn        func(ctx context.Context, appID string) (remoteApp, error)
 	telemetryFn        func(context.Context) context.Context
 	appendAppTokenFn   func(context.Context) context.Context
+	appAPITokenHeader  string
 	acl                *config.AccessControlList
 	resiliency         resiliency.Provider
 	maxRequestBodySize int
@@ -63,6 +64,7 @@ type ProxyOpts struct {
 	Resiliency         resiliency.Provider
 	MaxRequestBodySize int
 	AppendAppTokenFn   func(context.Context) context.Context
+	AppAPITokenHeader  string
 }
 
 // NewProxy returns a new proxy.
@@ -72,6 +74,7 @@ func NewProxy(opts ProxyOpts) Proxy {
 		appID:              opts.AppID,
 		connectionFactory:  opts.ConnectionFactory,
 		appendAppTokenFn:   opts.AppendAppTokenFn,
+		appAPITokenHeader:  opts.AppAPITokenHeader,
 		acl:                opts.ACL,
 		resiliency:         opts.Resiliency,
 		maxRequestBodySize: opts.MaxRequestBodySize,
@@ -145,7 +148,8 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		}
 
 		mdCopy := md.Copy()
-		delete(mdCopy, securityConsts.APITokenHeader)
+		mdCopy.Delete(securityConsts.APITokenHeader)
+		mdCopy.Delete(p.appAPITokenHeader)
 		outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 		if p.appendAppTokenFn != nil {
 			outCtx = p.appendAppTokenFn(outCtx)

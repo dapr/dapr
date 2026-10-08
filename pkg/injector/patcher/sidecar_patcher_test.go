@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -381,6 +382,22 @@ func TestPatching(t *testing.T) {
 				require.Len(t, pod.Spec.InitContainers, 1)
 				args := strings.Join(pod.Spec.InitContainers[0].Args, " ")
 				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds 30")
+			},
+		},
+		{
+			name: "app token header does not require app token secret",
+			podModifierFn: func(pod *corev1.Pod) {
+				pod.Annotations[annotations.KeyAppTokenHeader] = "x-api-key"
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				require.Len(t, pod.Spec.Containers, 2)
+				assert.Contains(t, pod.Spec.Containers[1].Env, corev1.EnvVar{
+					Name:  securityConsts.AppAPITokenHeaderEnvVar,
+					Value: "x-api-key",
+				})
+				for _, env := range pod.Spec.Containers[1].Env {
+					assert.NotEqual(t, securityConsts.AppAPITokenEnvVar, env.Name)
+				}
 			},
 		},
 		{
