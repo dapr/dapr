@@ -69,16 +69,17 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
 		fz.NumElements(0, 100).Fuzz(&f.queries[i])
 	}
-	// Generate method names that don't contain characters forbidden by
-	// NormalizeMethod (#, ?, %, \x00), nor '/' or '\' which url.QueryEscape
-	// turns into the forbidden %2F and %5C. Fuzzed strings frequently contain
-	// these, causing the test to fail on method validation rather than
-	// testing the actual invocation path.
+	// The method is sent through url.QueryEscape, which percent-encodes
+	// '#', '?', '%', control characters and null bytes into forms that
+	// NormalizeMethod accepts. Only '/' and '\' are excluded: QueryEscape
+	// turns them into "%2F" and "%5C", which NormalizeMethod rejects, so
+	// the test would fail on method validation rather than testing the
+	// actual invocation path.
 	f.methods = make([]string, 0, numTests)
 	for len(f.methods) < numTests {
 		var m string
 		fuzz.New().NumElements(0, 100).Fuzz(&m)
-		if !strings.ContainsAny(m, "#?%\x00/\\") {
+		if !strings.ContainsAny(m, "/\\") {
 			f.methods = append(f.methods, m)
 		}
 	}
