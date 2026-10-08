@@ -105,3 +105,33 @@ func Test_onActivityCompletionMirrorsHeld(t *testing.T) {
 	dereg()
 	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
 }
+
+func Test_onActivityCompletionConcurrentExecutions(t *testing.T) {
+	t.Parallel()
+
+	abe := &Actors{
+		pendingTasksBackend: pendingtracker.New(local.NewTasksBackend()),
+		activityExecs:       newActivityExecutions(),
+	}
+	req := &protos.ActivityRequest{
+		WorkflowInstance: &protos.WorkflowInstance{InstanceId: "wf1"},
+		TaskId:           3,
+	}
+
+	var first, second int
+	dereg1 := abe.OnActivityCompletion(req, func(*protos.ActivityResponse, error) { first++ })
+	dereg2 := abe.OnActivityCompletion(req, func(*protos.ActivityResponse, error) { second++ })
+
+	require.NoError(t, abe.CompleteActivityTask(t.Context(), &protos.ActivityResponse{InstanceId: "wf1", TaskId: 3}))
+	assert.Equal(t, 1, first)
+	assert.Equal(t, 1, second)
+
+	require.NoError(t, abe.CancelActivityTask(t.Context(), "wf1", 3))
+	assert.Equal(t, 2, first)
+	assert.Equal(t, 2, second)
+
+	dereg2()
+	assert.True(t, abe.ActivityExecutionHeld("wf1", 3))
+	dereg1()
+	assert.False(t, abe.ActivityExecutionHeld("wf1", 3))
+}
