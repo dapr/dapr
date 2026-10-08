@@ -75,15 +75,16 @@ func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMet
 		return nil
 	}
 
-	ns, appID, internal := hostauthz.InternalActorTypeOwner(actor.GetType())
-	if !internal {
+	internal, owned := hostauthz.InternalActorType(actor.GetType(), meta.GetNamespace(), meta.GetAppId())
+	if !internal || owned {
 		return nil
 	}
 
 	activityResult := createOnly &&
 		strings.HasPrefix(name, common.ReminderPrefixActivityResult) &&
+		strings.HasPrefix(actor.GetType(), "dapr.internal."+meta.GetNamespace()+".") &&
 		strings.HasSuffix(actor.GetType(), ".workflow")
-	if ns != meta.GetNamespace() || (appID != meta.GetAppId() && !activityResult) {
+	if !activityResult {
 		log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actor.GetType(), meta.GetNamespace(), meta.GetAppId())
 		monitoring.RecordSidecarAuthError()
 		return status.Errorf(codes.PermissionDenied, "actor type %s is not allowed for app ID %s in namespace %s", actor.GetType(), meta.GetAppId(), meta.GetNamespace())
