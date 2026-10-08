@@ -195,10 +195,11 @@ func (l *Lock) handleLock(ctx context.Context, msg *internalv1pb.InternalInvokeR
 		}
 
 		flight = v
-		v.depth++
-		if v.depth > l.maxStackDepth {
+		if v.depth+1 > l.maxStackDepth {
 			err = messages.ErrActorMaxStackDepthExceeded
+			return false
 		}
+		v.depth++
 
 		return false
 	})
