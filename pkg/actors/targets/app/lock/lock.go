@@ -79,15 +79,22 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	}
 
+	method := msg.GetMessage().GetMethod()
+
 	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, -1)
 
 	select {
 	case l.lock <- struct{}{}:
 	case <-l.closeCh:
-		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
+		return nil, nil, errors.NewClosed(method)
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
+	}
+
+	if l.isClosed() {
+		<-l.lock
+		return nil, nil, errors.NewClosed(method)
 	}
 
 	flight, err := l.handleLock(ctx, msg)
@@ -116,19 +123,35 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	case <-l.closeCh:
 		release()
-		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
+		return nil, nil, errors.NewClosed(method)
 	case <-flight.startCh:
-		cctx, cancel := context.WithCancelCause(ctx)
+		l.lock <- struct{}{}
+		if l.isClosed() {
+			<-l.lock
+			release()
+			return nil, nil, errors.NewClosed(method)
+		}
 
+		cctx, cancel := context.WithCancelCause(ctx)
 		l.wg.Go(func() {
 			select {
 			case <-doneCh:
 			case <-l.closeCh:
 			}
-			cancel(errors.NewClosed(msg.GetMessage().GetMethod()))
+			cancel(errors.NewClosed(method))
 		})
+		<-l.lock
 
 		return cctx, release, nil
+	}
+}
+
+func (l *Lock) isClosed() bool {
+	select {
+	case <-l.closeCh:
+		return true
+	default:
+		return false
 	}
 }
 
