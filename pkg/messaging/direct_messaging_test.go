@@ -72,6 +72,32 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 		assert.Equal(t, callerAppID, actualCallerAppID.GetValues()[0])
 		assert.Equal(t, calleeAppID, actualCalleeAppID.GetValues()[0])
 	})
+
+	t.Run("strips caller-supplied headers in any casing", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				"Dapr-Caller-Namespace": {"spoofed-ns"},
+				"Dapr-Caller-App-Id":    {"spoofed-app"},
+				"Dapr-Callee-App-Id":    {"spoofed-callee"},
+				"DAPR-CALLER-APP-ID":    {"spoofed-app"},
+				"dapr-caller-app-id":    {"spoofed-app"},
+				"Other":                 {"kept"},
+			})
+		defer req.Close()
+
+		dm := &directMessaging{}
+		dm.addCallerAndCalleeAppIDHeaderToMetadata("caller-namespace", "caller-app", "callee-app", req)
+		got := make(map[string][]string)
+		for k, v := range req.Metadata() {
+			got[k] = v.GetValues()
+		}
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerNamespaceHeader: {"caller-namespace"},
+			invokev1.CallerIDHeader:        {"caller-app"},
+			invokev1.CalleeIDHeader:        {"callee-app"},
+			"Other":                        {"kept"},
+		}, got)
+	})
 }
 
 func TestInvokeLocalCallerAndCalleeHeaders(t *testing.T) {
