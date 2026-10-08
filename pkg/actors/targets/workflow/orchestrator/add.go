@@ -46,10 +46,13 @@ const (
 
 // completionSender identifies the child delivering a completion: its instance
 // ID and the parent execution it was created under. Zero for senders that
-// carry neither.
+// carry neither. appID is the app that created an activity result reminder,
+// as verified by the Scheduler; empty when the path carries no verified
+// creator.
 type completionSender struct {
 	instanceID        string
 	parentExecutionID string
+	appID             string
 }
 
 // admitOutcome is the completion-admission decision for an inbound event.
@@ -129,8 +132,25 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// is not in history yet cannot fold either: nothing in the turn would
 	// match it.
 	taskID, execID, isResolution := activityResolution(e)
-	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
+	scheduledEvent := state.FindHistoryEventByID(taskID)
+	scheduled := scheduledEvent.GetTaskScheduled()
 	hold := canFold && isActivity && o.rstate.GetStalled() == nil && scheduled != nil
+
+	// An activity result may only come from the app the task was dispatched
+	// to, or from this workflow's own app (failTaskViaReminder synthesises a
+	// failure for a remote dispatch). The Scheduler lets any app in the
+	// namespace create an activity-result reminder on this workflow actor,
+	// but it verifies the creator's identity, so a result from any other app
+	// is forged and is acked without effect.
+	if sender.appID != "" && isResolution && scheduled != nil && sender.appID != o.appID {
+		expected := scheduledEvent.GetRouter().GetTargetAppID()
+		if expected == "" {
+			expected = o.appID
+		}
+		if sender.appID != expected {
+			return admission{reason: "it was sent by app '" + sender.appID + "' but the task was dispatched to '" + expected + "'"}
+		}
+	}
 
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
@@ -156,6 +176,14 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// not use is the sender's to discard.
 	if reason := activityDrop(state, taskID, execID, isResolution, scheduled); reason != "" {
 		return admission{reason: reason}
+	}
+	// A result from another app for a task this history has not scheduled
+	// yet cannot be checked against its dispatch target, and once in the
+	// inbox it would be consumed, creator unchecked, when the task is
+	// scheduled. Refuse it as not yet durable: the sender re-delivers while
+	// the scheduling may still be committing, and gives up past the window.
+	if sender.appID != "" && isResolution && scheduled == nil && sender.appID != o.appID {
+		return admission{err: wferrors.NewRecoverable(fmt.Errorf("task %d from app '%s': %w", taskID, sender.appID, common.ErrSchedulingNotDurable))}
 	}
 	if !hold {
 		return admission{outcome: admitInbox}

@@ -15,10 +15,13 @@ package authz
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/hostauthz"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/security"
@@ -40,8 +43,53 @@ func New(opts Options) *Authz {
 	return &Authz{sec: opts.Security}
 }
 
+// Request is a named job request.
+type Request interface {
+	GetName() string
+	GetMetadata() *schedulerv1pb.JobMetadata
+}
+
 func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.JobMetadata) error {
-	return a.authz(ctx, meta.GetNamespace(), meta.GetAppId())
+	return a.job(ctx, "", meta, false)
+}
+
+// Job authorizes a request for a named job. An actor targeted job on a
+// reserved internal actor type (dapr.internal.<namespace>.<appid>.*) must
+// belong to the requesting app. The one exception is scheduling, without
+// overwrite, an activity result reminder on a workflow actor in the same
+// namespace, which is how an activity host delivers a result to the
+// workflow's app: reading, deleting or replacing such a job stays with the
+// owner.
+func (a *Authz) Job(ctx context.Context, req Request) error {
+	schedule, ok := req.(*schedulerv1pb.ScheduleJobRequest)
+	return a.job(ctx, req.GetName(), req.GetMetadata(), ok && !schedule.GetOverwrite())
+}
+
+func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMetadata, createOnly bool) error {
+	if err := a.authz(ctx, meta.GetNamespace(), meta.GetAppId()); err != nil {
+		return err
+	}
+
+	actor := meta.GetTarget().GetActor()
+	if actor == nil {
+		return nil
+	}
+
+	ns, appID, internal := hostauthz.InternalActorTypeOwner(actor.GetType())
+	if !internal {
+		return nil
+	}
+
+	activityResult := createOnly &&
+		strings.HasPrefix(name, common.ReminderPrefixActivityResult) &&
+		strings.HasSuffix(actor.GetType(), ".workflow")
+	if ns != meta.GetNamespace() || (appID != meta.GetAppId() && !activityResult) {
+		log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actor.GetType(), meta.GetNamespace(), meta.GetAppId())
+		monitoring.RecordSidecarAuthError()
+		return status.Errorf(codes.PermissionDenied, "actor type %s is not allowed for app ID %s in namespace %s", actor.GetType(), meta.GetAppId(), meta.GetNamespace())
+	}
+
+	return nil
 }
 
 func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {

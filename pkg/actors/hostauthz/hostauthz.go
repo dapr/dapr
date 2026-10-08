@@ -66,20 +66,31 @@ func Authorize(ctx context.Context, sec security.Handler, r Report) error {
 		}
 	}
 
-	const partDapr = "dapr"
-	const partInternal = "internal"
 	for _, actorType := range r.ActorTypes {
-		split := strings.Split(actorType, ".")
-		if len(split) >= 2 && split[0] == partDapr && split[1] == partInternal {
-			if len(split) < 4 || split[2] != r.Namespace || split[3] != r.AppID {
-				return status.Errorf(
-					codes.PermissionDenied,
-					"entity %s is not allowed for app ID %s in namespace %s",
-					actorType, r.AppID, r.Namespace,
-				)
-			}
+		ns, appID, internal := InternalActorTypeOwner(actorType)
+		if internal && (ns != r.Namespace || appID != r.AppID) {
+			return status.Errorf(
+				codes.PermissionDenied,
+				"entity %s is not allowed for app ID %s in namespace %s",
+				actorType, r.AppID, r.Namespace,
+			)
 		}
 	}
 
 	return nil
+}
+
+// InternalActorTypeOwner returns the namespace and app ID a reserved internal
+// actor type (dapr.internal.<namespace>.<appid>.*) belongs to. internal is
+// false for any other actor type; a malformed internal type yields empty
+// owner fields.
+func InternalActorTypeOwner(actorType string) (ns, appID string, internal bool) {
+	split := strings.Split(actorType, ".")
+	if len(split) < 2 || split[0] != "dapr" || split[1] != "internal" {
+		return "", "", false
+	}
+	if len(split) < 4 {
+		return "", "", true
+	}
+	return split[2], split[3], true
 }

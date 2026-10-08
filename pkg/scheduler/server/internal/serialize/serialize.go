@@ -34,10 +34,7 @@ type Serializer struct {
 	authz *authz.Authz
 }
 
-type Request interface {
-	GetName() string
-	GetMetadata() *schedulerv1pb.JobMetadata
-}
+type Request = authz.Request
 
 type Job struct {
 	name string
@@ -53,7 +50,7 @@ func New(opts Options) *Serializer {
 }
 
 func (s *Serializer) FromRequest(ctx context.Context, req Request) (*Job, error) {
-	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
+	if err := s.authz.Job(ctx, req); err != nil {
 		return nil, err
 	}
 
@@ -81,19 +78,25 @@ func (s *Serializer) KeyFromMetadata(ctx context.Context, req *schedulerv1pb.Job
 	var str string
 	switch t := req.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
+		// The actor type is always delimited so a prefix query can only be
+		// a prefix of the actor ID: authorization checks the literal type,
+		// so an undelimited type would let "dapr" match every
+		// "dapr.internal.<ns>.<app>.*" key in the namespace.
 		actor := t.GetActor()
-		str = joinStrings("actorreminder", req.GetNamespace(), actor.GetType())
+		str = joinStrings("actorreminder", req.GetNamespace(), actor.GetType()) + "||"
 		if len(actor.GetId()) > 0 {
-			str = joinStrings(str, actor.GetId())
+			str += actor.GetId()
+			if !asPrefix {
+				str += "||"
+			}
 		}
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		str = joinStrings("app", req.GetNamespace(), req.GetAppId())
+		if !asPrefix {
+			str += "||"
+		}
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
-	}
-
-	if !asPrefix {
-		str += "||"
 	}
 
 	return str, nil
