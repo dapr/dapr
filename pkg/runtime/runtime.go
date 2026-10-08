@@ -1066,6 +1066,7 @@ func (a *DaprRuntime) initProxy() {
 		AppClientFn:        a.grpc.GetAppClient,
 		ConnectionFactory:  a.grpc.GetGRPCConnection,
 		AppID:              a.runtimeConfig.id,
+		Namespace:          a.namespace,
 		ACL:                a.accessControlList,
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
