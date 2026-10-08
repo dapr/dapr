@@ -341,6 +341,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
 		IsTimer:        reminder.IsTimer,
 		SkipLock:       reminder.SkipLock,
+		Callback:       reminder.Callback,
 	})
 
 	return err
