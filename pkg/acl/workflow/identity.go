@@ -22,9 +22,9 @@ import (
 
 // IsInternalActorType reports whether actorType is a Dapr-reserved internal
 // actor type (workflow, activity, executor, retentioner, ...). User-facing
-// actor APIs (state, reminder, timer) must reject these because the workflow
-// runtime owns their lifecycle. Direct access from a user would corrupt state
-// or bypass per-operation policy enforcement.
+// actor APIs (invoke, state, reminder, timer) must reject these because the
+// workflow runtime owns their lifecycle. Direct access from a user would
+// corrupt state or bypass per-operation policy enforcement.
 func IsInternalActorType(actorType string) bool {
 	return strings.HasPrefix(actorType, actorTypePrefix)
 }

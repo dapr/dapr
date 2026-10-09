@@ -37,12 +37,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 )
 
 type Daprd struct {
@@ -352,6 +357,47 @@ func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 
 func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
+}
+
+// InternalGRPCClient returns a client for the daprd internal gRPC API, the
+// one peer daprds use for actor calls. With sen set, the connection is mTLS
+// with a Sentry-issued identity for appID in namespace, otherwise plaintext.
+func (d *Daprd) InternalGRPCClient(t *testing.T, ctx context.Context, sen *sentry.Sentry, appID, namespace string) internalv1pb.ServiceInvocationClient {
+	t.Helper()
+
+	dialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
+	if sen != nil {
+		sctx, cancel := context.WithCancel(ctx)
+		sec, err := security.New(sctx, security.Options{
+			SentryAddress:            sen.Address(),
+			ControlPlaneTrustDomain:  sen.TrustDomain(t),
+			ControlPlaneNamespace:    sen.Namespace(),
+			TrustAnchors:             sen.CABundle().X509.TrustAnchors,
+			AppID:                    appID,
+			Mode:                     modes.StandaloneMode,
+			MTLSEnabled:              true,
+			Healthz:                  healthz.New(),
+			OverrideRequestNamespace: &namespace,
+		})
+		require.NoError(t, err)
+
+		errCh := make(chan error, 1)
+		go func() { errCh <- sec.Run(sctx) }()
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+
+		sech, err := sec.Handler(sctx)
+		require.NoError(t, err)
+		dialOpt = sech.GRPCDialOptionMTLSUnknownTrustDomain(d.Namespace(), d.AppID())
+	}
+
+	conn, err := grpc.NewClient(d.InternalGRPCAddress(), dialOpt)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return internalv1pb.NewServiceInvocationClient(conn)
 }
 
 func (d *Daprd) AppID() string {
