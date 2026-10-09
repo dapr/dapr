@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -80,7 +82,11 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, request)
+		var ev backend.HistoryEvent
+		if err := proto.Unmarshal(request, &ev); err != nil {
+			return nil, err
+		}
+		return nil, o.addWorkflowEvent(ctx, &ev, "")
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -106,7 +112,20 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
-		return o.addWorkflowEvent(ctx, reminder.Data.GetValue())
+		var ev backend.HistoryEvent
+		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
+			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
+		}
+		// The Scheduler lets any app in the namespace create a reminder
+		// under this name on this actor. Only an activity result belongs
+		// here: anything else (a raised event, a termination, a timer firing
+		// that the persistable inbox cannot hold) is acked and dropped,
+		// whoever sent it.
+		if ev.GetTaskCompleted() == nil && ev.GetTaskFailed() == nil {
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': payload is not an activity result (%T)", o.actorID, reminder.Name, reminder.SourceAppID, ev.GetEventType())
+			return nil
+		}
+		return o.addWorkflowEvent(ctx, &ev, reminder.SourceAppID)
 
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
