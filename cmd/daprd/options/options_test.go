@@ -14,6 +14,8 @@ limitations under the License.
 package options
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -385,5 +387,55 @@ func TestDisableInitEndpoints(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, opts.DisableInitEndpoints)
+	})
+}
+
+func TestTrustAnchorsFile(t *testing.T) {
+	t.Run("no env vars set, trust anchors empty and no file", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile)
+		assert.Empty(t, opts.TrustAnchors)
+	})
+
+	t.Run("only DAPR_TRUST_ANCHORS set, use static trust anchors", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS", "anchors-pem")
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, []byte("anchors-pem"), opts.TrustAnchors)
+	})
+
+	t.Run("existing trust anchors file is preferred over static env var", func(t *testing.T) {
+		taFile := filepath.Join(t.TempDir(), "ca.crt")
+		require.NoError(t, os.WriteFile(taFile, []byte("anchors-pem"), 0o600))
+		t.Setenv("DAPR_TRUST_ANCHORS", "static-anchors-pem")
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", taFile)
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		require.NotNil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, taFile, *opts.TrustAnchorsFile)
+		assert.Empty(t, opts.TrustAnchors, "static trust anchors must not be set when the file is used")
+	})
+
+	t.Run("missing trust anchors file falls back to static env var", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS", "static-anchors-pem")
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", filepath.Join(t.TempDir(), "does-not-exist", "ca.crt"))
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile)
+		assert.Equal(t, []byte("static-anchors-pem"), opts.TrustAnchors)
+	})
+
+	t.Run("trust anchors file pointing at a directory falls back to static env var", func(t *testing.T) {
+		t.Setenv("DAPR_TRUST_ANCHORS", "static-anchors-pem")
+		t.Setenv("DAPR_TRUST_ANCHORS_FILE", t.TempDir())
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.TrustAnchorsFile, "a directory is not a usable trust anchors file")
+		assert.Equal(t, []byte("static-anchors-pem"), opts.TrustAnchors)
 	})
 }
