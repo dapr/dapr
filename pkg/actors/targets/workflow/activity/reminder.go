@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 // activityReminderName is the constant name of the per-activity-actor
@@ -90,6 +91,11 @@ func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType,
 		// One shot, retry forever, jittered interval.
 		FailurePolicy: common.RetryForeverPolicy(),
 		Data:          anydata,
+		// The Scheduler only lets another app's result reminder be created,
+		// never replaced; the name is random, so a retry of an unacked
+		// create is the only AlreadyExists, and the retry helper treats it
+		// as success.
+		Overwrite: ptr.Of(false),
 	})
 }
 
