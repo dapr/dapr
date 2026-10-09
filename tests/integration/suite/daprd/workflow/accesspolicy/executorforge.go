@@ -58,7 +58,8 @@ func init() {
 // peer. Only the peer is allowed; every forged result is rejected and never
 // consumed.
 type executorforge struct {
-	appID string
+	appID  string
+	policy bool
 
 	sentry   *sentry.Sentry
 	place    *placement.Placement
@@ -85,6 +86,7 @@ func (e *executorforgenopolicy) Setup(t *testing.T) []framework.Option {
 
 func (e *executorforge) setup(t *testing.T, appID string, policy bool) []framework.Option {
 	e.appID = appID
+	e.policy = policy
 	e.release = make(chan struct{})
 	e.sentry = sentry.New(t)
 	e.place = placement.New(t, placement.WithSentry(t, e.sentry))
@@ -335,6 +337,12 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 	assert.Zero(t, e.sensitive.Load(), "Sensitive activity must never run")
 
 	metrics := e.target.Metrics(t, ctx)
-	assert.InDelta(t, 1.0, metrics.SumWithLabels("dapr_runtime_workflow_acl_action_allowed_total", "type:internal"), 0)
+	// The same-app peer call is only counted as an allowed policy
+	// evaluation when a policy is loaded.
+	allowed := 0.0
+	if e.policy {
+		allowed = 1.0
+	}
+	assert.InDelta(t, allowed, metrics.SumWithLabels("dapr_runtime_workflow_acl_action_allowed_total", "type:internal"), 0)
 	assert.InDelta(t, 7.0, metrics.SumWithLabels("dapr_runtime_workflow_acl_action_denied_total", "type:internal"), 0)
 }

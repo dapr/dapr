@@ -23,7 +23,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/api/universal"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/crypto/test"
 	"github.com/dapr/kit/logger"
@@ -66,6 +68,30 @@ func TestCallActorInternalActorTypeSameApp(t *testing.T) {
 		"retentioner: no identity is allowed":    {ctx: t.Context(), actorType: "dapr.internal.ns1.app1.retentioner", expCode: codes.OK},
 		"user actor type is not checked":         {ctx: otherApp, actorType: "myactortype", expCode: codes.OK},
 	}
+
+	t.Run("no identity is denied when a policy is loaded", func(t *testing.T) {
+		withPolicy := &api{
+			logger:                 a.logger,
+			Universal:              a.Universal,
+			workflowAccessPolicies: workflowacl.NewHolder(),
+		}
+		withPolicy.workflowAccessPolicies.Store(workflowacl.Compile([]wfaclapi.WorkflowAccessPolicy{{}}))
+		require.NotNil(t, withPolicy.workflowAccessPolicies.Load())
+
+		for _, actorType := range []string{"dapr.internal.ns1.app1.executor", "dapr.internal.ns1.app1.retentioner"} {
+			err := withPolicy.callActorValidateWorkflowACL(t.Context(),
+				internalv1pb.NewInternalInvokeRequest("Complete").WithActor(actorType, "id"),
+			)
+			assert.Equal(t, codes.PermissionDenied, status.Code(err), "CallActor %s: %v", actorType, err)
+
+			err = withPolicy.callActorReminderValidateWorkflowACL(t.Context(), &internalv1pb.Reminder{
+				ActorType: actorType,
+				ActorId:   "id",
+				Name:      "reminder",
+			})
+			assert.Equal(t, codes.PermissionDenied, status.Code(err), "CallActorReminder %s: %v", actorType, err)
+		}
+	})
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
