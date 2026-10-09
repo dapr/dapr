@@ -39,6 +39,7 @@ type componentMetrics struct {
 	bulkPubsubIngressCount      *stats.Int64Measure
 	bulkPubsubEventIngressCount *stats.Int64Measure
 	bulkPubsubIngressLatency    *stats.Float64Measure
+	pubsubIngressInFlight       *stats.Int64Measure
 	pubsubEgressCount           *stats.Int64Measure
 	pubsubEgressLatency         *stats.Float64Measure
 	bulkPubsubEgressCount       *stats.Int64Measure
@@ -98,6 +99,10 @@ func newComponentMetrics() *componentMetrics {
 			"component/pubsub_ingress/bulk/latencies",
 			"The consuming app event processing latency for the bulk pub/sub component.",
 			stats.UnitMilliseconds),
+		pubsubIngressInFlight: stats.Int64(
+			"component/pubsub_ingress/in_flight",
+			"The number of messages currently being processed by the app for a subscription.",
+			stats.UnitDimensionless),
 		pubsubEgressCount: stats.Int64(
 			"component/pubsub_egress/count",
 			"The number of outgoing messages published to the pub/sub component.",
@@ -205,6 +210,7 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 		diagUtils.NewMeasureView(c.bulkPubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.bulkPubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.bulkPubsubEventIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
+		diagUtils.NewMeasureView(c.pubsubIngressInFlight, []tag.Key{appIDKey, componentKey, namespaceKey, topicKey}, view.LastValue()),
 		diagUtils.NewMeasureView(c.pubsubEgressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.pubsubEgressCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.bulkPubsubEgressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, latencyDistribution),
@@ -248,6 +254,20 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 				stats.WithTags(diagUtils.WithTags(c.pubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, statusKey, status, topicKey, topic)...),
 				stats.WithMeasurements(c.pubsubIngressLatency.M(elapsed)))
 		}
+	}
+}
+
+// PubsubIngressInFlight records the number of messages a subscription
+// currently has in flight, i.e. handed to the app and not yet resolved. The
+// caller owns the counter and passes its current value; this is a gauge, so
+// each record replaces the last.
+func (c *componentMetrics) PubsubIngressInFlight(ctx context.Context, component, topic string, count int64) {
+	if c.enabled {
+		stats.RecordWithOptions(
+			ctx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(diagUtils.WithTags(c.pubsubIngressInFlight.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic)...),
+			stats.WithMeasurements(c.pubsubIngressInFlight.M(count)))
 	}
 }
 

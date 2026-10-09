@@ -17,5 +17,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/pubsub"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/workflow"
 )
