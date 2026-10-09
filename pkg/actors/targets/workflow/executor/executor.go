@@ -71,7 +71,9 @@ type executor struct {
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	e.wg.Add(1)
+	if err := e.enter(); err != nil {
+		return nil, err
+	}
 	defer e.wg.Done()
 
 	switch req.GetMessage().GetMethod() {
@@ -165,6 +167,18 @@ func (e *executor) cancel() error {
 	return nil
 }
 
+// enter adds a call to wg unless the actor is closed. It holds mu, under
+// which deactivate closes the actor, so no Add can race wg.Wait.
+func (e *executor) enter() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
+		return targeterrors.NewClosed("executor")
+	}
+	e.wg.Add(1)
+	return nil
+}
+
 func (e *executor) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	return errors.New("reminders are not implemented")
 }
@@ -225,7 +239,9 @@ func (e *executor) InvokeStream(ctx context.Context,
 	req *internalsv1pb.InternalInvokeRequest,
 	stream func(*internalsv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	e.wg.Add(1)
+	if err := e.enter(); err != nil {
+		return err
+	}
 	defer e.wg.Done()
 
 	switch req.GetMessage().GetMethod() {
