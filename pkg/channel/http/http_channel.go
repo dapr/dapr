@@ -405,7 +405,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// HTTP/1.1 is unaffected because TCP reads don't check the context.
 	reqCtx := ctx
 	var reqCancel context.CancelFunc
-	if _, ok := h.client.Transport.(*http2.Transport); ok {
+	if _, ok := h.client.Transport.(*http2.Transport); ok { //nolint:staticcheck
 		reqCtx, reqCancel = context.WithCancel(context.WithoutCancel(ctx))
 	}
 

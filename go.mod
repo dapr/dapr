@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.6
+go 1.26.9
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -65,11 +65,11 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.56.0
-	golang.org/x/net v0.58.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
 	gonum.org/v1/plot v0.16.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d
@@ -467,9 +467,9 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.43.0 // indirect
-	golang.org/x/mod v0.40.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
