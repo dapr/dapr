@@ -296,7 +296,7 @@ func startHTTP() {
 func startH2C() {
 	log.Printf("Health App HTTP/2 Cleartext server listening on http://:%s", appPort)
 
-	h2s := &http2.Server{}
+	h2s := &http2.Server{} //nolint:staticcheck
 	srv := &http.Server{
 		Addr:              ":" + appPort,
 		Handler:           h2c.NewHandler(httpRouter(), h2s), //nolint:staticcheck
