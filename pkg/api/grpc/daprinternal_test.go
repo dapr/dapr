@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
@@ -36,6 +37,9 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/crypto/test"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestCallLocal(t *testing.T) {
@@ -399,4 +403,79 @@ func TestCallActorWithTracing(t *testing.T) {
 	resp, err := client.CallActor(t.Context(), request.Proto())
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
+}
+
+// A forwarded reminder's creator is trusted only from a replica of this app,
+// which relays what the Scheduler verified; any other peer is stamped as the
+// creator itself; with no peer identity the claim is taken as is.
+func TestCallActorReminderSourceAppID(t *testing.T) {
+	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/default/target")
+	peerCtx := func(t *testing.T, id string) context.Context {
+		t.Helper()
+		return test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: spiffeid.RequireFromString(id)}).ClientGRPCCtx(t)
+	}
+
+	tests := map[string]struct {
+		ctx       func(*testing.T) context.Context
+		claimed   *string
+		expSource string
+		expCode   codes.Code
+	}{
+		"same app replica relays the verified creator": {
+			ctx:     func(t *testing.T) context.Context { return peerCtx(t, "spiffe://example.org/ns/default/target") },
+			claimed: ptr.Of("creator"), expSource: "creator",
+		},
+		"same app replica with no creator stays unknown": {
+			ctx:       func(t *testing.T) context.Context { return peerCtx(t, "spiffe://example.org/ns/default/target") },
+			expSource: "",
+		},
+		"another app is stamped as the creator whatever it claims": {
+			ctx:     func(t *testing.T) context.Context { return peerCtx(t, "spiffe://example.org/ns/default/other") },
+			claimed: ptr.Of("target"), expSource: "other",
+		},
+		"same app id in another namespace is denied": {
+			ctx:     func(t *testing.T) context.Context { return peerCtx(t, "spiffe://example.org/ns/ns2/target") },
+			claimed: ptr.Of("creator"), expCode: codes.PermissionDenied,
+		},
+		"no peer identity takes the claim as is": {
+			ctx:     func(*testing.T) context.Context { return t.Context() },
+			claimed: ptr.Of("creator"), expSource: "creator",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var got *actorapi.Reminder
+			rtr := routerfake.New().WithCallReminderFn(func(_ context.Context, r *actorapi.Reminder) error {
+				got = r
+				return nil
+			})
+			fakeAPI := &api{
+				logger: logger.NewLogger("test"),
+				Universal: universal.New(universal.Options{
+					AppID:     "target",
+					Namespace: "default",
+					Actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+						return rtr, nil
+					}),
+				}),
+			}
+
+			_, err := fakeAPI.CallActorReminder(tc.ctx(t), &internalv1pb.Reminder{
+				ActorType:   "abc",
+				ActorId:     "id",
+				Name:        "activity-result-abc",
+				SourceAppId: tc.claimed,
+			})
+			if tc.expCode != codes.OK {
+				require.Equal(t, tc.expCode, status.Code(err), "err: %v", err)
+				assert.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, tc.expSource, got.SourceAppID)
+			assert.True(t, got.IsRemote)
+		})
+	}
 }
