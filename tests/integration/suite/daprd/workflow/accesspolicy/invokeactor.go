@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
@@ -42,10 +43,12 @@ func init() {
 	suite.Register(new(invokeactor))
 }
 
-// invokeactor tests that a crafted InvokeActor call on the public gRPC API
-// targeting a remote sidecar's workflow actors is denied by the target's
-// workflow access policy. Bypassing the workflow SDK and using direct actor
-// invocation must not circumvent ACL enforcement.
+// invokeactor tests that crafted calls to a remote sidecar's workflow actors
+// are denied. The public gRPC InvokeActor API rejects the reserved actor
+// type, and the same calls sent to the target's internal CallActor API with
+// the caller's identity are denied by the target's workflow access policy.
+// Bypassing the workflow SDK and using direct actor invocation must not
+// circumvent ACL enforcement.
 type invokeactor struct {
 	sentry   *sentry.Sentry
 	place    *placement.Placement
@@ -144,8 +147,9 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	attackerDaprClient := runtimev1pb.NewDaprClient(ia.attacker.GRPCConn(t, ctx))
+	attackerInternalClient := ia.target.InternalGRPCClient(t, ctx, ia.sentry, ia.attacker.AppID(), ia.attacker.Namespace())
 
-	t.Run("crafted InvokeActor targeting remote workflow actor is denied", func(t *testing.T) {
+	t.Run("crafted InvokeActor targeting remote workflow actor is rejected", func(t *testing.T) {
 		_, err := attackerDaprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 			ActorType: "dapr.internal.default.invokeactor-target.workflow",
 			ActorId:   "crafted-attack-instance",
@@ -153,16 +157,25 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 			Data:      craftedPayload,
 		})
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+	})
+
+	t.Run("crafted CallActor targeting remote workflow actor is denied", func(t *testing.T) {
+		_, err := attackerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("CreateWorkflowInstance").
+				WithActor("dapr.internal.default.invokeactor-target.workflow", "crafted-attack-instance").
+				WithData(craftedPayload),
+		)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
 
-	t.Run("crafted InvokeActor for non-subject method is denied", func(t *testing.T) {
-		_, err := attackerDaprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: "dapr.internal.default.invokeactor-target.workflow",
-			ActorId:   "some-instance",
-			Method:    "AddWorkflowEvent",
-			Data:      []byte{},
-		})
+	t.Run("crafted CallActor for non-subject method is denied", func(t *testing.T) {
+		_, err := attackerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+				WithActor("dapr.internal.default.invokeactor-target.workflow", "some-instance").
+				WithData([]byte{}),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
