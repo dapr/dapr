@@ -70,10 +70,12 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		}
 	}
 
-	if vErr := method.ValidateName(in.GetName()); vErr != nil {
-		vErr = messages.ErrBadRequest.WithFormat(vErr)
-		a.logger.Debug(vErr)
-		return nil, vErr
+	for _, name := range []string{in.GetActorId(), in.GetName()} {
+		if vErr := method.ValidateName(name); vErr != nil {
+			vErr = messages.ErrBadRequest.WithFormat(vErr)
+			a.logger.Debug(vErr)
+			return nil, vErr
+		}
 	}
 
 	req := &api.CreateTimerRequest{
@@ -147,10 +149,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		return nil, err
 	}
 
-	if vErr := method.ValidateName(in.GetName()); vErr != nil {
-		vErr = messages.ErrBadRequest.WithFormat(vErr)
-		a.logger.Debug(vErr)
-		return nil, vErr
+	for _, name := range []string{in.GetActorId(), in.GetName()} {
+		if vErr := method.ValidateName(name); vErr != nil {
+			vErr = messages.ErrBadRequest.WithFormat(vErr)
+			a.logger.Debug(vErr)
+			return nil, vErr
+		}
 	}
 
 	//nolint:protogetter
