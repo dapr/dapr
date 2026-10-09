@@ -263,9 +263,7 @@ func (r *acl) Run(t *testing.T, ctx context.Context) {
 		assert.NotEqualf(t, codes.OK, code, "caller sent method %q, callee received: %s", sent, body)
 	})
 
-	// NormalizeMethod no longer decodes percent-encoding, so
-	// admin%2F..%2Fpublic stays as-is. path.Clean has no / to resolve.
-	// ACL sees /admin%2F..%2Fpublic → doesn't match /public → denied.
+	// NormalizeMethod rejects percent-encoded slashes before ACL evaluation.
 	t.Run("encoded slash traversal", func(t *testing.T) {
 		sent, body, code := invoke(t, "admin%2F..%2Fpublic")
 		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
@@ -346,43 +344,32 @@ func (r *acl) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "/public", body, "callee must receive clean path, not raw traversal")
 	})
 
-	// Percent-encoded slashes (%2F) are literal characters in gRPC methods.
-	// NormalizeMethod does not decode percent-encoding, so path.Clean sees
-	// no '/' separators and cannot resolve traversal. The ACL must also
-	// treat them as literals (not decode them).
+	// gRPC methods are not percent-decoded, so the ACL would see %2F as a
+	// literal character while an HTTP app decodes it to '/'. NormalizeMethod
+	// rejects any method containing %2F before ACL evaluation.
 
 	t.Run("encoded slash without traversal", func(t *testing.T) {
-		// admin%2Fpublic is a single opaque segment — no path separator.
-		// ACL sees /admin%2Fpublic → doesn't match /public → denied.
 		sent, body, code := invoke(t, "admin%2Fpublic")
 		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
 	})
 
 	t.Run("double encoded slash traversal", func(t *testing.T) {
-		// admin%2F..%2F..%2Fpublic is opaque — no real slashes for traversal.
 		sent, body, code := invoke(t, "admin%2F..%2F..%2Fpublic")
 		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
 	})
 
 	t.Run("encoded slash from nested denied path", func(t *testing.T) {
-		// admin%2Fsecret%2F..%2F..%2Fpublic is opaque.
 		sent, body, code := invoke(t, "admin%2Fsecret%2F..%2F..%2Fpublic")
 		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
 	})
 
-	// Mixed literal and encoded slashes: the literal / is the only path
-	// separator. path.Clean resolves ../ relative to real segments.
-
 	t.Run("mixed literal and encoded slash traversal", func(t *testing.T) {
-		// admin%2Fsecret/../public → path.Clean sees one real '/' between
-		// "admin%2Fsecret" and ".." → resolves to "public" → ACL allows.
 		sent, body, code := invoke(t, "admin%2Fsecret/../public")
-		assert.Equalf(t, codes.OK, code, "caller sent method %q, callee received: %s", sent, body)
-		assert.Equal(t, "public", body)
+		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
+		assert.Contains(t, body, "invalid method")
 	})
 
 	t.Run("traversal with encoded slash to denied path", func(t *testing.T) {
-		// public/../admin%2Fsecret → resolves to "admin%2Fsecret" → denied.
 		sent, body, code := invoke(t, "public/../admin%2Fsecret")
 		assert.Equalf(t, codes.Internal, code, "caller sent method %q, callee received: %s", sent, body)
 	})
