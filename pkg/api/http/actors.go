@@ -414,13 +414,18 @@ func (a *api) onDeleteActorTimer() http.HandlerFunc {
 func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	if err := a.universal.RejectInternalActorType(actorType); err != nil {
+		respondWithError(w, err)
+		return
+	}
+
 	router, err := a.universal.ActorRouter(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
 
-	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	for _, param := range []struct{ name, val string }{
 		{"actorType", actorType}, {"actorId", actorID},

@@ -22,6 +22,24 @@ import (
 
 var log = logger.NewLogger("dapr.acl.workflow")
 
+const (
+	DeniedMessageBase = "access denied by workflow access policy"
+
+	// DeniedInternalActorMessage is returned when a reserved internal actor
+	// type is called from another app, regardless of whether a
+	// WorkflowAccessPolicy is loaded.
+	DeniedInternalActorMessage = "reserved internal actor type '%s' can only be called by a sidecar with the same app ID and namespace"
+)
+
+// DenialReason is for local metrics/logging only; never put on the wire.
+type DenialReason string
+
+const (
+	DenialReasonNone          DenialReason = ""
+	DenialReasonNotAllowed    DenialReason = "NotAllowed"
+	DenialReasonRequiresUnmet DenialReason = "RequiresUnmet"
+)
+
 // CompiledPolicies holds pre-processed workflow access policies for a single
 // target app, built from one or more WorkflowAccessPolicy resources scoped to
 // the app. The policy is a pure allow-list: presence of a matching rule
