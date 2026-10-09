@@ -226,7 +226,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	// Prepare gRPC Metadata
-	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
+	ctx = grpcMetadata.NewOutgoingContext(ctx, md)
 
 	conn, teardown, err := g.connFn()
 	if err != nil {
