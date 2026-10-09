@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -134,4 +135,37 @@ func Test_handleJob_ErrReminderCanceled_localSentinel(t *testing.T) {
 			assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, got)
 		})
 	}
+}
+
+func Test_invokeActorReminder_SourceAppID(t *testing.T) {
+	t.Parallel()
+
+	var got *actorapi.Reminder
+	actors := routerfake.New().WithCallReminderFn(
+		func(_ context.Context, r *actorapi.Reminder) error {
+			got = r
+			return nil
+		},
+	)
+	s := &streamer{actors: actors, wfengine: wfenginefake.New()}
+
+	job := &schedulerv1pb.WatchJobsResponse{
+		Name: "activity-result-abc",
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     "creator",
+			Namespace: "default",
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{Type: "dapr.internal.default.target.workflow", Id: "instance-1"},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, s.invokeActorReminder(t.Context(), job))
+	require.NotNil(t, got)
+	assert.Equal(t, "creator", got.SourceAppID)
+	assert.Equal(t, "activity-result-abc", got.Name)
+	assert.Equal(t, "dapr.internal.default.target.workflow", got.ActorType)
+	assert.Equal(t, "instance-1", got.ActorID)
 }

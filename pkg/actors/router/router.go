@@ -314,6 +314,10 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
+	var sourceAppID *string
+	if reminder.SourceAppID != "" {
+		sourceAppID = &reminder.SourceAppID
+	}
 	_, err = client.CallActorReminder(ctx, &internalv1pb.Reminder{
 		ActorId:        reminder.ActorID,
 		ActorType:      reminder.ActorType,
@@ -325,6 +329,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
 		IsTimer:        reminder.IsTimer,
 		SkipLock:       reminder.SkipLock,
+		SourceAppId:    sourceAppID,
 	})
 
 	return err

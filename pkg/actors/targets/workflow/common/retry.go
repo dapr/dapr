@@ -53,11 +53,21 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && !isTransientCreateError(err) {
+		if isCreated(err) {
+			return nil
+		}
+		if !isTransientCreateError(err) {
 			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(bo, ctx))
+}
+
+// isCreated reports whether a Create left the reminder in place. A create
+// without overwrite answers AlreadyExists when a retry follows a create whose
+// success was lost in transit; the reminder is there, which is the goal.
+func isCreated(err error) bool {
+	return err == nil || status.Code(err) == codes.AlreadyExists
 }
 
 // isTransientCreateError reports whether a reminder Create error should be

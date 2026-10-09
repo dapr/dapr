@@ -230,6 +230,9 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		ActorID:   actor.GetId(),
 		Data:      job.GetData(),
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
+		// Verified by the scheduler against the creator's SPIFFE ID at
+		// schedule time and echoed back on trigger.
+		SourceAppID: job.GetMetadata().GetAppId(),
 	})
 	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
 	if err != nil {

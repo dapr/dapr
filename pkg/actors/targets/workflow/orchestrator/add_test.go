@@ -22,7 +22,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -152,9 +151,7 @@ func Test_addWorkflowEvent_dedupReAssertsReminder(t *testing.T) {
 		},
 	}
 
-	incomingBytes, err := proto.Marshal(incoming)
-	require.NoError(t, err)
-	require.NoError(t, o.addWorkflowEvent(t.Context(), incomingBytes))
+	require.NoError(t, o.addWorkflowEvent(t.Context(), incoming, ""))
 
 	mu.Lock()
 	defer mu.Unlock()
