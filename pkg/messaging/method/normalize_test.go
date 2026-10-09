@@ -146,6 +146,18 @@ func TestValidateName(t *testing.T) {
 		require.Error(t, ValidateName("test\revil"))
 	})
 
+	t.Run("rejects percent-encoded slash, backslash and dot", func(t *testing.T) {
+		for _, n := range []string{"..%2F..%2Fadmin", "a%2fb", "a%5Cb", "a%5cb", "%2E%2E", "%2e"} {
+			require.Errorf(t, ValidateName(n), "name %q", n)
+		}
+	})
+
+	t.Run("allows other percent-encoded sequences", func(t *testing.T) {
+		for _, n := range []string{"a%20b", "a%252Fb", "100%"} {
+			require.NoErrorf(t, ValidateName(n), "name %q", n)
+		}
+	})
+
 	t.Run("rejects double-dot", func(t *testing.T) {
 		require.Error(t, ValidateName(".."))
 	})

@@ -19,13 +19,18 @@ import (
 	"strings"
 )
 
-// ValidateName checks that a name (e.g. reminder or timer name) does not
-// contain characters that could cause path traversal or injection when the
-// name is embedded in a URL path. Unlike NormalizeMethod, this rejects any
-// name containing '/' or '\' since names are identifiers, not paths.
+// ValidateName checks that a name (e.g. an actor type, actor ID, reminder or
+// timer name) does not contain characters that could cause path traversal or
+// injection when the name is embedded in a URL path. Unlike NormalizeMethod,
+// this rejects any name containing '/' or '\' since names are identifiers,
+// not paths, and, like NormalizeMethod, a percent-encoded '/', '\' or '.',
+// which the app would decode into a path segment.
 func ValidateName(name string) error {
 	if strings.ContainsAny(name, "#?\x00/\\") {
 		return fmt.Errorf("name contains forbidden character: %q", name)
+	}
+	if hasEncodedSeparator(name) {
+		return fmt.Errorf("name contains percent-encoded '/', '\\' or '.': %q", name)
 	}
 	for i := range name {
 		b := name[i]
@@ -53,8 +58,7 @@ func NormalizeMethod(method string) (string, error) {
 		return "", fmt.Errorf("method contains forbidden character: %q", method)
 	}
 
-	lower := strings.ToLower(method)
-	if strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2e") {
+	if hasEncodedSeparator(method) {
 		return "", fmt.Errorf("method contains percent-encoded '/', '\\' or '.': %q", method)
 	}
 
@@ -82,4 +86,11 @@ func NormalizeMethod(method string) (string, error) {
 	}
 
 	return cleaned, nil
+}
+
+// hasEncodedSeparator reports whether s contains a percent-encoded '/', '\' or
+// '.' (%2F, %5C, %2E in any case).
+func hasEncodedSeparator(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2e")
 }
