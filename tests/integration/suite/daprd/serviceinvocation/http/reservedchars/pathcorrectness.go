@@ -78,7 +78,7 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode, string(body)
 	}
 
-	// Forbidden characters: encoded #, ?, % are rejected after decoding.
+	// Forbidden characters: encoded #, ?, \ are rejected after decoding.
 	t.Run("encoded hash is rejected", func(t *testing.T) {
 		status, _ := invoke(t, "test%23stream")
 		assert.Equal(t, http.StatusInternalServerError, status)
@@ -86,6 +86,11 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("encoded question mark is rejected", func(t *testing.T) {
 		status, _ := invoke(t, "test%3Fstream")
+		assert.Equal(t, http.StatusInternalServerError, status)
+	})
+
+	t.Run("encoded backslash is rejected", func(t *testing.T) {
+		status, _ := invoke(t, "test%5Cstream")
 		assert.Equal(t, http.StatusInternalServerError, status)
 	})
 
@@ -125,12 +130,6 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "/test*stream|", body)
 	})
 
-	t.Run("backslash in path", func(t *testing.T) {
-		status, body := invoke(t, "test%5Cstream")
-		assert.Equal(t, http.StatusOK, status)
-		assert.Equal(t, `/test\stream|`, body)
-	})
-
 	// Traversal: resolved by path.Clean, callee gets the clean path.
 	t.Run("encoded traversal is resolved", func(t *testing.T) {
 		status, body := invoke(t, "admin%2F..%2Fpublic")
@@ -163,10 +162,10 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "/test*stream|", body)
 	})
 
-	t.Run("literal backslash in path", func(t *testing.T) {
-		status, body := invoke(t, `test\stream`)
-		assert.Equal(t, http.StatusOK, status)
-		assert.Equal(t, `/test\stream|`, body)
+	t.Run("literal backslash in path is rejected", func(t *testing.T) {
+		// Go's HTTP client sends a literal backslash as %5C.
+		status, _ := invoke(t, `test\stream`)
+		assert.Equal(t, http.StatusInternalServerError, status)
 	})
 
 	// dapr-app-id header path: the method is the entire URL path.

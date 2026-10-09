@@ -54,7 +54,7 @@ func NewHTTPClient(allowHTTP2 bool) *http.Client {
 			Timeout: DefaultProbeTimeout,
 			// Configure for HTT/2 Cleartext (without TLS) and with prior knowledge
 			// (RFC7540 Section 3.2)
-			Transport: &http2.Transport{
+			Transport: &http2.Transport{ //nolint:staticcheck
 				// Make the transport accept scheme "http:"
 				AllowHTTP: true,
 				// Pretend we are dialing a TLS endpoint
