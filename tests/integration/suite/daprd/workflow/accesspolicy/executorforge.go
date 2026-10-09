@@ -29,7 +29,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -43,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -103,7 +103,16 @@ func (e *executorforge) setup(t *testing.T, appID string, policy bool) []framewo
 
 	targetOpts := append([]daprd.Option{
 		daprd.WithAppID(e.appID),
-		daprd.WithFeatureEnabled(t, "WorkflowsClusteredDeployment"),
+		daprd.WithConfigManifests(t, `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: workflowsclustereddeployment
+spec:
+  features:
+  - name: WorkflowsClusteredDeployment
+    enabled: true
+`),
 	}, shared...)
 	if policy {
 		// Only an app that does not exist is allowed.
@@ -207,10 +216,9 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		return data
 	}
-	req := func(method, actorID, taskType string, data []byte) *internalv1pb.InternalInvokeRequest {
+	req := func(method, actorID string, data []byte) *internalv1pb.InternalInvokeRequest {
 		r := internalv1pb.NewInternalInvokeRequest(method).
-			WithActor(executorActorType, actorID).
-			WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
+			WithActor(executorActorType, actorID)
 		if data != nil {
 			r = r.WithData(data)
 		}
@@ -255,7 +263,9 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 	)
 	schedule(t, live)
 	waitStarted(t, live)
-	liveActorID := common.ActivityActorID(live, 0)
+	// The executor actor of an activity is keyed by its execution key, and
+	// that of a workflow turn by the instance ID.
+	liveActorID := backend.GetActivityExecutionKey(live, 0)
 
 	t.Run("actor invoke API rejects the executor actor type", func(t *testing.T) {
 		_, err := e.attacker.GRPCClient(t, ctx).InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
@@ -263,35 +273,34 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 			ActorId:   liveActorID,
 			Method:    executor.MethodComplete,
 			Data:      activityResult(t, live, "ATTACKER_APPROVED"),
-			Metadata:  map[string]string{executor.MetadataTaskType: executor.TaskTypeActivity},
 		})
 		require.ErrorContains(t, err, "reserved for the Dapr workflow runtime")
 	})
 
 	t.Run("internal CallActor from another app is denied", func(t *testing.T) {
-		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, liveActorID, executor.TaskTypeActivity, activityResult(t, live, "ATTACKER_APPROVED")))
+		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, liveActorID, activityResult(t, live, "ATTACKER_APPROVED")))
 		denied(t, err)
 	})
 
 	t.Run("internal Cancel from another app is denied", func(t *testing.T) {
-		_, err := attacker.CallActor(ctx, req(executor.MethodCancel, liveActorID, executor.TaskTypeActivity, nil))
+		_, err := attacker.CallActor(ctx, req(executor.MethodCancel, liveActorID, nil))
 		denied(t, err)
 	})
 
-	t.Run("internal Claim from another app is denied", func(t *testing.T) {
-		_, err := attacker.CallActor(ctx, req(executor.MethodClaim, liveActorID, executor.TaskTypeActivity, nil))
+	t.Run("internal Register from another app is denied", func(t *testing.T) {
+		_, err := attacker.CallActor(ctx, req(executor.MethodRegister, liveActorID, nil))
 		denied(t, err)
 	})
 
 	t.Run("internal WatchComplete stream from another app is denied", func(t *testing.T) {
-		stream, err := attacker.CallActorStream(ctx, req(executor.MethodWatchComplete, liveActorID, executor.TaskTypeActivity, nil))
+		stream, err := attacker.CallActorStream(ctx, req(executor.MethodWatchComplete, liveActorID, nil))
 		require.NoError(t, err)
 		_, err = stream.Recv()
 		denied(t, err)
 	})
 
 	t.Run("pre-seeded activity result from another app is denied", func(t *testing.T) {
-		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, common.ActivityActorID(preseed, 0), executor.TaskTypeActivity, activityResult(t, preseed, "ATTACKER_APPROVED")))
+		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, backend.GetActivityExecutionKey(preseed, 0), activityResult(t, preseed, "ATTACKER_APPROVED")))
 		denied(t, err)
 	})
 
@@ -302,7 +311,7 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 				Result:         wrapperspb.String(`"FORGED_TURN"`),
 			},
 		}})
-		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, wfTurn, executor.TaskTypeWorkflow, data))
+		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, wfTurn, data))
 		denied(t, err)
 	})
 
@@ -310,19 +319,19 @@ func (e *executorforge) Run(t *testing.T, ctx context.Context) {
 		data := workflowResult(t, inject, &protos.WorkflowAction{WorkflowActionType: &protos.WorkflowAction_ScheduleTask{
 			ScheduleTask: &protos.ScheduleTaskAction{Name: "Sensitive", Input: wrapperspb.String(`"evil"`)},
 		}})
-		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, inject, executor.TaskTypeWorkflow, data))
+		_, err := attacker.CallActor(ctx, req(executor.MethodComplete, inject, data))
 		denied(t, err)
 	})
 
 	t.Run("same app from another namespace is denied", func(t *testing.T) {
-		_, err := otherNS.CallActor(ctx, req(executor.MethodComplete, liveActorID, executor.TaskTypeActivity, activityResult(t, live, "OTHER_NAMESPACE")))
+		_, err := otherNS.CallActor(ctx, req(executor.MethodComplete, liveActorID, activityResult(t, live, "OTHER_NAMESPACE")))
 		deniedWith(t, err, "access denied by workflow access policy")
 	})
 
 	t.Run("same app peer is allowed and its result consumed", func(t *testing.T) {
 		schedule(t, peerWF)
 		waitStarted(t, peerWF)
-		_, err := peer.CallActor(ctx, req(executor.MethodComplete, common.ActivityActorID(peerWF, 0), executor.TaskTypeActivity, activityResult(t, peerWF, "PEER_LEGIT")))
+		_, err := peer.CallActor(ctx, req(executor.MethodComplete, backend.GetActivityExecutionKey(peerWF, 0), activityResult(t, peerWF, "PEER_LEGIT")))
 		require.NoError(t, err)
 		waitCompleted(t, peerWF, "PEER_LEGIT")
 	})
