@@ -1,6 +1,6 @@
 module controllergen
 
-go 1.26.6
+go 1.26.9
 
 require sigs.k8s.io/controller-tools v0.17.0
 
