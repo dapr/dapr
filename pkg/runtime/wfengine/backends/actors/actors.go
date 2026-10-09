@@ -940,6 +940,9 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 			log.Warnf("Ignoring complete task which no longer exists: %s", err)
 			return nil
 
+		case errors.Is(err, local.ErrAmbiguousCompletion):
+			return backoff.Permanent(err)
+
 		case abe.stopped.Load():
 			return backoff.Permanent(err)
 

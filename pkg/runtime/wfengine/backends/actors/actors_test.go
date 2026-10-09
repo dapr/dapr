@@ -14,11 +14,14 @@ limitations under the License.
 package actors
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/durabletask-go/backend/local"
 )
 
 func TestUniqueEventTimestamp(t *testing.T) {
@@ -56,4 +59,15 @@ func TestUniqueEventTimestamp(t *testing.T) {
 			seen[v] = struct{}{}
 		}
 	})
+}
+
+func Test_callWithBackoffDoesNotRetryAmbiguousCompletion(t *testing.T) {
+	abe := &Actors{}
+	var calls int
+	err := abe.callWithBackoff(t.Context(), func() error {
+		calls++
+		return fmt.Errorf("activity task wf1/0: %w", local.ErrAmbiguousCompletion)
+	})
+	require.ErrorIs(t, err, local.ErrAmbiguousCompletion)
+	assert.Equal(t, 1, calls)
 }
