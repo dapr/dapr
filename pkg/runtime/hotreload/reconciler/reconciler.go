@@ -123,6 +123,7 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
+			auth:   opts.Authorizer,
 		},
 	}
 	r.loop = loopFactory.NewLoop(r)
