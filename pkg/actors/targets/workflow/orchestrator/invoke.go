@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
@@ -138,7 +139,53 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev, completionSender{})
+		// The Scheduler lets any app in the namespace create a reminder
+		// under this name on this actor. Only an activity result belongs
+		// here, plus the child failure this app synthesises for itself
+		// (failChildWorkflowTask): anything else (a raised event, a
+		// termination, a timer firing that the persistable inbox cannot
+		// hold) is acked and dropped, whoever sent it.
+		_, _, isResolution := activityResolution(&ev)
+		isChild := ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
+		ownChild := isChild && (reminder.SourceAppID == "" || reminder.SourceAppID == o.appID)
+		if !isResolution && !ownChild {
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': payload is not an activity result (%T)", o.actorID, reminder.Name, reminder.SourceAppID, ev.GetEventType())
+			return nil
+		}
+		sender := completionSender{appID: reminder.SourceAppID}
+		err := o.addWorkflowEvent(ctx, &ev, sender)
+		if common.IsSchedulingNotDurable(err) {
+			// This reminder IS the retry chain for the refusal, and it
+			// retries forever, so each fire drops the cache and reads again
+			// across the store's lag. Bounded, though: a completion whose
+			// scheduling is still committing resolves within the commit
+			// timeout, and one still refused past it is not ahead of its row
+			// but a straggler no history will ever admit.
+			//
+			// The timestamp is stamped by the host that ran the activity, so
+			// it is read against another clock; at this granularity skew is
+			// noise, and an event carrying none reads as ancient and is
+			// dropped, which is the safe direction. The creator chooses the
+			// stamp, though, and any app in the namespace may create this
+			// reminder: a stamp far in the future would otherwise never
+			// leave the window and keep the retries going forever, so one
+			// more than the window ahead of this clock is as expired as one
+			// more than the window behind it.
+			o.invalidateCachedState()
+			window := common.SchedulingDurableWindow()
+			if age := time.Since(ev.GetTimestamp().AsTime()); -window < age && age < window {
+				return err
+			}
+			// Past the bound this fire is the last word, and the refusal was
+			// judged on whatever history the actor held: judge once more on
+			// the reload the invalidate above forces before giving up.
+			err = o.addWorkflowEvent(ctx, &ev, sender)
+			if common.IsSchedulingNotDurable(err) {
+				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not become durable: %v", o.actorID, reminder.Name, err)
+				return nil
+			}
+			// Anything else the re-judge produced belongs to the arm below.
+		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever
