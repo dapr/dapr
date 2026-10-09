@@ -15,6 +15,7 @@ package reservedchars
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -206,5 +207,80 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		status, body := invokeViaHeader(t, "/admin%2F..%2Fpublic")
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "/public|", body)
+	})
+
+	// Trailing slash: preserved end-to-end. path.Clean strips a trailing
+	// slash by design; cleanPath re-attaches it after path.Clean runs so
+	// path traversal is still resolved, and the callee sees exactly what
+	// the caller intended (dapr/dapr#7686).
+
+	t.Run("invoke URL: trailing slash preserved", func(t *testing.T) {
+		status, body := invoke(t, "foo/bar/")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/foo/bar/|", body)
+	})
+
+	t.Run("invoke URL: no trailing slash stays without one", func(t *testing.T) {
+		status, body := invoke(t, "foo/bar")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/foo/bar|", body)
+	})
+
+	t.Run("invoke URL: traversal with trailing slash resolves and preserves slash", func(t *testing.T) {
+		status, body := invoke(t, "admin/../public/")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/public/|", body)
+	})
+
+	t.Run("invoke URL: encoded traversal with trailing slash resolves and preserves slash", func(t *testing.T) {
+		status, body := invoke(t, "admin%2F..%2Fpublic/")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/public/|", body)
+	})
+
+	t.Run("invoke URL: duplicate slashes collapsed but trailing slash preserved", func(t *testing.T) {
+		status, body := invoke(t, "/foo//bar//")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/foo/bar/|", body)
+	})
+
+	t.Run("invoke URL: root method with trailing slash", func(t *testing.T) {
+		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/", r.caller.HTTPPort(), r.callee.AppID())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "/|", string(body))
+	})
+
+	t.Run("Basic Auth: trailing slash preserved", func(t *testing.T) {
+		reqURL := fmt.Sprintf("http://localhost:%d/foo/bar/", r.caller.HTTPPort())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+		creds := base64.StdEncoding.EncodeToString([]byte("dapr-app-id:" + r.callee.AppID()))
+		req.Header.Set("Authorization", "Basic "+creds)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "/foo/bar/|", string(body))
+	})
+
+	t.Run("header: trailing slash preserved", func(t *testing.T) {
+		status, body := invokeViaHeader(t, "/foo/bar/")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/foo/bar/|", body)
+	})
+
+	t.Run("header: root with trailing slash", func(t *testing.T) {
+		status, body := invokeViaHeader(t, "/")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/|", body)
 	})
 }

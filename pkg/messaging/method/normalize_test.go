@@ -100,6 +100,25 @@ func TestNormalizeMethod(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "api/v1/users", got)
 	})
+
+	// Trailing slash preservation (issue #7686)
+	t.Run("preserves trailing slash", func(t *testing.T) {
+		got, err := NormalizeMethod("foo/bar/")
+		require.NoError(t, err)
+		assert.Equal(t, "foo/bar/", got)
+	})
+
+	t.Run("preserves trailing slash with traversal resolved", func(t *testing.T) {
+		got, err := NormalizeMethod("admin/../public/")
+		require.NoError(t, err)
+		assert.Equal(t, "public/", got)
+	})
+
+	t.Run("root slash stays as empty", func(t *testing.T) {
+		got, err := NormalizeMethod("/")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
 }
 
 func TestValidateName(t *testing.T) {

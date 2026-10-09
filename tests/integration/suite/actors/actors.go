@@ -27,4 +27,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/schedulerplacement"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/trailingslash"
 )
