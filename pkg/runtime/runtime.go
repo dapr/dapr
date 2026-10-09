@@ -495,6 +495,12 @@ func newDaprRuntime(ctx context.Context,
 		inProcessExec.Run,
 	)
 
+	if runtimeConfig.onShutdownStart != nil {
+		if err := rt.runnerCloser.AddCloser(runtimeConfig.onShutdownStart); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
 			log.Info("Dapr is shutting down")
