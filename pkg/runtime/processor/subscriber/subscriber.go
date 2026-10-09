@@ -108,6 +108,9 @@ func New(opts Options) *Subscriber {
 
 func (s *Subscriber) Run(ctx context.Context) error {
 	<-ctx.Done()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.closed.Store(true)
 	s.cancelAllRetries()
 

@@ -137,6 +137,8 @@ type DaprRuntime struct {
 	clock                 clock.Clock
 	reloader              *hotreload.Reloader
 
+	grpcServersLock    sync.Mutex
+	grpcServersClosed  bool
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
 	// grpcInternalServerListener is bound early (before components are
@@ -458,7 +460,7 @@ func newDaprRuntime(ctx context.Context,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 
-			if server := rt.grpcInternalServer; server != nil {
+			if server := rt.closingGRPCServer(&rt.grpcInternalServer); server != nil {
 				// Closing the server also closes the reserved listener it was
 				// handed. If the server was never started, initRuntime's defer
 				// (closeUnstartedInternalGRPCListener) releases the reserved
@@ -471,7 +473,7 @@ func newDaprRuntime(ctx context.Context,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 
-			if server := rt.grpcAPIServer; server != nil {
+			if server := rt.closingGRPCServer(&rt.grpcAPIServer); server != nil {
 				return server.Close()
 			}
 
@@ -1141,6 +1143,12 @@ func (a *DaprRuntime) closeUnstartedInternalGRPCListener() error {
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	if a.grpcServersClosed {
+		return errGRPCServersClosed
+	}
+
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	server := grpc.NewInternalServer(grpc.OptionsInternal{
@@ -1167,7 +1175,23 @@ func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API)
 	return nil
 }
 
+var errGRPCServersClosed = errors.New("gRPC servers are closed, runtime is shutting down")
+
+// closingGRPCServer stops new gRPC servers from starting and returns server.
+func (a *DaprRuntime) closingGRPCServer(server *grpc.Server) grpc.Server {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	a.grpcServersClosed = true
+	return *server
+}
+
 func (a *DaprRuntime) startGRPCAPIServer(ctx context.Context, api grpc.API, port int) error {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	if a.grpcServersClosed {
+		return errGRPCServersClosed
+	}
+
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	a.grpcAPIServer = grpc.NewAPIServer(grpc.Options{
 		API:            api,
