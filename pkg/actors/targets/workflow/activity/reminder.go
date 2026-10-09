@@ -29,6 +29,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 func (a *activity) createReminder(ctx context.Context, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
@@ -90,5 +91,10 @@ func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType,
 			},
 		},
 		Data: anydata,
+		// The Scheduler only lets another app's result reminder be created,
+		// never replaced; the name is random, so a retry of an unacked
+		// create is the only AlreadyExists, and the retry helper treats it
+		// as success.
+		Overwrite: ptr.Of(false),
 	})
 }
