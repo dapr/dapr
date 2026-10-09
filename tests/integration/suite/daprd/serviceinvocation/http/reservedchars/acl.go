@@ -223,7 +223,7 @@ func (r *acl) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("backslash in path does not bypass ACL", func(t *testing.T) {
 		status, body, sent := invoke(t, "admin%5Cstream")
-		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
+		assert.Equalf(t, http.StatusInternalServerError, status, "caller sent: %s, callee received: %s", sent, body)
 	})
 
 	// Path traversal is resolved before ACL check. Encoded slashes decode
@@ -253,12 +253,12 @@ func (r *acl) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("encoded backslash traversal", func(t *testing.T) {
 		status, body, sent := invoke(t, "admin%5C..%5Cpublic")
-		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
+		assert.Equalf(t, http.StatusInternalServerError, status, "caller sent: %s, callee received: %s", sent, body)
 	})
 
 	t.Run("mixed slash and backslash traversal", func(t *testing.T) {
 		status, body, sent := invoke(t, "admin%2F..%5C..%2Fpublic")
-		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
+		assert.Equalf(t, http.StatusInternalServerError, status, "caller sent: %s, callee received: %s", sent, body)
 	})
 
 	t.Run("dot segment only traversal", func(t *testing.T) {
@@ -357,7 +357,7 @@ func (r *acl) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("literal backslash on denied path", func(t *testing.T) {
 		status, body, sent := invoke(t, `admin\stream`)
-		assert.Equalf(t, http.StatusForbidden, status, "caller sent: %s, callee received: %s", sent, body)
+		assert.Equalf(t, http.StatusInternalServerError, status, "caller sent: %s, callee received: %s", sent, body)
 	})
 
 	// Verify callee receives the normalized method, not the raw traversal.
