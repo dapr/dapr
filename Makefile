@@ -340,6 +340,7 @@ test: test-deps
 # Note: CGO is required for tests with "-race"
 TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/actors \
+./pkg/actors/internal/placement/... \
 ./pkg/apis/... \
 ./pkg/apphealth/... \
 ./pkg/buildinfo/... \

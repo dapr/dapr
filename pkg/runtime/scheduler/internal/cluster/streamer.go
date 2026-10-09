@@ -56,11 +56,9 @@ func (s *streamer) run(ctx context.Context) error {
 // receive is a long running blocking process which listens for incoming
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
+// It must not call CloseSend; outgoing owns the send side.
 func (s *streamer) receive(ctx context.Context) error {
-	defer func() {
-		s.wg.Wait()
-		s.stream.CloseSend()
-	}()
+	defer s.wg.Wait()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -102,6 +100,7 @@ func (s *streamer) receive(ctx context.Context) error {
 // results back to the Scheduler. Ack messages are collected via a channel to
 // ensure they are sent unary over the stream- gRPC does not support parallel
 // message sends.
+// It is the only caller of Send and CloseSend.
 func (s *streamer) outgoing(ctx context.Context) error {
 	defer s.stream.CloseSend()
 
