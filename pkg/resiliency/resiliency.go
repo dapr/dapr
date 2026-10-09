@@ -634,14 +634,11 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
-				cache, ok := r.serviceCBs[app]
-				if ok {
-					policyDef.cb, ok = cache.Get(endpoint)
-					if !ok || policyDef.cb == nil {
-						policyDef.cb = newCB(endpoint, template, r.log)
-						cache.Add(endpoint, policyDef.cb)
-					}
+				serviceCBCache, err := r.getServiceCBCache(app)
+				if err != nil {
+					r.log.Errorf("error getting circuit breaker cache for app %s: %s", app, err)
 				}
+				policyDef.cb = r.getCBFromCache(serviceCBCache, endpoint, template)
 			}
 		}
 	} else {
@@ -768,21 +765,19 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
-				cache, ok := r.actorCBCaches[actorType]
-				if ok {
-					var key string
-					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
-						key = actorType
-					} else {
-						key = actorType + "-" + id
-					}
-
-					policyDef.cb, ok = cache.Get(key)
-					if !ok || policyDef.cb == nil {
-						policyDef.cb = newCB(key, template, r.log)
-						cache.Add(key, policyDef.cb)
-					}
+				actorCBCache, err := r.getActorCBCache(actorType)
+				if err != nil {
+					r.log.Errorf("error getting circuit breaker cache for actor type %s: %v", actorType, err)
 				}
+
+				var key string
+				if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
+					key = actorType
+				} else {
+					key = actorType + "-" + id
+				}
+
+				policyDef.cb = r.getCBFromCache(actorCBCache, key, template)
 			}
 		}
 	} else {
