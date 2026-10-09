@@ -147,7 +147,23 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		sender := completionSender{parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name)}
+		// The Scheduler lets any app in the namespace create a reminder
+		// under this name on this actor. Only an activity result belongs
+		// here, plus the child failure this app synthesises for itself
+		// (failTaskViaReminder): anything else (a raised event, a
+		// termination, a timer firing that the persistable inbox cannot
+		// hold) is acked and dropped, whoever sent it.
+		_, _, isResolution := activityResolution(&ev)
+		isChild := ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
+		ownChild := isChild && (reminder.SourceAppID == "" || reminder.SourceAppID == o.appID)
+		if !isResolution && !ownChild {
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': payload is not an activity result (%T)", o.actorID, reminder.Name, reminder.SourceAppID, ev.GetEventType())
+			return nil
+		}
+		sender := completionSender{
+			parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name),
+			appID:             reminder.SourceAppID,
+		}
 		err := o.addWorkflowEvent(ctx, &ev, sender)
 		if common.IsSchedulingNotDurable(err) {
 			// This reminder IS the retry chain for the refusal, and it
@@ -161,9 +177,15 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 			// The timestamp is stamped by the host that ran the activity, so
 			// it is read against another clock; at this granularity skew is
 			// noise, and an event carrying none reads as ancient and is
-			// dropped, which is the safe direction.
+			// dropped, which is the safe direction. The creator chooses the
+			// stamp, though, and any app in the namespace may create this
+			// reminder: a stamp far in the future would otherwise never
+			// leave the window and keep the storm going forever, so one more
+			// than the window ahead of this clock is as expired as one more
+			// than the window behind it.
 			o.invalidateCachedState()
-			if time.Since(ev.GetTimestamp().AsTime()) < common.SchedulingDurableWindow() {
+			window := common.SchedulingDurableWindow()
+			if age := time.Since(ev.GetTimestamp().AsTime()); -window < age && age < window {
 				return err
 			}
 			// Past the bound this fire is the last word, and the refusal was

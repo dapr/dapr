@@ -90,7 +90,7 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		return string(resp.GetData().GetValue()), codes.OK
 	}
 
-	// Methods containing #, ?, or \x00 are rejected by NormalizeMethod.
+	// Methods containing #, ?, \ or \x00 are rejected by NormalizeMethod.
 	// (% is no longer forbidden since NormalizeMethod no longer decodes.)
 	rejectedTests := []struct {
 		name   string
@@ -100,6 +100,7 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 		{name: "question mark in method", method: "test?stream"},
 		{name: "null byte in method", method: "test\x00stream"},
 		{name: "carriage return in method", method: "test\rstream"},
+		{name: "backslash in method", method: `test\stream`},
 		{name: "multiple reserved characters", method: "a#b?c%d"},
 	}
 
@@ -130,11 +131,6 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 			expectedMethod: "test*stream",
 		},
 		{
-			name:           "backslash in method",
-			method:         `test\stream`,
-			expectedMethod: `test\stream`,
-		},
-		{
 			name:           "percent in method",
 			method:         "test%stream",
 			expectedMethod: "test%stream",
@@ -163,21 +159,18 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 			"callee should receive the resolved path, not the raw traversal")
 	})
 
-	// Percent-encoded slashes (%2F) are literal characters in gRPC.
-	// They are NOT decoded — callee receives them as-is.
-	t.Run("encoded slash preserved in method", func(t *testing.T) {
+	// Percent-encoded slashes (%2F) are not decoded in gRPC methods, so an
+	// HTTP app would decode a path the ACL never saw. They are rejected.
+	t.Run("encoded slash rejected", func(t *testing.T) {
 		got, code := invoke(t, "test%2Fstream")
-		assert.Equalf(t, codes.OK, code, "method %q should pass through normally", "test%2Fstream")
-		assert.Equalf(t, "test%2Fstream", got,
-			"callee should receive literal %%2F, not a decoded slash")
+		assert.Equal(t, codes.Internal, code)
+		assert.Contains(t, got, "invalid method")
 	})
 
-	t.Run("encoded slash traversal preserved literally", func(t *testing.T) {
-		// admin%2F..%2Fpublic has no real '/' — callee receives it as-is.
+	t.Run("encoded slash traversal rejected", func(t *testing.T) {
 		got, code := invoke(t, "admin%2F..%2Fpublic")
-		assert.Equalf(t, codes.OK, code, "method %q should pass through normally", "admin%2F..%2Fpublic")
-		assert.Equalf(t, "admin%2F..%2Fpublic", got,
-			"callee should receive literal percent-encoded slashes, not decoded")
+		assert.Equal(t, codes.Internal, code)
+		assert.Contains(t, got, "invalid method")
 	})
 
 	t.Run("double traversal resolved", func(t *testing.T) {
