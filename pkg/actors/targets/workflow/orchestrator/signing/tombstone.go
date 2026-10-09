@@ -22,15 +22,15 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 )
 
-// Tombstone appends an unsigned ExecutionCompleted(FAILED) tamper marker to
+// Tombstone appends an unsigned ExecutionCompleted(CANCELED) tamper marker to
 // the workflow's history (see [wfenginestate.MarkAsTamperFailed]) so it
-// surfaces as terminally FAILED on every subsequent load, then deletes the
+// surfaces as terminally CANCELED on every subsequent load, then deletes the
 // actor's reminders so no further activations fire against the dead workflow.
 // The original (untrusted) history, inbox, signatures, and certs are left
-// intact for forensics. Returns the new (failed) state; the caller is
+// intact for forensics. Returns the new (canceled) state; the caller is
 // responsible for refreshing any cached views (state, rstate, ometa).
 func (s *Signing) Tombstone(ctx context.Context, actorState state.Interface, opts wfenginestate.Options, prior *wfenginestate.State, cause error) (*wfenginestate.State, error) {
-	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as FAILED: %s", s.ActorID, cause)
+	log.Warnf("Workflow actor '%s': tampering detected, marking workflow as CANCELED: %s", s.ActorID, cause)
 
 	failed, err := wfenginestate.MarkAsTamperFailed(ctx, actorState, s.ActorID, opts, prior, cause)
 	if err != nil {
@@ -44,7 +44,7 @@ func (s *Signing) Tombstone(ctx context.Context, actorState state.Interface, opt
 // failSignatureVerification deletes all reminders for this workflow to
 // prevent endless retries when signature verification has failed. The
 // workflow state is left untouched; the tamper marker inserted by
-// Tombstone is what surfaces the FAILED status on subsequent loads.
+// Tombstone is what surfaces the CANCELED status on subsequent loads.
 func (s *Signing) failSignatureVerification(ctx context.Context) {
 	log.Warnf("Workflow actor '%s': signature verification failed, deleting reminders to stop retries", s.ActorID)
 
