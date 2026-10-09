@@ -93,13 +93,18 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 // Reserved internal actor types other than workflow and activity (executor,
 // retentioner) are only ever called by daprds of the same app, so callers
 // from another app or namespace are denied whether or not policies are
-// loaded. Without mTLS there is no caller identity to check.
+// loaded. Without mTLS there is no caller identity, so these calls are
+// denied when a policy is loaded and allowed otherwise.
 func (a *api) validateSameAppInternalActor(ctx context.Context, actorType, operation string) error {
 	if !workflowacl.IsInternalActorType(actorType) {
 		return nil
 	}
 
-	if _, ok, err := spiffe.FromGRPCContext(ctx); err == nil && !ok {
+	// Without mTLS there is no caller identity to check. That is allowed as
+	// before when no policy is loaded, and denied when one is, matching the
+	// workflow and activity actors.
+	policies := a.workflowAccessPolicies.Load()
+	if _, ok, err := spiffe.FromGRPCContext(ctx); err == nil && !ok && policies == nil {
 		return nil
 	}
 
@@ -118,7 +123,11 @@ func (a *api) validateSameAppInternalActor(ctx context.Context, actorType, opera
 		return status.Errorf(codes.PermissionDenied, workflowacl.DeniedInternalActorMessage, actorType)
 	}
 
-	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "internal", operation)
+	// Same-app calls are the normal traffic between replicas; only count them
+	// as policy evaluations when a policy is loaded.
+	if policies != nil {
+		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, "internal", operation)
+	}
 	return nil
 }
 
