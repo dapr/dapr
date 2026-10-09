@@ -25,6 +25,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -423,6 +425,53 @@ func (m *methodinjection) Run(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		io.ReadAll(resp.Body)
 		assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode)
+	})
+
+	// A percent-encoded separator in an actor ID would be decoded by the app
+	// into a path segment of /actors/{type}/{id}/method/...
+	t.Run("grpc: actor ID with encoded traversal rejected", func(t *testing.T) {
+		_, err := grpcClient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: "mytype",
+			ActorId:   "..%2F..%2Fevil",
+			Method:    "ping",
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "err: %v", err)
+	})
+
+	t.Run("http: actor ID with double-encoded traversal rejected", func(t *testing.T) {
+		url := fmt.Sprintf(
+			"http://%s/v1.0/actors/mytype/..%%252F..%%252Fevil/method/ping",
+			m.app.Daprd().HTTPAddress(),
+		)
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		io.ReadAll(resp.Body)
+		assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("grpc: reminder actor ID with encoded traversal rejected", func(t *testing.T) {
+		_, err := grpcClient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "mytype",
+			ActorId:   "..%2F..%2Fevil",
+			Name:      "myreminder",
+			DueTime:   "1000s",
+			Period:    "1000s",
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("grpc: timer actor ID with encoded traversal rejected", func(t *testing.T) {
+		_, err := grpcClient.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
+			ActorType: "mytype",
+			ActorId:   "..%2F..%2Fevil",
+			Name:      "mytimer",
+			DueTime:   "1000s",
+			Period:    "1000s",
+		})
+		require.Error(t, err)
 	})
 
 	t.Run("http: actor ID with question mark rejected", func(t *testing.T) {
