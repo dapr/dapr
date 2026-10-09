@@ -1600,6 +1600,24 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
 	})
+
+	t.Run("Direct Message - 403 on reserved internal actor type", func(t *testing.T) {
+		for _, actorType := range []string{
+			"dapr.internal.default.fakeAPI.workflow",
+			"dapr.internal.default.fakeAPI.activity",
+			"dapr.internal.default.fakeAPI.executor",
+			"dapr.internal.default.fakeAPI.retentioner",
+		} {
+			apiPath := "v1.0/actors/" + actorType + "/fakeActorID/method/Complete"
+
+			// act
+			resp := fakeServer(t).DoRequest("POST", apiPath, []byte("fakeData"), nil)
+
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, actorType)
+			assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"], actorType)
+		}
+	})
 }
 
 func TestV1MetadataEndpoint(t *testing.T) {

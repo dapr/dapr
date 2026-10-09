@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dedup"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -44,10 +45,13 @@ const (
 
 // completionSender identifies the child delivering a completion: its instance
 // ID and the parent execution it was created under. Zero for senders that
-// carry neither.
+// carry neither. appID is the app that created an activity result reminder,
+// as verified by the Scheduler; empty when the path carries no verified
+// creator.
 type completionSender struct {
 	instanceID        string
 	parentExecutionID string
+	appID             string
 }
 
 // addWorkflowEvent appends an inbound event to the inbox and drives it.
@@ -81,7 +85,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// ackDropped acknowledges a completion this workflow will never consume,
 	// after confirming the cache it was judged on is current: a child clears
 	// its pending notification on this ack.
-	ackDropped := func(reason string) error {
+	ackDropped := func(reason string, unauthorized bool) error {
 		if !fresh {
 			if err := o.confirmCachedState(ctx, state); err != nil {
 				return err
@@ -89,7 +93,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		}
 		// The result is no longer in flight, whether this workflow consumed
 		// it or dropped it, so a completed instance's ID becomes reusable.
-		if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+		// Not for a forged one (unauthorized): the task's real result is
+		// still in flight, and releasing the guard here would let the forger
+		// recreate the instance under it.
+		if !unauthorized && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
 			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, reason)
@@ -100,7 +107,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// rather than queueing a turn: the terminal path would re-issue the
 	// recursive terminate and the child would re-send.
 	if runtimestate.IsCompleted(o.rstate) && (e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil) {
-		return ackDropped("the workflow has completed")
+		return ackDropped("the workflow has completed", false)
 	}
 
 	// Only reject user events when the workflow is stalled.
@@ -114,12 +121,31 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// straggler from a previous generation and is acked without effect.
 	if sender.instanceID != "" {
 		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
-			return ackDropped("the task's current child is '" + created.GetInstanceId() + "'")
+			return ackDropped("the task's current child is '"+created.GetInstanceId()+"'", false)
 		}
 	}
 	if sender.parentExecutionID != "" {
 		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
-			return ackDropped("it was created under a previous execution")
+			return ackDropped("it was created under a previous execution", false)
+		}
+	}
+
+	taskID, execID, isResolution := activityResolution(e)
+	scheduledEvent := state.FindHistoryEventByID(taskID)
+	scheduled := scheduledEvent.GetTaskScheduled()
+
+	// An activity result may only come from the app the task was dispatched
+	// to, or from this workflow's own app. The Scheduler lets any app in the
+	// namespace create an activity-result reminder on this workflow actor,
+	// but it verifies the creator's identity, so a result from any other app
+	// is forged and is acked without effect.
+	if sender.appID != "" && isResolution && scheduled != nil && sender.appID != o.appID {
+		expected := scheduledEvent.GetRouter().GetTargetAppID()
+		if expected == "" {
+			expected = o.appID
+		}
+		if sender.appID != expected {
+			return ackDropped("it was sent by app '"+sender.appID+"' but the task was dispatched to '"+expected+"'", true)
 		}
 	}
 
@@ -150,10 +176,16 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// and dropped: the sender has nothing to gain by re-delivering it, and
 	// the activity contract is at-least-once, so a result the workflow will
 	// not use is the sender's to discard.
-	taskID, execID, isResolution := activityResolution(e)
-	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
 	if reason := activityDrop(state, taskID, execID, isResolution, scheduled); reason != "" {
-		return ackDropped(reason)
+		return ackDropped(reason, false)
+	}
+	// A result from another app for a task this history has not scheduled
+	// yet cannot be checked against its dispatch target, and once in the
+	// inbox it would be consumed, creator unchecked, when the task is
+	// scheduled. Refuse it as not yet durable: the sender re-delivers while
+	// the scheduling may still be committing, and gives up past the window.
+	if sender.appID != "" && isResolution && scheduled == nil && sender.appID != o.appID {
+		return wferrors.NewRecoverable(fmt.Errorf("task %d from app '%s': %w", taskID, sender.appID, common.ErrSchedulingNotDurable))
 	}
 
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {

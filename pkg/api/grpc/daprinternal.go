@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
+	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
@@ -37,6 +39,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sse"
 )
 
@@ -55,6 +58,11 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	err = a.setPeerIdentityMetadata(ctx, req.Proto(), a.AppID())
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +132,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	err = a.setPeerIdentityMetadata(ctx, req.Proto(), a.AppID())
 	if err != nil {
 		return err
 	}
@@ -301,6 +314,9 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err := a.callActorValidateWorkflowACL(ctx, in); err != nil {
 		return nil, err
 	}
+	if err := a.setPeerIdentityMetadata(ctx, in, ""); err != nil {
+		return nil, err
+	}
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
@@ -341,6 +357,11 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		return nil, err
 	}
 
+	sourceAppID, err := a.reminderSourceAppID(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
 	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
@@ -358,11 +379,41 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		IsTimer:        in.GetIsTimer(),
 		IsRemote:       true,
 		SkipLock:       in.GetSkipLock(),
+		SourceAppID:    sourceAppID,
 	})
+}
+
+// reminderSourceAppID resolves the creator of a forwarded reminder. A replica
+// of this app relays the creator the Scheduler verified, so its value is
+// trusted (it may be empty from an older forwarder). Any other peer is itself
+// the creator as far as this app can verify, so its own identity is stamped
+// instead of whatever it claims. A peer from another namespace is refused,
+// since replicas never span namespaces. Without a peer identity (mTLS off) the
+// claim is taken as is, which is no weaker than the Scheduler path.
+func (a *api) reminderSourceAppID(ctx context.Context, in *internalv1pb.Reminder) (string, error) {
+	peer, ok, err := spiffe.FromGRPCContext(ctx)
+	if err != nil {
+		a.logger.Errorf("Failed to extract the caller identity of a forwarded reminder: %v", err)
+		return "", status.Error(codes.Internal, "failed to extract caller identity")
+	}
+	if !ok {
+		return in.GetSourceAppId(), nil
+	}
+	if peer.Namespace() != a.Namespace() {
+		a.logger.Warnf("Denied forwarded reminder from namespace '%s' (this daprd is in '%s')", peer.Namespace(), a.Namespace())
+		return "", status.Error(codes.PermissionDenied, "reminders cannot be forwarded across namespaces")
+	}
+	if peer.AppID() == a.AppID() {
+		return in.GetSourceAppId(), nil
+	}
+	return peer.AppID(), nil
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
 	if err := a.callActorValidateWorkflowACL(stream.Context(), req); err != nil {
+		return err
+	}
+	if err := a.setPeerIdentityMetadata(stream.Context(), req, ""); err != nil {
 		return err
 	}
 
@@ -421,6 +472,48 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	return nil
+}
+
+// setPeerIdentityMetadata replaces the caller/callee identity metadata of a
+// request received from another daprd before it reaches the app. With mTLS,
+// the caller is taken from the peer's SPIFFE ID and the callee is
+// calleeAppID, so values an older caller daprd forwarded from its app are
+// discarded. Without mTLS, the lowercase values stamped by the caller daprd
+// are kept and other casings, which can only have come from the calling app,
+// are dropped. Actor invocations pass an empty calleeAppID: Dapr does not set
+// dapr-callee-app-id for actors, so it is left as received.
+func (a *api) setPeerIdentityMetadata(ctx context.Context, req *internalv1pb.InternalInvokeRequest, calleeAppID string) error {
+	id, _, err := spiffe.FromGRPCContext(ctx)
+	if err != nil {
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
+	setIdentityMetadata(req, id, calleeAppID)
+	return nil
+}
+
+func setIdentityMetadata(req *internalv1pb.InternalInvokeRequest, id *spiffe.Parsed, calleeAppID string) {
+	for k := range req.GetMetadata() {
+		lk := strings.ToLower(k)
+		switch lk {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader:
+		case invokev1.CalleeIDHeader:
+			if calleeAppID == "" {
+				continue
+			}
+		default:
+			continue
+		}
+		if id != nil || k != lk {
+			delete(req.GetMetadata(), k)
+		}
+	}
+	if id == nil {
+		return
+	}
+	workflowacl.SetCallerIdentity(req, id.AppID(), id.Namespace())
+	if calleeAppID != "" {
+		req.Metadata[invokev1.CalleeIDHeader] = &internalv1pb.ListStringValue{Values: []string{calleeAppID}}
+	}
 }
 
 // Internal function that records the received request for diagnostics

@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -322,6 +323,16 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	t.Helper()
 	return w.daprds[0].GRPCClient(t, ctx)
+}
+
+// InternalGRPCClient returns a client for the internal gRPC API of the first
+// daprd, authenticated as that daprd's own app when mTLS is enabled. Tests
+// use it to drive the reserved workflow actors directly, as a peer daprd of
+// the same app would.
+func (w *Workflow) InternalGRPCClient(t *testing.T, ctx context.Context) internalv1pb.ServiceInvocationClient {
+	t.Helper()
+	d := w.daprds[0]
+	return d.InternalGRPCClient(t, ctx, w.sentry, d.AppID(), d.Namespace())
 }
 
 // GRPCClientForApp returns a GRPC client for the specified app index
