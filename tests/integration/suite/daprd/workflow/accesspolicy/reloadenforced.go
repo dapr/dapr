@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -135,7 +135,9 @@ func (r *reloadenforced) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(r.target.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	callerActorClient := runtimev1pb.NewDaprClient(r.caller.GRPCConn(t, ctx))
+	// The public actor invoke API rejects reserved actor types, so send the
+	// calls to the target's internal API with the caller's identity.
+	callerInternalClient := r.target.InternalGRPCClient(t, ctx, r.sentry, r.caller.AppID(), r.caller.Namespace())
 	targetActorType := "dapr.internal.default." + reloadTargetAppID + ".workflow"
 
 	for i := range 30 {
@@ -160,12 +162,11 @@ func (r *reloadenforced) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*20, time.Microsecond)
 
 		id := fmt.Sprintf("reload-wf-%d", i)
-		_, err = callerActorClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetActorType,
-			ActorId:   id,
-			Method:    "CreateWorkflowInstance",
-			Data:      mustMarshalCreate(t, "ReloadWF", id),
-		})
+		_, err = callerInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("CreateWorkflowInstance").
+				WithActor(targetActorType, id).
+				WithData(mustMarshalCreate(t, "ReloadWF", id)),
+		)
 		if allow {
 			require.NoError(t, err, "round %d: policy %s allows schedule", i, name)
 		} else {
