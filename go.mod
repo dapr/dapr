@@ -12,7 +12,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.18.6
-	github.com/dapr/durabletask-go v0.12.5
+	github.com/dapr/durabletask-go v0.12.6
 	github.com/dapr/kit v0.18.4
 	github.com/diagridio/go-etcd-cron v0.12.10
 	github.com/evanphx/json-patch/v5 v5.9.0
