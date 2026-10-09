@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -141,12 +142,11 @@ func (d *dedupreassert) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	wfActorType := fmt.Sprintf("dapr.internal.%s.%s.workflow", d.workflow.Dapr().Namespace(), d.workflow.Dapr().AppID())
-	_, _ = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: wfActorType,
-		ActorId:   wfID,
-		Method:    "AddWorkflowEvent",
-		Data:      dupBytes,
-	})
+	_, _ = d.workflow.InternalGRPCClient(t, ctx).CallActor(ctx,
+		internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+			WithActor(wfActorType, wfID).
+			WithData(dupBytes),
+	)
 
 	select {
 	case <-failedCh:

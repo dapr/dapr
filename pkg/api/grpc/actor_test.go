@@ -19,6 +19,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
@@ -125,4 +127,37 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, res)
 	})
+}
+
+func TestInvokeActorRejectsInternalActorType(t *testing.T) {
+	api := &api{
+		Universal: universal.New(universal.Options{
+			AppID:  "fakeAPI",
+			Actors: actorsfake.New(),
+		}),
+	}
+	lis := startDaprAPIServer(t, api, "")
+
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for _, actorType := range []string{
+		"dapr.internal.default.fakeAPI.workflow",
+		"dapr.internal.default.fakeAPI.activity",
+		"dapr.internal.default.fakeAPI.executor",
+		"dapr.internal.default.fakeAPI.retentioner",
+	} {
+		t.Run(actorType, func(t *testing.T) {
+			_, err := client.InvokeActor(t.Context(), &runtimev1pb.InvokeActorRequest{
+				ActorType: actorType,
+				ActorId:   "fakeActorID",
+				Method:    "Complete",
+			})
+			require.Error(t, err)
+			assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+		})
+	}
 }
