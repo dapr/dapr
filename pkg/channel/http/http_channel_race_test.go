@@ -134,7 +134,7 @@ func TestTriggerJob_concurrentRequestsIsolated(t *testing.T) {
 
 	for range 20 {
 		runConcurrent(t, 16, func(name string) (*invokev1.InvokeMethodResponse, error) {
-			return c.TriggerJob(t.Context(), name, data)
+			return c.TriggerJob(t.Context(), name, name, data)
 		})
 	}
 }

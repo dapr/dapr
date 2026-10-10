@@ -190,12 +190,12 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 }
 
 // TriggerJob sends the triggered job back to the app via HTTP.
-func (h *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+func (h *Channel) TriggerJob(ctx context.Context, _, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	// passed in from the app
-	return h.sendJob(ctx, name, data)
+	return h.sendJob(ctx, route, data)
 }
 
-func (h *Channel) constructJobRequest(ctx context.Context, name string, data *anypb.Any) (*http.Request, error) {
+func (h *Channel) constructJobRequest(ctx context.Context, route string, data *anypb.Any) (*http.Request, error) {
 	var value []byte
 	switch data.GetTypeUrl() {
 	case "type.googleapis.com/google.protobuf.Value":
@@ -214,7 +214,7 @@ func (h *Channel) constructJobRequest(ctx context.Context, name string, data *an
 		value = bytes.TrimSpace(data.GetValue())
 	}
 
-	uri := h.baseAddress + "/job/" + strings.TrimPrefix(name, "/")
+	uri := h.baseAddress + "/job/" + strings.TrimPrefix(route, "/")
 	channelReq, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewReader(value))
 	if err != nil {
 		return nil, err
@@ -243,8 +243,8 @@ func (h *Channel) constructJobRequest(ctx context.Context, name string, data *an
 	return channelReq, nil
 }
 
-func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructJobRequest(ctx, name, data)
+func (h *Channel) sendJob(ctx context.Context, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	channelReq, err := h.constructJobRequest(ctx, route, data)
 	if err != nil {
 		return nil, err
 	}

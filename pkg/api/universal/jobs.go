@@ -15,7 +15,9 @@ package universal
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -53,13 +55,14 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 
 	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:          job.GetName(),
-			Schedule:      job.Schedule,
-			Repeats:       job.Repeats,
-			DueTime:       job.DueTime,
-			Ttl:           job.Ttl,
-			Data:          data,
-			FailurePolicy: job.GetFailurePolicy(),
+			Name:              job.GetName(),
+			Schedule:          job.Schedule,
+			Repeats:           job.Repeats,
+			DueTime:           job.DueTime,
+			Ttl:               job.Ttl,
+			Data:              data,
+			FailurePolicy:     job.GetFailurePolicy(),
+			OverrideRoutePath: job.OverrideRoutePath,
 		},
 		Overwrite: job.GetOverwrite(),
 	})
@@ -83,6 +86,12 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, errorcodes.SchedulerScheduleEmpty)
 	}
 
+	if job.OverrideRoutePath != nil {
+		if err := validateOverrideRoutePath(job.GetOverrideRoutePath()); err != nil {
+			return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerOverrideRoutePath(errMetadata, err)
+		}
+	}
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name: job.GetName(),
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -90,7 +99,9 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 			Namespace: a.Namespace(),
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Job{
-					Job: new(schedulerv1pb.TargetJob),
+					Job: &schedulerv1pb.TargetJob{
+						OverrideRoutePath: job.OverrideRoutePath,
+					},
 				},
 			},
 		},
@@ -205,13 +216,14 @@ func (a *Universal) getJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
-			Name:          inReq.GetName(),
-			Schedule:      resp.GetJob().Schedule,
-			Data:          resp.GetJob().GetData(),
-			Repeats:       resp.GetJob().Repeats,
-			DueTime:       resp.GetJob().DueTime,
-			Ttl:           resp.GetJob().Ttl,
-			FailurePolicy: resp.GetJob().GetFailurePolicy(),
+			Name:              inReq.GetName(),
+			Schedule:          resp.GetJob().Schedule,
+			Data:              resp.GetJob().GetData(),
+			Repeats:           resp.GetJob().Repeats,
+			DueTime:           resp.GetJob().DueTime,
+			Ttl:               resp.GetJob().Ttl,
+			FailurePolicy:     resp.GetJob().GetFailurePolicy(),
+			OverrideRoutePath: overrideRoutePath(resp.GetMetadata()),
 		},
 	}, nil
 }
@@ -301,17 +313,69 @@ func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsReque
 		job := namedJob.GetJob()
 		//nolint:protogetter
 		jobs = append(jobs, &runtimev1pb.Job{
-			Name:          namedJob.GetName(),
-			Schedule:      job.Schedule,
-			Repeats:       job.Repeats,
-			DueTime:       job.DueTime,
-			Ttl:           job.Ttl,
-			Data:          job.Data,
-			FailurePolicy: job.FailurePolicy,
+			Name:              namedJob.GetName(),
+			Schedule:          job.Schedule,
+			Repeats:           job.Repeats,
+			DueTime:           job.DueTime,
+			Ttl:               job.Ttl,
+			Data:              job.Data,
+			FailurePolicy:     job.FailurePolicy,
+			OverrideRoutePath: overrideRoutePath(namedJob.GetMetadata()),
 		})
 	}
 
 	return &runtimev1pb.ListJobsResponse{
 		Jobs: jobs,
 	}, nil
+}
+
+// overrideRoutePath returns the override route path of the given job
+// metadata, or nil if it is not set. The metadata is not returned on get by
+// Schedulers which predate the override route path.
+func overrideRoutePath(meta *schedulerv1pb.JobMetadata) *string {
+	if job := meta.GetTarget().GetJob(); job != nil {
+		return job.OverrideRoutePath
+	}
+	return nil
+}
+
+// validateOverrideRoutePath validates a job override route path, which
+// replaces the job name in the `/job/{name}` route the triggered job is
+// delivered to on the app. The path must be a non-empty relative HTTP path of
+// one or more '/' separated segments. Empty, '.' and '..' segments are
+// rejected so the route always resolves under `/job/`. Percent-encoding is not
+// accepted so that the path is delivered verbatim over both HTTP and gRPC app
+// channels.
+func validateOverrideRoutePath(path string) error {
+	if len(path) == 0 {
+		return errors.New("must not be empty")
+	}
+
+	for segment := range strings.SplitSeq(path, "/") {
+		switch segment {
+		case "":
+			return fmt.Errorf("%q must not contain empty path segments, nor start or end with '/'", path)
+		case ".", "..":
+			return fmt.Errorf("%q must not contain '.' or '..' path segments", path)
+		}
+
+		for _, c := range segment {
+			if !isOverrideRoutePathChar(c) {
+				return fmt.Errorf("%q contains invalid character %q", path, c)
+			}
+		}
+	}
+
+	return nil
+}
+
+// isOverrideRoutePathChar returns true if the given character is a valid
+// unescaped URL path segment character, as defined by RFC 3986 `pchar`.
+func isOverrideRoutePathChar(c rune) bool {
+	switch {
+	case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9':
+		return true
+	default:
+		return strings.ContainsRune("-._~!$&'()*+,;=:@", c)
+	}
 }

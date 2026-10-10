@@ -118,15 +118,15 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 }
 
 // TriggerJob sends the triggered job to the app via gRPC.
-func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) TriggerJob(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && !g.appHealth.GetStatus().IsHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
-	return g.sendJob(ctx, name, data)
+	return g.sendJob(ctx, name, route, data)
 }
 
-func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) sendJob(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
 		// Acquiring the max-concurrency slot must respect cancellation: a
 		// caller whose context is already dead would otherwise queue on the
@@ -156,7 +156,7 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	req := &runtimev1pb.JobEventRequest{
 		Name:          name,
 		Data:          data,
-		Method:        "job/" + name,
+		Method:        "job/" + route,
 		ContentType:   data.GetTypeUrl(),
 		HttpExtension: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST},
 	}

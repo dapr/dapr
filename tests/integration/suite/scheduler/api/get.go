@@ -17,7 +17,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -46,19 +48,23 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 
 	client := g.scheduler.Client(t, ctx)
 
+	meta := &schedulerv1pb.JobMetadata{
+		AppId:     "foo",
+		Namespace: "default",
+		Target: &schedulerv1pb.JobTargetMetadata{
+			Type: &schedulerv1pb.JobTargetMetadata_Job{Job: &schedulerv1pb.TargetJob{
+				OverrideRoutePath: new("my/route"),
+			}},
+		},
+	}
+
 	_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-		Name: "test",
-		Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
-		Metadata: &schedulerv1pb.JobMetadata{
-			AppId:     "foo",
-			Namespace: "default",
-			Target: &schedulerv1pb.JobTargetMetadata{
-				Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
-			},
-		},
+		Name:     "test",
+		Job:      &schedulerv1pb.Job{Schedule: new("@daily")},
+		Metadata: meta,
 	})
 	require.NoError(t, err)
-	_, err = client.GetJob(ctx, &schedulerv1pb.GetJobRequest{
+	resp, err := client.GetJob(ctx, &schedulerv1pb.GetJobRequest{
 		Name: "test",
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "foo",
@@ -69,4 +75,6 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, "@daily", resp.GetJob().GetSchedule())
+	assert.True(t, proto.Equal(meta, resp.GetMetadata()), "expected metadata %v, got %v", meta, resp.GetMetadata())
 }

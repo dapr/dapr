@@ -174,14 +174,15 @@ var (
 	CommonMalformedResponse    = ErrorCode{"ERR_MALFORMED_RESPONSE", "", CategoryCommon}     // Malformed response
 
 	// ### Scheduler/Jobs API
-	SchedulerScheduleJob   = ErrorCode{"DAPR_SCHEDULER_SCHEDULE_JOB", "DAPR_SCHEDULER_SCHEDULE_JOB", CategoryJob}     // Error scheduling job
-	SchedulerJobName       = ErrorCode{"DAPR_SCHEDULER_JOB_NAME", "DAPR_SCHEDULER_JOB_NAME", CategoryJob}             // Job name should only be set in the url
-	SchedulerJobNameEmpty  = ErrorCode{"DAPR_SCHEDULER_JOB_NAME_EMPTY", "DAPR_SCHEDULER_JOB_NAME_EMPTY", CategoryJob} // Job name is empty
-	SchedulerGetJob        = ErrorCode{"DAPR_SCHEDULER_GET_JOB", "DAPR_SCHEDULER_GET_JOB", CategoryJob}               // Error getting job
-	SchedulerListJobs      = ErrorCode{"DAPR_SCHEDULER_LIST_JOBS", "DAPR_SCHEDULER_LIST_JOBS", CategoryJob}           // Error listing jobs
-	SchedulerDeleteJob     = ErrorCode{"DAPR_SCHEDULER_DELETE_JOB", "DAPR_SCHEDULER_DELETE_JOB", CategoryJob}         // Error deleting job
-	SchedulerEmpty         = ErrorCode{"DAPR_SCHEDULER_EMPTY", "DAPR_SCHEDULER_EMPTY", CategoryJob}                   // Required argument is empty
-	SchedulerScheduleEmpty = ErrorCode{"DAPR_SCHEDULER_SCHEDULE_EMPTY", "DAPR_SCHEDULER_SCHEDULE_EMPTY", CategoryJob} // No schedule provided for job
+	SchedulerScheduleJob          = ErrorCode{"DAPR_SCHEDULER_SCHEDULE_JOB", "DAPR_SCHEDULER_SCHEDULE_JOB", CategoryJob}                       // Error scheduling job
+	SchedulerJobName              = ErrorCode{"DAPR_SCHEDULER_JOB_NAME", "DAPR_SCHEDULER_JOB_NAME", CategoryJob}                               // Job name should only be set in the url
+	SchedulerJobNameEmpty         = ErrorCode{"DAPR_SCHEDULER_JOB_NAME_EMPTY", "DAPR_SCHEDULER_JOB_NAME_EMPTY", CategoryJob}                   // Job name is empty
+	SchedulerJobOverrideRoutePath = ErrorCode{"DAPR_SCHEDULER_JOB_OVERRIDE_ROUTE_PATH", "DAPR_SCHEDULER_JOB_OVERRIDE_ROUTE_PATH", CategoryJob} // Job override route path is invalid
+	SchedulerGetJob               = ErrorCode{"DAPR_SCHEDULER_GET_JOB", "DAPR_SCHEDULER_GET_JOB", CategoryJob}                                 // Error getting job
+	SchedulerListJobs             = ErrorCode{"DAPR_SCHEDULER_LIST_JOBS", "DAPR_SCHEDULER_LIST_JOBS", CategoryJob}                             // Error listing jobs
+	SchedulerDeleteJob            = ErrorCode{"DAPR_SCHEDULER_DELETE_JOB", "DAPR_SCHEDULER_DELETE_JOB", CategoryJob}                           // Error deleting job
+	SchedulerEmpty                = ErrorCode{"DAPR_SCHEDULER_EMPTY", "DAPR_SCHEDULER_EMPTY", CategoryJob}                                     // Required argument is empty
+	SchedulerScheduleEmpty        = ErrorCode{"DAPR_SCHEDULER_SCHEDULE_EMPTY", "DAPR_SCHEDULER_SCHEDULE_EMPTY", CategoryJob}                   // No schedule provided for job
 
 	// ### Generic
 	CommonGeneric = ErrorCode{"ERROR", "ERROR", CategoryCommon} // Generic error

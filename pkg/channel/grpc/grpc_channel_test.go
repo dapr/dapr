@@ -188,7 +188,7 @@ func TestConcurrencyLimiterContext(t *testing.T) {
 
 		errCh := make(chan error, 1)
 		go func() {
-			_, err := c.TriggerJob(ctx, "job", nil)
+			_, err := c.TriggerJob(ctx, "job", "job", nil)
 			errCh <- err
 		}()
 

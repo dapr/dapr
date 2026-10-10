@@ -28,7 +28,7 @@ type Fake struct {
 	fnInvokeMethod func(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error)
 	fnHealthProbe  func(ctx context.Context) (*apphealth.Status, error)
 	fnSetAppHealth func(ah *apphealth.AppHealth)
-	fnTriggerJob   func(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error)
+	fnTriggerJob   func(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error)
 }
 
 func New() *Fake {
@@ -43,7 +43,7 @@ func New() *Fake {
 			return &apphealth.Status{}, nil
 		},
 		fnSetAppHealth: func(ah *apphealth.AppHealth) {},
-		fnTriggerJob: func(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+		fnTriggerJob: func(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 			return &invokev1.InvokeMethodResponse{}, nil
 		},
 	}
@@ -69,7 +69,7 @@ func (f *Fake) WithSetAppHealth(fn func(*apphealth.AppHealth)) *Fake {
 	return f
 }
 
-func (f *Fake) WithTriggerJob(fn func(context.Context, string, *anypb.Any) (*invokev1.InvokeMethodResponse, error)) *Fake {
+func (f *Fake) WithTriggerJob(fn func(context.Context, string, string, *anypb.Any) (*invokev1.InvokeMethodResponse, error)) *Fake {
 	f.fnTriggerJob = fn
 	return f
 }
@@ -90,6 +90,6 @@ func (f *Fake) SetAppHealth(ah *apphealth.AppHealth) {
 	f.fnSetAppHealth(ah)
 }
 
-func (f *Fake) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
-	return f.fnTriggerJob(ctx, name, data)
+func (f *Fake) TriggerJob(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	return f.fnTriggerJob(ctx, name, route, data)
 }

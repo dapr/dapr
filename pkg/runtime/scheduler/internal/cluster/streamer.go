@@ -197,9 +197,14 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return errors.New("received job, but app channel not initialized")
 	}
 
+	route := job.GetName()
+	if override := job.GetMetadata().GetTarget().GetJob().GetOverrideRoutePath(); len(override) > 0 {
+		route = override
+	}
+
 	start := time.Now()
 
-	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
+	response, err := appChannel.TriggerJob(ctx, job.GetName(), route, job.GetData())
 	if err != nil {
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}

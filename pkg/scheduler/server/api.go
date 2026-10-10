@@ -126,7 +126,13 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 		return nil, status.Error(codes.NotFound, "job not found: "+req.GetName())
 	}
 
+	var meta schedulerv1pb.JobMetadata
+	if err := job.GetMetadata().UnmarshalTo(&meta); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal job metadata: %w", err)
+	}
+
 	return &schedulerv1pb.GetJobResponse{
+		Metadata: &meta,
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
 			Schedule:      job.Schedule,

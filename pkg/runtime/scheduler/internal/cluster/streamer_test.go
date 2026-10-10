@@ -22,11 +22,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	channelfake "github.com/dapr/dapr/pkg/channel/fake"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 )
 
@@ -250,4 +254,59 @@ func Test_invokeActorReminder_SourceAppID(t *testing.T) {
 	assert.Equal(t, "activity-result-abc", got.Name)
 	assert.Equal(t, "dapr.internal.default.target.workflow", got.ActorType)
 	assert.Equal(t, "instance-1", got.ActorID)
+}
+
+func Test_handleJob_appJobRoute(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		target   *schedulerv1pb.TargetJob
+		expRoute string
+	}{
+		"no override route path": {
+			target:   new(schedulerv1pb.TargetJob),
+			expRoute: "my-job",
+		},
+		"empty override route path": {
+			target:   &schedulerv1pb.TargetJob{OverrideRoutePath: new("")},
+			expRoute: "my-job",
+		},
+		"override route path": {
+			target:   &schedulerv1pb.TargetJob{OverrideRoutePath: new("my-route/123")},
+			expRoute: "my-route/123",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotName, gotRoute string
+			appChannel := channelfake.New().WithTriggerJob(
+				func(_ context.Context, name, route string, _ *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+					gotName, gotRoute = name, route
+					return invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil), nil
+				},
+			)
+
+			s := &streamer{
+				channels: new(channels.Channels).WithAppChannel(appChannel),
+				wfengine: wfenginefake.New(),
+			}
+
+			got := s.handleJob(t.Context(), &schedulerv1pb.WatchJobsResponse{
+				Name: "my-job",
+				Metadata: &schedulerv1pb.JobMetadata{
+					AppId:     "myapp",
+					Namespace: "default",
+					Target: &schedulerv1pb.JobTargetMetadata{
+						Type: &schedulerv1pb.JobTargetMetadata_Job{Job: test.target},
+					},
+				},
+			})
+			assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, got)
+			assert.Equal(t, "my-job", gotName)
+			assert.Equal(t, test.expRoute, gotRoute)
+		})
+	}
 }

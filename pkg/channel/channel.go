@@ -35,7 +35,9 @@ type AppChannel interface {
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error)
 	HealthProbe(ctx context.Context) (*apphealth.Status, error)
 	SetAppHealth(ah *apphealth.AppHealth)
-	TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error)
+	// TriggerJob delivers the triggered job with the given name and data to
+	// the app on the given route, which is the job name unless overridden.
+	TriggerJob(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error)
 }
 
 // HTTPEndpointAppChannel is an abstraction over communications with http endpoint resources.

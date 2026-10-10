@@ -984,7 +984,7 @@ func TestConcurrencyLimiterContext(t *testing.T) {
 
 		errCh := make(chan error, 1)
 		go func() {
-			_, err := c.TriggerJob(ctx, "job", nil)
+			_, err := c.TriggerJob(ctx, "job", "job", nil)
 			errCh <- err
 		}()
 
@@ -995,4 +995,21 @@ func TestConcurrencyLimiterContext(t *testing.T) {
 			t.Fatal("TriggerJob did not return after context cancellation while the limiter was full")
 		}
 	})
+}
+
+func TestConstructJobRequestRoute(t *testing.T) {
+	c := Channel{baseAddress: "http://localhost:3000"}
+
+	for route, expPath := range map[string]string{
+		"my-job":               "/job/my-job",
+		"sync-video-state/123": "/job/sync-video-state/123",
+	} {
+		t.Run(route, func(t *testing.T) {
+			req, err := c.constructJobRequest(t.Context(), route, nil)
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodPost, req.Method)
+			assert.Equal(t, "localhost:3000", req.URL.Host)
+			assert.Equal(t, expPath, req.URL.Path)
+		})
+	}
 }
