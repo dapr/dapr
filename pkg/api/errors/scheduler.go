@@ -37,6 +37,18 @@ func SchedulerURLName(metadata map[string]string) error {
 		Build()
 }
 
+func SchedulerOverrideRoutePath(metadata map[string]string, err error) error {
+	return kiterrors.NewBuilder(
+		codes.InvalidArgument,
+		http.StatusBadRequest,
+		"invalid job override route path: "+err.Error(),
+		"",
+		string(errorcodes.SchedulerJobOverrideRoutePath.Category),
+	).
+		WithErrorInfo(errorcodes.SchedulerJobOverrideRoutePath.Code, metadata).
+		Build()
+}
+
 func SchedulerScheduleJob(metadata map[string]string, err error) error {
 	code := status.Code(err)
 	if code == codes.Unknown {

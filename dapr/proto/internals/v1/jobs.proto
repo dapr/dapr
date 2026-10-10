@@ -35,6 +35,7 @@ message JobHTTPRequest {
   google.protobuf.Value data = 6 [json_name = "data"];
   optional bool overwrite = 7 [json_name = "overwrite"];
   optional common.v1.JobFailurePolicy failure_policy = 8 [json_name = "failurePolicy"];
+  optional string override_route_path = 9 [json_name = "overrideRoutePath"];
 }
 
 // JobEvent is an event of a job to be processed by Scheduler.

@@ -24,7 +24,7 @@ type MockAppChannel struct {
 }
 
 // TriggerJob - TODO implement
-func (_m *MockAppChannel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+func (_m *MockAppChannel) TriggerJob(ctx context.Context, name, route string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	return nil, nil
 }
 

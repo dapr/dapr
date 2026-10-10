@@ -64,6 +64,7 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 "dueTime": "1000s",
 "ttl": "123s",
 "data": "hello world",
+"overrideRoutePath": "test/route",
 "failure_policy": {
 	"constant": {
 		"interval": "3s",
@@ -99,18 +100,20 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				},
+				OverrideRoutePath: new("test/route"),
 			},
 		},
 		//nolint:protogetter
 		&runtimev1pb.GetJobResponse{
 			Job: &runtimev1pb.Job{
-				Name:          job.Job.Name,
-				Schedule:      job.Job.Schedule,
-				Repeats:       job.Job.Repeats,
-				DueTime:       job.Job.DueTime,
-				Ttl:           job.Job.Ttl,
-				Data:          job.Job.Data,
-				FailurePolicy: job.Job.FailurePolicy,
+				Name:              job.Job.Name,
+				Schedule:          job.Job.Schedule,
+				Repeats:           job.Job.Repeats,
+				DueTime:           job.Job.DueTime,
+				Ttl:               job.Job.Ttl,
+				Data:              job.Job.Data,
+				FailurePolicy:     job.Job.FailurePolicy,
+				OverrideRoutePath: job.Job.OverrideRoutePath,
 			},
 		},
 	)
