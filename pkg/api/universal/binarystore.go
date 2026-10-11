@@ -162,6 +162,11 @@ func (a *Universal) DeleteBinaryFileAlpha1(ctx context.Context, componentName, f
 // with appropriate HTTP/gRPC status codes, wrapping everything else as a
 // generic operation failure using the provided fallback APIError.
 func mapBinaryStoreError(err error, componentName, fileName string, fallback messages.APIError) error {
+	var apiErr messages.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr
+	}
+
 	switch {
 	case errors.Is(err, binarystore.ErrFileNotFound):
 		return messages.ErrBinaryStoreFileNotFound.WithFormat(fileName, componentName)

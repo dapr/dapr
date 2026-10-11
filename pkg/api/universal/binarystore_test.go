@@ -335,3 +335,10 @@ func TestBinaryStore_mapBinaryStoreErrorWrapsUnknown(t *testing.T) {
 	require.True(t, ok, "expected an APIError for unknown errors")
 	assert.Equal(t, messages.ErrBinaryStoreSet.Tag(), apiErr.Tag())
 }
+
+func TestBinaryStore_mapBinaryStoreErrorPreservesAPIError(t *testing.T) {
+	expected := messages.ErrBadRequest.WithFormat("invalid stream")
+	err := mapBinaryStoreError(expected, "c", "f", messages.ErrBinaryStoreSet)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, expected)
+}

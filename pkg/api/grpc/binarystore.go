@@ -197,7 +197,7 @@ func (a *api) binaryStoreReadStream(ctx context.Context, stream runtimev1pb.Dapr
 	var expectSeq uint64
 
 	closeWithError := func(err error) error {
-		_ = inWriter.CloseWithError(err)
+		_ = inWriter.CloseWithError(messages.ErrBadRequest.WithFormat(err))
 		return err
 	}
 
