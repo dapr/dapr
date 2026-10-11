@@ -15,11 +15,7 @@ limitations under the License.
 
 package compstore
 
-import (
-	"maps"
-
-	"github.com/dapr/components-contrib/binarystore"
-)
+import "github.com/dapr/components-contrib/binarystore"
 
 func (c *ComponentStore) AddBinaryStore(name string, store binarystore.BinaryStore) {
 	c.lock.Lock()
@@ -37,23 +33,9 @@ func (c *ComponentStore) GetBinaryStore(name string) (binarystore.BinaryStore, b
 	return store, ok
 }
 
-func (c *ComponentStore) ListBinaryStores() map[string]binarystore.BinaryStore {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	return maps.Clone(c.binaryStores)
-}
-
 func (c *ComponentStore) DeleteBinaryStore(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	delete(c.binaryStores, name)
-}
-
-func (c *ComponentStore) BinaryStoresLen() int {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	return len(c.binaryStores)
 }

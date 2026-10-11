@@ -32,9 +32,7 @@ func TestBinaryStoreLifecycle(t *testing.T) {
 	first := &testStore{}
 	second := &testStore{}
 
-	assert.Equal(t, 0, store.BinaryStoresLen())
 	store.AddBinaryStore("files", first)
-	assert.Equal(t, 1, store.BinaryStoresLen())
 
 	got, ok := store.GetBinaryStore("files")
 	require.True(t, ok)
@@ -45,13 +43,7 @@ func TestBinaryStoreLifecycle(t *testing.T) {
 	require.True(t, ok)
 	assert.Same(t, second, got)
 
-	listed := store.ListBinaryStores()
-	assert.Same(t, second, listed["files"])
-	delete(listed, "files")
-	assert.Equal(t, 1, store.BinaryStoresLen(), "ListBinaryStores must return a copy")
-
 	store.DeleteBinaryStore("files")
-	assert.Equal(t, 0, store.BinaryStoresLen())
 	_, ok = store.GetBinaryStore("files")
 	assert.False(t, ok)
 }
