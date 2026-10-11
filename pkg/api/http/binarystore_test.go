@@ -29,14 +29,22 @@ import (
 )
 
 func TestStreamBinaryFileAbortsTruncatedResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	streamHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		streamBinaryFile(
 			w,
 			io.MultiReader(strings.NewReader("partial"), errorReader{}),
 			"store",
 			"file",
 		)
-	}))
+	})
+	recoveringHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			_ = recover()
+		}()
+		streamHandler.ServeHTTP(w, r)
+	})
+
+	server := httptest.NewServer(recoveringHandler)
 	t.Cleanup(server.Close)
 
 	resp, err := server.Client().Get(server.URL)

@@ -18,6 +18,7 @@ package http
 import (
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -144,7 +145,9 @@ func streamBinaryFile(w http.ResponseWriter, body io.Reader, componentName, file
 		}
 		if readErr != nil {
 			log.Debugf("error streaming binary file %q from component %s: %s", fileName, componentName, readErr)
-			panic(http.ErrAbortHandler)
+			rc := http.NewResponseController(w)
+			_ = rc.SetWriteDeadline(time.Now())
+			return
 		}
 	}
 }
