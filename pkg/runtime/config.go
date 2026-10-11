@@ -451,7 +451,9 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		// acquired using a deterministic algorithm that returns the same value if
 		// the same app is restarted
 		// Otherwise, the port will be random.
-		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id)
+		// Never pick the API or HTTP ports: the stable hash range contains them
+		// and the internal listener is reserved before the API server binds.
+		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id, intc.apiGRPCPort, intc.httpPort)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
