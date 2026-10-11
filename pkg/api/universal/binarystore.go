@@ -20,24 +20,12 @@ import (
 	"errors"
 	"io"
 	"strings"
-	"sync"
 
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/streams"
 )
-
-type cancelOnCloseReadCloser struct {
-	io.ReadCloser
-	cancel context.CancelFunc
-	once   sync.Once
-}
-
-func (c *cancelOnCloseReadCloser) Close() error {
-	c.once.Do(c.cancel)
-	return c.ReadCloser.Close()
-}
 
 func validateBinaryStoreFileName(fileName string) error {
 	switch {
@@ -125,33 +113,22 @@ func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, file
 	// currently coupled to the Runner.
 	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
 	ctx = policyDef.ComponentContext(ctx)
-	var cancel context.CancelFunc
 	if timeout := policyDef.Timeout(); timeout > 0 {
+		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 
 	resp, err := component.Get(ctx, req)
 	if err != nil {
-		if cancel != nil {
-			cancel()
-		}
 		return nil, mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreGet)
 	}
 	if resp == nil || resp.Data == nil {
-		if cancel != nil {
-			cancel()
-		}
 		// Defensive: a nil reader should never be returned for an existing file,
 		// but treat it as not-found rather than returning nil to the caller.
 		err := messages.ErrBinaryStoreFileNotFound.WithFormat(fileName, componentName)
 		a.logger.Debug(err)
 		return nil, err
-	}
-	if cancel != nil {
-		return &cancelOnCloseReadCloser{
-			ReadCloser: resp.Data,
-			cancel:     cancel,
-		}, nil
 	}
 	return resp.Data, nil
 }
