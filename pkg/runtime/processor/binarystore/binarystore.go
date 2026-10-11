@@ -18,7 +18,6 @@ package binarystore
 import (
 	"context"
 	"fmt"
-	"io"
 
 	contribbinarystore "github.com/dapr/components-contrib/binarystore"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -90,14 +89,5 @@ func (b *binarystoremgr) Close(comp compapi.Component) error {
 	}
 
 	defer b.store.DeleteBinaryStore(comp.Name)
-
-	closer, ok := store.(io.Closer)
-	if ok && closer != nil {
-		err := closer.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return store.Close()
 }
