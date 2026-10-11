@@ -43,12 +43,11 @@ func isRouteExcludedFromMaxBodySize(method string, u *url.URL) bool {
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	return len(parts) == 5 &&
+	return len(parts) == 4 &&
 		parts[0] == apiVersionV1alpha1 &&
-		parts[1] == "state" &&
-		parts[2] == "binarystore" &&
-		parts[3] != "" &&
-		parts[4] != ""
+		parts[1] == "binarystore" &&
+		parts[2] != "" &&
+		parts[3] != ""
 }
 
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.

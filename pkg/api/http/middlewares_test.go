@@ -61,25 +61,25 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 		{
 			name:       "binary store PUT is unlimited",
 			method:     http.MethodPut,
-			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
 			statusCode: http.StatusNoContent,
 		},
 		{
 			name:       "binary store POST is unlimited",
 			method:     http.MethodPost,
-			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
 			statusCode: http.StatusNoContent,
 		},
 		{
 			name:       "binary store GET is limited",
 			method:     http.MethodGet,
-			path:       "/v1.0-alpha1/state/binarystore/store/file.bin",
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
 			statusCode: http.StatusRequestEntityTooLarge,
 		},
 		{
 			name:       "binary store prefix is limited",
 			method:     http.MethodPut,
-			path:       "/v1.0-alpha1/state/binarystore/store/file.bin/extra",
+			path:       "/v1.0-alpha1/binarystore/store/file.bin/extra",
 			statusCode: http.StatusRequestEntityTooLarge,
 		},
 	}
