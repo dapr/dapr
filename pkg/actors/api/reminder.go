@@ -51,6 +51,10 @@ type Reminder struct {
 	// second-scale tail latency. Unlike SkipLock it does not affect the
 	// placement claim or target locking.
 	SkipRetries bool `json:"-"`
+	// SourceAppID is the app that created the reminder, as verified by the
+	// Scheduler against the creator's identity when the job was scheduled.
+	// Empty when unknown (state store reminders, timers, older Schedulers).
+	SourceAppID string `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
