@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -60,4 +61,36 @@ type errorReader struct{}
 
 func (errorReader) Read([]byte) (int, error) {
 	return 0, errors.New("read failed")
+}
+
+func TestStreamBinaryFileAbortsOnShortWrite(t *testing.T) {
+	w := &shortWriteResponseWriter{
+		header: make(http.Header),
+	}
+
+	streamBinaryFile(w, strings.NewReader("payload"), "store", "file")
+
+	require.True(t, w.deadlineSet)
+}
+
+type shortWriteResponseWriter struct {
+	header      http.Header
+	deadlineSet bool
+}
+
+func (s *shortWriteResponseWriter) Header() http.Header {
+	return s.header
+}
+
+func (*shortWriteResponseWriter) WriteHeader(int) {}
+
+func (*shortWriteResponseWriter) Write(p []byte) (int, error) {
+	return len(p) - 1, nil
+}
+
+func (*shortWriteResponseWriter) Flush() {}
+
+func (s *shortWriteResponseWriter) SetWriteDeadline(time.Time) error {
+	s.deadlineSet = true
+	return nil
 }

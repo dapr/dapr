@@ -125,30 +125,16 @@ func streamBinaryFile(w http.ResponseWriter, body io.Reader, componentName, file
 	w.Header().Set(headerContentType, "application/octet-stream")
 	w.WriteHeader(http.StatusOK)
 
+	var dst io.Writer = w
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
+		dst = &flushWriter{w: w, f: f}
 	}
 
-	buf := make([]byte, 32*1024)
-	for {
-		n, readErr := body.Read(buf)
-		if n > 0 {
-			if _, werr := w.Write(buf[:n]); werr != nil {
-				return
-			}
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-		}
-		if readErr == io.EOF {
-			return
-		}
-		if readErr != nil {
-			log.Debugf("error streaming binary file %q from component %s: %s", fileName, componentName, readErr)
-			rc := http.NewResponseController(w)
-			_ = rc.SetWriteDeadline(time.Now())
-			return
-		}
+	if _, err := io.Copy(dst, body); err != nil {
+		log.Debugf("error streaming binary file %q from component %s: %s", fileName, componentName, err)
+		rc := http.NewResponseController(w)
+		_ = rc.SetWriteDeadline(time.Now())
 	}
 }
 
