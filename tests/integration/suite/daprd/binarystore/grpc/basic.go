@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -71,7 +72,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
-					Overwrite:     true,
+					Overwrite:     proto.Bool(true),
 				},
 			},
 		}))
@@ -125,7 +126,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 							ComponentName: "mystore",
 							FileName:      test.fileName,
-							Overwrite:     true,
+							Overwrite:     proto.Bool(true),
 						},
 					},
 				}))
@@ -153,7 +154,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "large.bin",
-					Overwrite:     true,
+					Overwrite:     proto.Bool(true),
 				},
 			},
 		}))
@@ -201,7 +202,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "oversized-chunk.bin",
-					Overwrite:     true,
+					Overwrite:     proto.Bool(true),
 				},
 			},
 		}))
@@ -233,7 +234,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "out-of-order.bin",
-					Overwrite:     true,
+					Overwrite:     proto.Bool(true),
 				},
 			},
 		}))
@@ -305,7 +306,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "temp.bin",
-					Overwrite:     true,
+					Overwrite:     proto.Bool(true),
 				},
 			},
 		}))
