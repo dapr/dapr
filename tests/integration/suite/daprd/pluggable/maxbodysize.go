@@ -103,8 +103,24 @@ func (m *maxbodysize) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, m.store.Set(ctx, &state.SetRequest{Key: "large", Value: value}))
 
 	for _, store := range []string{"builtin", "pluggable"} {
-		resp, err := client.GetState(ctx, &rtv1.GetStateRequest{StoreName: store, Key: "large"})
-		require.NoError(t, err, store)
+		resp, gerr := client.GetState(ctx, &rtv1.GetStateRequest{StoreName: store, Key: "large"})
+		require.NoError(t, gerr, store)
 		assert.Len(t, resp.GetData(), len(value), store)
 	}
+
+	tooLarge := bytes.Repeat([]byte("x"), 11<<20)
+	const tooLargeErr = "received message larger than max"
+
+	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+		StoreName: "builtin",
+		States:    []*commonv1.StateItem{{Key: "too-large", Value: tooLarge}},
+	})
+	require.ErrorContains(t, err, tooLargeErr)
+	require.ErrorContains(t, err, "vs. 10485760)")
+
+	require.NoError(t, m.store.Set(ctx, &state.SetRequest{Key: "too-large", Value: tooLarge}))
+	_, err = client.GetState(ctx, &rtv1.GetStateRequest{StoreName: "pluggable", Key: "too-large"})
+	require.ErrorContains(t, err, "fail to get too-large from state store pluggable")
+	require.ErrorContains(t, err, tooLargeErr)
+	require.ErrorContains(t, err, "vs. 10485760)")
 }
