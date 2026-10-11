@@ -22,6 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -115,11 +117,13 @@ func (m *maxbodysize) Run(t *testing.T, ctx context.Context) {
 		StoreName: "builtin",
 		States:    []*commonv1.StateItem{{Key: "too-large", Value: tooLarge}},
 	})
+	assert.Equal(t, codes.ResourceExhausted, status.Code(err))
 	require.ErrorContains(t, err, tooLargeErr)
 	require.ErrorContains(t, err, "vs. 10485760)")
 
 	require.NoError(t, m.store.Set(ctx, &state.SetRequest{Key: "too-large", Value: tooLarge}))
 	_, err = client.GetState(ctx, &rtv1.GetStateRequest{StoreName: "pluggable", Key: "too-large"})
+	assert.Equal(t, codes.Internal, status.Code(err))
 	require.ErrorContains(t, err, "fail to get too-large from state store pluggable")
 	require.ErrorContains(t, err, tooLargeErr)
 	require.ErrorContains(t, err, "vs. 10485760)")
