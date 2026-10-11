@@ -89,7 +89,7 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 
 	wErr := <-writerDone
 	if wErr != nil {
-		err = messages.ErrBinaryStoreSet.WithFormat(fileName, componentName, wErr.Error())
+		err = messages.ErrBadRequest.WithFormat(wErr)
 		a.logger.Debug(err)
 		return err
 	}

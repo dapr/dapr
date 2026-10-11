@@ -256,7 +256,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		_, err = stream.CloseAndRecv()
 		require.Error(t, err)
-		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 		assert.Contains(t, status.Convert(err).Message(), "invalid sequence number received: 1 (expected: 0)")
 	})
 
