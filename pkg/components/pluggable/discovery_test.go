@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -199,14 +200,14 @@ func TestDiscover(t *testing.T) {
 	}
 	t.Run("discovered components should accept responses up to the max recv message size", func(t *testing.T) {
 		const (
-			fakeSocketFolder = "/tmp/test"
-			fakeSvcName      = "dapr.my.service.large"
-			fakeMethodName   = "Large"
-			respSize         = 5 << 20
+			fakeSvcName    = "dapr.my.service.large"
+			fakeMethodName = "Large"
+			respSize       = 5 << 20
 		)
-		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
-		defer os.RemoveAll(fakeSocketFolder)
+		fakeSocketFolder, err := nettest.LocalPath()
 		require.NoError(t, err)
+		require.NoError(t, os.Mkdir(fakeSocketFolder, 0o700))
+		t.Cleanup(func() { require.NoError(t, os.RemoveAll(fakeSocketFolder)) })
 		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
 
 		listener, err := net.Listen("unix", fakeSocketFolder+"/large.sock")
