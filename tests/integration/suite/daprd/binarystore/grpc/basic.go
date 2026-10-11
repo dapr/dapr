@@ -71,7 +71,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
-					Overwrite:     new(true),
+					Overwrite:     true,
 				},
 			},
 		}))
@@ -125,7 +125,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 							ComponentName: "mystore",
 							FileName:      test.fileName,
-							Overwrite:     new(true),
+							Overwrite:     true,
 						},
 					},
 				}))
@@ -153,7 +153,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "large.bin",
-					Overwrite:     new(true),
+					Overwrite:     true,
 				},
 			},
 		}))
@@ -201,7 +201,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "oversized-chunk.bin",
-					Overwrite:     new(true),
+					Overwrite:     true,
 				},
 			},
 		}))
@@ -233,7 +233,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "out-of-order.bin",
-					Overwrite:     new(true),
+					Overwrite:     true,
 				},
 			},
 		}))
@@ -269,7 +269,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "hello.bin",
-					Overwrite:     new(false),
 				},
 			},
 		}))
@@ -306,7 +305,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
 					FileName:      "temp.bin",
-					Overwrite:     new(true),
+					Overwrite:     true,
 				},
 			},
 		}))
