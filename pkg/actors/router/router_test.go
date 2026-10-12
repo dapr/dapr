@@ -30,8 +30,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
-	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/router"
+	"github.com/dapr/dapr/pkg/actors/table"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
@@ -43,112 +44,153 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-type registeredStorage struct {
-	internaltimers.Storage
-	registered bool
-}
-
-func (s *registeredStorage) IsRegistered(*api.Reminder) bool { return s.registered }
-
 type localTimerRouter struct {
 	router.Interface
 	lookups, releases, creates, invokes int
 }
 
-func newLocalTimerRouter(t *testing.T, timers func() internaltimers.Storage, claimCtx func(context.Context) context.Context) *localTimerRouter {
+func newLocalTimerRouter(t *testing.T, lookup func(ctx context.Context, n int) (context.Context, error), invoke func(context.Context, *api.Reminder)) *localTimerRouter {
 	t.Helper()
 	l := new(localTimerRouter)
 	plc := placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
 		l.lookups++
-		if claimCtx != nil {
-			ctx = claimCtx(ctx)
+		if lookup != nil {
+			var err error
+			ctx, err = lookup(ctx, l.lookups)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 		}
 		return &api.LookupActorResponse{Local: true}, ctx, func(error) { l.releases++ }, nil
 	})
-	target := targetsfake.New("abc").(*targetsfake.Fake).WithInvokeTimer(func(context.Context, *api.Reminder) error {
+	fn := func(ctx context.Context, req *api.Reminder) error {
 		l.invokes++
+		if invoke != nil {
+			invoke(ctx, req)
+		}
 		return nil
-	})
-	tbl := tablefake.New().WithGetOrCreate(func(string, string) (targets.Interface, error) {
-		l.creates++
-		return target, nil
+	}
+	target := targetsfake.New("abc").(*targetsfake.Fake).WithInvokeTimer(fn).WithInvokeReminder(fn).
+		WithInvokeMethod(func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+			l.invokes++
+			return new(internalv1pb.InternalInvokeResponse), nil
+		}).
+		WithInvokeStream(func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
+			l.invokes++
+			return nil
+		})
+	tbl := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+	t.Cleanup(func() { require.NoError(t, tbl.Close()) })
+	tbl.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: []table.ActorTypeFactory{{
+			Type: "abc",
+			Factory: targetsfake.NewFactory().WithGetOrCreate(func(string) targets.Interface {
+				l.creates++
+				return target
+			}),
+		}},
 	})
 	l.Interface = router.New(router.Options{
 		Placement:  plc,
 		Table:      tbl,
 		Resiliency: resiliency.FromConfigurations(logger.NewLogger("test")),
-		Timers:     timers,
 	})
 	return l
 }
 
-func storageFn(registered bool) func() internaltimers.Storage {
-	s := &registeredStorage{registered: registered}
-	return func() internaltimers.Storage { return s }
+func removableTimer() (*api.Reminder, context.CancelFunc) {
+	removed, remove := context.WithCancel(context.Background())
+	return &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, Removed: removed}, remove
 }
 
-func TestCallReminderStaleTimerDropped(t *testing.T) {
+func TestCallReminderTimerRemovedDuringLookup(t *testing.T) {
 	t.Parallel()
 
-	r := newLocalTimerRouter(t, storageFn(false), nil)
+	for name, claimed := range map[string]bool{
+		"lookup fails on the cancelled context": false,
+		"lookup returns a claim":                true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
-	require.ErrorIs(t, err, actorerrors.ErrTimerFireStale)
-	assert.Equal(t, 1, r.lookups)
-	assert.Equal(t, 1, r.releases, "the placement claim was not released")
-	assert.Equal(t, 0, r.creates)
-	assert.Equal(t, 0, r.invokes, "a stale timer was invoked")
+			waiting := make(chan struct{})
+			r := newLocalTimerRouter(t, func(ctx context.Context, _ int) (context.Context, error) {
+				close(waiting)
+				<-ctx.Done()
+				if claimed {
+					return context.Background(), nil
+				}
+				return nil, ctx.Err()
+			}, nil)
+
+			timer, remove := removableTimer()
+			errCh := make(chan error, 1)
+			go func() { errCh <- r.CallReminder(t.Context(), timer) }()
+			<-waiting
+			remove()
+
+			require.ErrorIs(t, <-errCh, actorerrors.ErrTimerFireStale)
+			assert.Equal(t, 1, r.lookups, "a removed timer fire was retried")
+			if claimed {
+				assert.Equal(t, 1, r.releases, "the placement claim was not released")
+			}
+			assert.Equal(t, 0, r.creates)
+			assert.Equal(t, 0, r.invokes)
+		})
+	}
 }
 
-func TestCallReminderRegisteredTimerInvoked(t *testing.T) {
+func TestCallReminderTimerRemovedDuringRetryBackoff(t *testing.T) {
 	t.Parallel()
 
-	r := newLocalTimerRouter(t, storageFn(true), nil)
+	timer, remove := removableTimer()
+	r := newLocalTimerRouter(t, func(ctx context.Context, n int) (context.Context, error) {
+		if n == 1 {
+			// The built-in retry backs off for 1s, so this lands in the backoff.
+			time.AfterFunc(100*time.Millisecond, remove)
+			return nil, errors.New("actor not found")
+		}
+		return ctx, nil
+	}, nil)
 
-	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
-	require.NoError(t, err)
-	assert.Equal(t, 1, r.lookups)
-	assert.Equal(t, 1, r.releases)
+	require.ErrorIs(t, r.CallReminder(t.Context(), timer), actorerrors.ErrTimerFireStale)
+	assert.Equal(t, 2, r.lookups)
+	assert.Equal(t, 0, r.creates, "a target was created for a removed timer")
+	assert.Equal(t, 0, r.invokes)
+}
+
+func TestCallReminderTimerRemovedDuringInvokeCompletes(t *testing.T) {
+	t.Parallel()
+
+	timer, remove := removableTimer()
+	var alive bool
+	r := newLocalTimerRouter(t, nil, func(ctx context.Context, _ *api.Reminder) {
+		remove()
+		alive = ctx.Err() == nil
+	})
+
+	require.NoError(t, r.CallReminder(t.Context(), timer))
 	assert.Equal(t, 1, r.invokes)
-}
-
-func TestCallReminderNoTimersOption(t *testing.T) {
-	t.Parallel()
-
-	r := newLocalTimerRouter(t, nil, nil)
-
-	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
-	require.NoError(t, err)
-	assert.Equal(t, 1, r.invokes)
-}
-
-func TestCallReminderRemoteTimerNotGated(t *testing.T) {
-	t.Parallel()
-
-	r := newLocalTimerRouter(t, storageFn(false), nil)
-
-	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, IsRemote: true})
-	require.NoError(t, err)
-	assert.Equal(t, 1, r.invokes, "a forwarded timer fire was dropped")
+	assert.True(t, alive, "removing the timer cancelled its running callback")
 }
 
 func TestCallReminderCancelledClaimDoesNotCreateActor(t *testing.T) {
 	t.Parallel()
 
-	for name, timers := range map[string]func() internaltimers.Storage{
-		"with timers":    storageFn(true),
-		"without timers": nil,
+	for name, isTimer := range map[string]bool{
+		"timer":    true,
+		"reminder": false,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newLocalTimerRouter(t, timers, func(ctx context.Context) context.Context {
+			r := newLocalTimerRouter(t, func(ctx context.Context, _ int) (context.Context, error) {
 				ctx, cancel := context.WithCancel(ctx)
 				cancel()
-				return ctx
-			})
+				return ctx, nil
+			}, nil)
 
-			err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, SkipRetries: true})
+			err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: isTimer, SkipRetries: true})
 			require.ErrorIs(t, err, context.Canceled)
 			assert.Equal(t, 1, r.releases)
 			assert.Equal(t, 0, r.creates, "a target was created for an actor whose claim was cancelled")
@@ -160,22 +202,46 @@ func TestCallReminderCancelledClaimDoesNotCreateActor(t *testing.T) {
 func TestCallReminderCancelledClaimRetried(t *testing.T) {
 	t.Parallel()
 
-	var claims int
-	r := newLocalTimerRouter(t, nil, func(ctx context.Context) context.Context {
-		claims++
-		if claims > 1 {
-			return ctx
-		}
-		ctx, cancel := context.WithCancel(ctx)
-		cancel()
-		return ctx
-	})
+	r := newLocalTimerRouter(t, cancelledClaimOnFirstLookup, nil)
 
 	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
 	require.NoError(t, err)
 	assert.Equal(t, 2, r.lookups)
 	assert.Equal(t, 1, r.creates)
 	assert.Equal(t, 1, r.invokes, "a fire whose claim was cancelled was not retried")
+}
+
+func cancelledClaimOnFirstLookup(ctx context.Context, n int) (context.Context, error) {
+	if n > 1 {
+		return ctx, nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	return ctx, nil
+}
+
+func TestCallCancelledClaimDoesNotCreateActor(t *testing.T) {
+	t.Parallel()
+
+	for name, call := range map[string]func(context.Context, router.Interface, *internalv1pb.InternalInvokeRequest) error{
+		"method": func(ctx context.Context, r router.Interface, req *internalv1pb.InternalInvokeRequest) error {
+			_, err := r.Call(ctx, req)
+			return err
+		},
+		"stream": func(ctx context.Context, r router.Interface, req *internalv1pb.InternalInvokeRequest) error {
+			return r.CallStream(ctx, req, func(*internalv1pb.InternalInvokeResponse) (bool, error) { return true, nil })
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newLocalTimerRouter(t, cancelledClaimOnFirstLookup, nil)
+			require.NoError(t, call(t.Context(), r, internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo")))
+			assert.Equal(t, 2, r.lookups, "a call whose claim was cancelled was not retried")
+			assert.Equal(t, 1, r.creates, "a target was created for an actor whose claim was cancelled")
+			assert.Equal(t, 1, r.invokes)
+		})
+	}
 }
 
 func TestCallReminderNonLocalTimerDropped(t *testing.T) {

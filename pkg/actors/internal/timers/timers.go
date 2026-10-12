@@ -29,7 +29,4 @@ type Storage interface {
 	Get(ctx context.Context, timerKey string) *api.Reminder
 	// List returns the timers registered for the given actor, sorted by name.
 	List(ctx context.Context, actorType, actorID string) []*api.Reminder
-	// IsRegistered reports whether reminder is the same object currently
-	// stored under its key.
-	IsRegistered(reminder *api.Reminder) bool
 }

@@ -41,7 +41,6 @@ func (s *stubTimerStorage) Delete(context.Context, string)              {}
 
 func (s *stubTimerStorage) List(context.Context, string, string) []*api.Reminder { return nil }
 func (s *stubTimerStorage) Get(context.Context, string) *api.Reminder            { return nil }
-func (s *stubTimerStorage) IsRegistered(*api.Reminder) bool                      { return true }
 
 func (s *stubTimerStorage) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
 	s.sweeps = append(s.sweeps, fn)
@@ -117,7 +116,7 @@ func Test_GetOrCreate_NotRegistered(t *testing.T) {
 		ReentrancyStore: reentrancystore.New(),
 	})
 
-	_, err := tble.GetOrCreate("test1", "1")
+	_, err := tble.GetOrCreate(t.Context(), "test1", "1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, actorerrors.ErrCreatingActor)
 }
@@ -153,7 +152,7 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.False(t, tble.IsActorTypeHosted("test1"))
 		assert.Equal(t, int64(1), halted.Load())
 
-		_, err := tble.GetOrCreate("test1", "1")
+		_, err := tble.GetOrCreate(t.Context(), "test1", "1")
 		require.Error(t, err)
 		require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
 		require.ErrorContains(t, err, "actor hosting is suspended")
@@ -162,7 +161,7 @@ func Test_SuspendHosting(t *testing.T) {
 		tble.ResumeHosting()
 		assert.Equal(t, []string{"test1"}, tble.Types())
 		assert.True(t, tble.IsActorTypeHosted("test1"))
-		_, err = tble.GetOrCreate("test1", "1")
+		_, err = tble.GetOrCreate(t.Context(), "test1", "1")
 		require.NoError(t, err)
 	})
 
