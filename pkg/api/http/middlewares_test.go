@@ -71,6 +71,12 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 			statusCode: http.StatusNoContent,
 		},
 		{
+			name:       "binary store nested key is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/binarystore/store/path%2Ffile.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
 			name:       "binary store GET is limited",
 			method:     http.MethodGet,
 			path:       "/v1.0-alpha1/binarystore/store/file.bin",

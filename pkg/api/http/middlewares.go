@@ -42,7 +42,7 @@ func isRouteExcludedFromMaxBodySize(method string, u *url.URL) bool {
 		return false
 	}
 
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	parts := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
 	return len(parts) == 4 &&
 		parts[0] == apiVersionV1alpha1 &&
 		parts[1] == "binarystore" &&

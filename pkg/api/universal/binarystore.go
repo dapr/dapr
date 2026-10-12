@@ -30,11 +30,20 @@ func validateBinaryStoreFileName(fileName string) error {
 	switch {
 	case fileName == "":
 		return messages.ErrBinaryStoreNameMissing
-	case fileName == ".", fileName == "..", strings.ContainsAny(fileName, `/\*?[]#`):
-		return messages.ErrBadRequest.WithFormat("invalid file name %q: contains reserved characters", fileName)
-	default:
-		return nil
+	case strings.HasPrefix(fileName, "/"),
+		strings.HasSuffix(fileName, "/"),
+		strings.Contains(fileName, "//"),
+		strings.ContainsAny(fileName, `\*?[]#`):
+		return messages.ErrBadRequest.WithFormat("invalid file name %q", fileName)
 	}
+
+	for segment := range strings.SplitSeq(fileName, "/") {
+		if segment == "." || segment == ".." {
+			return messages.ErrBadRequest.WithFormat("invalid file name %q", fileName)
+		}
+	}
+
+	return nil
 }
 
 // getBinaryStore looks up an initialised binary store component by name,
