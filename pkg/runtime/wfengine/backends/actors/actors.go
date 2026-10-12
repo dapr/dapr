@@ -521,9 +521,12 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
 
+		// Aborted: a completed child refuses reuse of its ID until its
+		// parent acknowledges the completion.
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
-			status.Code() == codes.Unavailable) {
+			status.Code() == codes.Unavailable ||
+			status.Code() == codes.Aborted) {
 			return eerr
 		}
 
