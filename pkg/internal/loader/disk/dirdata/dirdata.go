@@ -66,6 +66,9 @@ const (
 // resources the file holds.
 var ErrLocked = errors.New("resource file held by another process")
 
+// readFileFn is replaced in tests to inject read errors.
+var readFileFn = os.ReadFile
+
 // ReadDirs reads all YAML files from the given directories into memory.
 func ReadDirs(dirs []string) (*DirData, error) {
 	data := &DirData{
@@ -125,7 +128,7 @@ func readFile(path string) ([]byte, error) {
 		if attempt > 0 {
 			time.Sleep(readRetryDelay)
 		}
-		content, err = os.ReadFile(path)
+		content, err = readFileFn(path)
 		if err == nil || !isLocked(err) {
 			return content, err
 		}
