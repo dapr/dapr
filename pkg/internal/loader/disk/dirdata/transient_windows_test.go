@@ -18,9 +18,11 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/windows"
 )
 
 func TestIsDeletePendingWindows(t *testing.T) {
@@ -54,6 +56,58 @@ func TestIsDeletePendingWindows(t *testing.T) {
 
 		data, err := ReadDirs([]string{dir})
 		require.NoError(t, err, "a delete pending file must not fail the scan")
+		require.Len(t, data.Entries, 1)
+		assert.Empty(t, data.Entries[0].Files)
+	})
+}
+
+func TestIsLockedWindows(t *testing.T) {
+	t.Run("should recognise a sharing violation", func(t *testing.T) {
+		assert.True(t, isLocked(windows.ERROR_SHARING_VIOLATION))
+		assert.False(t, isLocked(syscall.ERROR_ACCESS_DENIED))
+	})
+
+	// lock opens path without sharing, as an on-access scanner does, and
+	// returns the handle for the test to close.
+	lock := func(t *testing.T, path string) syscall.Handle {
+		t.Helper()
+		name, err := syscall.UTF16PtrFromString(path)
+		require.NoError(t, err)
+		handle, err := syscall.CreateFile(name, syscall.GENERIC_READ, 0,
+			nil, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+		require.NoError(t, err)
+		return handle
+	}
+
+	t.Run("should read a file once a brief exclusive hold is released", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "1.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
+		handle := lock(t, path)
+		released := make(chan struct{})
+		go func() {
+			defer close(released)
+			time.Sleep(readRetryDelay * 2)
+			_ = syscall.CloseHandle(handle)
+		}()
+
+		data, err := ReadDirs([]string{dir})
+		<-released
+		require.NoError(t, err)
+		require.Len(t, data.Entries, 1)
+		require.Len(t, data.Entries[0].Files, 1)
+		assert.Equal(t, []byte("a"), data.Entries[0].Files[0].Content)
+	})
+
+	t.Run("should skip a file still held exclusively after the retries", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "1.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
+		handle := lock(t, path)
+		t.Cleanup(func() { _ = syscall.CloseHandle(handle) })
+
+		data, err := ReadDirs([]string{dir})
+		require.NoError(t, err, "a locked file must not fail the scan")
 		require.Len(t, data.Entries, 1)
 		assert.Empty(t, data.Entries[0].Files)
 	})

@@ -21,3 +21,9 @@ package dirdata
 func isDeletePending(error) bool {
 	return false
 }
+
+// isLocked is always false away from Windows, where a file open for writing
+// elsewhere can still be read.
+func isLocked(error) bool {
+	return false
+}
