@@ -16,7 +16,9 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/cenkalti/backoff/v4"
@@ -155,4 +157,44 @@ func TestDeactivate_NonOKFails(t *testing.T) {
 
 	err := tp.Deactivate(t.Context(), "myactortype", "a")
 	require.Error(t, err)
+}
+
+func TestEvict_UsesDELETE(t *testing.T) {
+	var seenPath string
+	var seenVerb string
+	tp := newHTTPTransport(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+		seenPath = req.Message().GetMethod()
+		seenVerb = req.Message().GetHttpExtension().GetVerb().String()
+		return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+	})
+
+	err := tp.Evict(t.Context(), "myactortype", "a")
+	require.NoError(t, err)
+	assert.Equal(t, "actors/myactortype/a", seenPath)
+	assert.Equal(t, "DELETE", seenVerb)
+}
+
+func TestEvict_AnyStatusIsNotAnError(t *testing.T) {
+	for _, code := range []int32{http.StatusOK, http.StatusBadRequest, http.StatusNotFound, http.StatusInternalServerError} {
+		t.Run(strconv.Itoa(int(code)), func(t *testing.T) {
+			tp := newHTTPTransport(func(context.Context, *invokev1.InvokeMethodRequest, string) (*invokev1.InvokeMethodResponse, error) {
+				return invokev1.NewInvokeMethodResponse(code, "", nil), nil
+			})
+
+			require.NoError(t, tp.Evict(t.Context(), "myactortype", "a"))
+		})
+	}
+}
+
+func TestEvict_TransportErrorReturned(t *testing.T) {
+	tp := newHTTPTransport(func(context.Context, *invokev1.InvokeMethodRequest, string) (*invokev1.InvokeMethodResponse, error) {
+		return nil, errors.New("boom")
+	})
+
+	require.ErrorContains(t, tp.Evict(t.Context(), "myactortype", "a"), "boom")
+}
+
+func TestEvict_NilAppChannel(t *testing.T) {
+	tp := New(nil, resiliency.New(logger.NewLogger("test")), "myactortype")
+	require.Error(t, tp.Evict(t.Context(), "myactortype", "a"))
 }

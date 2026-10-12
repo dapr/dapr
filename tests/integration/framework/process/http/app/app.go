@@ -65,6 +65,9 @@ func New(t *testing.T, fopts ...Option) *App {
 		}),
 	)
 	httpopts = append(httpopts, opts.handlerFuncs...)
+	if opts.evictions {
+		httpopts = append(httpopts, http.WithEvictions())
+	}
 
 	return &App{
 		http:    http.New(t, httpopts...),

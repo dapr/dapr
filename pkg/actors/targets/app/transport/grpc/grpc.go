@@ -192,6 +192,10 @@ func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) e
 	return err
 }
 
+func (t *Transport) Evict(ctx context.Context, actorType, actorID string) error {
+	return t.Deactivate(ctx, actorType, actorID)
+}
+
 // reminderResult extracts an SubscribeActorEventsRequestReminderResponseAlpha1 from an incoming
 // stream message. A RequestFailed oneof is mapped to a Go error.
 func reminderResult(incoming *runtimev1pb.SubscribeActorEventsRequestAlpha1, err error) (*runtimev1pb.SubscribeActorEventsRequestReminderResponseAlpha1, error) {

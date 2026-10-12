@@ -48,6 +48,7 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	IdleTimeout    time.Duration
 	clock          clock.Clock
+	evictTimeout   time.Duration
 	Reentrancy     *reentrancystore.Store
 	Placement      placement.Interface
 	EntityConfig   *api.EntityConfig
@@ -66,13 +67,20 @@ type factory struct {
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
 
+	evictTimeout time.Duration
+
 	table sync.Map
 	lock  sync.RWMutex
 }
 
+const defaultEvictTimeout = 5 * time.Second
+
 func New(opts Options) targets.Factory {
 	if opts.clock == nil {
 		opts.clock = clock.RealClock{}
+	}
+	if opts.evictTimeout == 0 {
+		opts.evictTimeout = defaultEvictTimeout
 	}
 
 	f := &factory{
@@ -82,6 +90,7 @@ func New(opts Options) targets.Factory {
 		placement:    opts.Placement,
 		clock:        opts.clock,
 		idleTimeout:  opts.IdleTimeout,
+		evictTimeout: opts.evictTimeout,
 		reentrancy:   opts.Reentrancy,
 		entityConfig: opts.EntityConfig,
 	}
@@ -177,7 +186,7 @@ func (f *factory) haltActors(ctx context.Context, fn func(string) bool) error {
 		wg.Add(1)
 		go func(aa *app) {
 			defer wg.Done()
-			errs.Append(f.halt(ctx, aa))
+			errs.Append(f.halt(ctx, aa, false))
 		}(aa)
 
 		return true
@@ -212,18 +221,22 @@ func (f *factory) handleIdleActor(target *app) {
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := f.halt(ctx, target); err != nil {
+	if err := f.halt(ctx, target, true); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
 }
 
-func (f *factory) halt(ctx context.Context, app *app) error {
+func (f *factory) halt(ctx context.Context, app *app, idle bool) error {
+	if !app.closeLock(ctx, idle) {
+		return nil
+	}
+
 	key := app.Key()
 
 	diag.DefaultMonitoring.ActorRebalanced(app.Type())
 
 	log.Debugf("Halting actor '%s'", key)
 
-	return app.Deactivate(ctx)
+	return app.teardown()
 }

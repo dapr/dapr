@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/http2/h2c" //nolint:staticcheck
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/evict"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -111,8 +112,8 @@ func (h *resiliency) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(body))
 	})
 
-	h2cHandler := h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck
-	srv := prochttp.New(t, prochttp.WithHandler(h2cHandler))
+	h2cHandler := h2c.NewHandler(evict.New().Handler(handler), &http2.Server{}) //nolint:staticcheck
+	srv := prochttp.New(t, prochttp.WithHandler(h2cHandler), prochttp.WithEvictions())
 
 	h.place = placement.New(t)
 	h.sched = scheduler.New(t, scheduler.WithID("dapr-scheduler-0"))

@@ -105,6 +105,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	for pattern, handler := range opts.handlers {
 		handlers = append(handlers, app.WithHandlerFunc(pattern, handler))
 	}
+	if opts.evictions {
+		handlers = append(handlers, app.WithEvictions())
+	}
 
 	config := fmt.Sprintf(`{"entities": [%s]`, strings.Join(opts.types, ","))
 	if opts.reentryMaxDepth != nil {

@@ -24,6 +24,7 @@ type options struct {
 	config        string
 	initialHealth bool
 	handlerFuncs  []http.Option
+	evictions     bool
 }
 
 func WithSubscribe(subscribe string) Option {
@@ -41,6 +42,13 @@ func WithConfig(config string) Option {
 func WithHandlerFunc(path string, fn nethttp.HandlerFunc) Option {
 	return func(o *options) {
 		o.handlerFuncs = append(o.handlerFuncs, http.WithHandlerFunc(path, fn))
+	}
+}
+
+// WithEvictions passes eviction deactivations to the handlers, which drop them by default.
+func WithEvictions() Option {
+	return func(o *options) {
+		o.evictions = true
 	}
 }
 

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework/actors/evict"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
@@ -36,8 +37,9 @@ type Option func(*options)
 
 // App is a wrapper around a grpc.Server that implements a Dapr App.
 type App struct {
-	grpc *procgrpc.GRPC
-	opts options
+	grpc      *procgrpc.GRPC
+	opts      options
+	evictions *evict.Filter
 
 	streamCtx    context.Context
 	streamCancel context.CancelFunc
@@ -55,8 +57,14 @@ func New(t *testing.T, fopts ...Option) *App {
 		fopt(&opts)
 	}
 
+	var evictions *evict.Filter
+	if !opts.evictions {
+		evictions = evict.New()
+	}
+
 	return &App{
-		opts: opts,
+		opts:      opts,
+		evictions: evictions,
 		grpc: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				onInvokeFn:         opts.onInvokeFn,
@@ -216,6 +224,7 @@ func (a *App) dispatchActorCallback(
 	switch v := msg.GetResponseType().(type) {
 	case *rtv1.SubscribeActorEventsResponseAlpha1_InvokeRequest:
 		req := v.InvokeRequest
+		a.called(req.GetActorType(), req.GetActorId())
 		resp := &rtv1.SubscribeActorEventsRequestInvokeResponseAlpha1{Id: req.GetId()}
 		if a.opts.onActorInvokeFn != nil {
 			r, err := a.opts.onActorInvokeFn(ctx, req)
@@ -235,6 +244,7 @@ func (a *App) dispatchActorCallback(
 		})
 	case *rtv1.SubscribeActorEventsResponseAlpha1_ReminderRequest:
 		req := v.ReminderRequest
+		a.called(req.GetActorType(), req.GetActorId())
 		resp := &rtv1.SubscribeActorEventsRequestReminderResponseAlpha1{Id: req.GetId()}
 		if a.opts.onActorReminderFn != nil {
 			r, err := a.opts.onActorReminderFn(ctx, req)
@@ -254,6 +264,7 @@ func (a *App) dispatchActorCallback(
 		})
 	case *rtv1.SubscribeActorEventsResponseAlpha1_TimerRequest:
 		req := v.TimerRequest
+		a.called(req.GetActorType(), req.GetActorId())
 		resp := &rtv1.SubscribeActorEventsRequestReminderResponseAlpha1{Id: req.GetId()}
 		if a.opts.onActorTimerFn != nil {
 			r, err := a.opts.onActorTimerFn(ctx, req)
@@ -274,7 +285,8 @@ func (a *App) dispatchActorCallback(
 	case *rtv1.SubscribeActorEventsResponseAlpha1_DeactivateRequest:
 		req := v.DeactivateRequest
 		resp := &rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1{Id: req.GetId()}
-		if a.opts.onActorDeactivateFn != nil {
+		evicted := a.evictions != nil && a.evictions.IsEviction(req.GetActorType(), req.GetActorId())
+		if a.opts.onActorDeactivateFn != nil && !evicted {
 			r, err := a.opts.onActorDeactivateFn(ctx, req)
 			if err != nil {
 				_ = send(requestFailed(req.GetId(), err))
@@ -290,6 +302,12 @@ func (a *App) dispatchActorCallback(
 				DeactivateResponse: resp,
 			},
 		})
+	}
+}
+
+func (a *App) called(actorType, actorID string) {
+	if a.evictions != nil {
+		a.evictions.Called(actorType, actorID)
 	}
 }
 

@@ -28,6 +28,7 @@ type options struct {
 	handlerFuncs map[string]http.HandlerFunc
 	tlsConfig    *tls.Config
 	port         *int
+	evictions    bool
 }
 
 func WithHandler(handler http.Handler) Option {
@@ -48,6 +49,13 @@ func WithHandlerFunc(path string, fn http.HandlerFunc) Option {
 			o.handlerFuncs = make(map[string]http.HandlerFunc)
 		}
 		o.handlerFuncs[path] = fn
+	}
+}
+
+// WithEvictions passes eviction deactivations to the handler, which drops them by default.
+func WithEvictions() Option {
+	return func(o *options) {
+		o.evictions = true
 	}
 }
 
