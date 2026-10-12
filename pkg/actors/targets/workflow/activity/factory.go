@@ -106,10 +106,11 @@ type factory struct {
 	registerResolver func(workflowInstanceID string, taskID int32, resolve func()) func()
 	staleClaimAfter  time.Duration
 
-	// publishShutdownGrace is how long the context of a result publish stays
-	// live after the runtime starts to shut down (see publishAndSettle). Zero
-	// means defaultPublishShutdownGrace. Unit tests set it.
-	publishShutdownGrace time.Duration
+	// shutdownGraceOverride replaces publishShutdownGrace for this factory
+	// when it is set (see publishAndSettle). Zero means publishShutdownGrace.
+	// Unit tests set it, because subtests that run in parallel need different
+	// values.
+	shutdownGraceOverride time.Duration
 
 	// inflight tracks activity executions whose WorkItem is in the durabletask
 	// queue or being processed by the SDK, keyed by inflight.Key. Shared by

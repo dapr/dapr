@@ -18,11 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -33,25 +35,33 @@ import (
 	"github.com/dapr/durabletask-go/api"
 )
 
-// defaultPublishShutdownGrace is how long the context of a result publish
-// stays live after the runtime starts to shut down (see publishAndSettle). It
-// is the only time bound that this package puts on a publish. The publish
-// waits for the parent workflow's turn lock, and in a fan-out every
-// completion queues on that one lock behind the turn that scheduled the
-// activities, so the wait grows with the fan-out. The wait is backpressure,
-// not a failure. A deadline on it settled the execution as failed, the
-// run-activity reminder ran the body again, and the re-run queued on the same
-// lock.
+// defaultPublishShutdownGrace is the production value of
+// publishShutdownGrace.
 const defaultPublishShutdownGrace = 30 * time.Second
 
+// publishShutdownGrace is how long the context of a result publish stays live
+// after the runtime starts to shut down (see publishAndSettle). It is the only
+// time bound that this package puts on a publish. The publish waits for the
+// parent workflow's turn lock, and in a fan-out every completion queues on
+// that one lock behind the turn that scheduled the activities, so the wait
+// grows with the fan-out. The wait is backpressure, not a failure. A deadline
+// on it settled the execution as failed, the run-activity reminder ran the
+// body again, and the re-run queued on the same lock.
+//
+// The env override exists for integration tests that cannot wait the
+// production bound; it is not a supported production knob.
+var publishShutdownGrace = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE", defaultPublishShutdownGrace)
+})
+
 // shutdownGrace is how long the context of a publish stays live after the
-// runtime starts to shut down: the factory's publishShutdownGrace when set,
-// else defaultPublishShutdownGrace.
+// runtime starts to shut down: the factory's shutdownGraceOverride when a unit
+// test set it, else publishShutdownGrace.
 func (f *factory) shutdownGrace() time.Duration {
-	if f.publishShutdownGrace > 0 {
-		return f.publishShutdownGrace
+	if f.shutdownGraceOverride > 0 {
+		return f.shutdownGraceOverride
 	}
-	return defaultPublishShutdownGrace
+	return publishShutdownGrace()
 }
 
 // errPublishAbandoned settles an execution whose result can no longer be

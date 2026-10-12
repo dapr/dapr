@@ -338,7 +338,7 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		f, scheduled := newExecHarness(t)
 		rootCtx, rootCancel := context.WithCancel(t.Context())
 		f.detached = detached.New(rootCtx)
-		f.publishShutdownGrace = time.Millisecond * 50
+		f.shutdownGraceOverride = time.Millisecond * 50
 		b := newBusyParent(f)
 
 		a := f.GetOrCreate("wf::3::0").(*activity)
@@ -377,7 +377,7 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		f, scheduled := newExecHarness(t)
 		rootCtx, rootCancel := context.WithCancel(t.Context())
 		f.detached = detached.New(rootCtx)
-		f.publishShutdownGrace = time.Hour
+		f.shutdownGraceOverride = time.Hour
 		b := newBusyParent(f)
 
 		a := f.GetOrCreate("wf::3::0").(*activity)

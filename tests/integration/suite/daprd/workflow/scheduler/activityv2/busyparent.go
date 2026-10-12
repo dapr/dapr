@@ -50,9 +50,10 @@ type busyparent struct {
 const (
 	busyparentActivities = 5
 	// busyparentHold is how long the parent's second turn holds its turn
-	// lock once the other four results are in hand. It is longer than the
-	// 30 s publish bound that this test guards against. With the 45 s case
-	// budget, it leaves about 12 s for process startup.
+	// lock once the publishes of the other four results wait for it. It is
+	// longer than the 30 s publish bound that this test guards against, and
+	// that bound starts before each publish waits. With the 45 s case budget,
+	// it leaves about 12 s for process startup.
 	busyparentHold = 32 * time.Second
 	// busyparentGate bounds each wait on the order this test forces.
 	busyparentGate = 10 * time.Second
@@ -74,22 +75,26 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 		// second turn holds the lock.
 		turnTwo     = make(chan struct{})
 		turnTwoOnce sync.Once
-		// returned counts the bodies of activities 1-4 that returned.
-		returned atomic.Int64
-		// heldWithResults is set when the second turn saw all four results
-		// in hand before it started to hold the lock.
+		// heldWithResults is set when the second turn saw the publishes of
+		// all four results wait for the lock before it started to hold it.
 		heldWithResults atomic.Bool
 	)
+
+	// Calls that wait for the parent's turn lock. The second turn holds the
+	// lock, so the publishes of activities 1-4 queue here.
+	waiting := func() float64 {
+		return b.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_actor_pending_actor_calls", "actor_type:"+b.workflow.WorkflowActorType(0))
+	}
 
 	require.NoError(t, b.workflow.Registry().AddWorkflowN("BusyParent", func(c *task.WorkflowContext) (any, error) {
 		// The second turn is the one driven by the result of activity 0.
 		if turns.Add(1) == 2 {
 			turnTwoOnce.Do(func() { close(turnTwo) })
 			deadline := time.Now().Add(busyparentGate)
-			for returned.Load() < busyparentActivities-1 && time.Now().Before(deadline) {
+			for waiting() < busyparentActivities-1 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond * 10)
 			}
-			heldWithResults.Store(returned.Load() == busyparentActivities-1)
+			heldWithResults.Store(waiting() >= busyparentActivities-1)
 			time.Sleep(busyparentHold)
 		}
 		tasks := make([]task.Task, busyparentActivities)
@@ -117,7 +122,6 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 		case <-time.After(busyparentGate):
 			return nil, errors.New("the parent's second turn did not start")
 		}
-		returned.Add(1)
 		return nil, nil
 	}))
 
@@ -129,7 +133,7 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	require.True(t, heldWithResults.Load(),
-		"the second turn must hold the parent's turn lock while the four results are in hand")
+		"the second turn must hold the parent's turn lock while the publishes of the four results wait for it")
 
 	// Each result was in hand while it waited for the parent. Nothing was
 	// lost and nothing moved, so each body must have run one time.
