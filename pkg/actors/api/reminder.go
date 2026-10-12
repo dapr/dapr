@@ -14,6 +14,7 @@ limitations under the License.
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -55,6 +56,18 @@ type Reminder struct {
 	// Scheduler against the creator's identity when the job was scheduled.
 	// Empty when unknown (state store reminders, timers, older Schedulers).
 	SourceAppID string `json:"-"`
+	// Removed is cancelled when the timer is deleted or replaced.
+	Removed context.Context `json:"-"`
+}
+
+// UntilRemoved merges Removed into ctx until removed is called.
+func (r *Reminder) UntilRemoved(ctx context.Context) (wctx context.Context, removed func() bool, cancel context.CancelFunc) {
+	if r.Removed == nil {
+		return ctx, func() bool { return false }, func() {}
+	}
+	wctx, cancel = context.WithCancel(ctx)
+	stop := context.AfterFunc(r.Removed, cancel)
+	return wctx, func() bool { return !stop() }, cancel
 }
 
 // ActorKey returns the key of the actor for this reminder.
