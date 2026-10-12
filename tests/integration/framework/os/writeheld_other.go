@@ -15,13 +15,11 @@ limitations under the License.
 
 package os
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 // WriteFileHeld holds a file without sharing, which only Windows can do.
-func WriteFileHeld(t *testing.T, _ string, _ []byte, _ time.Duration) {
+func WriteFileHeld(t *testing.T, _ string, _ []byte) (release func()) {
 	t.Helper()
 	t.Fatal("WriteFileHeld requires windows")
+	return nil
 }

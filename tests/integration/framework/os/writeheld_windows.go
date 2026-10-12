@@ -14,17 +14,18 @@ limitations under the License.
 package os
 
 import (
+	"sync"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 // WriteFileHeld creates path with no sharing, writes data, and keeps the
-// handle open for hold before closing it, as an on-access scanner does. Every
-// other open of the file fails with a sharing violation while it is held.
-func WriteFileHeld(t *testing.T, path string, data []byte, hold time.Duration) {
+// handle open until the returned release is called, as an on-access scanner
+// does. Every other open of the file fails with a sharing violation while it
+// is held.
+func WriteFileHeld(t *testing.T, path string, data []byte) (release func()) {
 	t.Helper()
 	name, err := syscall.UTF16PtrFromString(path)
 	require.NoError(t, err)
@@ -34,6 +35,8 @@ func WriteFileHeld(t *testing.T, path string, data []byte, hold time.Duration) {
 	var written uint32
 	require.NoError(t, syscall.WriteFile(handle, data, &written, nil))
 	require.NoError(t, syscall.FlushFileBuffers(handle))
-	time.Sleep(hold)
-	require.NoError(t, syscall.CloseHandle(handle))
+	var once sync.Once
+	release = func() { once.Do(func() { require.NoError(t, syscall.CloseHandle(handle)) }) }
+	t.Cleanup(release)
+	return release
 }

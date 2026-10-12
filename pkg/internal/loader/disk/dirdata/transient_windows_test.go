@@ -99,7 +99,7 @@ func TestIsLockedWindows(t *testing.T) {
 		assert.Equal(t, []byte("a"), data.Entries[0].Files[0].Content)
 	})
 
-	t.Run("should skip a file still held exclusively after the retries", func(t *testing.T) {
+	t.Run("should report a file still held exclusively after the retries", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "1.yaml")
 		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
@@ -107,8 +107,7 @@ func TestIsLockedWindows(t *testing.T) {
 		t.Cleanup(func() { _ = syscall.CloseHandle(handle) })
 
 		data, err := ReadDirs([]string{dir})
-		require.NoError(t, err, "a locked file must not fail the scan")
-		require.Len(t, data.Entries, 1)
-		assert.Empty(t, data.Entries[0].Files)
+		require.ErrorIs(t, err, ErrLocked, "a locked file must abort the scan so it is retried, not skipped")
+		assert.Nil(t, data)
 	})
 }

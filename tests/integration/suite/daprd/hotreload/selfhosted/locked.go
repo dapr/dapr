@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,9 +34,9 @@ func init() {
 	suite.Register(new(locked))
 }
 
-// locked asserts a resource file another process holds without sharing while
-// it is written, as an on-access scanner does, neither stops the runtime nor
-// loses the resource once the hold is released.
+// locked asserts a resource file another process holds without sharing, as
+// an on-access scanner does, neither stops the runtime, loses the resource
+// once the hold is released, nor unloads a resource already loaded from it.
 type locked struct {
 	daprd  *daprd.Daprd
 	resDir string
@@ -55,41 +56,46 @@ func (l *locked) Run(t *testing.T, ctx context.Context) {
 	l.daprd.WaitUntilRunning(t, ctx)
 	assert.Empty(t, l.daprd.GetMetaRegisteredComponents(t, ctx))
 
-	t.Run("a hold shorter than the read retries loads the component", func(t *testing.T) {
-		fos.WriteFileHeld(t, filepath.Join(l.resDir, "1.yaml"), []byte(`
+	component := func(name string) []byte {
+		return fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: brief
+  name: %s
 spec:
   type: state.in-memory
   version: v1
   metadata: []
-`), time.Millisecond*50)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, l.daprd.GetMetaRegisteredComponents(c, ctx), 1)
-		}, time.Second*15, time.Millisecond*10)
+`, name)
+	}
+	registered := func(c *assert.CollectT, n int) {
+		assert.Len(c, l.daprd.GetMetaRegisteredComponents(c, ctx), n)
+	}
+
+	t.Run("a hold shorter than the read retries loads the component", func(t *testing.T) {
+		release := fos.WriteFileHeld(t, filepath.Join(l.resDir, "1.yaml"), component("brief"))
+		time.Sleep(time.Millisecond * 50)
+		release()
+		require.EventuallyWithT(t, func(c *assert.CollectT) { registered(c, 1) }, time.Second*15, time.Millisecond*10)
 	})
 
-	t.Run("a hold longer than the read retries keeps the runtime up", func(t *testing.T) {
-		path := filepath.Join(l.resDir, "2.yaml")
-		component := []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: long
-spec:
-  type: state.in-memory
-  version: v1
-  metadata: []
-`)
-		fos.WriteFileHeld(t, path, component, time.Second)
-		// The scan which found the file locked skipped it; the runtime must
-		// still answer and pick the file up on its next change.
+	t.Run("a hold longer than the read retries keeps the runtime up and the scan is retried", func(t *testing.T) {
+		release := fos.WriteFileHeld(t, filepath.Join(l.resDir, "2.yaml"), component("long"))
+		time.Sleep(time.Second)
 		assert.Len(t, l.daprd.GetMetaRegisteredComponents(t, ctx), 1)
-		require.NoError(t, os.WriteFile(path, component, 0o600))
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, l.daprd.GetMetaRegisteredComponents(c, ctx), 2)
-		}, time.Second*15, time.Millisecond*10)
+		release()
+		// Releasing a handle raises no filesystem event, so only the loader's
+		// own rescan can pick the file up.
+		require.EventuallyWithT(t, func(c *assert.CollectT) { registered(c, 2) }, time.Second*15, time.Millisecond*10)
+	})
+
+	t.Run("a loaded component whose file is held is not unloaded", func(t *testing.T) {
+		release := fos.WriteFileHeld(t, filepath.Join(l.resDir, "1.yaml"), component("brief"))
+		require.NoError(t, os.WriteFile(filepath.Join(l.resDir, "3.yaml"), component("other"), 0o600))
+		assert.Never(t, func() bool {
+			return len(l.daprd.GetMetaRegisteredComponents(t, ctx)) < 2
+		}, time.Second, time.Millisecond*10, "a scan that cannot read a held file must not reconcile without it")
+		release()
+		require.EventuallyWithT(t, func(c *assert.CollectT) { registered(c, 3) }, time.Second*15, time.Millisecond*10)
 	})
 }

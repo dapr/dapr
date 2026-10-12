@@ -60,6 +60,12 @@ const (
 	readRetryDelay = 20 * time.Millisecond
 )
 
+// ErrLocked reports a file still held exclusively by another process after
+// the read retries. The scan is incomplete rather than failed: a caller must
+// retry it instead of reconciling the partial result, which would unload the
+// resources the file holds.
+var ErrLocked = errors.New("resource file held by another process")
+
 // ReadDirs reads all YAML files from the given directories into memory.
 func ReadDirs(dirs []string) (*DirData, error) {
 	data := &DirData{
@@ -96,11 +102,12 @@ func readDir(dir string) (*DirEntry, error) {
 			//
 			// Windows reports the same race as a delete pending file rather
 			// than a missing one, since the watcher's own handle keeps the
-			// entry in the listing until it closes. A file still held
-			// exclusively after the retries is skipped the same way rather
-			// than failing the scan, which would stop the runtime.
-			if errors.Is(err, fs.ErrNotExist) || isDeletePending(err) || isLocked(err) {
+			// entry in the listing until it closes.
+			if errors.Is(err, fs.ErrNotExist) || isDeletePending(err) {
 				continue
+			}
+			if isLocked(err) {
+				return nil, fmt.Errorf("%w: %s: %w", ErrLocked, filepath.Join(dir, f.Name()), err)
 			}
 			return nil, fmt.Errorf("failed to read file %s: %w", filepath.Join(dir, f.Name()), err)
 		}
