@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
@@ -123,7 +124,8 @@ func (f *forcepurgemissing) Run(t *testing.T, ctx context.Context) {
 
 		err = client.PurgeWorkflowState(ctx, id, dworkflow.WithForcePurge(true))
 		require.Error(t, err, "an instance without rows is not found")
-		assert.NotContains(t, err.Error(), api.ErrInstanceNotFound.Error(), "daprd must answer, not drop the connection")
+		assert.NotContains(t, err.Error(), "EOF")
+		assert.Contains(t, err.Error(), api.ErrInstanceNotFound.Error())
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, timer(), "force purge must remove the orphaned reminder")
 		}, 10*time.Second, 10*time.Millisecond)
