@@ -41,9 +41,10 @@ import (
 )
 
 type blockingSetBinaryFileStream struct {
-	ctx     context.Context
-	recvErr error
-	once    sync.Once
+	ctx            context.Context
+	recvErr        error
+	initialRequest *runtimev1pb.SetBinaryFileRequestInitialAlpha1
+	once           sync.Once
 }
 
 type providerErrorBinaryStore struct {
@@ -105,13 +106,17 @@ func (b *blockingSetBinaryFileStream) RecvMsg(message any) error {
 		first = true
 	})
 	if first {
+		initialRequest := b.initialRequest
+		if initialRequest == nil {
+			initialRequest = &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
+				ComponentName: "missing",
+				FileName:      "file.bin",
+			}
+		}
 		req := message.(*runtimev1pb.SetBinaryFileRequestAlpha1)
 		*req = runtimev1pb.SetBinaryFileRequestAlpha1{
 			SetBinaryFileRequestType: &runtimev1pb.SetBinaryFileRequestAlpha1_InitialRequest{
-				InitialRequest: &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
-					ComponentName: "missing",
-					FileName:      "file.bin",
-				},
+				InitialRequest: initialRequest,
 			},
 		}
 		return nil
@@ -154,6 +159,51 @@ func TestSetBinaryFileReturnsComponentErrorBeforeClientClosesStream(t *testing.T
 		require.ErrorIs(t, err, messages.ErrBinaryStoreNotFound)
 	case <-time.After(time.Second):
 		t.Fatal("SetBinaryFileAlpha1 waited for the client to close the stream")
+	}
+}
+
+func TestSetBinaryFileUsesUniversalValidation(t *testing.T) {
+	tests := []struct {
+		name           string
+		initialRequest *runtimev1pb.SetBinaryFileRequestInitialAlpha1
+		expected       error
+	}{
+		{
+			name: "empty component name",
+			initialRequest: &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
+				FileName: "file.bin",
+			},
+			expected: messages.ErrBinaryStoreNotFound,
+		},
+		{
+			name: "empty file name",
+			initialRequest: &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
+				ComponentName: "missing",
+			},
+			expected: messages.ErrBinaryStoreNameMissing,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			a := &api{
+				Universal: universal.New(universal.Options{
+					Logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+					Resiliency: resiliency.New(nil),
+					CompStore:  compstore.New(),
+				}),
+				logger: logger.NewLogger("dapr.runtime.grpc.test"),
+			}
+			defer a.wg.Wait()
+			defer cancel()
+
+			err := a.SetBinaryFileAlpha1(&blockingSetBinaryFileStream{
+				ctx:            ctx,
+				initialRequest: test.initialRequest,
+			})
+			require.ErrorIs(t, err, test.expected)
+		})
 	}
 }
 

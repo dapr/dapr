@@ -48,17 +48,7 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 		return err
 	}
 	componentName := initialRequest.GetComponentName()
-	if componentName == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'componentName' in the initial request")
-		a.logger.Debug(err)
-		return err
-	}
 	fileName := initialRequest.GetFileName()
-	if fileName == "" {
-		err = messages.ErrBinaryStoreNameMissing
-		a.logger.Debug(err)
-		return err
-	}
 	overwrite := initialRequest.GetOverwrite()
 
 	// Pipe the streamed payload to the universal layer which forwards it to
