@@ -15,6 +15,7 @@ package router_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -22,6 +23,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -282,4 +285,24 @@ type reminderSink struct {
 func (s *reminderSink) CallActorReminder(_ context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
 	s.received <- in
 	return new(emptypb.Empty), nil
+}
+
+func TestIsRetryableRemoteError(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"unavailable":               {err: status.Error(codes.Unavailable, "connection refused"), want: true},
+		"actor moved":               {err: status.Error(codes.Internal, "error invoke actor method: remote actor moved"), want: true},
+		"placement disseminating":   {err: status.Error(codes.Internal, "lookup: placement is disseminating"), want: true},
+		"other internal":            {err: status.Error(codes.Internal, "boom"), want: false},
+		"aborted is for the caller": {err: status.Error(codes.Aborted, "retry later"), want: false},
+		"already exists":            {err: status.Error(codes.AlreadyExists, "taken"), want: false},
+		"not a status":              {err: errors.New("plain"), want: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, router.IsRetryableRemoteError(tc.err))
+		})
+	}
 }
