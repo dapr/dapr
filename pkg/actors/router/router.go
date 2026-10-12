@@ -281,19 +281,31 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		return nil, err
 	}
 
-	attempt := resiliency.GetAttempt(ctx)
-	s, ok := status.FromError(err)
-	if ok {
-		if s.Code() == codes.Unavailable ||
-			(s.Code() == codes.Internal &&
-				(s.Message() == "error invoke actor method: remote actor moved" ||
-					strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
-			// Destroy the connection and force a re-connection on the next attempt
-			return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
-		}
+	if IsRetryableRemoteError(err) {
+		// Destroy the connection and force a re-connection on the next attempt
+		attempt := resiliency.GetAttempt(ctx)
+		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}
 
 	return res, backoff.Permanent(err)
+}
+
+// IsRetryableRemoteError reports whether an error from a remote actor call
+// is retried by the built-in actor policy, inside the caller's invocation:
+// Unavailable (the host is unreachable or the actor is moving) and the
+// Internal errors of an actor moved or a placement dissemination in progress.
+// An actor method must not answer with these codes for a refusal that only
+// the caller's next turn can resolve: the caller would retry while still
+// holding its own actor lock.
+func IsRetryableRemoteError(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	return s.Code() == codes.Unavailable ||
+		(s.Code() == codes.Internal &&
+			(s.Message() == "error invoke actor method: remote actor moved" ||
+				strings.HasSuffix(s.Message(), ": placement is disseminating")))
 }
 
 func (r *router) callRemoteActor(ctx context.Context, lar *api.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
