@@ -14,11 +14,14 @@ limitations under the License.
 package os
 
 import (
+	"errors"
+	"os"
 	"sync"
 	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/windows"
 )
 
 // WriteFileHeld creates path with no sharing, writes data, and keeps the
@@ -35,6 +38,18 @@ func WriteFileHeld(t *testing.T, path string, data []byte) (release func()) {
 	var written uint32
 	require.NoError(t, syscall.WriteFile(handle, data, &written, nil))
 	require.NoError(t, syscall.FlushFileBuffers(handle))
+
+	// Some hosts do not refuse the open with a sharing violation; skip
+	// rather than test something else.
+	f, oerr := os.Open(path)
+	if oerr == nil {
+		f.Close()
+	}
+	if !errors.Is(oerr, windows.ERROR_SHARING_VIOLATION) {
+		require.NoError(t, syscall.CloseHandle(handle))
+		t.Skipf("host did not refuse an open of a file held with share mode 0, os.Open returned: %v", oerr)
+	}
+
 	var once sync.Once
 	release = func() { once.Do(func() { require.NoError(t, syscall.CloseHandle(handle)) }) }
 	t.Cleanup(release)
