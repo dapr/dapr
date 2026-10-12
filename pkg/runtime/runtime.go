@@ -951,7 +951,7 @@ func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 		return
 	}
 
-	err := pluggable.Discover(ctx)
+	err := pluggable.Discover(ctx, a.runtimeConfig.maxRequestBodySize)
 	if err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}
