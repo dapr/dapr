@@ -19,6 +19,7 @@ package actor_reminder_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -340,9 +341,15 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					_, errInternal := utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
 					require.NoError(t, errInternal)
 
-					// Registering reminder
-					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
-					require.NoError(t, errInternal)
+					// Registering reminder. The previous subtest restarts the app, and the
+					// app answers 500 while its sidecar is still starting, so retry until
+					// the registration succeeds.
+					assert.EventuallyWithT(t, func(c *assert.CollectT) {
+						body, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
+						if assert.NoError(c, err) {
+							assert.Equal(c, http.StatusOK, status, "registering reminder %s for actor %s: %s", reminderNameForGet, actorID, string(body))
+						}
+					}, 60*time.Second, time.Second)
 				}
 			}(iteration)
 		}

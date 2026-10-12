@@ -47,8 +47,9 @@ func init() {
 // the actor backend suppressed the re-dispatch as already resolved,
 // deadlocking the workflow forever; this is the deterministic reproduction
 // of the scheduler crash redelivery stall seen in clustered deployment mode.
-// With the fix the buffered resolution completes the activity task as it is
-// scheduled, the scheduling is recorded without being dispatched, and the
+// Now daprd hands the completion to the worker after the event that leads
+// the workflow to schedule the activity, so it resolves the task in the same
+// turn; the scheduling is recorded without being dispatched, and the
 // workflow completes with the injected result.
 type completion struct {
 	workflow *workflow.Workflow

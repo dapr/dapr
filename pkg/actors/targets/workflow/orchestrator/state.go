@@ -209,7 +209,7 @@ func (o *orchestrator) invalidateCachedState() {
 // invalidateCachedState. Callers set o.state themselves: a caller priming the
 // views for a state that is not yet durable must not cache it.
 func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *protos.ExecutionStartedEvent) {
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, resolutionsAfterScheduling(state.History))
 	o.ometa = o.ometaFromState(o.rstate, startEvent)
 }
 

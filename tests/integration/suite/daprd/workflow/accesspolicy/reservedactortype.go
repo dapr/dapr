@@ -96,8 +96,17 @@ func (r *reservedactortype) Run(t *testing.T, ctx context.Context) {
 	for _, actorType := range []string{
 		"dapr.internal.default.reserved-app.workflow",
 		"dapr.internal.default.reserved-app.activity",
+		"dapr.internal.default.reserved-app.executor",
 	} {
 		t.Run(actorType, func(t *testing.T) {
+			t.Run("gRPC InvokeActor is denied", func(t *testing.T) {
+				_, err := daprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+					ActorType: actorType, ActorId: "any", Method: "Complete",
+				})
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+			})
+
 			t.Run("gRPC ExecuteActorStateTransaction is denied", func(t *testing.T) {
 				_, err := daprClient.ExecuteActorStateTransaction(ctx, &runtimev1pb.ExecuteActorStateTransactionRequest{
 					ActorType: actorType,
@@ -135,6 +144,19 @@ func (r *reservedactortype) Run(t *testing.T, ctx context.Context) {
 				})
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+			})
+
+			t.Run("HTTP onDirectActorMessage is denied", func(t *testing.T) {
+				url := fmt.Sprintf("http://%s/v1.0/actors/%s/any/method/Complete", r.daprd.HTTPAddress(), actorType)
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+				require.NoError(t, err)
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+				assert.Contains(t, string(body), "reserved for the Dapr workflow runtime")
 			})
 
 			t.Run("HTTP onActorStateTransaction is denied", func(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -96,6 +97,31 @@ func Test_classifyEvent_absentSchedulingTakesTheInbox(t *testing.T) {
 	}
 }
 
+func Test_classifyEvent_activityFromAnotherExecution(t *testing.T) {
+	t.Parallel()
+	const instanceID = "test-admit-other-execution"
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.fastPath = true
+	h.primeRunningWithExecID(t, instanceID, 7, "exec-B")
+	h.orch.getExecutionStartedEvent(h.orch.state).WorkflowInstance.ExecutionId = wrapperspb.String("gen-2")
+
+	// Task IDs restart on ContinueAsNew, so a result dispatched by another
+	// execution is dropped even while this generation has not reached its
+	// task ID, where it would otherwise be held as an early result.
+	result := taskCompletedWithExecID(8, "exec-C")
+	for _, canFold := range []bool{false, true} {
+		a := h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-1"}, canFold)
+		assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
+		assert.Contains(t, a.reason, "another execution", "canFold=%v", canFold)
+
+		a = h.orch.classifyEvent(result, h.orch.state, completionSender{parentExecutionID: "gen-2"}, canFold)
+		assert.Equal(t, admitInbox, a.outcome, "this execution's result: canFold=%v", canFold)
+
+		a = h.orch.classifyEvent(result, h.orch.state, completionSender{}, canFold)
+		assert.Equal(t, admitInbox, a.outcome, "a sender that predates the stamp: canFold=%v", canFold)
+	}
+}
+
 func Test_classifyEvent_provenStragglers(t *testing.T) {
 	t.Parallel()
 	const instanceID = "test-admit-proven"
@@ -168,4 +194,62 @@ func Test_cleanupWorkflowStateInternal_dropsTheCache(t *testing.T) {
 	assert.Nil(t, h.orch.state, "the purged state must not be served from the cache")
 	assert.Nil(t, h.orch.rstate)
 	assert.Nil(t, h.orch.ometa)
+}
+
+func Test_classifyEvent_activityResultCreatorMustMatchDispatchTarget(t *testing.T) {
+	t.Parallel()
+
+	prime := func(t *testing.T, targetAppID string) *wakeHarness {
+		t.Helper()
+		h := newWakeHarness(t, "test-admit-creator", true)
+		h.primeRunning(t, "test-admit-creator", 7)
+		h.saved = true
+		if targetAppID != "" {
+			h.orch.state.FindHistoryEventByID(7).Router = &protos.TaskRouter{
+				SourceAppID: "testapp",
+				TargetAppID: &targetAppID,
+			}
+		}
+		return h
+	}
+
+	tests := map[string]struct {
+		targetAppID string
+		senderAppID string
+		expReason   string
+	}{
+		"local task from own app is admitted":              {senderAppID: "testapp"},
+		"local task from another app is dropped":           {senderAppID: "other", expReason: "it was sent by app 'other' but the task was dispatched to 'testapp'"},
+		"cross-app task from its target is admitted":       {targetAppID: "appB", senderAppID: "appB"},
+		"cross-app task from another app is dropped":       {targetAppID: "appB", senderAppID: "other", expReason: "it was sent by app 'other' but the task was dispatched to 'appB'"},
+		"cross-app task from the workflow app is admitted": {targetAppID: "appB", senderAppID: "testapp"},
+		"unknown creator skips the check (local task)":     {senderAppID: ""},
+		"unknown creator skips the check (cross-app task)": {targetAppID: "appB", senderAppID: ""},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := prime(t, tc.targetAppID)
+			sender := completionSender{appID: tc.senderAppID}
+			for _, canFold := range []bool{false, true} {
+				a := h.orch.classifyEvent(taskCompletedEvent(7), h.orch.state, sender, canFold)
+				require.NoError(t, a.err, "canFold=%v", canFold)
+				if tc.expReason != "" {
+					assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
+					assert.Equal(t, tc.expReason, a.reason, "canFold=%v", canFold)
+					continue
+				}
+				assert.Empty(t, a.reason, "canFold=%v", canFold)
+				assert.NotEqual(t, admitDrop, a.outcome, "canFold=%v", canFold)
+			}
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), sender), "a drop is acked, not retried")
+			if tc.expReason != "" {
+				assert.Empty(t, h.orch.state.Inbox, "a forged result must not be persisted")
+			} else {
+				assert.Len(t, h.orch.state.Inbox, 1)
+			}
+		})
+	}
 }

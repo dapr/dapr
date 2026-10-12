@@ -159,19 +159,19 @@ func (s *stragglerbody) run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for the second generation's activity to start")
 	}
 
-	// The orphan's result carries the previous scheduling's execution id and
+	// The orphan's result carries the previous generation's execution ID and
 	// reaches the workflow before the second generation's result does: the
 	// second is released only once the workflow actor has judged the orphan's
 	// AddWorkflowEvent under its lock, so the second's completion is
 	// serialised behind it.
 	// The verdict is observed through the drop the orphan alone can cause:
-	// only its result names a superseded scheduling of task 0, so nothing
+	// only its result was dispatched by a previous execution, so nothing
 	// else, the "proceed" event included, can satisfy the gate.
-	dropped := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it resolves a superseded scheduling of task 0", id)
+	dropped := fmt.Sprintf("Workflow actor '%s': dropping completion (sender ''): it was created or dispatched under another execution", id)
 	count := func(needle string) int { return logline.CountAll(needle, s.logline[:]...) }
 	releaseOrphanOnce()
 	require.Eventually(t, func() bool { return count(dropped) >= 1 }, time.Second*20, time.Millisecond*10,
-		"the orphan's result must be acknowledged and dropped as superseded")
+		"the orphan's result must be acknowledged and dropped as coming from a previous execution")
 	releaseSecondOnce()
 
 	metadata, err := cl.WaitForWorkflowCompletion(ctx, id)

@@ -24,6 +24,26 @@ const (
 	ReminderPrefixActivityResult = "activity-result-"
 )
 
+// ActivityResultReminderName returns the name of an activity-result reminder:
+// the prefix, a unique part, and the execution ID of the workflow generation
+// that dispatched the activity when it is known. The name carries the
+// execution ID rather than the data, so a daprd that predates it still reads
+// the reminder: it matches on the prefix and decodes the data as before. The
+// unique part must not contain a dot.
+func ActivityResultReminderName(unique, parentExecutionID string) string {
+	if parentExecutionID == "" {
+		return ReminderPrefixActivityResult + unique
+	}
+	return ReminderPrefixActivityResult + unique + "." + parentExecutionID
+}
+
+// ActivityResultParentExecutionID returns the execution ID an
+// activity-result reminder name carries, or "" when it carries none.
+func ActivityResultParentExecutionID(name string) string {
+	_, id, _ := strings.Cut(strings.TrimPrefix(name, ReminderPrefixActivityResult), ".")
+	return id
+}
+
 // ErrSchedulingNotDurable is the orchestrator's refusal of an activity
 // completion whose scheduling the durable history does not show yet. A turn
 // dispatches its activities before it saves, so a completion can reach
