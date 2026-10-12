@@ -45,6 +45,12 @@ type noTimeoutBinaryStore struct {
 	t *testing.T
 }
 
+type countingDeleteBinaryStore struct {
+	binarystore.BinaryStore
+	calls int
+	err   error
+}
+
 func (c *contextCheckingBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
 	require.Equal(c.t, "identity", ctx.Value(binaryStoreContextKey{}))
 	return nil
@@ -63,6 +69,11 @@ func (n *noTimeoutBinaryStore) Get(ctx context.Context, _ *binarystore.GetReques
 	return &binarystore.GetResponse{
 		Data: io.NopCloser(bytes.NewBufferString("payload")),
 	}, nil
+}
+
+func (c *countingDeleteBinaryStore) Delete(context.Context, *binarystore.DeleteRequest) error {
+	c.calls++
+	return c.err
 }
 
 func newBinaryTestUniversal(t *testing.T) (*Universal, binarystore.BinaryStore) {
@@ -227,6 +238,44 @@ func TestBinaryStore_DeleteMissingReturnsNotFound(t *testing.T) {
 	u, _ := newBinaryTestUniversal(t)
 	err := u.DeleteBinaryFileAlpha1(context.Background(), "mystore", "nope")
 	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+}
+
+func TestBinaryStore_DeleteDoesNotRetryPermanentErrors(t *testing.T) {
+	store := &countingDeleteBinaryStore{
+		BinaryStore: fake.NewFake(testLogger),
+		err:         binarystore.ErrFileNotFound,
+	}
+	compStore := compstore.New()
+	compStore.AddBinaryStore("mystore", store)
+	u := &Universal{
+		logger: testLogger,
+		resiliency: resiliency.FromConfigurations(testLogger, &v1alpha1.Resiliency{
+			Spec: v1alpha1.ResiliencySpec{
+				Policies: v1alpha1.Policies{
+					Retries: map[string]v1alpha1.Retry{
+						"deleteRetry": {
+							MaxRetries:  new(3),
+							MaxInterval: "10ms",
+							Policy:      "constant",
+							Duration:    "1ms",
+						},
+					},
+				},
+				Targets: v1alpha1.Targets{
+					Components: map[string]v1alpha1.ComponentPolicyNames{
+						"mystore": {
+							Outbound: v1alpha1.PolicyNames{Retry: "deleteRetry"},
+						},
+					},
+				},
+			},
+		}),
+		compStore: compStore,
+	}
+
+	err := u.DeleteBinaryFileAlpha1(context.Background(), "mystore", "nope")
+	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
+	require.Equal(t, 1, store.calls)
 }
 
 func TestBinaryStore_MissingFileName(t *testing.T) {

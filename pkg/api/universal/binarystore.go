@@ -21,6 +21,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -143,7 +144,11 @@ func (a *Universal) DeleteBinaryFileAlpha1(ctx context.Context, componentName, f
 		a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, component.Delete(ctx, req)
+		derr := component.Delete(ctx, req)
+		if errors.Is(derr, binarystore.ErrFileNotFound) || errors.Is(derr, binarystore.ErrMissingFileName) {
+			return nil, backoff.Permanent(derr)
+		}
+		return nil, derr
 	})
 	if err != nil {
 		return mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreDelete)
