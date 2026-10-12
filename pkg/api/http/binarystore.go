@@ -40,7 +40,8 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreSet(true),
 			Settings: endpoints.EndpointSettings{
-				Name: "SetBinaryFile",
+				Name:                     "SetBinaryFile",
+				SkipRequestBodySizeLimit: true,
 			},
 		},
 		{
@@ -50,7 +51,8 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 			Group:   endpointGroupBinaryStoreV1Alpha1,
 			Handler: a.onBinaryStoreSet(false),
 			Settings: endpoints.EndpointSettings{
-				Name: "SetBinaryFile",
+				Name:                     "SetBinaryFile",
+				SkipRequestBodySizeLimit: true,
 			},
 		},
 		{

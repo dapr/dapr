@@ -101,7 +101,9 @@ func NewServer(opts NewServerOpts) Server {
 func (s *server) StartNonBlocking(ctx context.Context) error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
-	s.useMaxBodySize(r)
+	if s.config.MaxRequestBodySize > 0 {
+		log.Infof("Enabled max body size HTTP handlers with size %d bytes", s.config.MaxRequestBodySize)
+	}
 	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
@@ -289,16 +291,6 @@ func (s *server) useMetrics(r chi.Router) {
 	r.Use(diag.DefaultHTTPMonitoring.HTTPMiddleware)
 }
 
-func (s *server) useMaxBodySize(r chi.Router) {
-	if s.config.MaxRequestBodySize <= 0 {
-		return
-	}
-
-	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
-
-	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize)))
-}
-
 func (s *server) useContextSetup(mux chi.Router) {
 	// Adds an empty `endpoints.EndpointCtxData` value to the context so it can be later set by the handler
 	// This context value is used by the logging, tracing, and metrics middlewares
@@ -464,7 +456,7 @@ func (s *server) addEndpointCtx(e endpoints.Endpoint, next http.Handler) http.Ha
 }
 
 func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
-	handler := e.Handler
+	var handler http.Handler = e.Handler
 
 	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(handler)
@@ -472,18 +464,23 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 
 	handler = s.addEndpointCtx(e, handler)
 
+	if s.config.MaxRequestBodySize > 0 && !e.Settings.SkipRequestBodySizeLimit {
+		handler = MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize))(handler)
+	}
+	handlerFunc := http.HandlerFunc(handler.ServeHTTP)
+
 	// If no method is defined, match any method
 	if len(e.Methods) == 0 {
-		r.Handle(path, handler)
+		r.Handle(path, handlerFunc)
 	} else {
 		for _, m := range e.Methods {
-			r.Method(m, path, handler)
+			r.Method(m, path, handlerFunc)
 		}
 	}
 
 	// Set as fallback method
 	if e.Settings.IsFallback {
-		r.NotFound(handler)
-		r.MethodNotAllowed(handler)
+		r.NotFound(handlerFunc)
+		r.MethodNotAllowed(handlerFunc)
 	}
 }

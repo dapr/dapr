@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/streams"
 )
@@ -46,6 +47,46 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 	})
 	h := MaxBodySizeMiddleware(maxSize)(handler)
 
+	r := httptest.NewRequest(http.MethodPost, "/v1.0/state/store", strings.NewReader("large"))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+}
+
+func TestEndpointRequestBodySizeLimit(t *testing.T) {
+	const maxSize = 4
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			assert.ErrorIs(t, err, streams.ErrStreamTooLarge)
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	srv := newServer()
+	srv.config.MaxRequestBodySize = maxSize
+	router := srv.getRouter()
+	srv.setupRoutes(router, []endpoints.Endpoint{
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "state/store",
+			Version: apiVersionV1,
+			Handler: handler,
+		},
+		{
+			Methods: []string{http.MethodPut, http.MethodPost},
+			Route:   "binarystore/{name}/{fileName}",
+			Version: apiVersionV1alpha1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+	})
+
 	tests := []struct {
 		name       string
 		method     string
@@ -53,40 +94,22 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 		statusCode int
 	}{
 		{
-			name:       "regular route is limited",
+			name:       "regular endpoint is limited",
 			method:     http.MethodPost,
 			path:       "/v1.0/state/store",
 			statusCode: http.StatusRequestEntityTooLarge,
 		},
 		{
-			name:       "binary store PUT is unlimited",
+			name:       "streaming endpoint is unlimited",
 			method:     http.MethodPut,
 			path:       "/v1.0-alpha1/binarystore/store/file.bin",
 			statusCode: http.StatusNoContent,
 		},
 		{
-			name:       "binary store POST is unlimited",
-			method:     http.MethodPost,
-			path:       "/v1.0-alpha1/binarystore/store/file.bin",
-			statusCode: http.StatusNoContent,
-		},
-		{
-			name:       "binary store nested key is unlimited",
+			name:       "cleaned streaming endpoint is unlimited",
 			method:     http.MethodPut,
-			path:       "/v1.0-alpha1/binarystore/store/path%2Ffile.bin",
+			path:       "/v1.0-alpha1/binarystore//store/file.bin",
 			statusCode: http.StatusNoContent,
-		},
-		{
-			name:       "binary store GET is limited",
-			method:     http.MethodGet,
-			path:       "/v1.0-alpha1/binarystore/store/file.bin",
-			statusCode: http.StatusRequestEntityTooLarge,
-		},
-		{
-			name:       "binary store prefix is limited",
-			method:     http.MethodPut,
-			path:       "/v1.0-alpha1/binarystore/store/file.bin/extra",
-			statusCode: http.StatusRequestEntityTooLarge,
 		},
 	}
 
@@ -94,7 +117,7 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader("large"))
 			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
+			router.ServeHTTP(w, r)
 			assert.Equal(t, test.statusCode, w.Code)
 		})
 	}
