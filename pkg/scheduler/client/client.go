@@ -74,7 +74,8 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 		sec.GRPCDialOptionMTLS(schedulerID),
 	}
 
-	conn, err := grpc.DialContext(ctx, address, opts...) //nolint:staticcheck
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
