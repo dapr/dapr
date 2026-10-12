@@ -35,10 +35,6 @@ import (
 	"github.com/dapr/durabletask-go/api"
 )
 
-// defaultPublishShutdownGrace is the production value of
-// publishShutdownGrace.
-const defaultPublishShutdownGrace = 30 * time.Second
-
 // publishShutdownGrace is how long the context of a result publish stays live
 // after the runtime starts to shut down (see publishAndSettle). It is the only
 // time bound that this package puts on a publish. The publish waits for the
@@ -51,18 +47,8 @@ const defaultPublishShutdownGrace = 30 * time.Second
 // The env override exists for integration tests that cannot wait the
 // production bound; it is not a supported production knob.
 var publishShutdownGrace = sync.OnceValue(func() time.Duration {
-	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE", defaultPublishShutdownGrace)
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE", 30*time.Second)
 })
-
-// shutdownGrace is how long the context of a publish stays live after the
-// runtime starts to shut down: the factory's shutdownGraceOverride when a unit
-// test set it, else publishShutdownGrace.
-func (f *factory) shutdownGrace() time.Duration {
-	if f.shutdownGraceOverride > 0 {
-		return f.shutdownGraceOverride
-	}
-	return publishShutdownGrace()
-}
 
 // errPublishAbandoned settles an execution whose result can no longer be
 // published because the runtime is shutting down. Recoverable: followers
@@ -147,12 +133,12 @@ func (f *factory) publishOwned(ctx context.Context, ex *execution, completed boo
 //
 // At shutdown, runCtx ends and the actor router's Run cancels every router
 // call in flight. So an AddWorkflowEvent call that waits for the parent ends
-// at once. The publish context stays live for shutdownGrace after runCtx
-// ends. With WorkflowsRemoteActivityReminder off, the publish then settles at
-// once with the recoverable "failed to invoke" error. With it on (the
-// default), publishResult creates a durable result reminder for the parent on
-// the publish context, and the grace bounds that create (and the placement
-// lookup before the call):
+// at once. The publish context stays live for publishShutdownGrace after
+// runCtx ends. With WorkflowsRemoteActivityReminder off, the publish then
+// settles at once with the recoverable "failed to invoke" error. With it on
+// (the default), publishResult creates a durable result reminder for the
+// parent on the publish context, and the grace bounds that create (and the
+// placement lookup before the call):
 //   - The scheduler accepts the reminder: the result is not lost, and the
 //     publish settles as a success.
 //   - The create fails within the grace: the publish settles with the
@@ -166,7 +152,7 @@ func (f *factory) publishAndSettle(runCtx, base context.Context, ex *execution, 
 	_ = ex.call.BeginResolve()
 	ctx, cancel := context.WithCancel(base)
 	stop := context.AfterFunc(runCtx, func() {
-		time.AfterFunc(f.shutdownGrace(), cancel)
+		time.AfterFunc(publishShutdownGrace(), cancel)
 	})
 	execErr := f.publishResult(ctx, ex, completed)
 	// base never cancels, so a cancelled ctx means the shutdown grace ended

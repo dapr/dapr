@@ -333,51 +333,11 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		require.NoError(t, call.Err())
 	})
 
-	t.Run("shutdown abandons the publish in flight after the grace", func(t *testing.T) {
-		t.Parallel()
-		f, scheduled := newExecHarness(t)
-		rootCtx, rootCancel := context.WithCancel(t.Context())
-		f.detached = detached.New(rootCtx)
-		f.shutdownGraceOverride = time.Millisecond * 50
-		b := newBusyParent(f)
-
-		a := f.GetOrCreate("wf::3::0").(*activity)
-		ownerErr := make(chan error, 1)
-		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
-		}()
-		wi := recvWorkItem(t, scheduled)
-		call, ok := f.inflight.Peek(key)
-		require.True(t, ok)
-
-		completeWorkItem(t, wi)
-		recvEntered(t, b)
-		// The runtime shuts down while the parent is busy. The parent never
-		// takes the result. The fake router ignores shutdown, so this checks
-		// the grace timer only. In daprd the router cancels the call at once
-		// (see publishAndSettle).
-		rootCancel()
-		select {
-		case err := <-ownerErr:
-			require.ErrorIs(t, err, errPublishAbandoned)
-		case <-time.After(time.Second * 5):
-			t.Fatal("the publish in flight outlived the shutdown grace")
-		}
-		f.detached.Wait()
-
-		assert.Equal(t, int64(1), b.calls.Load(), "no new publish starts after shutdown")
-		require.True(t, call.Settled())
-		require.ErrorIs(t, call.Err(), errPublishAbandoned)
-		_, ok = f.inflight.Peek(key)
-		assert.False(t, ok, "the unpublished result releases the entry so the next owner re-executes")
-	})
-
 	t.Run("shutdown keeps the publish in flight for the grace", func(t *testing.T) {
 		t.Parallel()
 		f, scheduled := newExecHarness(t)
 		rootCtx, rootCancel := context.WithCancel(t.Context())
 		f.detached = detached.New(rootCtx)
-		f.shutdownGraceOverride = time.Hour
 		b := newBusyParent(f)
 
 		a := f.GetOrCreate("wf::3::0").(*activity)
@@ -392,8 +352,10 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		completeWorkItem(t, wi)
 		recvEntered(t, b)
 		// The runtime shuts down. The publish stays in flight, and the parent
-		// then takes the result within the grace. As above, the fake router
-		// ignores shutdown, so this checks the grace timer only.
+		// then takes the result within the grace. The fake router ignores
+		// shutdown, so this checks the grace timer only. In daprd the router
+		// cancels the call at once (see publishAndSettle). The integration
+		// tests busyparentshutdown and busyparentabandon cover that order.
 		rootCancel()
 		select {
 		case err := <-ownerErr:

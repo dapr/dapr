@@ -36,13 +36,14 @@ func init() {
 }
 
 // busyparent: activity results reach a parent workflow whose turn lock is
-// held for longer than 30 s. In a large fan-out this is the normal state: the
-// turn that schedules the activities, and every completion queued before a
-// result, hold the same lock. A wait for that lock is backpressure, not a
-// lost delivery. A result publish bounded at 30 s gave up while the parent
-// was busy, the execution settled as failed, the run-activity reminder ran
-// the body again, and the re-run queued on the same lock, so a large fan-out
-// ran most bodies several times and slowed down as it grew.
+// held. In a large fan-out this is the normal state: the turn that schedules
+// the activities, and every completion queued before a result, hold the same
+// lock. A wait for that lock is backpressure, not a lost delivery: the parent
+// admits each result when the lock is free, and each body runs one time. A
+// result publish bounded at 30 s gave up while the parent was busy, the
+// execution settled as failed, the run-activity reminder ran the body again,
+// and the re-run queued on the same lock, so a large fan-out ran most bodies
+// several times and slowed down as it grew.
 type busyparent struct {
 	workflow *workflow.Workflow
 }
@@ -50,11 +51,11 @@ type busyparent struct {
 const (
 	busyparentActivities = 5
 	// busyparentHold is how long the parent's second turn holds its turn
-	// lock once the publishes of the other four results wait for it. It is
-	// longer than the 30 s publish bound that this test guards against, and
-	// that bound starts before each publish waits. With the 45 s case budget,
-	// it leaves about 12 s for process startup.
-	busyparentHold = 32 * time.Second
+	// lock once the publishes of the other four results wait for it. The
+	// publish has no deadline, so the hold only has to outlast the queueing.
+	// Test_runOwned_busyParentIsNotAFailedPublish checks that the publish
+	// context has no deadline.
+	busyparentHold = time.Second
 	// busyparentGate bounds each wait on the order this test forces.
 	busyparentGate = 10 * time.Second
 )
@@ -148,5 +149,5 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		return false
-	}, time.Second, time.Millisecond*10)
+	}, time.Millisecond*500, time.Millisecond*10)
 }

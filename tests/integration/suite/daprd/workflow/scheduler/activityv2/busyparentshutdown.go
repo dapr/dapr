@@ -40,9 +40,10 @@ func init() {
 // busy parent workflow. Shutdown cancels the waiting result publishes at once.
 // With WorkflowsRemoteActivityReminder on (the default), each activity then
 // hands its result to a durable activity-result reminder, inside the publish
-// shutdown grace. After a restart, the parent admits the results from those
-// reminders and the workflow completes. busyparentabandon covers a publish
-// that cannot hand off its result inside the grace.
+// shutdown grace, so no result is lost. crossapp/resultreminder/restart
+// covers how the parent admits the results from these reminders after a
+// restart. busyparentabandon covers a publish that cannot hand off its result
+// inside the grace.
 type busyparentshutdown struct {
 	workflow *workflow.Workflow
 }
@@ -62,8 +63,7 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
 	var (
-		turns      atomic.Int64
-		executions [busyparentShutdownActivities]atomic.Int64
+		turns atomic.Int64
 		// turnTwo closes when the parent's second turn starts. Activities
 		// 1-4 return only after that, so their results arrive while the
 		// second turn holds the parent's turn lock.
@@ -74,15 +74,12 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 		// release ends the hold. The test closes it after daprd stopped, so
 		// the worker goroutine of the held turn can return.
 		release = make(chan struct{})
-		// restarted stops the hold after the restart, when the workflow
-		// replays the second turn.
-		restarted atomic.Bool
 	)
 
 	reg := dworkflow.NewRegistry()
 	require.NoError(t, reg.AddWorkflowN("BusyParentShutdown", func(c *dworkflow.WorkflowContext) (any, error) {
 		// The second turn is the one driven by the result of activity 0.
-		if turns.Add(1) == 2 && !restarted.Load() {
+		if turns.Add(1) == 2 {
 			turnTwoOnce.Do(func() { close(turnTwo) })
 			holding.Store(true)
 			select {
@@ -105,7 +102,6 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 		if err := c.GetInput(&i); err != nil {
 			return nil, err
 		}
-		executions[i].Add(1)
 		if i == 0 {
 			// The first result drives the second turn.
 			return nil, nil
@@ -166,35 +162,4 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.Equal(c, expResults, results)
 	}, time.Second*10, time.Millisecond*10)
-
-	restarted.Store(true)
-	b.workflow.Dapr().Restart(t, ctx)
-	client = dworkflow.NewClientWithLogger(b.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, client.StartWorker(ctx, reg))
-
-	meta, err := client.WaitForWorkflowCompletion(ctx, id)
-	require.NoError(t, err)
-	assert.Equal(t, dworkflow.StatusCompleted.String(), meta.RuntimeStatus.String())
-
-	// Fast path has no run-activity reminder, so there a body that runs again
-	// means that its result was lost. The reminder-driven path runs the
-	// bodies of activities 1-4 one more time after the restart: daprd stopped
-	// before it acknowledged their run-activity reminders, so the scheduler
-	// fires them again.
-	maxRuns := int64(1)
-	if !b.workflow.FastPath() {
-		maxRuns = 2
-	}
-	tooMany := func() bool {
-		for i := range busyparentShutdownActivities {
-			if executions[i].Load() > maxRuns {
-				return true
-			}
-		}
-		return false
-	}
-	for i := range busyparentShutdownActivities {
-		assert.LessOrEqual(t, executions[i].Load(), maxRuns, "activity %d", i)
-	}
-	assert.Never(t, tooMany, time.Second, time.Millisecond*10)
 }

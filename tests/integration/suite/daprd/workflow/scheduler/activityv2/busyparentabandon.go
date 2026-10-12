@@ -43,7 +43,7 @@ func init() {
 // activity-result reminder: each create retries until the publish shutdown
 // grace ends the publish. The publish then gives up its result with a
 // warning, and the shutdown does not wait longer than the grace. The test sets
-// the grace to 3 s through DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE. With the
+// the grace to 1 s through DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE. With the
 // production grace of 30 s, this shutdown takes 30 s. busyparentshutdown
 // covers the handoff to the reminders when the scheduler is up.
 type busyparentabandon struct {
@@ -53,7 +53,7 @@ type busyparentabandon struct {
 
 const (
 	busyparentAbandonActivities = 5
-	busyparentAbandonGrace      = 3 * time.Second
+	busyparentAbandonGrace      = time.Second
 	// busyparentAbandonGate bounds each wait on the order this test forces.
 	busyparentAbandonGate = 20 * time.Second
 )
