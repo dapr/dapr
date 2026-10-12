@@ -108,6 +108,10 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
+		if span != nil {
+				diag.AddAttributesToSpan(span, diag.ConstructSubscriptionSpanAttributes(msg.Topic))
+				span.SetStatus(otelcodes.Error, err.Error())
+		}
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(err))
 	}
