@@ -71,19 +71,11 @@ func (a *Universal) SetBinaryFileAlpha1(ctx context.Context, componentName, file
 		Overwrite: overwrite,
 	}
 
-	// The request body is a one-shot stream and cannot be rewound for retries.
-	// Invoke the component directly so a partially-consumed reader cannot be
-	// replayed and produce a truncated or empty file on retry. This also bypasses
-	// the circuit breaker because it is currently coupled to the Runner.
+	// No timeout, retries or circuit breaker: the request body is a one-shot
+	// stream that cannot be replayed, and a per-call deadline would bound the
+	// whole transfer. Delete keeps the Runner.
 	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
-	ctx = policyDef.ComponentContext(ctx)
-	if timeout := policyDef.Timeout(); timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	err = component.Set(ctx, req)
+	err = component.Set(policyDef.ComponentContext(ctx), req)
 	if err != nil {
 		return mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreSet)
 	}
@@ -106,19 +98,11 @@ func (a *Universal) GetBinaryFileAlpha1(ctx context.Context, componentName, file
 
 	req := &binarystore.GetRequest{FileName: fileName}
 
-	// The response body is read after this method returns, so it must not use a
-	// Runner context that is canceled as soon as the component call completes.
-	// This also bypasses retries and the circuit breaker because both are
-	// currently coupled to the Runner.
+	// No timeout, retries or circuit breaker: the body is read after this call
+	// returns, so a per-call deadline would either cancel the body mid-read or
+	// bound the whole transfer. Delete keeps the Runner.
 	policyDef := a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Binarystore)
-	ctx = policyDef.ComponentContext(ctx)
-	if timeout := policyDef.Timeout(); timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	resp, err := component.Get(ctx, req)
+	resp, err := component.Get(policyDef.ComponentContext(ctx), req)
 	if err != nil {
 		return nil, mapBinaryStoreError(err, componentName, fileName, messages.ErrBinaryStoreGet)
 	}

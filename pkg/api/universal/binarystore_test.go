@@ -21,7 +21,6 @@ import (
 	"errors"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,14 +40,9 @@ type contextCheckingBinaryStore struct {
 	t *testing.T
 }
 
-type blockingSetBinaryStore struct {
+type noTimeoutBinaryStore struct {
 	binarystore.BinaryStore
-	ctxErr chan error
-}
-
-type blockingGetBinaryStore struct {
-	binarystore.BinaryStore
-	ctxErr chan error
+	t *testing.T
 }
 
 func (c *contextCheckingBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
@@ -56,16 +50,19 @@ func (c *contextCheckingBinaryStore) Set(ctx context.Context, req *binarystore.S
 	return nil
 }
 
-func (b *blockingSetBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
-	<-ctx.Done()
-	b.ctxErr <- ctx.Err()
-	return ctx.Err()
+func (n *noTimeoutBinaryStore) Set(ctx context.Context, req *binarystore.SetRequest) error {
+	_, ok := ctx.Deadline()
+	require.False(n.t, ok)
+	_, err := io.Copy(io.Discard, req.Data)
+	return err
 }
 
-func (b *blockingGetBinaryStore) Get(ctx context.Context, req *binarystore.GetRequest) (*binarystore.GetResponse, error) {
-	<-ctx.Done()
-	b.ctxErr <- ctx.Err()
-	return nil, ctx.Err()
+func (n *noTimeoutBinaryStore) Get(ctx context.Context, _ *binarystore.GetRequest) (*binarystore.GetResponse, error) {
+	_, ok := ctx.Deadline()
+	require.False(n.t, ok)
+	return &binarystore.GetResponse{
+		Data: io.NopCloser(bytes.NewBufferString("payload")),
+	}, nil
 }
 
 func newBinaryTestUniversal(t *testing.T) (*Universal, binarystore.BinaryStore) {
@@ -135,10 +132,10 @@ func TestBinaryStore_SetAppliesComponentContext(t *testing.T) {
 	))
 }
 
-func TestBinaryStore_SetAppliesTimeout(t *testing.T) {
-	store := &blockingSetBinaryStore{
+func TestBinaryStore_SetIgnoresConfiguredTimeout(t *testing.T) {
+	store := &noTimeoutBinaryStore{
 		BinaryStore: fake.NewFake(testLogger),
-		ctxErr:      make(chan error, 1),
+		t:           t,
 	}
 	compStore := compstore.New()
 	compStore.AddBinaryStore("mystore", store)
@@ -168,8 +165,7 @@ func TestBinaryStore_SetAppliesTimeout(t *testing.T) {
 		true,
 		bytes.NewReader([]byte("payload")),
 	)
-	require.ErrorIs(t, err, messages.ErrBinaryStoreSet)
-	require.ErrorIs(t, <-store.ctxErr, context.DeadlineExceeded)
+	require.NoError(t, err)
 }
 
 func TestBinaryStore_OverwriteReplaces(t *testing.T) {
@@ -192,10 +188,10 @@ func TestBinaryStore_GetMissingReturnsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, messages.ErrBinaryStoreFileNotFound)
 }
 
-func TestBinaryStore_GetAppliesTimeout(t *testing.T) {
-	store := &blockingGetBinaryStore{
+func TestBinaryStore_GetIgnoresConfiguredTimeout(t *testing.T) {
+	store := &noTimeoutBinaryStore{
 		BinaryStore: fake.NewFake(testLogger),
-		ctxErr:      make(chan error, 1),
+		t:           t,
 	}
 	compStore := compstore.New()
 	compStore.AddBinaryStore("mystore", store)
@@ -218,38 +214,10 @@ func TestBinaryStore_GetAppliesTimeout(t *testing.T) {
 		compStore: compStore,
 	}
 
-	_, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
-	require.ErrorIs(t, err, messages.ErrBinaryStoreGet)
-	require.ErrorIs(t, <-store.ctxErr, context.DeadlineExceeded)
-}
-
-func TestBinaryStore_GetTimeoutDoesNotLimitBodyRead(t *testing.T) {
-	u, store := newBinaryTestUniversal(t)
-	u.resiliency = resiliency.FromConfigurations(testLogger, &v1alpha1.Resiliency{
-		Spec: v1alpha1.ResiliencySpec{
-			Policies: v1alpha1.Policies{
-				Timeouts: map[string]string{"getTimeout": "10ms"},
-			},
-			Targets: v1alpha1.Targets{
-				Components: map[string]v1alpha1.ComponentPolicyNames{
-					"mystore": {
-						Outbound: v1alpha1.PolicyNames{Timeout: "getTimeout"},
-					},
-				},
-			},
-		},
-	})
-
-	require.NoError(t, store.Set(context.Background(), &binarystore.SetRequest{
-		FileName:  "file.bin",
-		Data:      bytes.NewBufferString("payload"),
-		Overwrite: true,
-	}))
 	body, err := u.GetBinaryFileAlpha1(context.Background(), "mystore", "file.bin")
 	require.NoError(t, err)
 	defer body.Close()
 
-	time.Sleep(50 * time.Millisecond)
 	got, err := io.ReadAll(body)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("payload"), got)
