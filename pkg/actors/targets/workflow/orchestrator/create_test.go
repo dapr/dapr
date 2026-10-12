@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -550,16 +551,54 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		assert.True(t, h.orch.state.ParentNotifyPending)
 	})
 
-	t.Run("any other creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
+	t.Run("a later execution of the parent recreates the id, acknowledging the completion", func(t *testing.T) {
 		h := prime(t)
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
-		err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
-		require.Error(t, err)
-		assert.Equal(t, codes.Unavailable, status.Code(err))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		assert.False(t, h.orch.state.ParentNotifyPending, "the recreate's save clears the marker")
 		h.lock.Lock()
 		defer h.lock.Unlock()
-		assert.Empty(t, h.ops)
+		assert.Contains(t, h.ops, "save")
 	})
+
+	t.Run("a later execution naming the local app recreates the id of a child saved without one", func(t *testing.T) {
+		h := prime(t)
+		localApp := "testapp"
+		incoming := startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.AppID = &localApp
+		})
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		assert.False(t, h.orch.state.ParentNotifyPending, "the recreate's save clears the marker")
+	})
+
+	otherApp := "otherapp"
+	for name, mutate := range map[string]func(*protos.ExecutionStartedEvent){
+		"a client": nil,
+		"another parent": func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.WorkflowInstance.InstanceId = "parent-2"
+		},
+		"another app's parent": func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.AppID = &otherApp
+		},
+	} {
+		t.Run(name+" creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
+			h := prime(t)
+			incoming := startEventFor(instanceID, time.Now(), mutate)
+			err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+			require.Error(t, err)
+			// The actor router must not retry the refusal inside the creating
+			// turn, which holds the caller's lock.
+			assert.False(t, router.IsRetryableRemoteError(err),
+				"the refusal must not be retried by the actor router under the caller's lock, got %s", status.Code(err))
+			assert.Equal(t, codes.Aborted, status.Code(err))
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			assert.Empty(t, h.ops)
+		})
+	}
 }
 
 func Test_scheduleWorkflowStart_claimCancelledCreateArmsDetached(t *testing.T) {
