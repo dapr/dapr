@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -364,7 +365,7 @@ func (o *orchestrator) isLaterParentExecution(state *wfenginestate.State, startE
 	owed := o.getExecutionStartedEvent(state).GetParentInstance()
 	if incoming == nil || owed == nil ||
 		incoming.GetWorkflowInstance().GetInstanceId() != owed.GetWorkflowInstance().GetInstanceId() ||
-		incoming.GetAppID() != owed.GetAppID() {
+		cmp.Or(incoming.GetAppID(), o.appID) != cmp.Or(owed.GetAppID(), o.appID) {
 		return false
 	}
 	return !sameParentExecution(owed, incoming)

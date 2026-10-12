@@ -561,6 +561,17 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		assert.Contains(t, h.ops, "save")
 	})
 
+	t.Run("a later execution naming the local app recreates the id of a child saved without one", func(t *testing.T) {
+		h := prime(t)
+		localApp := "testapp"
+		incoming := startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.AppID = &localApp
+		})
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		assert.False(t, h.orch.state.ParentNotifyPending, "the recreate's save clears the marker")
+	})
+
 	otherApp := "otherapp"
 	for name, mutate := range map[string]func(*protos.ExecutionStartedEvent){
 		"a client": nil,
