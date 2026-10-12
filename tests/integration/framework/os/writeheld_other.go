@@ -13,11 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dirdata
+package os
 
-// isDeletePending is always false away from Windows, where unlinking a file
-// takes effect immediately and a delete observed mid scan surfaces as
-// fs.ErrNotExist.
-func isDeletePending(error) bool {
-	return false
+import "testing"
+
+// WriteFileHeld holds a file without sharing, which only Windows can do.
+func WriteFileHeld(t *testing.T, _ string, _ []byte) (release func()) {
+	t.Helper()
+	t.Fatal("WriteFileHeld requires windows")
+	return nil
 }
