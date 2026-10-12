@@ -15,6 +15,7 @@ package router_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
