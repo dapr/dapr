@@ -132,3 +132,21 @@ func Test_CreateReminderWithRetryForever_ResourceExhausted(t *testing.T) {
 	require.NoError(t, CreateReminderWithRetryForever(t.Context(), creator, req))
 	assert.Equal(t, 3, creator.calls)
 }
+
+// A create without overwrite answers AlreadyExists when a retry follows a
+// create whose success was lost in transit: the reminder is there, so both
+// helpers report success instead of spinning on the retry.
+func Test_CreateReminderWithRetry_AlreadyExistsIsSuccess(t *testing.T) {
+	t.Parallel()
+
+	req := &actorapi.CreateReminderRequest{Name: "activity-result-abc", ActorType: "wf", ActorID: "id"}
+	exists := status.Error(codes.AlreadyExists, "job already exists")
+
+	creator := &failNCreator{n: 10, err: exists}
+	require.NoError(t, CreateReminderWithRetry(t.Context(), creator, req))
+	assert.Equal(t, 1, creator.calls)
+
+	creator = &failNCreator{n: 10, err: exists}
+	require.NoError(t, CreateReminderWithRetryForever(t.Context(), creator, req))
+	assert.Equal(t, 1, creator.calls)
+}

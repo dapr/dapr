@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -69,7 +69,7 @@ func (c *createretry) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	bc := c.workflow.BackendClient(t, ctx)
-	gclient := c.workflow.GRPCClient(t, ctx)
+	iclient := c.workflow.InternalGRPCClient(t, ctx)
 
 	createBytes, err := proto.Marshal(&protos.CreateWorkflowInstanceRequest{
 		StartEvent: &protos.HistoryEvent{
@@ -88,15 +88,12 @@ func (c *createretry) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	create := &rtv1.InvokeActorRequest{
-		ActorType: fmt.Sprintf("dapr.internal.%s.%s.workflow", c.workflow.Dapr().Namespace(), c.workflow.Dapr().AppID()),
-		ActorId:   wfID,
-		Method:    "CreateWorkflowInstance",
-		Data:      createBytes,
-	}
+	create := internalv1pb.NewInternalInvokeRequest("CreateWorkflowInstance").
+		WithActor(fmt.Sprintf("dapr.internal.%s.%s.workflow", c.workflow.Dapr().Namespace(), c.workflow.Dapr().AppID()), wfID).
+		WithData(createBytes)
 
 	assert.EventuallyWithT(t, func(co *assert.CollectT) {
-		_, ierr := gclient.InvokeActor(ctx, create)
+		_, ierr := iclient.CallActor(ctx, create)
 		assert.NoError(co, ierr)
 	}, 5*time.Second, 50*time.Millisecond)
 
@@ -108,7 +105,7 @@ func (c *createretry) Run(t *testing.T, ctx context.Context) {
 	hist, err := bc.GetInstanceHistory(ctx, api.InstanceID(wfID))
 	require.NoError(t, err)
 
-	_, err = gclient.InvokeActor(ctx, create)
+	_, err = iclient.CallActor(ctx, create)
 	require.NoError(t, err, "a retry of the committed create must answer success")
 
 	assert.Never(t, func() bool {

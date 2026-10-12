@@ -140,7 +140,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewOutgoingContext(t.Context(), metadata.MD{"a": []string{"b"}})
 		proxy := p.(*proxy)
-		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
 		defer teardown(true)
 
 		require.Error(t, err)
@@ -166,7 +166,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		_, _, _, _, err := proxy.intercept(ctx, "/test")
+		_, _, _, _, err := proxy.intercept(ctx, "/test", false)
 
 		require.NoError(t, err)
 	})
@@ -195,7 +195,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
 		proxy := p.(*proxy)
-		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
 		defer teardown(true)
 
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
 		defer teardown(true)
 
 		require.NoError(t, err)
@@ -240,6 +240,103 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
 		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
 		assert.NotContains(t, md, securityConsts.APITokenHeader)
+	})
+
+	t.Run("proxy to a remote app replaces identity metadata", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Namespace:         "ns-a",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: s}, nil
+		})
+
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{
+			invokev1.CalleeIDHeader:        []string{"b", "other"},
+			invokev1.CallerIDHeader:        []string{"admin"},
+			invokev1.CallerNamespaceHeader: []string{"kube-system"},
+		})
+		ctx, _, _, teardown, err := p.(*proxy).intercept(ctx, "/test", false)
+		defer teardown(true)
+		require.NoError(t, err)
+
+		md, _ := metadata.FromOutgoingContext(ctx)
+		assert.Equal(t, []string{"a"}, md.Get(invokev1.CallerIDHeader))
+		assert.Equal(t, []string{"ns-a"}, md.Get(invokev1.CallerNamespaceHeader))
+		assert.Equal(t, []string{"b"}, md.Get(invokev1.CalleeIDHeader))
+	})
+
+	t.Run("proxy to the app without mTLS keeps the last identity value", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: "a"}, nil
+		})
+
+		// An older caller daprd forwards its app's values, then appends its own.
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{
+			invokev1.CalleeIDHeader:        []string{"a", "other", "a"},
+			invokev1.CallerIDHeader:        []string{"admin", "c"},
+			invokev1.CallerNamespaceHeader: []string{"ns-c"},
+		})
+		ctx, _, _, teardown, err := p.(*proxy).intercept(ctx, "/test", false)
+		defer teardown(true)
+		require.NoError(t, err)
+
+		md, _ := metadata.FromOutgoingContext(ctx)
+		assert.Equal(t, []string{"c"}, md.Get(invokev1.CallerIDHeader))
+		assert.Equal(t, []string{"ns-c"}, md.Get(invokev1.CallerNamespaceHeader))
+		assert.Equal(t, []string{"a"}, md.Get(invokev1.CalleeIDHeader))
+	})
+
+	t.Run("self-invocation from the app stamps this app as caller and callee", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Namespace:         "ns-a",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: "a"}, nil
+		})
+
+		for name, md := range map[string]metadata.MD{
+			"no identity metadata": {},
+			"spoofed identity metadata": {
+				invokev1.CalleeIDHeader:        []string{"a", "other"},
+				invokev1.CallerIDHeader:        []string{"admin"},
+				invokev1.CallerNamespaceHeader: []string{"kube-system"},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				md.Set("dapr-app-id", "a")
+				ctx, _, _, teardown, err := p.(*proxy).intercept(metadata.NewIncomingContext(t.Context(), md), "/test", true)
+				defer teardown(true)
+				require.NoError(t, err)
+
+				out, _ := metadata.FromOutgoingContext(ctx)
+				assert.Equal(t, []string{"a"}, out.Get(invokev1.CallerIDHeader))
+				assert.Equal(t, []string{"ns-a"}, out.Get(invokev1.CallerNamespaceHeader))
+				assert.Equal(t, []string{"a"}, out.Get(invokev1.CalleeIDHeader))
+			})
+		}
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {
@@ -269,7 +366,7 @@ func TestIntercept(t *testing.T) {
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
-		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
 		defer teardown(true)
 
 		require.Error(t, err)
@@ -289,10 +386,26 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
 		defer teardown(true)
 
 		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
+}
+
+func TestSetLocalIdentityMetadata(t *testing.T) {
+	md := metadata.MD{
+		invokev1.CalleeIDHeader:        []string{"a", "other"},
+		invokev1.CallerIDHeader:        []string{"admin", "not-c"},
+		invokev1.CallerNamespaceHeader: []string{"kube-system"},
+		"other":                        []string{"kept"},
+	}
+	setLocalIdentityMetadata(md, "c", "ns-c", "a")
+	assert.Equal(t, metadata.MD{
+		invokev1.CalleeIDHeader:        []string{"a"},
+		invokev1.CallerIDHeader:        []string{"c"},
+		invokev1.CallerNamespaceHeader: []string{"ns-c"},
+		"other":                        []string{"kept"},
+	}, md)
 }

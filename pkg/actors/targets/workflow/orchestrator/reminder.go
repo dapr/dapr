@@ -35,6 +35,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 // createWorkflowReminder schedules a wake-up reminder on the workflow actor.
@@ -275,7 +276,14 @@ func (o *orchestrator) failTaskViaReminder(ctx context.Context, failedEvent *pro
 	if err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
-	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
+	req, err := o.buildReminderRequest(reminderName, failedEvent, time.Now(), o.actorTypeBuilder.Workflow(o.appID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	// Create only, as the activity host does for this name family: the name
+	// is random, so AlreadyExists means a retry of an unacked create.
+	req.Overwrite = ptr.Of(false)
+	if err := common.CreateReminderWithRetry(ctx, o.reminders, req); err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
 
