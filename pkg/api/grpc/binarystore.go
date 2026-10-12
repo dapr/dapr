@@ -82,7 +82,15 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	_ = inReader.CloseWithError(setErr)
 
 	if setErr != nil {
-		// setErr is already an APIError.
+		select {
+		case wErr := <-writerDone:
+			if wErr != nil {
+				err = messages.ErrBadRequest.WithFormat(wErr)
+				a.logger.Debug(err)
+				return err
+			}
+		default:
+		}
 		a.logger.Debug(setErr)
 		return setErr
 	}

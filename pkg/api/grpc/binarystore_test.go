@@ -19,6 +19,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/api/universal"
@@ -42,6 +44,37 @@ type blockingSetBinaryFileStream struct {
 	ctx     context.Context
 	recvErr error
 	once    sync.Once
+}
+
+type providerErrorBinaryStore struct {
+	binarystore.BinaryStore
+}
+
+type duplicateInitialSetBinaryFileStream struct {
+	blockingSetBinaryFileStream
+	messages int
+}
+
+func (*providerErrorBinaryStore) Set(_ context.Context, req *binarystore.SetRequest) error {
+	_, _ = io.Copy(io.Discard, req.Data)
+	return errors.New("provider error")
+}
+
+func (d *duplicateInitialSetBinaryFileStream) RecvMsg(message any) error {
+	if d.messages == 2 {
+		return io.EOF
+	}
+	d.messages++
+	req := message.(*runtimev1pb.SetBinaryFileRequestAlpha1)
+	*req = runtimev1pb.SetBinaryFileRequestAlpha1{
+		SetBinaryFileRequestType: &runtimev1pb.SetBinaryFileRequestAlpha1_InitialRequest{
+			InitialRequest: &runtimev1pb.SetBinaryFileRequestInitialAlpha1{
+				ComponentName: "store",
+				FileName:      "file.bin",
+			},
+		},
+	}
+	return nil
 }
 
 func (b *blockingSetBinaryFileStream) SetHeader(metadata.MD) error {
@@ -122,6 +155,30 @@ func TestSetBinaryFileReturnsComponentErrorBeforeClientClosesStream(t *testing.T
 	case <-time.After(time.Second):
 		t.Fatal("SetBinaryFileAlpha1 waited for the client to close the stream")
 	}
+}
+
+func TestSetBinaryFileReturnsInvalidArgumentForMalformedStreamWhenComponentReturnsProviderError(t *testing.T) {
+	compStore := compstore.New()
+	compStore.AddBinaryStore("store", &providerErrorBinaryStore{})
+	a := &api{
+		Universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			Resiliency: resiliency.New(nil),
+			CompStore:  compStore,
+		}),
+		logger: logger.NewLogger("dapr.runtime.grpc.test"),
+	}
+	defer a.wg.Wait()
+
+	stream := &duplicateInitialSetBinaryFileStream{
+		blockingSetBinaryFileStream: blockingSetBinaryFileStream{
+			ctx: context.Background(),
+		},
+	}
+	err := a.SetBinaryFileAlpha1(stream)
+
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid request: initial request found in non-leading message", status.Convert(err).Message())
 }
 
 func TestSetBinaryFileReturnsAPIClosed(t *testing.T) {
