@@ -259,18 +259,13 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	// long, and the timer may be deleted or replaced meanwhile — Delete's
 	// processor.Dequeue can't reach a fire that already left the heap. Execute
 	// only if this reminder is still the registered one for its key.
-	i.queueLock.Lock()
-	cur, ok := i.activeTimers.Load(reminder.Key())
-	i.queueLock.Unlock()
-	if !ok || cur != reminder {
+	if !i.IsRegistered(reminder) {
+		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
 		return
 	}
 
 	err := i.router.CallReminder(ctx, reminder)
-	if errors.Is(err, actorerrors.ErrTimerFireNotLocal) {
-		// The actor is no longer hosted here: the ownership-loss sweep is
-		// deleting this timer, so remove it rather than count a fire or tick
-		// forward.
+	if errors.Is(err, actorerrors.ErrTimerFireNotLocal) || errors.Is(err, actorerrors.ErrTimerFireStale) {
 		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
 		i.queueLock.Lock()
 		if i.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
@@ -392,6 +387,11 @@ func (i *inmemory) Get(_ context.Context, timerKey string) *api.Reminder {
 	// Hand out a copy so callers can never alias the store.
 	c := *reminderAny.(*api.Reminder)
 	return &c
+}
+
+func (i *inmemory) IsRegistered(reminder *api.Reminder) bool {
+	cur, ok := i.activeTimers.Load(reminder.Key())
+	return ok && cur == reminder
 }
 
 func (i *inmemory) List(_ context.Context, actorType, actorID string) []*api.Reminder {

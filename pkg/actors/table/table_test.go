@@ -41,6 +41,7 @@ func (s *stubTimerStorage) Delete(context.Context, string)              {}
 
 func (s *stubTimerStorage) List(context.Context, string, string) []*api.Reminder { return nil }
 func (s *stubTimerStorage) Get(context.Context, string) *api.Reminder            { return nil }
+func (s *stubTimerStorage) IsRegistered(*api.Reminder) bool                      { return true }
 
 func (s *stubTimerStorage) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
 	s.sweeps = append(s.sweeps, fn)

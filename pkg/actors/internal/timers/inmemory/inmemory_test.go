@@ -24,12 +24,55 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/stats/view"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
+
+func newTimerMeter(t *testing.T) view.Meter {
+	t.Helper()
+	meter := view.NewMeter()
+	meter.Start()
+	require.NoError(t, diag.DefaultMonitoring.Init(meter, "test", view.Distribution(1)))
+	return meter
+}
+
+func countMetric(t *testing.T, meter view.Meter, name string, want map[string]string) int64 {
+	t.Helper()
+	rows, err := meter.RetrieveData(name)
+	require.NoError(t, err)
+	var n int64
+	for _, row := range rows {
+		got := make(map[string]string, len(row.Tags))
+		for _, tg := range row.Tags {
+			got[tg.Key.Name()] = tg.Value
+		}
+		match := true
+		for k, v := range want {
+			if got[k] != v {
+				match = false
+			}
+		}
+		if match {
+			n += row.Data.(*view.CountData).Value
+		}
+	}
+	return n
+}
+
+func timersDropped(t *testing.T, meter view.Meter) int64 {
+	t.Helper()
+	return countMetric(t, meter, "runtime/actor/timers_dropped_total", nil)
+}
+
+func timersFailed(t *testing.T, meter view.Meter) int64 {
+	t.Helper()
+	return countMetric(t, meter, "runtime/actor/timers_fired_total", map[string]string{"success": "false"})
+}
 
 // TestUpdateActiveTimersCountConcurrent exercises updateActiveTimersCount from
 // many goroutines using distinct actor types. First-seen actor types insert a
@@ -198,6 +241,7 @@ func TestDeleteFuncSuppressesParkedFire(t *testing.T) {
 	im, ok := store.(*inmemory)
 	require.True(t, ok)
 
+	meter := newTimerMeter(t)
 	now := clock.RealClock{}.Now()
 	ctx := context.Background()
 	require.NoError(t, store.Create(ctx, newNamedTimer(t, "x", "slow", "", now)))
@@ -219,6 +263,7 @@ func TestDeleteFuncSuppressesParkedFire(t *testing.T) {
 		return !exists
 	}, 5*time.Second, time.Millisecond)
 	assert.False(t, victimFired.Load(), "a swept parked fire executed its callback")
+	assert.Equal(t, int64(1), timersDropped(t, meter), "a swept parked fire was not counted as dropped")
 }
 
 func TestListReturnsActorTimersSorted(t *testing.T) {
@@ -282,4 +327,117 @@ func TestGetReturnsCopyOrNil(t *testing.T) {
 
 	store.Delete(ctx, timer.Key())
 	assert.Nil(t, store.Get(ctx, timer.Key()))
+}
+
+func TestIsRegistered(t *testing.T) {
+	t.Parallel()
+
+	store := New(Options{Router: routerfake.New()})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	future := clock.RealClock{}.Now().Add(time.Hour)
+	ctx := context.Background()
+
+	timer := newTimer(t, "x", "", future)
+	require.NoError(t, store.Create(ctx, timer))
+	assert.True(t, store.IsRegistered(timer))
+	assert.False(t, store.IsRegistered(store.Get(ctx, timer.Key())), "a copy is not the registered timer")
+
+	store.Delete(ctx, timer.Key())
+	assert.False(t, store.IsRegistered(timer))
+
+	require.NoError(t, store.Create(ctx, timer))
+	replacement := newTimer(t, "x", "", future)
+	require.NoError(t, store.Create(ctx, replacement))
+	assert.False(t, store.IsRegistered(timer))
+	assert.True(t, store.IsRegistered(replacement))
+
+	store.DeleteFunc(ctx, func(_, actorID string) bool { return actorID == "x" })
+	assert.False(t, store.IsRegistered(replacement))
+}
+
+func TestStaleFireOnDeletedTimerIsDropped(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int64
+	router := routerfake.New().WithCallReminderFn(
+		func(context.Context, *api.Reminder) error {
+			calls.Add(1)
+			close(started)
+			<-release
+			return backoff.Permanent(actorerrors.ErrTimerFireStale)
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	meter := newTimerMeter(t)
+	ctx := context.Background()
+	timer := newTimer(t, "abc", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(ctx, timer))
+	<-started
+
+	store.Delete(ctx, timer.Key())
+	require.Equal(t, int64(0), im.GetActiveTimersCount(timer.ActorType))
+	close(release)
+
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(im, timer.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond, "deleted timer's state was not reaped")
+
+	_, ok = im.activeTimers.Load(timer.Key())
+	assert.False(t, ok, "stale fire re-enqueued its deleted timer")
+	assert.Equal(t, int64(0), im.GetActiveTimersCount(timer.ActorType), "stale fire changed the counts")
+	assert.Equal(t, int64(1), calls.Load())
+	assert.Equal(t, int64(1), timersDropped(t, meter), "stale fire was not counted as dropped")
+	assert.Zero(t, timersFailed(t, meter), "stale fire was counted as a failed fire")
+}
+
+func TestStaleFireOnReplacedTimerKeepsReplacement(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int64
+	router := routerfake.New().WithCallReminderFn(
+		func(context.Context, *api.Reminder) error {
+			if calls.Add(1) == 1 {
+				close(started)
+				<-release
+				return backoff.Permanent(actorerrors.ErrTimerFireStale)
+			}
+			return nil
+		},
+	)
+
+	store := New(Options{Router: router})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	im, ok := store.(*inmemory)
+	require.True(t, ok)
+
+	meter := newTimerMeter(t)
+	ctx := context.Background()
+	now := clock.RealClock{}.Now()
+	timer := newTimer(t, "x", "1s", now)
+	require.NoError(t, store.Create(ctx, timer))
+	<-started
+
+	replacement := newTimer(t, "x", "1h", now.Add(time.Hour))
+	require.NoError(t, store.Create(ctx, replacement))
+	close(release)
+
+	require.Eventually(t, func() bool {
+		_, pending, _ := stateSnapshot(im, timer.ActorKey())
+		return pending == 0
+	}, 5*time.Second, time.Millisecond, "stale fire did not complete")
+	cur, ok := im.activeTimers.Load(timer.Key())
+	require.True(t, ok, "stale fire removed the replacement")
+	assert.Same(t, replacement, cur)
+	assert.True(t, store.IsRegistered(replacement))
+	assert.Equal(t, int64(1), im.GetActiveTimersCount(timer.ActorType))
+	assert.Equal(t, int64(1), calls.Load())
+	assert.Equal(t, int64(1), timersDropped(t, meter), "stale fire was not counted as dropped")
+	assert.Zero(t, timersFailed(t, meter), "stale fire was counted as a failed fire")
 }

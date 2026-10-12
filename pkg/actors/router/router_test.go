@@ -27,8 +27,11 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/router"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/actors/targets"
+	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/modes"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -36,6 +39,141 @@ import (
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 	"github.com/dapr/kit/logger"
 )
+
+type registeredStorage struct {
+	internaltimers.Storage
+	registered bool
+}
+
+func (s *registeredStorage) IsRegistered(*api.Reminder) bool { return s.registered }
+
+type localTimerRouter struct {
+	router.Interface
+	lookups, releases, creates, invokes int
+}
+
+func newLocalTimerRouter(t *testing.T, timers func() internaltimers.Storage, claimCtx func(context.Context) context.Context) *localTimerRouter {
+	t.Helper()
+	l := new(localTimerRouter)
+	plc := placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+		l.lookups++
+		if claimCtx != nil {
+			ctx = claimCtx(ctx)
+		}
+		return &api.LookupActorResponse{Local: true}, ctx, func(error) { l.releases++ }, nil
+	})
+	target := targetsfake.New("abc").(*targetsfake.Fake).WithInvokeTimer(func(context.Context, *api.Reminder) error {
+		l.invokes++
+		return nil
+	})
+	tbl := tablefake.New().WithGetOrCreate(func(string, string) (targets.Interface, error) {
+		l.creates++
+		return target, nil
+	})
+	l.Interface = router.New(router.Options{
+		Placement:  plc,
+		Table:      tbl,
+		Resiliency: resiliency.FromConfigurations(logger.NewLogger("test")),
+		Timers:     timers,
+	})
+	return l
+}
+
+func storageFn(registered bool) func() internaltimers.Storage {
+	s := &registeredStorage{registered: registered}
+	return func() internaltimers.Storage { return s }
+}
+
+func TestCallReminderStaleTimerDropped(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, storageFn(false), nil)
+
+	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
+	require.ErrorIs(t, err, actorerrors.ErrTimerFireStale)
+	assert.Equal(t, 1, r.lookups)
+	assert.Equal(t, 1, r.releases, "the placement claim was not released")
+	assert.Equal(t, 0, r.creates)
+	assert.Equal(t, 0, r.invokes, "a stale timer was invoked")
+}
+
+func TestCallReminderRegisteredTimerInvoked(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, storageFn(true), nil)
+
+	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r.lookups)
+	assert.Equal(t, 1, r.releases)
+	assert.Equal(t, 1, r.invokes)
+}
+
+func TestCallReminderNoTimersOption(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, nil, nil)
+
+	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r.invokes)
+}
+
+func TestCallReminderRemoteTimerNotGated(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, storageFn(false), nil)
+
+	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, IsRemote: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r.invokes, "a forwarded timer fire was dropped")
+}
+
+func TestCallReminderCancelledClaimDoesNotCreateActor(t *testing.T) {
+	t.Parallel()
+
+	for name, timers := range map[string]func() internaltimers.Storage{
+		"with timers":    storageFn(true),
+		"without timers": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newLocalTimerRouter(t, timers, func(ctx context.Context) context.Context {
+				ctx, cancel := context.WithCancel(ctx)
+				cancel()
+				return ctx
+			})
+
+			err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, SkipRetries: true})
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Equal(t, 1, r.releases)
+			assert.Equal(t, 0, r.creates, "a target was created for an actor whose claim was cancelled")
+			assert.Equal(t, 0, r.invokes)
+		})
+	}
+}
+
+func TestCallReminderCancelledClaimRetried(t *testing.T) {
+	t.Parallel()
+
+	var claims int
+	r := newLocalTimerRouter(t, nil, func(ctx context.Context) context.Context {
+		claims++
+		if claims > 1 {
+			return ctx
+		}
+		ctx, cancel := context.WithCancel(ctx)
+		cancel()
+		return ctx
+	})
+
+	err := r.CallReminder(t.Context(), &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true})
+	require.NoError(t, err)
+	assert.Equal(t, 2, r.lookups)
+	assert.Equal(t, 1, r.creates)
+	assert.Equal(t, 1, r.invokes, "a fire whose claim was cancelled was not retried")
+}
 
 func TestCallReminderNonLocalTimerDropped(t *testing.T) {
 	var lookups int

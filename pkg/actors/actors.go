@@ -275,6 +275,7 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		Reminders:          a.reminders,
 		MaxRequestBodySize: a.maxRequestBodySize,
+		Timers:             func() internaltimers.Storage { return a.timerStorage },
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{

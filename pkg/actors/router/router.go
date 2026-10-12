@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
@@ -62,6 +63,7 @@ type Options struct {
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
 	MaxRequestBodySize int
+	Timers             func() internaltimers.Storage
 }
 
 type router struct {
@@ -73,6 +75,7 @@ type router struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
+	timers     func() internaltimers.Storage
 
 	clock clock.Clock
 
@@ -93,6 +96,7 @@ func New(opts Options) Interface {
 		resiliency: opts.Resiliency,
 		grpc:       opts.GRPC,
 		reminders:  opts.Reminders,
+		timers:     opts.Timers,
 		clock:      clock.RealClock{},
 		callOptions: []grpc.CallOption{
 			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
@@ -216,6 +220,18 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 			return backoff.Permanent(err)
 		}
 		return err
+	}
+
+	if req.IsTimer && !req.IsRemote {
+		if r.timers != nil {
+			if storage := r.timers(); storage != nil && !storage.IsRegistered(req) {
+				log.Debugf("Dropping timer %s: timer is no longer registered", req.Key())
+				return backoff.Permanent(actorerrors.ErrTimerFireStale)
+			}
+		}
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
 	}
 
 	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
