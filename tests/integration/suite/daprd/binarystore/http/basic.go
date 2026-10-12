@@ -50,6 +50,9 @@ metadata:
 spec:
   type: binarystore.in-memory
   version: v1
+  metadata:
+    - name: maxSize
+      value: "6291456"
 `
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -94,6 +97,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}{
 			{name: "plus", path: "file+name.bin", payload: "plus"},
 			{name: "encoded space", path: "file%20name.bin", payload: "space"},
+			{name: "nested path", path: "a%2Fb.bin", payload: "nested"},
 		}
 
 		for _, test := range tests {
@@ -129,8 +133,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			statusCode  int
 		}{
 			{name: "valid", fileName: "valid-name.bin", statusCode: http.StatusNoContent},
-			{name: "nested path", fileName: "a/b.bin", statusCode: http.StatusBadRequest},
-			{name: "encoded slash", requestPath: "a%2Fb.bin", statusCode: http.StatusBadRequest},
 			{name: "parent path", fileName: "../x.bin", statusCode: http.StatusBadRequest},
 			{name: "leading slash", fileName: "/x.bin", statusCode: http.StatusBadRequest},
 			{name: "backslash", fileName: `a\b.bin`, statusCode: http.StatusBadRequest},

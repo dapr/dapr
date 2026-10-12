@@ -49,6 +49,9 @@ metadata:
 spec:
   type: binarystore.in-memory
   version: v1
+  metadata:
+    - name: maxSize
+      value: "6291456"
 `
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -70,7 +73,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
-					FileName:      "hello.bin",
+					FileName:      "path/hello.bin",
 					Overwrite:     new(true),
 				},
 			},
@@ -85,7 +88,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		getStream, err := client.GetBinaryFileAlpha1(ctx, &rtv1.GetBinaryFileRequestAlpha1{
 			ComponentName: "mystore",
-			FileName:      "hello.bin",
+			FileName:      "path/hello.bin",
 		})
 		require.NoError(t, err)
 
@@ -108,7 +111,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			code     codes.Code
 		}{
 			{name: "valid", fileName: "valid-name.bin", code: codes.OK},
-			{name: "nested path", fileName: "a/b.bin", code: codes.InvalidArgument},
+			{name: "nested path", fileName: "a/b.bin", code: codes.OK},
 			{name: "parent path", fileName: "../x.bin", code: codes.InvalidArgument},
 			{name: "leading slash", fileName: "/x.bin", code: codes.InvalidArgument},
 			{name: "backslash", fileName: `a\b.bin`, code: codes.InvalidArgument},
@@ -261,14 +264,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("set without overwrite conflicts", func(t *testing.T) {
-		// "hello.bin" already exists from the previous subtest.
+		// "path/hello.bin" already exists from the previous subtest.
 		stream, err := client.SetBinaryFileAlpha1(ctx)
 		require.NoError(t, err)
 		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
 			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
 				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
 					ComponentName: "mystore",
-					FileName:      "hello.bin",
+					FileName:      "path/hello.bin",
 				},
 			},
 		}))
