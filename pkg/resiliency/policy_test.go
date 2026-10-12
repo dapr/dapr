@@ -25,6 +25,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -270,6 +272,43 @@ func TestPolicyRetry(t *testing.T) {
 			assert.Equal(t, test.expected, called.Load())
 		})
 	}
+}
+
+func TestTimeoutError(t *testing.T) {
+	// The status a proxied gRPC call fails with once its context is
+	// cancelled, which pkg/api/grpc/proxy wraps for retry matching.
+	statusErr := NewCodeError(int32(codes.DeadlineExceeded), status.Error(codes.DeadlineExceeded, "deadline exceeded"))
+
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+
+	require.ErrorIs(t, timeoutError(expired, statusErr), context.DeadlineExceeded, "an error returned after the deadline is the timeout")
+	require.ErrorIs(t, timeoutError(expired, errors.New("any")), context.DeadlineExceeded)
+	require.NoError(t, timeoutError(expired, nil), "a result returned as the deadline passes is still a result")
+	require.NoError(t, timeoutError(t.Context(), statusErr), "an error before the deadline is the operation's own")
+
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, timeoutError(cancelled, statusErr), context.Canceled, "a cancelled attempt reports its cancellation")
+
+	// The deadline has passed on the clock but the timer which cancels the
+	// context has not run yet: a downstream enforcing the same deadline
+	// answers in this gap.
+	stale := staleDeadline{Context: t.Context(), deadline: time.Now().Add(-time.Millisecond)}
+	require.ErrorIs(t, timeoutError(stale, statusErr), context.DeadlineExceeded, "an error after the deadline instant is the timeout")
+	require.NoError(t, timeoutError(stale, nil))
+	due := staleDeadline{Context: t.Context(), deadline: time.Now().Add(time.Minute)}
+	require.NoError(t, timeoutError(due, statusErr), "an error well before the deadline is the operation's own")
+}
+
+type staleDeadline struct {
+	context.Context
+	deadline time.Time
+}
+
+func (s staleDeadline) Deadline() (time.Time, bool) {
+	return s.deadline, true
 }
 
 func TestPolicyRetryWithMatch(t *testing.T) {

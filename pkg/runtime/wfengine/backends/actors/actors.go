@@ -521,9 +521,12 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
 
+		// Aborted: a completed child refuses reuse of its ID until its
+		// parent acknowledges the completion.
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
-			status.Code() == codes.Unavailable) {
+			status.Code() == codes.Unavailable ||
+			status.Code() == codes.Aborted) {
 			return eerr
 		}
 
@@ -1336,21 +1339,21 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	deleteReminders := []concurrency.Runner{
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.workflowActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.activityActorType,
 				ActorID:         id.String() + "::",
 				MatchIDAsPrefix: true,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.retentionerActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,

@@ -16,6 +16,8 @@ package dirdata
 import (
 	"errors"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 // isDeletePending reports whether err is Windows refusing to open a file which
@@ -29,4 +31,11 @@ import (
 // fs.ErrNotExist a POSIX system would return.
 func isDeletePending(err error) bool {
 	return errors.Is(err, syscall.ERROR_ACCESS_DENIED)
+}
+
+// isLocked reports whether err is Windows refusing to open a file another
+// process holds without sharing, which an on-access scanner does for a
+// moment after a resource file is written.
+func isLocked(err error) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION)
 }
