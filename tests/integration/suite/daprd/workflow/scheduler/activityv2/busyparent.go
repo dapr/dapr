@@ -1,0 +1,148 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package activityv2
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/task"
+)
+
+func init() {
+	suite.Register(new(busyparent))
+}
+
+// busyparent: activity results reach a parent workflow whose turn lock is
+// held for longer than 30 s. In a large fan-out this is the normal state: the
+// turn that schedules the activities, and every completion queued before a
+// result, hold the same lock. A wait for that lock is backpressure, not a
+// lost delivery. A result publish bounded at 30 s gave up while the parent
+// was busy, the execution settled as failed, the run-activity reminder ran
+// the body again, and the re-run queued on the same lock, so a large fan-out
+// ran most bodies several times and slowed down as it grew.
+type busyparent struct {
+	workflow *workflow.Workflow
+}
+
+const (
+	busyparentActivities = 5
+	// busyparentHold is how long the parent's second turn holds its turn
+	// lock once the other four results are in hand. It is longer than the
+	// 30 s publish bound that this test guards against. With the 45 s case
+	// budget, it leaves about 12 s for process startup.
+	busyparentHold = 32 * time.Second
+	// busyparentGate bounds each wait on the order this test forces.
+	busyparentGate = 10 * time.Second
+)
+
+func (b *busyparent) Setup(t *testing.T) []framework.Option {
+	b.workflow = workflow.New(t)
+	return []framework.Option{framework.WithProcesses(b.workflow)}
+}
+
+func (b *busyparent) Run(t *testing.T, ctx context.Context) {
+	b.workflow.WaitUntilRunning(t, ctx)
+
+	var (
+		turns      atomic.Int64
+		executions [busyparentActivities]atomic.Int64
+		// turnTwo closes when the parent's second turn starts. Activities
+		// 1-4 return only after that, so their results arrive while the
+		// second turn holds the lock.
+		turnTwo     = make(chan struct{})
+		turnTwoOnce sync.Once
+		// returned counts the bodies of activities 1-4 that returned.
+		returned atomic.Int64
+		// heldWithResults is set when the second turn saw all four results
+		// in hand before it started to hold the lock.
+		heldWithResults atomic.Bool
+	)
+
+	require.NoError(t, b.workflow.Registry().AddWorkflowN("BusyParent", func(c *task.WorkflowContext) (any, error) {
+		// The second turn is the one driven by the result of activity 0.
+		if turns.Add(1) == 2 {
+			turnTwoOnce.Do(func() { close(turnTwo) })
+			deadline := time.Now().Add(busyparentGate)
+			for returned.Load() < busyparentActivities-1 && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond * 10)
+			}
+			heldWithResults.Store(returned.Load() == busyparentActivities-1)
+			time.Sleep(busyparentHold)
+		}
+		tasks := make([]task.Task, busyparentActivities)
+		for i := range busyparentActivities {
+			tasks[i] = c.CallActivity("Slow", task.WithActivityInput(i))
+		}
+		errs := make([]error, 0, len(tasks))
+		for _, tk := range tasks {
+			errs = append(errs, tk.Await(nil))
+		}
+		return nil, errors.Join(errs...)
+	}))
+	require.NoError(t, b.workflow.Registry().AddActivityN("Slow", func(c task.ActivityContext) (any, error) {
+		var i int
+		if err := c.GetInput(&i); err != nil {
+			return nil, err
+		}
+		executions[i].Add(1)
+		if i == 0 {
+			// The first result drives the second turn.
+			return nil, nil
+		}
+		select {
+		case <-turnTwo:
+		case <-time.After(busyparentGate):
+			return nil, errors.New("the parent's second turn did not start")
+		}
+		returned.Add(1)
+		return nil, nil
+	}))
+
+	cl := b.workflow.BackendClient(t, ctx)
+	id, err := cl.ScheduleNewWorkflow(ctx, "BusyParent")
+	require.NoError(t, err)
+
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+	require.True(t, heldWithResults.Load(),
+		"the second turn must hold the parent's turn lock while the four results are in hand")
+
+	// Each result was in hand while it waited for the parent. Nothing was
+	// lost and nothing moved, so each body must have run one time.
+	for i := range busyparentActivities {
+		assert.Equal(t, int64(1), executions[i].Load(),
+			"activity %d ran more than one time: a publish that waited on a busy parent was settled as a failure", i)
+	}
+	assert.Never(t, func() bool {
+		for i := range busyparentActivities {
+			if executions[i].Load() > 1 {
+				return true
+			}
+		}
+		return false
+	}, time.Second, time.Millisecond*10)
+}
