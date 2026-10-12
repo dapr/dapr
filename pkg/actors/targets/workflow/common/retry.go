@@ -99,6 +99,40 @@ func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req 
 	}, backoff.WithContext(bo, ctx))
 }
 
+// reminderDeleter is the minimal interface needed by DeleteRemindersWithRetry.
+// It is satisfied by both reminders.Interface and scheduler.Interface.
+type reminderDeleter interface {
+	DeleteByActorID(ctx context.Context, req *actorapi.DeleteRemindersByActorIDRequest) error
+}
+
+// DeleteRemindersWithRetry calls DeleteByActorID with the bounded backoff of
+// CreateReminderWithRetry and the same error classification; NotFound means
+// nothing is left to delete. A delete by actor ID is idempotent. Purge commits
+// the state rows and deletes the reminders concurrently, so a delete given up
+// on the first transient scheduler error (a connection reset after a network
+// partition or a scheduler restart) fails a purge whose rows are already gone:
+// the caller can no longer retry it, and the reminders are orphaned.
+func DeleteRemindersWithRetry(ctx context.Context, r reminderDeleter, req *actorapi.DeleteRemindersByActorIDRequest) error {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 100 * time.Millisecond
+	bo.MaxInterval = 5 * time.Second
+	bo.MaxElapsedTime = reminderCreateMaxElapsedTime
+
+	return backoff.Retry(func() error {
+		if err := ctx.Err(); err != nil {
+			return backoff.Permanent(err)
+		}
+		err := r.DeleteByActorID(ctx, req)
+		if err == nil || status.Code(err) == codes.NotFound {
+			return nil
+		}
+		if IsPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted {
+			return backoff.Permanent(err)
+		}
+		return err
+	}, backoff.WithContext(bo, ctx))
+}
+
 // isCreated reports whether a Create left the reminder in place. A create
 // without overwrite answers AlreadyExists when a retry follows a create whose
 // success was lost in transit; the reminder is there, which is the goal.
