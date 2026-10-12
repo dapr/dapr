@@ -1324,11 +1324,6 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
 	}
 
-	req, err := s.GetPurgeRequest(id.String())
-	if err != nil {
-		return err
-	}
-
 	reminders, err := abe.actors.Reminders(ctx)
 	if err != nil {
 		return err
@@ -1339,10 +1334,7 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	return concurrency.Join(ctx,
-		func(ctx context.Context) error {
-			return astate.TransactionalStateOperation(ctx, true, req, false)
-		},
+	deleteReminders := []concurrency.Runner{
 		func(ctx context.Context) error {
 			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.workflowActorType,
@@ -1364,7 +1356,27 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 				MatchIDAsPrefix: false,
 			})
 		},
-	)
+	}
+
+	// No rows: the instance never existed, or an earlier purge deleted its
+	// rows but failed to delete its reminders. Remove whatever is left in the
+	// scheduler, so force purge stays the escape hatch for that state, and
+	// report the instance as not found.
+	if s == nil {
+		if err = concurrency.Join(ctx, deleteReminders...); err != nil {
+			return err
+		}
+		return api.ErrInstanceNotFound
+	}
+
+	req, err := s.GetPurgeRequest(id.String())
+	if err != nil {
+		return err
+	}
+
+	return concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
+		return astate.TransactionalStateOperation(ctx, true, req, false)
+	})...)
 }
 
 // haltPurgedActors evicts this instance's workflow actor from this host,
