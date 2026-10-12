@@ -14,11 +14,11 @@ limitations under the License.
 package dirdata
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,33 +67,31 @@ func TestIsLockedWindows(t *testing.T) {
 		assert.False(t, isLocked(syscall.ERROR_ACCESS_DENIED))
 	})
 
-	// lock opens path without sharing, as an on-access scanner does, and
-	// returns the handle for the test to close.
-	lock := func(t *testing.T, path string) syscall.Handle {
+	// injectReads replaces the read with one failing with a sharing violation
+	// for the first failures calls, and counts every call.
+	injectReads := func(t *testing.T, failures int) *int {
 		t.Helper()
-		name, err := syscall.UTF16PtrFromString(path)
-		require.NoError(t, err)
-		handle, err := syscall.CreateFile(name, syscall.GENERIC_READ, 0,
-			nil, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL, 0)
-		require.NoError(t, err)
-		return handle
+		calls := new(int)
+		orig := readFileFn
+		t.Cleanup(func() { readFileFn = orig })
+		readFileFn = func(path string) ([]byte, error) {
+			*calls++
+			if *calls <= failures {
+				return nil, &fs.PathError{Op: "open", Path: path, Err: windows.ERROR_SHARING_VIOLATION}
+			}
+			return orig(path)
+		}
+		return calls
 	}
 
 	t.Run("should read a file once a brief exclusive hold is released", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "1.yaml")
-		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
-		handle := lock(t, path)
-		released := make(chan struct{})
-		go func() {
-			defer close(released)
-			time.Sleep(readRetryDelay * 2)
-			_ = syscall.CloseHandle(handle)
-		}()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "1.yaml"), []byte("a"), 0o600))
+		calls := injectReads(t, 2)
 
 		data, err := ReadDirs([]string{dir})
-		<-released
 		require.NoError(t, err)
+		assert.Equal(t, 3, *calls)
 		require.Len(t, data.Entries, 1)
 		require.Len(t, data.Entries[0].Files, 1)
 		assert.Equal(t, []byte("a"), data.Entries[0].Files[0].Content)
@@ -101,13 +99,38 @@ func TestIsLockedWindows(t *testing.T) {
 
 	t.Run("should report a file still held exclusively after the retries", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "1.yaml")
-		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
-		handle := lock(t, path)
-		t.Cleanup(func() { _ = syscall.CloseHandle(handle) })
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "1.yaml"), []byte("a"), 0o600))
+		calls := injectReads(t, readAttempts)
 
 		data, err := ReadDirs([]string{dir})
 		require.ErrorIs(t, err, ErrLocked, "a locked file must abort the scan so it is retried, not skipped")
+		assert.Equal(t, readAttempts, *calls)
+		assert.Nil(t, data)
+	})
+
+	t.Run("should report a file held by a real share mode 0 handle", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "1.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("a"), 0o600))
+		name, err := syscall.UTF16PtrFromString(path)
+		require.NoError(t, err)
+		handle, err := syscall.CreateFile(name, syscall.GENERIC_READ, 0,
+			nil, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = syscall.CloseHandle(handle) })
+
+		// Some hosts do not refuse the open; record what they did instead of
+		// failing on a premise the code under test does not control.
+		f, oerr := os.Open(path)
+		if oerr == nil {
+			f.Close()
+		}
+		if !isLocked(oerr) {
+			t.Skipf("host did not refuse an open of a file held with share mode 0, os.Open returned: %v", oerr)
+		}
+
+		data, err := ReadDirs([]string{dir})
+		require.ErrorIs(t, err, ErrLocked)
 		assert.Nil(t, data)
 	})
 }
