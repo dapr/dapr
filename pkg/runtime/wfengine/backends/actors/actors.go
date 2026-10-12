@@ -1344,21 +1344,21 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 			return astate.TransactionalStateOperation(ctx, true, req, false)
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.workflowActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.activityActorType,
 				ActorID:         id.String() + "::",
 				MatchIDAsPrefix: true,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.retentionerActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,
