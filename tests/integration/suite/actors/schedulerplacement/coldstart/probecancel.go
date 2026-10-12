@@ -99,6 +99,7 @@ func (c *probecancel) Setup(t *testing.T) []framework.Option {
 		scheduler.WithID(c.sched.ID()),
 		scheduler.WithPort(c.sched.Port()),
 		scheduler.WithEtcdClientPort(c.sched.EtcdClientPort()),
+		scheduler.WithInitialCluster(c.sched.InitialCluster()),
 		scheduler.WithDataDir(c.sched.DataDir()),
 	)
 	c.daprd = daprd.New(t,
