@@ -15,6 +15,8 @@ package http
 
 import (
 	nethttp "net/http"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -150,4 +152,38 @@ func TestHTTP(t *testing.T) {
 		assert.Equal(t, int32(4), middle1.invoked.Load())
 		assert.Equal(t, int32(4), middle2.invoked.Load())
 	})
+}
+
+func TestHTTP_concurrentAddRemoveAndBuild(t *testing.T) {
+	h := New()
+	spec := &config.PipelineSpec{Handlers: []config.HandlerSpec{
+		{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+	}}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range 20 {
+		wg.Go(func() {
+			<-start
+			h.BuildPipelineFromSpec("p"+strconv.Itoa(i), spec)
+		})
+		wg.Go(func() {
+			<-start
+			middle := newTestMiddle("test")
+			h.Add(Spec{Component: middle.comp, Implementation: middle.item.Middleware})
+			h.Remove("test")
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	middle := newTestMiddle("test")
+	h.Add(Spec{Component: middle.comp, Implementation: middle.item.Middleware})
+
+	var invoked int
+	h.BuildPipelineFromSpec("final", spec)(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {
+		invoked++
+	})).ServeHTTP(nil, nil)
+	assert.Equal(t, 1, invoked)
+	assert.Equal(t, int32(1), middle.invoked.Load())
 }

@@ -43,6 +43,7 @@ var (
 
 type Options struct {
 	Channel       transport.Transport
+	StreamCancel  context.CancelFunc
 	PlacementLoop loop.Interface[loops.EventPlace]
 	ActorTable    table.Interface
 	Scheduler     schedclient.Reloader
@@ -129,6 +130,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	})
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
+		Cancel:        opts.StreamCancel,
 		PlacementLoop: opts.PlacementLoop,
 		IDx:           opts.IDx,
 	})

@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
@@ -106,6 +107,7 @@ type Server struct {
 	cron       cron.Interface
 	etcd       etcd.Interface
 	placement  placement.Interface
+	handoff    *handoff.Handoff
 
 	hzAPIServer healthz.Target
 
@@ -164,6 +166,24 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
+	// Every scheduler runs the placement detection, whether or not it serves
+	// placement itself: during a rolling update of the placement flag a
+	// scheduler without it still elects the placement leader among its
+	// flagged peers, so it must withhold that election while a placement
+	// service is present.
+
+	// In kubernetes a placement service too old to announce itself is
+	// still detected through its service name resolving.
+	var placementDNSName string
+	if opts.Mode == modes.KubernetesMode {
+		placementDNSName = "dapr-placement-server"
+	}
+
+	hoff := handoff.New(handoff.Options{
+		PlacementDNSName: placementDNSName,
+		Security:         opts.Security,
+	})
+
 	place := placement.New(placement.Options{
 		Enabled:            opts.PlacementEnabled,
 		ID:                 opts.EtcdName,
@@ -184,10 +204,12 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		BackendConfig: opts.BackendConfig,
 		Workers:       opts.Workers,
 		Placement:     place,
+		Handoff:       hoff,
 	})
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
+		opts.Controller.SetPresenceSink(hoff)
 	}
 
 	return &Server{
@@ -197,6 +219,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		cron:          cron,
 		placement:     place,
 		etcd:          etcdServer,
+		handoff:       hoff,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -220,7 +243,13 @@ func (s *Server) Run(ctx context.Context) error {
 	runners := []concurrency.Runner{
 		s.runServer,
 		func(ctx context.Context) error {
-			defer cronCancel()
+			defer func() {
+				// Hand off etcd leadership before cron re-election writes.
+				if s.etcd != nil {
+					s.etcd.TransferLeadership()
+				}
+				cronCancel()
+			}()
 			return s.placement.Run(ctx)
 		},
 		func(context.Context) error {
@@ -231,6 +260,11 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 				return cronCtx.Err()
 			}
+			if err != nil {
+				log.Warnf("Scheduler cron exited unexpectedly, restarting server: %s", err)
+			} else {
+				log.Warn("Scheduler cron exited unexpectedly, restarting server")
+			}
 			return err
 		},
 		func(ctx context.Context) error {
@@ -239,6 +273,8 @@ func (s *Server) Run(ctx context.Context) error {
 			return nil
 		},
 	}
+
+	runners = append(runners, s.handoff.Run)
 
 	if s.etcd != nil {
 		runners = append(runners, s.etcd.Run)

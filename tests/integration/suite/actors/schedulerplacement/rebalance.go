@@ -160,7 +160,7 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 			r.lock.Unlock()
 		}
 		assert.Len(c, hosts, 3)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	for _, id := range ids {
 		invoke(t, id)

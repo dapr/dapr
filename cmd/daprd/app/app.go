@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 
-	"go.opencensus.io/stats/view"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -167,7 +166,9 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				return serr
 			}
 
-			meter := view.NewMeter()
+			meter := metrics.NewMeter()
+			defer meter.Stop()
+
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                         opts.AppID,
 				ActorsService:                 opts.ActorsService,

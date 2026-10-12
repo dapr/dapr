@@ -19,6 +19,7 @@ scopes:
 - actor1
 - actor2
 - actorapp
+- placementcutoverapp
 - actorfeatures
 - reentrantactor
 - actorreminder

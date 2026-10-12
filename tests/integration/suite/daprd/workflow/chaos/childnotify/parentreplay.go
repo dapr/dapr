@@ -159,12 +159,17 @@ func (p *parentreplay) Run(t *testing.T, ctx context.Context) {
 	// creation; the parent refuses the completion and the child drops it.
 	require.Eventually(t, func() bool { return runs.Load() == 1 }, time.Second*20, time.Millisecond*10)
 	close(releaseCh)
+	// The child's send and the parent's replay can hold each other's lock
+	// until the send times out (detachedReminderTimeout, 30s) and the retry
+	// reminder re-sends it, so the drop can take over 30s to land.
 	select {
 	case <-dropped:
-	case <-time.After(time.Second * 20):
+	case <-time.After(time.Second * 40):
 		require.Fail(t, "the child never dropped its refused completion")
 	}
-	assert.Zero(t, p.workflow.Scheduler().JobKeyCount(t, ctx, "parent-notify"), "nothing is left to re-send it")
+	// The timed out send arms the parent-notify reminder, which the
+	// successful drop then deletes.
+	p.workflow.Scheduler().WaitJobKeyCount(t, ctx, "parent-notify", func(n int) bool { return n == 0 })
 
 	// The parent can commit again: its replay re-dispatches the creation.
 	p.store.ArmFailures(parentID+"||history-", 0, nil)

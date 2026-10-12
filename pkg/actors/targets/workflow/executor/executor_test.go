@@ -301,3 +301,86 @@ func Test_claim(t *testing.T) {
 		assert.Equal(t, []byte("payload"), res.GetMessage().GetData().GetValue())
 	})
 }
+
+// Test_blockedCompleterDeliversToRegisteredWaiter covers a completer that
+// found the channel full (a superseded attempt's completion was parked) and
+// missed the pending map because the waiter had not registered yet. The waiter
+// then registers and claims the stale completion. The completer must find the
+// registered waiter and deliver to it, instead of refilling the slot that the
+// claim freed, where nothing would claim it again.
+func Test_blockedCompleterDeliversToRegisteredWaiter(t *testing.T) {
+	t.Parallel()
+	e, f := newClaimTestExecutor(t)
+
+	_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("stale")))
+	require.NoError(t, err)
+
+	blocked := make(chan error, 1)
+	go func() {
+		_, berr := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("genuine")))
+		blocked <- berr
+	}()
+	// Let the completer reach its wait for a free slot.
+	time.Sleep(100 * time.Millisecond)
+
+	got := make(chan []byte, 2)
+	t.Cleanup(f.pending.RegisterCallback(PendingKey(TaskTypeWorkflow, "abc"), func(r pending.Result) {
+		got <- r.Data
+	}))
+	res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+	require.Equal(t, []byte("stale"), res.GetMessage().GetData().GetValue())
+
+	select {
+	case data := <-got:
+		assert.Equal(t, []byte("genuine"), data)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the blocked completer did not deliver to the waiter that registered while it waited")
+	}
+	require.NoError(t, <-blocked)
+}
+
+// Test_watchKeepsOtherTaskTypeDisplaced covers a watch stream that receives
+// the colliding other task type's completion (a workflow instance ID equal to
+// an activity actor ID). It must keep that completion for its own waiter and
+// serve only its own type.
+func Test_watchKeepsOtherTaskTypeDisplaced(t *testing.T) {
+	t.Parallel()
+	e, _ := newClaimTestExecutor(t)
+
+	_, err := e.InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("wf")))
+	require.NoError(t, err)
+
+	got := make(chan []byte, 1)
+	go func() {
+		_ = e.InvokeStream(t.Context(),
+			internalsv1pb.NewInternalInvokeRequest(MethodWatchComplete).
+				WithActor("dapr.internal.default.test.executor", "abc").
+				WithContentType(invokev1.ProtobufContentType).
+				WithMetadata(map[string][]string{MetadataTaskType: {TaskTypeActivity}}),
+			func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
+				got <- res.GetMessage().GetData().GetValue()
+				return true, nil
+			})
+	}()
+
+	select {
+	case data := <-got:
+		require.Failf(t, "the activity watch stream served the workflow completion", "data=%q", data)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	_, err = e.InvokeMethod(t.Context(), completeReq(TaskTypeActivity, []byte("act")))
+	require.NoError(t, err)
+	select {
+	case data := <-got:
+		assert.Equal(t, []byte("act"), data)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the activity watch stream did not get the activity completion")
+	}
+
+	res, err := e.InvokeMethod(t.Context(), claimReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+	assert.Equal(t, int32(codes.OK), res.GetStatus().GetCode())
+	assert.Equal(t, []byte("wf"), res.GetMessage().GetData().GetValue())
+}

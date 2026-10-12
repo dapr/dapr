@@ -24,12 +24,12 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -37,6 +37,10 @@ import (
 func init() {
 	suite.Register(new(cleanup))
 }
+
+// janitorPeriod is the fast-path janitor period; a claim heartbeat that
+// stalls for two of them is reclaimed.
+const janitorPeriod = time.Second
 
 type cleanup struct {
 	workflow *workflow.Workflow
@@ -50,7 +54,7 @@ type cleanup struct {
 func (a *cleanup) Setup(t *testing.T) []framework.Option {
 	fp := []daprd.Option{
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
-		daprd.WithWorkflowJanitorPeriod(t, time.Second),
+		daprd.WithWorkflowJanitorPeriod(t, janitorPeriod),
 		// Compress the Completed-record retention so the delete leg fits
 		// the test window.
 		daprd.WithWorkflowClaimRetention(t, time.Second*2),
@@ -152,7 +156,7 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("HandoffCleanup", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
+		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -185,11 +189,21 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", metadata.GetRuntimeStatus().String())
 	}
-	assert.Equal(t, int64(len(ids)), executions.Load())
 
 	// Retention (2s) then delete: no record may leak past completion.
 	assert.Eventually(t, func() bool {
 		return wf.CountClaimRecords(t, ctx, a.workflow.DB()) == 0
 	}, time.Second*30, time.Millisecond*100,
 		"every execution-claim record must self-delete after the retention window")
+
+	// Activities are at-least-once across a handoff: a claim whose heartbeat
+	// stalls past the grace is reclaimed and its body re-runs, the duplicate
+	// completion deduped. Only a body starting after its workflow completed
+	// and its record was deleted would be a leak past the cleanup.
+	executed := executions.Load()
+	assert.GreaterOrEqual(t, executed, int64(len(ids)),
+		"every activity body must run at least once")
+	time.Sleep(janitorPeriod * 2)
+	assert.Equal(t, executed, executions.Load(),
+		"no activity body may start after its workflow completed and its claim record was deleted")
 }

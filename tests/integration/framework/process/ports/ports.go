@@ -22,8 +22,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 var (
@@ -32,7 +35,13 @@ var (
 	resvPIx  int
 	last     = portsBase()
 	resvP    []*reservedPort
+	// recentlyFreed records when Free released each port. A process binds
+	// its ports only after Free, so a probe that has wrapped around must not
+	// take one before that process has had the chance to.
+	recentlyFreed = map[int]time.Time{}
 )
+
+const freedGrace = 30 * time.Second
 
 // portsBase returns the starting port for reservation probing. A test binary
 // re-executed inside an unshare user namespace (where our mapped euid is 0)
@@ -80,11 +89,18 @@ func Reserve(t *testing.T, count int) *Ports {
 
 	resvPLen -= count
 	if count > resvPLen || resvPLen < 20 {
-		t.Logf("reserving %d more ports", blockSize)
+		iowriter.Eventf(t, "reserving %d more ports", blockSize)
 		for i := 0; i < blockSize; i++ {
 			last++
 			if last+i >= portsCeil {
 				last = portsBase()
+			}
+			if freedAt, ok := recentlyFreed[last]; ok {
+				if time.Since(freedAt) < freedGrace {
+					i--
+					continue
+				}
+				delete(recentlyFreed, last)
 			}
 			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(last))
 			if err != nil {
@@ -148,6 +164,7 @@ func (p *Ports) Free(t *testing.T) {
 			if !errors.Is(err, net.ErrClosed) {
 				require.NoError(t, err)
 			}
+			recentlyFreed[resvP[i].port] = time.Now()
 		}
 	}
 }

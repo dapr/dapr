@@ -277,7 +277,7 @@ func (h *hashingTopology) run(t *testing.T, ctx context.Context) {
 				assert.Equalf(c, owners[i], active,
 					"host %d metadata active actor count disagrees with observed activations", i)
 			}
-		}, time.Second*10, time.Millisecond*50)
+		}, time.Second*10, time.Millisecond*10)
 	})
 
 	t.Run("repeated lookups are stable", func(t *testing.T) {
@@ -318,7 +318,7 @@ func (h *hashingTopology) run(t *testing.T, ctx context.Context) {
 				}
 			}
 			assert.Len(c, owners, 3)
-		}, time.Second*20, time.Millisecond*100)
+		}, time.Second*20, time.Millisecond*10)
 
 		// New record: every actor again resolves identically and activates
 		// on one host, and unmoved actors stay where they were.
