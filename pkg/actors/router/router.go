@@ -183,10 +183,20 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
-	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	wctx, removed, wcancel := req.UntilRemoved(ctx)
+	defer wcancel()
+
+	lar, cctx, cancel, err := r.placement.LookupActor(wctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
 	})
+	if removed() {
+		if err == nil {
+			cancel(nil)
+		}
+		log.Debugf("Dropping timer %s: timer was removed", req.Key())
+		return backoff.Permanent(actorerrors.ErrTimerFireStale)
+	}
 	if err != nil {
 		return err
 	}
@@ -218,8 +228,11 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+	target, err := r.table.GetOrCreate(ctx, req.ActorType, req.ActorID)
 	if err != nil {
+		if ctx.Err() != nil {
+			return err
+		}
 		return backoff.Permanent(err)
 	}
 
@@ -281,19 +294,31 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		return nil, err
 	}
 
-	attempt := resiliency.GetAttempt(ctx)
-	s, ok := status.FromError(err)
-	if ok {
-		if s.Code() == codes.Unavailable ||
-			(s.Code() == codes.Internal &&
-				(s.Message() == "error invoke actor method: remote actor moved" ||
-					strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
-			// Destroy the connection and force a re-connection on the next attempt
-			return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
-		}
+	if IsRetryableRemoteError(err) {
+		// Destroy the connection and force a re-connection on the next attempt
+		attempt := resiliency.GetAttempt(ctx)
+		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}
 
 	return res, backoff.Permanent(err)
+}
+
+// IsRetryableRemoteError reports whether an error from a remote actor call
+// is retried by the built-in actor policy, inside the caller's invocation:
+// Unavailable (the host is unreachable or the actor is moving) and the
+// Internal errors of an actor moved or a placement dissemination in progress.
+// An actor method must not answer with these codes for a refusal that only
+// the caller's next turn can resolve: the caller would retry while still
+// holding its own actor lock.
+func IsRetryableRemoteError(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	return s.Code() == codes.Unavailable ||
+		(s.Code() == codes.Internal &&
+			(s.Message() == "error invoke actor method: remote actor moved" ||
+				strings.HasSuffix(s.Message(), ": placement is disseminating")))
 }
 
 func (r *router) callRemoteActor(ctx context.Context, lar *api.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -352,7 +377,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 }
 
 func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(ctx, req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +441,7 @@ func (r *router) callLocalActorStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
 	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(ctx, req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return err
 	}
