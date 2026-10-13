@@ -59,6 +59,14 @@ func newPublishGrace(runCtx context.Context, grace time.Duration) context.Contex
 var errPublishAbandoned = wferrors.NewRecoverable(errors.New(
 	"activity result publish abandoned at shutdown; the work item is re-dispatched on the next owner"))
 
+// errResultUndelivered settles an execution whose result the parent workflow
+// refused as instance not found. The refusal does not prove the instance is
+// gone: a state read that lags a write answers the same. So the outcome is
+// not cached as delivered, which would ack every janitor re-dispatch of a
+// live instance for InflightCacheTTL. A purged instance has no janitor left
+// to re-dispatch, so nothing re-executes for it.
+var errResultUndelivered = errors.New("activity result refused by the parent workflow as instance not found")
+
 // watchAndPublish hands an execution whose owner's ctx cancelled to the
 // factory's runtime-lifetime runner, so the WorkItem already in the
 // durabletask queue still has its result published and its inflight entry
@@ -173,6 +181,10 @@ func (f *factory) publishAndSettle(base context.Context, ex *execution, complete
 	}
 	f.settle(ex.key, ex.call, execErr)
 	ex.unregister()
+	if errors.Is(execErr, errResultUndelivered) {
+		// Acked: retrying the publish into a purged instance cannot succeed.
+		return nil
+	}
 	return execErr
 }
 
@@ -254,7 +266,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", ex.actorID, ex.wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
-			return nil
+			return errResultUndelivered
 		}
 
 		if f.workflowsRemoteActivityReminder {
