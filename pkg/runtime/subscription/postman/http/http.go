@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/baggage"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
@@ -109,8 +110,8 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if err != nil {
 		if span != nil {
-				diag.AddAttributesToSpan(span, diag.ConstructSubscriptionSpanAttributes(msg.Topic))
-				span.SetStatus(otelcodes.Error, err.Error())
+			diag.AddAttributesToSpan(span, diag.ConstructSubscriptionSpanAttributes(msg.Topic))
+			span.SetStatus(otelcodes.Error, err.Error())
 		}
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(err))

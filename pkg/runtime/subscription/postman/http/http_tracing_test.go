@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
@@ -346,6 +347,8 @@ func TestDeliverEndsSpanOnAppChannelError(t *testing.T) {
 	started := recorder.Started()
 	require.Len(t, started, 1, "the delivery must still be traced when the app call fails")
 
-	assert.True(t, recorder.Ended(started[0].SpanContext.SpanID()),
-		"a delivery that returns early must not leave its span unended")
+	status, ended := recorder.EndedStatus(started[0].SpanContext.SpanID())
+	require.True(t, ended, "a delivery that returns early must not leave its span unended")
+	assert.Equal(t, otelcodes.Error, status,
+		"a delivery that never reached the app must not end its span Unset, which reads as success")
 }

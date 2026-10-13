@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/otel"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
@@ -72,7 +73,7 @@ type StartedSpan struct {
 type SpanRecorder struct {
 	lock    sync.Mutex
 	started []StartedSpan
-	ended   map[trace.SpanID]struct{}
+	ended   map[trace.SpanID]otelcodes.Code
 }
 
 // NewSpanRecorder installs a recorder as the global tracer provider's span
@@ -84,7 +85,7 @@ type SpanRecorder struct {
 // tests that run in parallel with span-producing tests should select the spans
 // they care about by span ID rather than assert on the full set.
 func NewSpanRecorder() *SpanRecorder {
-	r := &SpanRecorder{ended: make(map[trace.SpanID]struct{})}
+	r := &SpanRecorder{ended: make(map[trace.SpanID]otelcodes.Code)}
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(r)))
 
 	return r
@@ -102,12 +103,13 @@ func (s *SpanRecorder) OnStart(_ context.Context, span sdktrace.ReadWriteSpan) {
 	})
 }
 
-// OnEnd implements sdktrace.SpanProcessor, marking the span as ended.
+// OnEnd implements sdktrace.SpanProcessor, recording the span as ended along
+// with the status it carried at the time.
 func (s *SpanRecorder) OnEnd(span sdktrace.ReadOnlySpan) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.ended[span.SpanContext().SpanID()] = struct{}{}
+	s.ended[span.SpanContext().SpanID()] = span.Status().Code
 }
 
 // Shutdown and ForceFlush complete sdktrace.SpanProcessor. The recorder keeps
@@ -134,6 +136,18 @@ func (s *SpanRecorder) Ended(id trace.SpanID) bool {
 	_, ok := s.ended[id]
 
 	return ok
+}
+
+// EndedStatus returns the status the span with the given span ID carried when
+// it ended, and whether it ended at all. A delivery that failed before reaching
+// the app should not end its span Unset, which reads as success.
+func (s *SpanRecorder) EndedStatus(id trace.SpanID) (otelcodes.Code, bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	code, ok := s.ended[id]
+
+	return code, ok
 }
 
 // Started returns every span started since the last Reset.
