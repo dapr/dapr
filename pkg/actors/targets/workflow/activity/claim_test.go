@@ -142,6 +142,7 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 	store := newRecordStore()
 	scheduled := make(chan *backend.ActivityWorkItem, 2)
 	driveCtx, driveCancel := context.WithCancel(t.Context())
+	det := detached.New(t.Context())
 	f := &factory{
 		drives:            detached.New(driveCtx),
 		driveCancel:       driveCancel,
@@ -154,7 +155,8 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 		signing:           &signing.Signing{Namespace: "default"},
 		fastPath:          true,
 		rootCtx:           t.Context(),
-		detached:          detached.New(t.Context()),
+		detached:          det,
+		publishGrace:      newPublishGrace(det.Context(), time.Minute),
 		staleClaimAfter:   time.Hour,
 		claims: claim.New(claim.Options{
 			ActorType:      "dapr.internal.default.testapp.activity",
