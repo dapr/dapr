@@ -51,7 +51,6 @@ type options struct {
 	onActorReminderFn   func(context.Context, *rtv1.SubscribeActorEventsResponseReminderRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)
 	onActorTimerFn      func(context.Context, *rtv1.SubscribeActorEventsResponseTimerRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error)
 	onActorDeactivateFn func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error)
-	evictions           bool
 }
 
 func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
@@ -165,12 +164,5 @@ func WithOnActorTimerFn(fn func(context.Context, *rtv1.SubscribeActorEventsRespo
 func WithOnActorDeactivateFn(fn func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error)) func(*options) {
 	return func(opts *options) {
 		opts.onActorDeactivateFn = fn
-	}
-}
-
-// WithEvictions passes eviction deactivations to the deactivate handler, which drops them by default.
-func WithEvictions() func(*options) {
-	return func(opts *options) {
-		opts.evictions = true
 	}
 }

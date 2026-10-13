@@ -24,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework/actors/evict"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -56,10 +55,6 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 			handler.HandleFunc(path, fn)
 		}
 		opts.handler = handler
-	}
-
-	if !opts.evictions {
-		opts.handler = evict.New().Handler(opts.handler)
 	}
 
 	var lis net.Listener

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -48,7 +49,6 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	IdleTimeout    time.Duration
 	clock          clock.Clock
-	evictTimeout   time.Duration
 	Reentrancy     *reentrancystore.Store
 	Placement      placement.Interface
 	EntityConfig   *api.EntityConfig
@@ -67,20 +67,13 @@ type factory struct {
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
 
-	evictTimeout time.Duration
-
 	table sync.Map
 	lock  sync.RWMutex
 }
 
-const defaultEvictTimeout = 5 * time.Second
-
 func New(opts Options) targets.Factory {
 	if opts.clock == nil {
 		opts.clock = clock.RealClock{}
-	}
-	if opts.evictTimeout == 0 {
-		opts.evictTimeout = defaultEvictTimeout
 	}
 
 	f := &factory{
@@ -90,7 +83,6 @@ func New(opts Options) targets.Factory {
 		placement:    opts.Placement,
 		clock:        opts.clock,
 		idleTimeout:  opts.IdleTimeout,
-		evictTimeout: opts.evictTimeout,
 		reentrancy:   opts.Reentrancy,
 		entityConfig: opts.EntityConfig,
 	}
@@ -137,9 +129,10 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 
 func (f *factory) initApp(actorID string) *app {
 	app := &app{
-		actorID: actorID,
-		factory: f,
-		clock:   f.clock,
+		actorID:      actorID,
+		activationID: uuid.New().String(),
+		factory:      f,
+		clock:        f.clock,
 		lock: lock.New(lock.Options{
 			ActorType:   f.actorType,
 			ConfigStore: f.reentrancy,
@@ -186,7 +179,7 @@ func (f *factory) haltActors(ctx context.Context, fn func(string) bool) error {
 		wg.Add(1)
 		go func(aa *app) {
 			defer wg.Done()
-			errs.Append(f.halt(ctx, aa, false))
+			errs.Append(f.halt(ctx, aa))
 		}(aa)
 
 		return true
@@ -221,22 +214,18 @@ func (f *factory) handleIdleActor(target *app) {
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := f.halt(ctx, target, true); err != nil {
+	if err := f.halt(ctx, target); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
 }
 
-func (f *factory) halt(ctx context.Context, app *app, idle bool) error {
-	if !app.closeLock(ctx, idle) {
-		return nil
-	}
-
+func (f *factory) halt(ctx context.Context, app *app) error {
 	key := app.Key()
 
 	diag.DefaultMonitoring.ActorRebalanced(app.Type())
 
 	log.Debugf("Halting actor '%s'", key)
 
-	return app.teardown()
+	return app.Deactivate(ctx)
 }

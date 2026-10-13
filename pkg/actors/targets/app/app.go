@@ -16,7 +16,7 @@ package app
 import (
 	"context"
 	"errors"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +26,7 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
-	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
@@ -37,7 +37,8 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 type app struct {
 	*factory
 
-	actorID string
+	actorID      string
+	activationID string
 
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to
@@ -48,15 +49,6 @@ type app struct {
 	clock clock.Clock
 
 	closed atomic.Bool
-
-	endEvictHook func()
-
-	evictLock  sync.Mutex
-	evicted    bool
-	evictCalls int
-
-	idleLock sync.Mutex
-	evicting bool
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -67,11 +59,8 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	defer cancel()
 
 	a.touchIdle()
-	release, err := a.evictStale(ctx)
-	defer release()
-	if err != nil {
-		return nil, err
-	}
+	req.Metadata = a.withActivationID(req.GetMetadata())
+	defer delete(req.GetMetadata(), transport.ActivationIDHeader)
 	return a.transport.Invoke(ctx, req)
 }
 
@@ -91,11 +80,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	defer cancel()
 
 	a.touchIdle()
-	release, err := a.evictStale(ctx)
-	defer release()
-	if err != nil {
-		return err
-	}
+	lockReq.Metadata = a.withActivationID(lockReq.GetMetadata())
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	if err := a.transport.InvokeReminder(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -120,11 +105,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	defer cancel()
 
 	a.touchIdle()
-	release, err := a.evictStale(ctx)
-	defer release()
-	if err != nil {
-		return err
-	}
+	lockReq.Metadata = a.withActivationID(lockReq.GetMetadata())
 	log.Debug("Executing timer for actor " + reminder.Key())
 
 	if err := a.transport.InvokeTimer(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -137,27 +118,11 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 }
 
 func (a *app) Deactivate(ctx context.Context) error {
-	if !a.closeLock(ctx, false) {
+	if !a.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	return a.teardown()
-}
 
-func (a *app) closeLock(ctx context.Context, idle bool) bool {
-	a.idleLock.Lock()
-	defer a.idleLock.Unlock()
-	if idle && a.evicting {
-		log.Debugf("Actor %s is mid-eviction, deferring idle deactivation", a.Key())
-		return false
-	}
-	if !a.closed.CompareAndSwap(false, true) {
-		return false
-	}
 	a.lock.Close(ctx)
-	return true
-}
-
-func (a *app) teardown() error {
 	a.table.Delete(a.actorID)
 
 	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID); err != nil {
@@ -197,75 +162,19 @@ func (a *app) InvokeStream(context.Context,
 	return errors.New("not implemented")
 }
 
-func (a *app) evictStale(ctx context.Context) (func(), error) {
-	a.evictLock.Lock()
-	defer a.evictLock.Unlock()
-
-	a.evictCalls++
-	if a.evictCalls == 1 && !a.evicted && a.startEvict(ctx) {
-		func() {
-			defer func() {
-				a.endEvict()
-				if r := recover(); r != nil {
-					a.evictCalls--
-					panic(r)
-				}
-			}()
-			a.evicted = a.evict(ctx)
-		}()
+// withActivationID replaces any caller-supplied activation id, in any case,
+// so the app only ever sees the one daprd minted.
+func (a *app) withActivationID(md map[string]*internalv1pb.ListStringValue) map[string]*internalv1pb.ListStringValue {
+	if md == nil {
+		md = make(map[string]*internalv1pb.ListStringValue, 1)
 	}
-
-	release := func() {
-		a.evictLock.Lock()
-		defer a.evictLock.Unlock()
-		a.evictCalls--
-	}
-
-	if cause := context.Cause(ctx); targetserrors.IsClosed(cause) {
-		return release, cause
-	}
-
-	return release, nil
-}
-
-func (a *app) evict(ctx context.Context) bool {
-	ectx, cancel := context.WithTimeout(ctx, a.evictTimeout)
-	defer cancel()
-
-	err := a.transport.Evict(ectx, a.actorType, a.actorID)
-	switch {
-	case err == nil:
-	case ctx.Err() == nil && errors.Is(ectx.Err(), context.DeadlineExceeded):
-		log.Warnf("App did not answer eviction of actor '%s' within %s, proceeding with the call", a.Key(), a.evictTimeout)
-	default:
-		log.Debugf("Failed to evict stale app instance of actor '%s', retrying on the next call: %v", a.Key(), err)
-		return false
-	}
-
-	return true
-}
-
-func (a *app) startEvict(ctx context.Context) bool {
-	a.idleLock.Lock()
-	defer a.idleLock.Unlock()
-	// Every lock close runs under idleLock, so a live ctx means no close has started.
-	if ctx.Err() != nil {
-		return false
-	}
-	a.evicting = true
-	return true
-}
-
-func (a *app) endEvict() {
-	a.idleLock.Lock()
-	defer a.idleLock.Unlock()
-	a.evicting = false
-	if !a.closed.Load() {
-		if a.endEvictHook != nil {
-			a.endEvictHook()
+	for k := range md {
+		if strings.EqualFold(k, transport.ActivationIDHeader) {
+			delete(md, k)
 		}
-		a.touchIdle()
 	}
+	md[transport.ActivationIDHeader] = &internalv1pb.ListStringValue{Values: []string{a.activationID}}
+	return md
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler

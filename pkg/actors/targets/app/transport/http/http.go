@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -202,7 +201,13 @@ func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) e
 		return fmt.Errorf("app channel for actor type %s is nil", actorType)
 	}
 
-	resp, err := t.invokeDelete(ctx, actorType, actorID)
+	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
+		WithActor(actorType, actorID).
+		WithHTTPExtension(http.MethodDelete, "").
+		WithContentType(invokev1.ProtobufContentType)
+	defer req.Close()
+
+	resp, err := t.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -216,29 +221,4 @@ func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) e
 	}
 
 	return nil
-}
-
-func (t *Transport) Evict(ctx context.Context, actorType, actorID string) error {
-	if t.appChannel == nil {
-		return fmt.Errorf("app channel for actor type %s is nil", actorType)
-	}
-
-	resp, err := t.invokeDelete(ctx, actorType, actorID)
-	if err != nil {
-		return err
-	}
-	defer resp.Close()
-
-	_, _ = io.Copy(io.Discard, resp.RawData())
-	return nil
-}
-
-func (t *Transport) invokeDelete(ctx context.Context, actorType, actorID string) (*invokev1.InvokeMethodResponse, error) {
-	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
-		WithActor(actorType, actorID).
-		WithHTTPExtension(http.MethodDelete, "").
-		WithContentType(invokev1.ProtobufContentType)
-	defer req.Close()
-
-	return t.appChannel.InvokeMethod(ctx, req, "")
 }

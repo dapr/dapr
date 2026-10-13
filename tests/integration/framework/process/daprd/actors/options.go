@@ -46,7 +46,6 @@ type options struct {
 	daprdOpts               []daprd.Option
 	schedulerPlacement      bool
 	placementService        bool
-	evictions               bool
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -90,13 +89,6 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 			o.handlers = make(map[string]http.HandlerFunc)
 		}
 		o.handlers[pattern] = handler
-	}
-}
-
-// WithEvictions passes eviction deactivations to the handlers, which drop them by default.
-func WithEvictions() Option {
-	return func(o *options) {
-		o.evictions = true
 	}
 }
 
