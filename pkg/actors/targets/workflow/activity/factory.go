@@ -55,6 +55,12 @@ type Options struct {
 
 	WorkflowsRemoteActivityReminder bool
 
+	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
+	// It bounds how long a result publish in flight at shutdown keeps its
+	// context (see publishAndSettle). Zero ends the publish when shutdown
+	// starts.
+	GracefulShutdownDuration time.Duration
+
 	// FastPath drives certified activity executions locally in place of
 	// their run-activity reminder (WorkflowsFastPath preview feature).
 	FastPath bool
@@ -140,6 +146,10 @@ type factory struct {
 	// publish.go).
 	detached *detached.Runner
 
+	// publishGrace bounds every result publish: it ends one graceful
+	// shutdown duration after detached's context (see newPublishGrace).
+	publishGrace context.Context
+
 	// claims owns the durable execution-claim guards and gate (see the claim
 	// subpackage).
 	claims *claim.Guards
@@ -220,6 +230,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
 		detached:               det,
+		publishGrace:           newPublishGrace(det.Context(), opts.GracefulShutdownDuration),
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,
