@@ -165,6 +165,10 @@ jobs:
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
+          # Verifying the config downloads its JSON schema from golangci-lint.run,
+          # which sometimes fails on push. Config changes land through PRs, so
+          # verifying there is enough.
+          verify: ${{ github.event_name == 'pull_request' }}
           args: --build-tags allcomponents --timeout=15m
 
   unit-tests:
