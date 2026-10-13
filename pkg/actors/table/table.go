@@ -39,7 +39,7 @@ type Interface interface {
 
 	Types() []string
 	IsActorTypeHosted(actorType string) bool
-	GetOrCreate(actorType, actorID string) (targets.Interface, error)
+	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
 	ActorExists(actorType, actorKey string) bool
 	RegisterActorTypes(opts RegisterActorTypeOptions)
 	UnRegisterActorTypes(actorTypes ...string) error
@@ -82,6 +82,7 @@ type RegisterActorTypeOptions struct {
 
 type table struct {
 	factories   sync.Map
+	createLocks sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
 	entityConfigs map[string]api.EntityConfig
@@ -155,12 +156,13 @@ func (t *table) HaltAll(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
-	t.factories.Range(func(_, factory any) bool {
+	t.factories.Range(func(key, factory any) bool {
 		wg.Add(1)
-		go func(factory targets.Factory) {
+		go func(actorType string, factory targets.Factory) {
 			defer wg.Done()
+			t.waitCreates(actorType)
 			errs.Append(factory.HaltAll(ctx))
-		}(factory.(targets.Factory))
+		}(key.(string), factory.(targets.Factory))
 
 		return true
 	})
@@ -176,12 +178,13 @@ func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReque
 
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
-	t.factories.Range(func(_, factory any) bool {
+	t.factories.Range(func(key, factory any) bool {
 		wg.Add(1)
-		go func(factory targets.Factory) {
+		go func(actorType string, factory targets.Factory) {
 			defer wg.Done()
+			t.waitCreates(actorType)
 			errs.Append(factory.HaltNonHosted(ctx, fn))
-		}(factory.(targets.Factory))
+		}(key.(string), factory.(targets.Factory))
 		return true
 	})
 	wg.Wait()
@@ -205,7 +208,19 @@ func (t *table) ActorExists(actorType, actorID string) bool {
 	return v.(targets.Factory).Exists(actorID)
 }
 
-func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, error) {
+// GetOrCreate checks ctx under the type's create lock, which halts wait on.
+func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
+	l, ok := t.createLocks.Load(actorType)
+	if !ok {
+		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
+	}
+	l.(*sync.RWMutex).RLock()
+	defer l.(*sync.RWMutex).RUnlock()
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	if t.suspended.Load() {
 		return nil, fmt.Errorf("%w: actor hosting is suspended: no actor state store configured", actorerrors.ErrCreatingActor)
 	}
@@ -216,6 +231,13 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, error
 	}
 
 	return factory.(targets.Factory).GetOrCreate(actorID), nil
+}
+
+func (t *table) waitCreates(actorType string) {
+	if l, ok := t.createLocks.Load(actorType); ok {
+		l.(*sync.RWMutex).Lock()
+		l.(*sync.RWMutex).Unlock() //nolint:staticcheck // SA2001: waits out the creates in progress
+	}
 }
 
 func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
@@ -229,6 +251,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
+		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
@@ -262,6 +285,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		wg.Add(1)
 
 		go func(fact targets.Factory) {
+			t.waitCreates(actorType)
 			errs.Append(fact.HaltAll(context.Background()))
 			wg.Done()
 		}(fact.(targets.Factory))
