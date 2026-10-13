@@ -15,7 +15,10 @@ package inmemory
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,12 +27,167 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/stats/view"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/app"
+	channelfake "github.com/dapr/dapr/pkg/channel/fake"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 )
+
+// parkedMeter keeps DefaultMonitoring off a stopped meter between tests.
+var parkedMeter view.Meter
+
+// newTimerMeter must be called before the store is created.
+func newTimerMeter(t *testing.T) view.Meter {
+	t.Helper()
+	meter := startTimerMeter(t)
+	if parkedMeter != nil {
+		parkedMeter.Stop()
+		parkedMeter = nil
+	}
+	t.Cleanup(func() {
+		parkedMeter = startTimerMeter(t)
+		meter.Stop()
+	})
+	return meter
+}
+
+func startTimerMeter(t *testing.T) view.Meter {
+	t.Helper()
+	meter := view.NewMeter()
+	meter.Start()
+	require.NoError(t, diag.DefaultMonitoring.Init(meter, "test", view.Distribution(1)))
+	return meter
+}
+
+func metricRows(t *testing.T, meter view.Meter, name string, want map[string]string) []*view.Row {
+	t.Helper()
+	rows, err := meter.RetrieveData(name)
+	require.NoError(t, err)
+	var out []*view.Row
+	for _, row := range rows {
+		got := make(map[string]string, len(row.Tags))
+		for _, tg := range row.Tags {
+			got[tg.Key.Name()] = tg.Value
+		}
+		match := true
+		for k, v := range want {
+			if got[k] != v {
+				match = false
+			}
+		}
+		if match {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func countMetric(t *testing.T, meter view.Meter, name string, want map[string]string) int64 {
+	t.Helper()
+	var n int64
+	for _, row := range metricRows(t, meter, name, want) {
+		n += row.Data.(*view.CountData).Value
+	}
+	return n
+}
+
+func pendingActorCalls(t *testing.T, meter view.Meter, actorType string) float64 {
+	t.Helper()
+	rows := metricRows(t, meter, "runtime/actor/pending_actor_calls", map[string]string{"actor_type": actorType})
+	if len(rows) == 0 {
+		return 0
+	}
+	return rows[0].Data.(*view.LastValueData).Value
+}
+
+func timersDropped(t *testing.T, meter view.Meter) int64 {
+	t.Helper()
+	return countMetric(t, meter, "runtime/actor/timers_dropped_total", nil)
+}
+
+func timersFailed(t *testing.T, meter view.Meter) int64 {
+	t.Helper()
+	return countMetric(t, meter, "runtime/actor/timers_fired_total", map[string]string{"success": "false"})
+}
+
+func timersSucceeded(t *testing.T, meter view.Meter) int64 {
+	t.Helper()
+	return countMetric(t, meter, "runtime/actor/timers_fired_total", map[string]string{"success": "true"})
+}
+
+func newAppStore(t *testing.T, actorType string, lookup func(context.Context) error, callback func(context.Context, *invokev1.InvokeMethodRequest)) (*inmemory, targets.Factory) {
+	t.Helper()
+	log := logger.NewLogger("test")
+	fact := app.New(app.Options{
+		ActorType:   actorType,
+		Reentrancy:  reentrancystore.New(),
+		IdleTimeout: time.Hour,
+		Resiliency:  resiliency.New(log),
+		AppChannel: channelfake.New().WithInvokeMethod(func(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+			callback(ctx, req)
+			return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+		}),
+	})
+	plc := placementfake.New().WithLookupActor(func(ctx context.Context, _ *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+		if lookup != nil {
+			if err := lookup(ctx); err != nil {
+				return nil, nil, nil, err
+			}
+		}
+		return &api.LookupActorResponse{Local: true}, ctx, func(error) {}, nil
+	})
+	rt := router.New(router.Options{
+		Placement: plc,
+		Table: tablefake.New().WithGetOrCreate(func(_ context.Context, _, actorID string) (targets.Interface, error) {
+			return fact.GetOrCreate(actorID), nil
+		}),
+		Resiliency: resiliency.FromConfigurations(log),
+	})
+	store, ok := New(Options{Router: rt}).(*inmemory)
+	require.True(t, ok)
+	return store, fact
+}
+
+func appTimer(t *testing.T, actorType, name, period string, at time.Time) *api.Reminder {
+	t.Helper()
+	timer := newNamedTimer(t, "x", name, period, at)
+	timer.ActorType = actorType
+	timer.IsTimer = true
+	return timer
+}
+
+func timerCallback(t *testing.T, req *invokev1.InvokeMethodRequest) string {
+	t.Helper()
+	raw, err := req.RawDataFull()
+	assert.NoError(t, err)
+	var body struct {
+		Callback string `json:"callback"`
+	}
+	assert.NoError(t, json.Unmarshal(raw, &body))
+	return body.Callback
+}
+
+func waitReaped(t *testing.T, store *inmemory, timer *api.Reminder) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, _, exists := stateSnapshot(store, timer.ActorKey())
+		return !exists
+	}, 5*time.Second, time.Millisecond, "the timer's actor state was not reaped")
+}
 
 // TestUpdateActiveTimersCountConcurrent exercises updateActiveTimersCount from
 // many goroutines using distinct actor types. First-seen actor types insert a
@@ -193,6 +351,7 @@ func TestDeleteFuncSuppressesParkedFire(t *testing.T) {
 		},
 	)
 
+	meter := newTimerMeter(t)
 	store := New(Options{Router: router})
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	im, ok := store.(*inmemory)
@@ -219,6 +378,7 @@ func TestDeleteFuncSuppressesParkedFire(t *testing.T) {
 		return !exists
 	}, 5*time.Second, time.Millisecond)
 	assert.False(t, victimFired.Load(), "a swept parked fire executed its callback")
+	assert.Equal(t, int64(1), timersDropped(t, meter), "a swept parked fire was not counted as dropped")
 }
 
 func TestListReturnsActorTimersSorted(t *testing.T) {
@@ -282,4 +442,231 @@ func TestGetReturnsCopyOrNil(t *testing.T) {
 
 	store.Delete(ctx, timer.Key())
 	assert.Nil(t, store.Get(ctx, timer.Key()))
+}
+
+func TestDeleteWhileFireWaitsOnActorLock(t *testing.T) {
+	meter := newTimerMeter(t)
+	holding := make(chan struct{})
+	release := make(chan struct{})
+	var fired atomic.Int64
+	store, fact := newAppStore(t, "lockwait", nil, func(_ context.Context, req *invokev1.InvokeMethodRequest) {
+		if strings.HasSuffix(req.Message().GetMethod(), "/method/hold") {
+			close(holding)
+			<-release
+			return
+		}
+		fired.Add(1)
+	})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	ctx := context.Background()
+	methodErr := make(chan error, 1)
+	go func() {
+		_, err := fact.GetOrCreate("x").InvokeMethod(ctx, internalv1pb.NewInternalInvokeRequest("hold").WithActor("lockwait", "x"))
+		methodErr <- err
+	}()
+	<-holding
+
+	timer := appTimer(t, "lockwait", "tick", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(ctx, timer))
+	require.Eventually(t, func() bool {
+		return pendingActorCalls(t, meter, "lockwait") == 1
+	}, 5*time.Second, time.Millisecond, "the timer fire never waited on the actor lock")
+
+	store.Delete(ctx, timer.Key())
+	close(release)
+	require.NoError(t, <-methodErr)
+	waitReaped(t, store, timer)
+
+	assert.Zero(t, fired.Load(), "a timer deleted while its fire waited on the actor lock still fired")
+	assert.Equal(t, int64(1), timersDropped(t, meter))
+	assert.Zero(t, timersFailed(t, meter), "a dropped fire was counted as failed")
+}
+
+func TestDeleteWhileFireWaitsInLookup(t *testing.T) {
+	meter := newTimerMeter(t)
+	waiting := make(chan struct{})
+	var fired atomic.Int64
+	store, _ := newAppStore(t, "lookupwait", func(ctx context.Context) error {
+		close(waiting)
+		<-ctx.Done()
+		return ctx.Err()
+	}, func(context.Context, *invokev1.InvokeMethodRequest) { fired.Add(1) })
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	ctx := context.Background()
+	timer := appTimer(t, "lookupwait", "tick", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(ctx, timer))
+	<-waiting
+
+	store.Delete(ctx, timer.Key())
+	waitReaped(t, store, timer)
+
+	assert.Zero(t, fired.Load())
+	assert.Equal(t, int64(1), timersDropped(t, meter))
+	assert.Zero(t, timersFailed(t, meter), "a dropped fire was counted as failed")
+}
+
+func TestCloseDuringLookupIsNotDropped(t *testing.T) {
+	meter := newTimerMeter(t)
+	waiting := make(chan struct{})
+	store, _ := newAppStore(t, "closewait", func(ctx context.Context) error {
+		close(waiting)
+		<-ctx.Done()
+		return ctx.Err()
+	}, func(context.Context, *invokev1.InvokeMethodRequest) {})
+
+	require.NoError(t, store.Create(context.Background(), appTimer(t, "closewait", "tick", "", clock.RealClock{}.Now())))
+	<-waiting
+	require.NoError(t, store.Close())
+
+	assert.Zero(t, timersDropped(t, meter), "a fire cut off by Close was counted as dropped")
+	assert.Equal(t, int64(1), timersFailed(t, meter))
+}
+
+func TestReplaceCancelsOnlyTheOldFire(t *testing.T) {
+	t.Parallel()
+
+	waiting := make(chan struct{})
+	var lookups atomic.Int64
+	var mu sync.Mutex
+	var fired []string
+	store, _ := newAppStore(t, "replace", func(ctx context.Context) error {
+		if lookups.Add(1) == 1 {
+			close(waiting)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}, func(_ context.Context, req *invokev1.InvokeMethodRequest) {
+		mu.Lock()
+		defer mu.Unlock()
+		fired = append(fired, timerCallback(t, req))
+	})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	ctx := context.Background()
+	now := clock.RealClock{}.Now()
+	old := appTimer(t, "replace", "tick", "", now)
+	old.Callback = "old"
+	require.NoError(t, store.Create(ctx, old))
+	<-waiting
+
+	replacement := appTimer(t, "replace", "tick", "", now)
+	replacement.Callback = "new"
+	require.NoError(t, store.Create(ctx, replacement))
+	waitReaped(t, store, replacement)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"new"}, fired)
+}
+
+func TestRescheduleKeepsTheTimerRemovalContext(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var seen []context.Context
+	store, ok := New(Options{Router: routerfake.New().WithCallReminderFn(func(_ context.Context, r *api.Reminder) error {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, r.Removed)
+		return nil
+	})}).(*inmemory)
+	require.True(t, ok)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	ctx := context.Background()
+	timer := newTimer(t, "x", "10ms", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(ctx, timer))
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(seen) >= 3
+	}, 5*time.Second, time.Millisecond)
+
+	store.Delete(ctx, timer.Key())
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, seen[0])
+	for _, removed := range seen {
+		assert.Same(t, seen[0], removed, "a rescheduled fire got a different removal context")
+	}
+	require.ErrorIs(t, seen[0].Err(), context.Canceled, "Delete did not cancel the removal context")
+}
+
+func TestCallbackDeletesOwnTimerCompletes(t *testing.T) {
+	meter := newTimerMeter(t)
+	var store *inmemory
+	var timer *api.Reminder
+	var calls atomic.Int64
+	var alive atomic.Bool
+	store, _ = newAppStore(t, "selfdelete", nil, func(ctx context.Context, req *invokev1.InvokeMethodRequest) {
+		calls.Add(1)
+		store.Delete(ctx, timer.Key())
+		alive.Store(ctx.Err() == nil)
+	})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	timer = appTimer(t, "selfdelete", "tick", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(context.Background(), timer))
+	waitReaped(t, store, timer)
+
+	assert.Equal(t, int64(1), calls.Load())
+	assert.True(t, alive.Load(), "deleting the timer cancelled its own running callback")
+	assert.Equal(t, int64(1), timersSucceeded(t, meter))
+	assert.Zero(t, timersDropped(t, meter))
+	assert.Zero(t, timersFailed(t, meter))
+}
+
+func TestCallbackReregistersOwnTimerCompletes(t *testing.T) {
+	t.Parallel()
+
+	var store *inmemory
+	var replacement *api.Reminder
+	var calls atomic.Int64
+	var alive atomic.Bool
+	createErr := make(chan error, 1)
+	store, _ = newAppStore(t, "selfreplace", nil, func(ctx context.Context, req *invokev1.InvokeMethodRequest) {
+		calls.Add(1)
+		createErr <- store.Create(ctx, replacement)
+		alive.Store(ctx.Err() == nil)
+	})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	now := clock.RealClock{}.Now()
+	timer := appTimer(t, "selfreplace", "tick", "1s", now)
+	replacement = appTimer(t, "selfreplace", "tick", "1s", now.Add(time.Hour))
+	require.NoError(t, store.Create(context.Background(), timer))
+	require.Eventually(t, func() bool {
+		_, pending, _ := stateSnapshot(store, timer.ActorKey())
+		return calls.Load() == 1 && pending == 0
+	}, 5*time.Second, time.Millisecond)
+
+	require.NoError(t, <-createErr)
+	assert.True(t, alive.Load(), "re-registering the timer cancelled its own running callback")
+	cur, ok := store.activeTimers.Load(timer.Key())
+	require.True(t, ok)
+	assert.Same(t, replacement, cur)
+}
+
+func TestDeleteFuncDuringCallbackCompletes(t *testing.T) {
+	t.Parallel()
+
+	var store *inmemory
+	var calls atomic.Int64
+	var alive atomic.Bool
+	store, _ = newAppStore(t, "sweepcallback", nil, func(ctx context.Context, req *invokev1.InvokeMethodRequest) {
+		calls.Add(1)
+		store.DeleteFunc(ctx, func(string, string) bool { return true })
+		alive.Store(ctx.Err() == nil)
+	})
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	timer := appTimer(t, "sweepcallback", "tick", "1s", clock.RealClock{}.Now())
+	require.NoError(t, store.Create(context.Background(), timer))
+	waitReaped(t, store, timer)
+
+	assert.Equal(t, int64(1), calls.Load())
+	assert.True(t, alive.Load(), "a sweep cancelled a running callback")
 }

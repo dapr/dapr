@@ -240,6 +240,13 @@ func (h *Handoff) refreshDetection(ctx context.Context) {
 	h.lock.RUnlock()
 
 	sighted := h.resolveDNS(ctx) || h.probeReportedAddresses(ctx)
+	// A detection cut short by shutdown saw nothing either way: a cancelled
+	// probe answers Canceled, which isPlacementService counts as a sighting,
+	// and the last broadcast would then withhold the leader from every
+	// sidecar and send them to the placement service.
+	if ctx.Err() != nil {
+		return
+	}
 
 	h.lock.Lock()
 	prev := h.detected

@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -235,4 +237,52 @@ func Test_ActivationIDReentrant(t *testing.T) {
 	assert.Equal(t, want, activationID(t, calls))
 	assert.Equal(t, []string{"r1"}, req.GetMetadata()["Dapr-Reentrancy-Id"].GetValues())
 	assert.NotContains(t, req.GetMetadata(), transport.ActivationIDHeader)
+}
+
+func newTimerTestActor(t *testing.T, fn func(ctx context.Context, method string)) *app {
+	t.Helper()
+	fact := New(Options{
+		ActorType:   "abc",
+		Reentrancy:  reentrancystore.New(),
+		IdleTimeout: time.Hour,
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		AppChannel: fake.New().WithInvokeMethod(func(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+			fn(ctx, req.Message().GetMethod())
+			return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+		}),
+	})
+	return fact.GetOrCreate("foo").(*app)
+}
+
+func newRemovableTimer() (*api.Reminder, context.CancelFunc) {
+	removed, remove := context.WithCancel(context.Background())
+	return &api.Reminder{ActorType: "abc", ActorID: "foo", Name: "tick", IsTimer: true, Removed: removed}, remove
+}
+
+func TestInvokeTimerAlreadyRemovedDropped(t *testing.T) {
+	t.Parallel()
+
+	var timerCalls atomic.Int64
+	a := newTimerTestActor(t, func(context.Context, string) { timerCalls.Add(1) })
+
+	timer, remove := newRemovableTimer()
+	remove()
+	require.ErrorIs(t, a.InvokeTimer(t.Context(), timer), actorerrors.ErrTimerFireStale)
+	assert.Zero(t, timerCalls.Load())
+}
+
+func TestInvokeTimerRemovedDuringCallbackCompletes(t *testing.T) {
+	t.Parallel()
+
+	timer, remove := newRemovableTimer()
+	var called, alive atomic.Bool
+	a := newTimerTestActor(t, func(ctx context.Context, _ string) {
+		called.Store(true)
+		remove()
+		alive.Store(ctx.Err() == nil)
+	})
+
+	require.NoError(t, a.InvokeTimer(t.Context(), timer))
+	assert.True(t, called.Load())
+	assert.True(t, alive.Load(), "removing the timer cancelled its running callback")
 }
