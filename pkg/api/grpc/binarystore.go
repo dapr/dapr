@@ -170,12 +170,14 @@ func (a *api) binaryStoreGetFirstChunk(stream runtimev1pb.Dapr_SetBinaryFileAlph
 	firstChunkCtx, cancel := context.WithTimeout(stream.Context(), binaryStoreFirstChunkTimeout)
 	defer cancel()
 
+	// RecvMsg blocks until a message arrives or the stream closes, so receive
+	// in the background and race the result against the timeout. On timeout
+	// the handler returns, which closes the stream and cancels its context,
+	// releasing the pending receive; the buffered channel lets the goroutine
+	// then exit without a receiver.
 	firstMsgCh := make(chan error, 1)
 	if gerr := a.goUnlessClosed(func() {
-		select {
-		case firstMsgCh <- stream.RecvMsg(reqProto):
-		case <-firstChunkCtx.Done():
-		}
+		firstMsgCh <- stream.RecvMsg(reqProto)
 	}); gerr != nil {
 		return gerr
 	}

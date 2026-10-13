@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -43,6 +44,8 @@ import (
 type blockingSetBinaryFileStream struct {
 	ctx            context.Context
 	recvErr        error
+	blockRecv      bool
+	recvStarted    chan struct{}
 	initialRequest *runtimev1pb.SetBinaryFileRequestInitialAlpha1
 	once           sync.Once
 }
@@ -97,6 +100,14 @@ func (b *blockingSetBinaryFileStream) SendMsg(any) error {
 }
 
 func (b *blockingSetBinaryFileStream) RecvMsg(message any) error {
+	if b.blockRecv {
+		if b.recvStarted != nil {
+			close(b.recvStarted)
+			b.recvStarted = nil
+		}
+		<-b.ctx.Done()
+		return b.ctx.Err()
+	}
 	if b.recvErr != nil {
 		return b.recvErr
 	}
@@ -253,4 +264,50 @@ func TestSetBinaryFileRejectsEmptyStream(t *testing.T) {
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "invalid request: error receiving the first message: EOF", status.Convert(err).Message())
+}
+
+func TestSetBinaryFileCloseReleasesPendingFirstChunkReceive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	a := newCloseTestAPI()
+	a.logger = logger.NewLogger("dapr.runtime.grpc.test")
+
+	recvStarted := make(chan struct{})
+	handlerDone := make(chan error, 1)
+	go func() {
+		handlerDone <- a.SetBinaryFileAlpha1(&blockingSetBinaryFileStream{ctx: ctx, blockRecv: true, recvStarted: recvStarted})
+	}()
+
+	// Wait until the handler is parked in the first-chunk receive; the
+	// tracked goroutine is now blocked in RecvMsg, so Close must wait for it.
+	select {
+	case <-recvStarted:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "handler never reached the first-chunk receive")
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		assert.NoError(t, a.Close())
+		close(closed)
+	}()
+
+	// The handler is parked in the first-chunk receive, so Close must wait
+	// for the tracked receive goroutine.
+	select {
+	case <-closed:
+		require.Fail(t, "Close must wait for the pending first-chunk receive")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// gRPC cancels the stream context when the stream closes, which must
+	// release the pending receive and let Close return.
+	cancel()
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "Close did not return after the stream context was canceled")
+	}
+
+	require.Equal(t, codes.InvalidArgument, status.Code(<-handlerDone))
 }
