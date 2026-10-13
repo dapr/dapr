@@ -26,7 +26,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/api/universal"
+	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/logger"
 )
 
 func TestStreamBinaryFileAbortsTruncatedResponse(t *testing.T) {
@@ -93,4 +99,55 @@ func (*shortWriteResponseWriter) Flush() {}
 func (s *shortWriteResponseWriter) SetWriteDeadline(time.Time) error {
 	s.deadlineSet = true
 	return nil
+}
+
+func TestBinaryStoreRejectsDotSegments(t *testing.T) {
+	a := &api{
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("dapr.runtime.http.test"),
+			Resiliency: resiliency.New(nil),
+			CompStore:  compstore.New(),
+		}),
+	}
+
+	r := chi.NewRouter()
+	r.Use(CleanPathMiddleware, StripSlashesMiddleware)
+	r.Method(http.MethodPut, "/v1.0-alpha1/binarystore/{name}/{fileName}", a.onBinaryStoreSet(true))
+	r.Method(http.MethodGet, "/v1.0-alpha1/binarystore/{name}/{fileName}", a.onBinaryStoreGet())
+	r.Method(http.MethodDelete, "/v1.0-alpha1/binarystore/{name}/{fileName}", a.onBinaryStoreDelete())
+
+	server := httptest.NewServer(r)
+	t.Cleanup(server.Close)
+
+	// CleanPathMiddleware resolves dot segments before routing, so without
+	// the original-path validation these requests would silently operate on
+	// a different file (or component) than the caller addressed.
+	dotPaths := []string{
+		"/v1.0-alpha1/binarystore/mystore/a/../b.bin",
+		"/v1.0-alpha1/binarystore/mystore/./b.bin",
+		"/v1.0-alpha1/binarystore/mystore/../otherstore/b.bin",
+	}
+	for _, path := range dotPaths {
+		for _, method := range []string{http.MethodPut, http.MethodGet, http.MethodDelete} {
+			req, err := http.NewRequest(method, server.URL+path, nil)
+			require.NoError(t, err)
+			resp, err := server.Client().Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s %s", method, path)
+			require.Contains(t, string(body), "must not contain", "%s %s", method, path)
+		}
+	}
+
+	// A path without dot segments reaches the component lookup as before
+	// (no component is registered here, so it fails with not found).
+	resp, err := server.Client().Get(server.URL + "/v1.0-alpha1/binarystore/mystore/valid.bin")
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Contains(t, string(body), "failed finding binary store component")
 }

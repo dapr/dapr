@@ -18,11 +18,13 @@ package http
 import (
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 var endpointGroupBinaryStoreV1Alpha1 = &endpoints.EndpointGroup{
@@ -78,6 +80,21 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 	}
 }
 
+// binaryStoreNames extracts the component and file names from the request.
+// CleanPathMiddleware normalizes the route path before matching, which
+// silently turns e.g. /binarystore/mystore/a/../b.bin into a request for
+// b.bin; reject dot segments in the original escaped path so HTTP callers
+// get the same validation as gRPC callers.
+func binaryStoreNames(r *http.Request) (componentName, fileName string, err error) {
+	for segment := range strings.SplitSeq(r.URL.EscapedPath(), "/") {
+		if segment == "." || segment == ".." {
+			return "", "", messages.ErrBadRequest.WithFormat("binary store path %q must not contain '.' or '..' segments", r.URL.EscapedPath())
+		}
+	}
+	ctx := r.Context()
+	return chi.URLParamFromCtx(ctx, nameParam), chi.URLParamFromCtx(ctx, binaryStoreFileNameParam), nil
+}
+
 // onBinaryStoreSet returns a handler that persists the request body to the
 // named file. When overwrite is true (PUT) existing files are replaced; when
 // false (POST) the request fails with 409 if the file already exists. The body
@@ -85,13 +102,16 @@ func (a *api) constructBinaryStoreEndpoints() []endpoints.Endpoint {
 func (a *api) onBinaryStoreSet(overwrite bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		componentName := chi.URLParamFromCtx(ctx, nameParam)
-		fileName := chi.URLParamFromCtx(ctx, binaryStoreFileNameParam)
+		componentName, fileName, err := binaryStoreNames(r)
+		if err != nil {
+			respondWithError(w, err)
+			return
+		}
 
 		// Defer closing the request body so the connection can be reused.
 		defer func() { _ = r.Body.Close() }()
 
-		err := a.universal.SetBinaryFileAlpha1(ctx, componentName, fileName, overwrite, r.Body)
+		err = a.universal.SetBinaryFileAlpha1(ctx, componentName, fileName, overwrite, r.Body)
 		if err != nil {
 			respondWithError(w, err)
 			return
@@ -105,11 +125,13 @@ func (a *api) onBinaryStoreSet(overwrite bool) http.HandlerFunc {
 // client with Content-Type application/octet-stream.
 func (a *api) onBinaryStoreGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		componentName := chi.URLParamFromCtx(ctx, nameParam)
-		fileName := chi.URLParamFromCtx(ctx, binaryStoreFileNameParam)
+		componentName, fileName, err := binaryStoreNames(r)
+		if err != nil {
+			respondWithError(w, err)
+			return
+		}
 
-		body, err := a.universal.GetBinaryFileAlpha1(ctx, componentName, fileName)
+		body, err := a.universal.GetBinaryFileAlpha1(r.Context(), componentName, fileName)
 		if err != nil {
 			respondWithError(w, err)
 			return
@@ -143,11 +165,13 @@ func streamBinaryFile(w http.ResponseWriter, body io.Reader, componentName, file
 // onBinaryStoreDelete returns a handler that deletes the named file.
 func (a *api) onBinaryStoreDelete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		componentName := chi.URLParamFromCtx(ctx, nameParam)
-		fileName := chi.URLParamFromCtx(ctx, binaryStoreFileNameParam)
+		componentName, fileName, err := binaryStoreNames(r)
+		if err != nil {
+			respondWithError(w, err)
+			return
+		}
 
-		if err := a.universal.DeleteBinaryFileAlpha1(ctx, componentName, fileName); err != nil {
+		if err := a.universal.DeleteBinaryFileAlpha1(r.Context(), componentName, fileName); err != nil {
 			respondWithError(w, err)
 			return
 		}
