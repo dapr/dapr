@@ -15,32 +15,20 @@ package activity
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
 	"errors"
-	"fmt"
-	"math/big"
-	"net/url"
 	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/dapr/kit/crypto/spiffe/signer"
 
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -382,124 +370,6 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		require.True(t, call.Settled())
 		require.NoError(t, call.Err(), "a result the parent takes within the grace is delivered")
 	})
-}
-
-// Test_runOwned_expiredSignatureSignedAgain pins what the sender does when the
-// parent refuses a result because its signer certificate expired while the
-// result waited for the parent. The publish has no deadline, so a busy parent
-// can outlast the certificate. The sender signs the result again: with a newer
-// certificate it delivers again, and with the same one it settles with a
-// recoverable error, so the run-activity reminder retries later.
-func Test_runOwned_expiredSignatureSignedAgain(t *testing.T) {
-	t.Parallel()
-
-	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
-	newSVID := func(t *testing.T) *x509svid.SVID {
-		t.Helper()
-		pub, priv, err := ed25519.GenerateKey(rand.Reader)
-		require.NoError(t, err)
-		template := &x509.Certificate{
-			SerialNumber: big.NewInt(1),
-			NotBefore:    time.Now().Add(-time.Hour),
-			NotAfter:     time.Now().Add(time.Hour),
-			URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/ns/default/testapp"}},
-		}
-		der, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
-		require.NoError(t, err)
-		certs, err := x509.ParseCertificates(der)
-		require.NoError(t, err)
-		id, err := x509svid.IDFromCert(certs[0])
-		require.NoError(t, err)
-		return &x509svid.SVID{ID: id, Certificates: certs, PrivateKey: priv}
-	}
-	// sent records the certificate chain that signed each delivery.
-	signedWith := func(t *testing.T, req *internalsv1pb.InternalInvokeRequest) []byte {
-		t.Helper()
-		var e protos.HistoryEvent
-		require.NoError(t, proto.Unmarshal(req.GetMessage().GetData().GetValue(), &e))
-		return e.GetTaskCompleted().GetSignerCertificate()
-	}
-	refused := fmt.Errorf("rpc error: code = Unknown desc = activity completion for task 3: %w", signing.ErrSignerCertExpired)
-
-	t.Run("a newer certificate is delivered again", func(t *testing.T) {
-		t.Parallel()
-		f, scheduled := newExecHarness(t)
-		first, second := newSVID(t), newSVID(t)
-		source := new(rotatingSVIDSource)
-		source.svid.Store(first)
-		f.signing = &signing.Signing{Signer: signer.New(source, nil), Namespace: "default"}
-
-		var sent [][]byte
-		f.router = routerfake.New().WithCallFn(func(_ context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-			sent = append(sent, signedWith(t, req))
-			if len(sent) == 1 {
-				// The sidecar rotated its certificate while the result
-				// waited for the parent.
-				source.svid.Store(second)
-				return nil, refused
-			}
-			return &internalsv1pb.InternalInvokeResponse{}, nil
-		})
-
-		a := f.GetOrCreate("wf::3::0").(*activity)
-		ownerErr := make(chan error, 1)
-		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
-		}()
-		wi := recvWorkItem(t, scheduled)
-		call, ok := f.inflight.Peek(key)
-		require.True(t, ok)
-		completeWorkItem(t, wi)
-		require.NoError(t, <-ownerErr)
-		f.detached.Wait()
-
-		require.Len(t, sent, 2, "the refused result is delivered again")
-		assert.Equal(t, first.Certificates[0].Raw, sent[0])
-		assert.Equal(t, second.Certificates[0].Raw, sent[1], "the result is signed again with the current certificate")
-		assert.Empty(t, scheduled, "the body must not be dispatched again")
-		require.True(t, call.Settled())
-		require.NoError(t, call.Err())
-	})
-
-	t.Run("the same certificate is not delivered again", func(t *testing.T) {
-		t.Parallel()
-		f, scheduled := newExecHarness(t)
-		source := new(rotatingSVIDSource)
-		source.svid.Store(newSVID(t))
-		f.signing = &signing.Signing{Signer: signer.New(source, nil), Namespace: "default"}
-
-		var calls atomic.Int64
-		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-			calls.Add(1)
-			return nil, refused
-		})
-
-		a := f.GetOrCreate("wf::3::0").(*activity)
-		ownerErr := make(chan error, 1)
-		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
-		}()
-		wi := recvWorkItem(t, scheduled)
-		call, ok := f.inflight.Peek(key)
-		require.True(t, ok)
-		completeWorkItem(t, wi)
-		err := <-ownerErr
-		f.detached.Wait()
-
-		require.Error(t, err)
-		assert.True(t, signing.IsSignerCertExpired(err), "%v", err)
-		assert.Equal(t, int64(1), calls.Load(), "signing again with the same certificate cannot succeed")
-		require.True(t, call.Settled())
-		require.Error(t, call.Err(), "the run-activity reminder retries the execution")
-	})
-}
-
-type rotatingSVIDSource struct {
-	svid atomic.Pointer[x509svid.SVID]
-}
-
-func (s *rotatingSVIDSource) GetX509SVID() (*x509svid.SVID, error) {
-	return s.svid.Load(), nil
 }
 
 // Test_settle_finishesBeforeReleasing pins the settle ordering. Releasing the

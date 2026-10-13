@@ -14,7 +14,6 @@ limitations under the License.
 package activity
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -32,7 +31,6 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 // newPublishGrace returns the context that bounds every result publish of a
@@ -199,9 +197,24 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", ex.actorID, ex.wi.InstanceID, activityReminderName)
 
-	if err := f.attachAttestation(ctx, ex); err != nil {
-		executionStatus = diag.StatusRecoverable
-		return err
+	// Attach an attestation so the parent workflow can cryptographically
+	// verify this activity's identity, input, and output. No-op when
+	// signing is disabled (AttachActivityCompletionAttestation handles
+	// the nil-Signer case internally).
+	if ex.wi.Result != nil {
+		scheduled := ex.wi.NewEvent.GetTaskScheduled()
+		if scheduled == nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", ex.actorID))
+		}
+		if attachErr := f.signing.AttachActivityCompletionAttestation(ctx, ex.wi.Result, signing.ActivityAttestationParams{
+			ParentInstanceID: ex.workflowID,
+			ActivityName:     ex.activityName,
+			Input:            scheduled.GetInput(),
+		}); attachErr != nil {
+			executionStatus = diag.StatusRecoverable
+			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", ex.actorID, attachErr))
+		}
 	}
 
 	// send completed event to orchestrator wf actor
@@ -217,28 +230,23 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result)
 	} else {
 		// publish the result back to the workflow actor as a new event to be processed
-		for {
-			var resultData []byte
-			resultData, err = proto.Marshal(ex.wi.Result)
-			if err != nil {
-				// Returning non-recoverable error
-				executionStatus = diag.StatusFailed
-				return err
-			}
-
-			req := internalsv1pb.
-				NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-				WithActor(wfActorType, ex.workflowID).
-				WithData(resultData).
-				WithContentType(invokev1.ProtobufContentType)
-			if ex.parentExecutionID != "" {
-				req = req.WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {ex.parentExecutionID}})
-			}
-			_, err = f.router.Call(ctx, req)
-			if !f.signAgain(ctx, ex, err) {
-				break
-			}
+		var resultData []byte
+		resultData, err = proto.Marshal(ex.wi.Result)
+		if err != nil {
+			// Returning non-recoverable error
+			executionStatus = diag.StatusFailed
+			return err
 		}
+
+		req := internalsv1pb.
+			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+			WithActor(wfActorType, ex.workflowID).
+			WithData(resultData).
+			WithContentType(invokev1.ProtobufContentType)
+		if ex.parentExecutionID != "" {
+			req = req.WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {ex.parentExecutionID}})
+		}
+		_, err = f.router.Call(ctx, req)
 	}
 
 	switch {
@@ -249,12 +257,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			return nil
 		}
 
-		// The reminder can wait for the parent for a long time, so it holds
-		// the result signed again: the parent then has the full life of the
-		// current certificate. A result that the parent refused as expired
-		// goes back to the run-activity reminder: signAgain got no newer
-		// certificate for it.
-		if f.workflowsRemoteActivityReminder && !signing.IsSignerCertExpired(err) && f.attachAttestation(ctx, ex) == nil {
+		if f.workflowsRemoteActivityReminder {
 			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result); cerr == nil {
 				return nil
 			}
@@ -272,53 +275,6 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 
 	return nil
-}
-
-// attachAttestation signs the result, so the parent workflow can
-// cryptographically verify this activity's identity, input, and output. It
-// replaces an earlier signature. No-op when signing is disabled
-// (AttachActivityCompletionAttestation handles the nil-Signer case
-// internally).
-func (f *factory) attachAttestation(ctx context.Context, ex *execution) error {
-	if ex.wi.Result == nil {
-		return nil
-	}
-	scheduled := ex.wi.NewEvent.GetTaskScheduled()
-	if scheduled == nil {
-		return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", ex.actorID))
-	}
-	if err := f.signing.AttachActivityCompletionAttestation(ctx, ex.wi.Result, signing.ActivityAttestationParams{
-		ParentInstanceID: ex.workflowID,
-		ActivityName:     ex.activityName,
-		Input:            scheduled.GetInput(),
-	}); err != nil {
-		return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", ex.actorID, err))
-	}
-	return nil
-}
-
-// signAgain signs the result again after the parent refused it, because the
-// signer certificate expired while the result waited for the parent. It
-// reports whether the new signature uses a newer certificate: only then can a
-// delivery again succeed.
-func (f *factory) signAgain(ctx context.Context, ex *execution, err error) bool {
-	if !signing.IsSignerCertExpired(err) {
-		return false
-	}
-	refused := signerCertificate(ex.wi.Result)
-	if f.attachAttestation(ctx, ex) != nil || bytes.Equal(refused, signerCertificate(ex.wi.Result)) {
-		return false
-	}
-	log.Infof("Activity actor '%s': workflow '%s' refused the result because its signer certificate expired; delivering it again with the current certificate", ex.actorID, ex.workflowID)
-	return true
-}
-
-// signerCertificate returns the certificate chain that signed the result.
-func signerCertificate(e *backend.HistoryEvent) []byte {
-	if c := e.GetTaskCompleted(); c != nil {
-		return c.GetSignerCertificate()
-	}
-	return e.GetTaskFailed().GetSignerCertificate()
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {

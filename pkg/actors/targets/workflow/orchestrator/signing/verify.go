@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -37,20 +36,6 @@ import (
 // and a store fault can roll back a save after dispatch. Callers should drop
 // the event like the unsigned path does, not tombstone.
 var ErrUnknownTaskScheduledID = errors.New("completion does not correspond to a task scheduled in signed history")
-
-// ErrSignerCertExpired marks a completion whose attestation verifies in full
-// at the end of its signer certificate's validity window, but not at
-// ingestion. Not proof of tampering: a result can wait for a busy workflow for
-// longer than the certificate it was signed with is valid. Callers should ask
-// the sender to deliver it again with a current signature, not tombstone.
-var ErrSignerCertExpired = errors.New("the signer certificate of the completion expired before ingestion")
-
-// IsSignerCertExpired reports whether err carries ErrSignerCertExpired. It
-// matches the text, because the error reaches the sender of the completion
-// through an actor call.
-func IsSignerCertExpired(err error) bool {
-	return err != nil && strings.HasSuffix(err.Error(), ErrSignerCertExpired.Error())
-}
 
 // VerifyInboxAttestation validates an attestation on an inbound completion
 // event, absorbs the signer certificate into the state's ext-sigcert table for
@@ -186,7 +171,7 @@ func (s *Signing) verifyChild(ctx context.Context, opts verifyChildOptions) erro
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheMiss)
 	}
 
-	vopts := historysigning.VerifyChildOptions{
+	payload, err := historysigning.VerifyChildAttestation(historysigning.VerifyChildOptions{
 		Attestation:                    opts.att,
 		SignerCertDER:                  opts.certDER,
 		EventTimestamp:                 opts.eventTS,
@@ -197,19 +182,10 @@ func (s *Signing) verifyChild(ctx context.Context, opts verifyChildOptions) erro
 		ClaimedFailure:                 opts.failure,
 		Signer:                         s.Signer,
 		ChainOfTrustVerifiedExternally: chainOfTrustVerifiedExternally,
-	}
-	payload, err := historysigning.VerifyChildAttestation(vopts)
+	})
 	if err != nil {
 		if s.isStaleChildCompletion(opts, created, chainOfTrustVerifiedExternally) {
 			return fmt.Errorf("child completion for task %d reports a superseded invocation of a reused scheduled id: %w", opts.taskID, ErrUnknownTaskScheduledID)
-		}
-		if onlyExpired(opts.certDER, opts.eventTS, func(at time.Time) bool {
-			vopts.EventTimestamp = at
-			vopts.ChainOfTrustVerifiedExternally = false
-			p, verr := historysigning.VerifyChildAttestation(vopts)
-			return verr == nil && p.GetTerminalStatus() == opts.expectedStatus
-		}) {
-			return fmt.Errorf("child completion for task %d: %w", opts.taskID, ErrSignerCertExpired)
 		}
 		return fmt.Errorf("child attestation verification failed for task %d: %w", opts.taskID, err)
 	}
@@ -253,7 +229,7 @@ func (s *Signing) verifyActivity(ctx context.Context, opts verifyActivityOptions
 		diag.DefaultWorkflowMonitoring.AttestationCertCacheLookup(ctx, diag.CertCacheMiss)
 	}
 
-	vopts := historysigning.VerifyActivityOptions{
+	payload, err := historysigning.VerifyActivityAttestation(historysigning.VerifyActivityOptions{
 		Attestation:                    opts.att,
 		SignerCertDER:                  opts.certDER,
 		EventTimestamp:                 opts.eventTS,
@@ -265,19 +241,10 @@ func (s *Signing) verifyActivity(ctx context.Context, opts verifyActivityOptions
 		ClaimedFailure:                 opts.failure,
 		Signer:                         s.Signer,
 		ChainOfTrustVerifiedExternally: chainOfTrustVerifiedExternally,
-	}
-	payload, err := historysigning.VerifyActivityAttestation(vopts)
+	})
 	if err != nil {
 		if s.isStaleActivityCompletion(opts, scheduled, chainOfTrustVerifiedExternally) {
 			return fmt.Errorf("activity completion for task %d reports a superseded invocation of a reused scheduled id: %w", opts.taskID, ErrUnknownTaskScheduledID)
-		}
-		if onlyExpired(opts.certDER, opts.eventTS, func(at time.Time) bool {
-			vopts.EventTimestamp = at
-			vopts.ChainOfTrustVerifiedExternally = false
-			p, verr := historysigning.VerifyActivityAttestation(vopts)
-			return verr == nil && p.GetTerminalStatus() == opts.expectedStatus
-		}) {
-			return fmt.Errorf("activity completion for task %d: %w", opts.taskID, ErrSignerCertExpired)
 		}
 		return fmt.Errorf("activity attestation verification failed for task %d: %w", opts.taskID, err)
 	}
@@ -294,19 +261,6 @@ func (s *Signing) verifyActivity(ctx context.Context, opts verifyActivityOptions
 		return fmt.Errorf("activity attestation: failed to absorb signer cert for task %d: %w", opts.taskID, err)
 	}
 	return nil
-}
-
-// onlyExpired reports whether the expiry of the signer certificate is the only
-// reason an attestation failed at eventTS: the leaf certificate expired before
-// eventTS, and verifyAt accepts the attestation, chain of trust included, at
-// the last instant the certificate was valid. The workflow does not admit
-// such a completion, so the check gives a forged one nothing.
-func onlyExpired(certDER []byte, eventTS time.Time, verifyAt func(time.Time) bool) bool {
-	leaf, err := parseLeafCertFromChainDER(certDER)
-	if err != nil || !eventTS.After(leaf.NotAfter) {
-		return false
-	}
-	return verifyAt(leaf.NotAfter)
 }
 
 // isStaleChildCompletion reports whether a child completion that failed full
