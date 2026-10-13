@@ -399,7 +399,7 @@ func TestBinaryStore_mapBinaryStoreErrorSizeLimitSentinels(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := mapBinaryStoreError(fmt.Errorf("wrapped: %w", test.sentinel), "c", "f", messages.ErrBinaryStoreSet)
 			require.Error(t, err)
-			assert.ErrorIs(t, err, test.expected)
+			require.ErrorIs(t, err, test.expected)
 			apiErr, ok := err.(messages.APIError)
 			require.True(t, ok, "expected an APIError")
 			assert.Equal(t, test.expected.HTTPCode(), apiErr.HTTPCode())
