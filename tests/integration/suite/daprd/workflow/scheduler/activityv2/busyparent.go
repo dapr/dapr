@@ -50,7 +50,7 @@ type busyparent struct {
 
 const (
 	busyparentActivities = 5
-	// busyparentHold is how long the parent's second turn holds its turn
+	// busyparentHold is how long the parent's held turn holds its turn
 	// lock once the publishes of the other four results wait for it. The
 	// publish has no deadline, so the hold only has to outlast the queueing.
 	// Test_runOwned_busyParentIsNotAFailedPublish checks that the publish
@@ -69,41 +69,45 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
 	var (
-		turns      atomic.Int64
 		executions [busyparentActivities]atomic.Int64
-		// turnTwo closes when the parent's second turn starts. Activities
-		// 1-4 return only after that, so their results arrive while the
-		// second turn holds the lock.
-		turnTwo     = make(chan struct{})
-		turnTwoOnce sync.Once
-		// heldWithResults is set when the second turn saw the publishes of
-		// all four results wait for the lock before it started to hold it.
+		// held closes when the turn that the result of activity 0 drives
+		// starts. Activities 1-4 return only after that, so their results
+		// arrive while that turn holds the lock.
+		held     = make(chan struct{})
+		heldOnce sync.Once
+		// heldWithResults is set when the held turn saw the publishes of all
+		// four results wait for the lock before it started to hold it.
 		heldWithResults atomic.Bool
 	)
 
-	// Calls that wait for the parent's turn lock. The second turn holds the
+	// Calls that wait for the parent's turn lock. The held turn holds the
 	// lock, so the publishes of activities 1-4 queue here.
 	waiting := func() float64 {
 		return b.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_actor_pending_actor_calls", "actor_type:"+b.workflow.WorkflowActorType(0))
 	}
 
 	require.NoError(t, b.workflow.Registry().AddWorkflowN("BusyParent", func(c *task.WorkflowContext) (any, error) {
-		// The second turn is the one driven by the result of activity 0.
-		if turns.Add(1) == 2 {
-			turnTwoOnce.Do(func() { close(turnTwo) })
+		tasks := make([]task.Task, busyparentActivities)
+		for i := range busyparentActivities {
+			tasks[i] = c.CallActivity("Slow", task.WithActivityInput(i))
+		}
+		// The hold is tied to the turn that the result of activity 0
+		// drives, not to an invocation count, so a first turn that is
+		// delivered again does not start it.
+		if err := tasks[0].Await(nil); err != nil {
+			return nil, err
+		}
+		heldOnce.Do(func() {
+			close(held)
 			deadline := time.Now().Add(busyparentGate)
 			for waiting() < busyparentActivities-1 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond * 10)
 			}
 			heldWithResults.Store(waiting() >= busyparentActivities-1)
 			time.Sleep(busyparentHold)
-		}
-		tasks := make([]task.Task, busyparentActivities)
-		for i := range busyparentActivities {
-			tasks[i] = c.CallActivity("Slow", task.WithActivityInput(i))
-		}
-		errs := make([]error, 0, len(tasks))
-		for _, tk := range tasks {
+		})
+		errs := make([]error, 0, len(tasks)-1)
+		for _, tk := range tasks[1:] {
 			errs = append(errs, tk.Await(nil))
 		}
 		return nil, errors.Join(errs...)
@@ -115,13 +119,13 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 		}
 		executions[i].Add(1)
 		if i == 0 {
-			// The first result drives the second turn.
+			// The first result drives the held turn.
 			return nil, nil
 		}
 		select {
-		case <-turnTwo:
+		case <-held:
 		case <-time.After(busyparentGate):
-			return nil, errors.New("the parent's second turn did not start")
+			return nil, errors.New("the parent's held turn did not start")
 		}
 		return nil, nil
 	}))
@@ -134,7 +138,7 @@ func (b *busyparent) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	require.True(t, heldWithResults.Load(),
-		"the second turn must hold the parent's turn lock while the publishes of the four results wait for it")
+		"the held turn must hold the parent's turn lock while the publishes of the four results wait for it")
 
 	// Each result was in hand while it waited for the parent. Nothing was
 	// lost and nothing moved, so each body must have run one time.

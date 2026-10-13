@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
@@ -42,14 +43,19 @@ import (
 
 func generateTestCert(t *testing.T) ([]byte, ed25519.PrivateKey) {
 	t.Helper()
+	return generateTestCertValidity(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+}
+
+func generateTestCertValidity(t *testing.T, notBefore, notAfter time.Time) ([]byte, ed25519.PrivateKey) {
+	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "test"},
-		NotBefore:    time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		NotAfter:     time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
 		URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/ns/default/app-a"}},
 	}
 
@@ -808,4 +814,139 @@ func TestVerifyInboxAttestation_StaleActivityTamperedSignatureStillTombstones(t 
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrUnknownTaskScheduledID)
 	assert.Contains(t, err.Error(), "verification failed")
+}
+
+// TestVerifyInboxAttestation_ExpiredSignerCertReturnsSentinel pins that a
+// completion whose signer certificate expired before ingestion, and which
+// verifies in full while the certificate was valid, is not tampering. It
+// returns ErrSignerCertExpired, so the workflow asks the sender to deliver it
+// again instead of tombstoning. A result can wait for a busy parent for
+// longer than its certificate is valid.
+func TestVerifyInboxAttestation_ExpiredSignerCertReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCertValidity(t, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+
+	const taskID int32 = 7
+	o := &Signing{Signer: sgn, ActorID: "parent-instance"}
+
+	t.Run("activity completion", func(t *testing.T) {
+		t.Parallel()
+		att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+			ParentInstanceId:      o.ActorID,
+			ParentTaskScheduledId: taskID,
+			ActivityName:          "say",
+			Input:                 wrapperspb.String("hello"),
+			Output:                wrapperspb.String("world"),
+			TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+		})
+		require.NoError(t, err)
+
+		st := testState(makeTaskScheduledEvent(taskID, "say", "hello"))
+		err = o.VerifyInboxAttestation(t.Context(), st, &backend.HistoryEvent{
+			EventId:   100,
+			Timestamp: timestamppb.New(time.Now()),
+			EventType: &protos.HistoryEvent_TaskCompleted{
+				TaskCompleted: &protos.TaskCompletedEvent{
+					TaskScheduledId:   taskID,
+					Result:            wrapperspb.String("world"),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		})
+		require.ErrorIs(t, err, ErrSignerCertExpired)
+		assert.True(t, IsSignerCertExpired(errors.New("remote: "+err.Error())), "the sender reads the error from its text")
+		assert.Empty(t, st.ExternalSigningCertificates, "a refused completion absorbs no certificate")
+	})
+
+	t.Run("child completion", func(t *testing.T) {
+		t.Parallel()
+		att, certChain, err := historysigning.BuildChildAttestation(sgn, historysigning.ChildAttestationInput{
+			ParentInstanceId:      o.ActorID,
+			ParentTaskScheduledId: taskID,
+			Input:                 wrapperspb.String("hello"),
+			Output:                wrapperspb.String("world"),
+			TerminalStatus:        protos.TerminalStatus_TERMINAL_STATUS_COMPLETED,
+		})
+		require.NoError(t, err)
+
+		st := testState(makeChildCreatedEvent(taskID, "child-instance", "hello"))
+		err = o.VerifyInboxAttestation(t.Context(), st, &backend.HistoryEvent{
+			EventId:   100,
+			Timestamp: timestamppb.New(time.Now()),
+			EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+				ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+					TaskScheduledId:   taskID,
+					Result:            wrapperspb.String("world"),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		})
+		require.ErrorIs(t, err, ErrSignerCertExpired)
+		assert.Empty(t, st.ExternalSigningCertificates)
+	})
+
+	t.Run("a tampered result with an expired certificate still tombstones", func(t *testing.T) {
+		t.Parallel()
+		att, certChain, err := historysigning.BuildActivityAttestation(sgn, historysigning.ActivityAttestationInput{
+			ParentInstanceId:      o.ActorID,
+			ParentTaskScheduledId: taskID,
+			ActivityName:          "say",
+			Input:                 wrapperspb.String("hello"),
+			Output:                wrapperspb.String("world"),
+			TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+		})
+		require.NoError(t, err)
+
+		st := testState(makeTaskScheduledEvent(taskID, "say", "hello"))
+		err = o.VerifyInboxAttestation(t.Context(), st, &backend.HistoryEvent{
+			EventId:   100,
+			Timestamp: timestamppb.New(time.Now()),
+			EventType: &protos.HistoryEvent_TaskCompleted{
+				TaskCompleted: &protos.TaskCompletedEvent{
+					TaskScheduledId:   taskID,
+					Result:            wrapperspb.String("forged"),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrSignerCertExpired)
+		assert.False(t, IsSignerCertExpired(err))
+	})
+
+	t.Run("an untrusted expired certificate still tombstones", func(t *testing.T) {
+		t.Parallel()
+		otherDER, otherPriv := generateTestCertValidity(t, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+		other := testSigner(t, otherDER, otherPriv)
+		att, certChain, err := historysigning.BuildActivityAttestation(other, historysigning.ActivityAttestationInput{
+			ParentInstanceId:      o.ActorID,
+			ParentTaskScheduledId: taskID,
+			ActivityName:          "say",
+			Input:                 wrapperspb.String("hello"),
+			Output:                wrapperspb.String("world"),
+			TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+		})
+		require.NoError(t, err)
+
+		st := testState(makeTaskScheduledEvent(taskID, "say", "hello"))
+		err = o.VerifyInboxAttestation(t.Context(), st, &backend.HistoryEvent{
+			EventId:   100,
+			Timestamp: timestamppb.New(time.Now()),
+			EventType: &protos.HistoryEvent_TaskCompleted{
+				TaskCompleted: &protos.TaskCompletedEvent{
+					TaskScheduledId:   taskID,
+					Result:            wrapperspb.String("world"),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrSignerCertExpired)
+	})
 }

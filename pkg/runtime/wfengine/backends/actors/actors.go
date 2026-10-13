@@ -103,6 +103,11 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
+	// It bounds how long an activity result publish in flight at shutdown
+	// keeps its context.
+	GracefulShutdownDuration time.Duration
+
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
 
@@ -137,6 +142,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -254,6 +260,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -319,6 +326,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}

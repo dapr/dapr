@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -44,10 +45,13 @@ import (
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/historysigning"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
@@ -291,6 +295,163 @@ func Test_addWorkflowEvent_unknownTaskIDDroppedNotTombstoned(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assert.Empty(t, creates, "no wake-up reminder for a dropped event")
+}
+
+// Test_addWorkflowEvent_expiredSignerCertRedeliveredNotTombstoned pins that a
+// completion whose signer certificate expired before the parent took it, for
+// example while it waited behind a busy turn lock, is not tampering. A live
+// delivery gets a recoverable error that asks the sender to sign again and
+// deliver again. A result reminder cannot be signed again, so it is acked.
+// Neither tombstones the workflow or persists the completion.
+func Test_addWorkflowEvent_expiredSignerCertRedeliveredNotTombstoned(t *testing.T) {
+	const instanceID = "test-expired-signer-wf"
+
+	// The activity signed its result with a certificate that has expired
+	// since. The parent trusts it.
+	svid := func(path string, notBefore, notAfter time.Time) *x509svid.SVID {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		template := &x509.Certificate{
+			SerialNumber: big.NewInt(1),
+			Subject:      pkix.Name{CommonName: path},
+			NotBefore:    notBefore,
+			NotAfter:     notAfter,
+			URIs:         []*url.URL{{Scheme: "spiffe", Host: "example.org", Path: path}},
+		}
+		der, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+		require.NoError(t, err)
+		certs, err := x509.ParseCertificates(der)
+		require.NoError(t, err)
+		id, err := x509svid.IDFromCert(certs[0])
+		require.NoError(t, err)
+		return &x509svid.SVID{ID: id, Certificates: certs, PrivateKey: priv}
+	}
+	actSVID := svid("/ns/default/activityapp", time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	actSigner := signer.New(staticTestSVIDSource{svid: actSVID}, nil)
+	parentSVID := svid("/ns/default/testapp", time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	parentSigner := signer.New(staticTestSVIDSource{svid: parentSVID},
+		trustfake.New(parentSVID.Certificates[0], actSVID.Certificates[0]))
+
+	startEvent := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				Name:             "TestWorkflow",
+				Input:            wrapperspb.String(`null`),
+				WorkflowInstance: &protos.WorkflowInstance{InstanceId: instanceID},
+			},
+		},
+	}
+	scheduledEvent := &protos.HistoryEvent{
+		EventId:   0,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskScheduled{
+			TaskScheduled: &protos.TaskScheduledEvent{Name: "Say", Input: wrapperspb.String(`"in"`)},
+		},
+	}
+	history := []*backend.HistoryEvent{startEvent, scheduledEvent}
+
+	att, certChain, err := historysigning.BuildActivityAttestation(actSigner, historysigning.ActivityAttestationInput{
+		ParentInstanceId:      instanceID,
+		ParentTaskScheduledId: 0,
+		ActivityName:          "Say",
+		Input:                 wrapperspb.String(`"in"`),
+		Output:                wrapperspb.String(`"out"`),
+		TerminalStatus:        protos.ActivityTerminalStatus_ACTIVITY_TERMINAL_STATUS_COMPLETED,
+	})
+	require.NoError(t, err)
+	completion := func() *protos.HistoryEvent {
+		return &protos.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_TaskCompleted{
+				TaskCompleted: &protos.TaskCompletedEvent{
+					TaskScheduledId:   0,
+					Result:            wrapperspb.String(`"out"`),
+					Attestation:       att,
+					SignerCertificate: certChain,
+				},
+			},
+		}
+	}
+
+	newParent := func(t *testing.T) (*orchestrator, *state.State, func() []*actorapi.CreateReminderRequest) {
+		t.Helper()
+		wfState := state.NewState(state.Options{
+			AppID:             "testapp",
+			Namespace:         "default",
+			WorkflowActorType: "dapr.internal.default.testapp.workflow",
+			ActivityActorType: "dapr.internal.default.testapp.activity",
+		})
+		for _, e := range history {
+			wfState.AddToHistory(e)
+		}
+		var (
+			mu       sync.Mutex
+			creates  []*actorapi.CreateReminderRequest
+			fakeRems = remindersfake.New().
+					WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+					mu.Lock()
+					defer mu.Unlock()
+					creates = append(creates, req)
+					return nil
+				})
+		)
+		actors := fake.New().WithReminders(func(context.Context) (reminders.Interface, error) {
+			return fakeRems, nil
+		}).WithState(func(context.Context) (actorstate.Interface, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+				return &actorapi.StateResponse{}, nil
+			}), nil
+		})
+		fact, err := New(t.Context(), Options{
+			AppID:             "testapp",
+			Namespace:         "default",
+			WorkflowActorType: "dapr.internal.default.testapp.workflow",
+			ActivityActorType: "dapr.internal.default.testapp.activity",
+			ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+			Actors:            actors,
+			Signer:            parentSigner,
+		})
+		require.NoError(t, err)
+		o := fact.GetOrCreate(instanceID).(*orchestrator)
+		o.state = wfState
+		o.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+		return o, wfState, func() []*actorapi.CreateReminderRequest {
+			mu.Lock()
+			defer mu.Unlock()
+			return creates
+		}
+	}
+
+	t.Run("a live delivery is asked to deliver again", func(t *testing.T) {
+		o, wfState, creates := newParent(t)
+		err := o.addWorkflowEvent(t.Context(), completion(), completionSender{})
+		require.Error(t, err)
+		assert.True(t, signing.IsSignerCertExpired(err), "%v", err)
+		assert.True(t, wferrors.IsRecoverable(err), "the sender must deliver again: %v", err)
+
+		assert.False(t, wfState.HasTamperMarker(), "an expired signer certificate must not tombstone the workflow")
+		assert.Empty(t, wfState.Inbox, "the refused completion must not be persisted")
+		assert.Len(t, wfState.History, len(history), "history must be untouched")
+		assert.Empty(t, creates(), "no wake-up reminder for a refused event")
+	})
+
+	t.Run("a result reminder is acked", func(t *testing.T) {
+		o, wfState, creates := newParent(t)
+		data, err := anypb.New(completion())
+		require.NoError(t, err)
+		require.NoError(t, o.handleReminder(t.Context(), &actorapi.Reminder{
+			Name: "activity-result-expired", ActorType: o.actorType, ActorID: o.actorID, Data: data, SourceAppID: "testapp",
+		}), "a result reminder retries forever, and the signature it holds can never verify again")
+
+		assert.False(t, wfState.HasTamperMarker(), "an expired signer certificate must not tombstone the workflow")
+		assert.Empty(t, wfState.Inbox, "the refused completion must not be persisted")
+		assert.Len(t, wfState.History, len(history), "history must be untouched")
+		assert.Empty(t, creates(), "no wake-up reminder for a refused event")
+	})
 }
 
 func testAddSigner(t *testing.T) *signer.Signer {

@@ -63,13 +63,12 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
 	var (
-		turns atomic.Int64
-		// turnTwo closes when the parent's second turn starts. Activities
-		// 1-4 return only after that, so their results arrive while the
-		// second turn holds the parent's turn lock.
-		turnTwo     = make(chan struct{})
-		turnTwoOnce sync.Once
-		// holding is set while the second turn holds the lock.
+		// held closes when the turn that the result of activity 0 drives
+		// starts. Activities 1-4 return only after that, so their results
+		// arrive while that turn holds the parent's turn lock.
+		held     = make(chan struct{})
+		heldOnce sync.Once
+		// holding is set while the held turn holds the lock.
 		holding atomic.Bool
 		// release ends the hold. The test closes it after daprd stopped, so
 		// the worker goroutine of the held turn can return.
@@ -78,21 +77,26 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	require.NoError(t, reg.AddWorkflowN("BusyParentShutdown", func(c *dworkflow.WorkflowContext) (any, error) {
-		// The second turn is the one driven by the result of activity 0.
-		if turns.Add(1) == 2 {
-			turnTwoOnce.Do(func() { close(turnTwo) })
+		tasks := make([]dworkflow.Task, busyparentShutdownActivities)
+		for i := range busyparentShutdownActivities {
+			tasks[i] = c.CallActivity("Slow", dworkflow.WithActivityInput(i))
+		}
+		// The hold is tied to the turn that the result of activity 0
+		// drives, not to an invocation count, so a first turn that is
+		// delivered again does not start it.
+		if err := tasks[0].Await(nil); err != nil {
+			return nil, err
+		}
+		heldOnce.Do(func() {
+			close(held)
 			holding.Store(true)
 			select {
 			case <-release:
 			case <-time.After(busyparentShutdownGate * 2):
 			}
-		}
-		tasks := make([]dworkflow.Task, busyparentShutdownActivities)
-		for i := range busyparentShutdownActivities {
-			tasks[i] = c.CallActivity("Slow", dworkflow.WithActivityInput(i))
-		}
-		errs := make([]error, 0, len(tasks))
-		for _, tk := range tasks {
+		})
+		errs := make([]error, 0, len(tasks)-1)
+		for _, tk := range tasks[1:] {
 			errs = append(errs, tk.Await(nil))
 		}
 		return nil, errors.Join(errs...)
@@ -103,13 +107,13 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 			return nil, err
 		}
 		if i == 0 {
-			// The first result drives the second turn.
+			// The first result drives the held turn.
 			return nil, nil
 		}
 		select {
-		case <-turnTwo:
+		case <-held:
 		case <-time.After(busyparentShutdownGate):
-			return nil, errors.New("the parent's second turn did not start")
+			return nil, errors.New("the parent's held turn did not start")
 		}
 		return nil, nil
 	}))
@@ -122,7 +126,7 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 	id, err := client.ScheduleWorkflow(ctx, "BusyParentShutdown")
 	require.NoError(t, err)
 
-	// Calls that wait for the parent's turn lock. The second turn holds the
+	// Calls that wait for the parent's turn lock. The held turn holds the
 	// lock, so the publishes of activities 1-4 queue here.
 	waiting := func() float64 {
 		return b.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_actor_pending_actor_calls", "actor_type:"+b.workflow.WorkflowActorType(0))
@@ -146,7 +150,7 @@ func (b *busyparentshutdown) Run(t *testing.T, ctx context.Context) {
 
 	// Each waiting result moved to a durable activity-result reminder. Under
 	// fast path, the publish of activity 0 waits too: the parent holds that
-	// result in memory until the second turn commits, so the result moves to
+	// result in memory until the held turn commits, so the result moves to
 	// a reminder as well.
 	expResults := busyparentShutdownActivities - 1
 	if b.workflow.FastPath() {

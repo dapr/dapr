@@ -31,6 +31,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -197,6 +198,13 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 				return nil
 			}
 			// Anything else the re-judge produced belongs to the arm below.
+		}
+		if signing.IsSignerCertExpired(err) {
+			// The reminder holds the result as it was signed, and the
+			// signer certificate has expired since. Only the sender can sign
+			// it again, and this reminder retries forever: ack it.
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': %v", o.actorID, reminder.Name, reminder.SourceAppID, err)
+			return nil
 		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler

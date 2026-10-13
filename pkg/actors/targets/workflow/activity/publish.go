@@ -14,17 +14,16 @@ limitations under the License.
 package activity
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -33,22 +32,27 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
 )
 
-// publishShutdownGrace is how long the context of a result publish stays live
-// after the runtime starts to shut down (see publishAndSettle). It is the only
-// time bound that this package puts on a publish. The publish waits for the
-// parent workflow's turn lock, and in a fan-out every completion queues on
-// that one lock behind the turn that scheduled the activities, so the wait
-// grows with the fan-out. The wait is backpressure, not a failure. A deadline
-// on it settled the execution as failed, the run-activity reminder ran the
-// body again, and the re-run queued on the same lock.
+// newPublishGrace returns the context that bounds every result publish of a
+// factory (see publishAndSettle). It ends grace after runCtx ends, and
+// nothing else ends it. grace is the runtime's graceful shutdown duration.
 //
-// The env override exists for integration tests that cannot wait the
-// production bound; it is not a supported production knob.
-var publishShutdownGrace = sync.OnceValue(func() time.Duration {
-	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PUBLISH_SHUTDOWN_GRACE", 30*time.Second)
-})
+// This is the only time bound that this package puts on a publish. The
+// publish waits for the parent workflow's turn lock, and in a fan-out every
+// completion queues on that one lock behind the turn that scheduled the
+// activities, so the wait grows with the fan-out. The wait is backpressure,
+// not a failure. A deadline on it settled the execution as failed, the
+// run-activity reminder ran the body again, and the re-run queued on the same
+// lock.
+func newPublishGrace(runCtx context.Context, grace time.Duration) context.Context {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(runCtx))
+	context.AfterFunc(runCtx, func() {
+		time.AfterFunc(grace, cancel)
+	})
+	return ctx
+}
 
 // errPublishAbandoned settles an execution whose result can no longer be
 // published because the runtime is shutting down. Recoverable: followers
@@ -72,9 +76,17 @@ func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 			// There is no caller left to return the outcome to: it is
 			// recorded in metrics and carried on the settled call, which is
 			// what parked followers read.
-			_ = f.publishAndSettle(ctx, context.WithoutCancel(origCtx), ex, completed)
+			_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
 		case <-ctx.Done():
-			f.abandonPublish(ex)
+			// The callback can be ready too, and select picks a ready case at
+			// random. A result already in hand goes through the shutdown
+			// grace like any other.
+			select {
+			case completed := <-ex.callback:
+				_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
+			default:
+				f.abandonPublish(ex)
+			}
 		}
 	})
 	if !started {
@@ -93,7 +105,7 @@ var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PU
 // unresolved task on the next owner. Settling unblocks parked followers into
 // their retry chains rather than leaving them on a call nothing will report.
 func (f *factory) abandonPublish(ex *execution) {
-	log.Warnf("Activity actor '%s': abandoning the result publish for '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, activityReminderName)
+	log.Warnf("Activity actor '%s': abandoning the result publish to workflow '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, ex.workflowID)
 	ex.unregister()
 	f.settle(ex.key, ex.call, errPublishAbandoned)
 }
@@ -107,8 +119,8 @@ func (f *factory) abandonPublish(ex *execution) {
 // of its own, like watchAndPublish.
 func (f *factory) publishOwned(ctx context.Context, ex *execution, completed bool) error {
 	done := make(chan error, 1)
-	started := f.detached.Go(func(runCtx context.Context) {
-		done <- f.publishAndSettle(runCtx, context.WithoutCancel(ctx), ex, completed)
+	started := f.detached.Go(func(context.Context) {
+		done <- f.publishAndSettle(context.WithoutCancel(ctx), ex, completed)
 	})
 	if !started {
 		f.abandonPublish(ex)
@@ -124,45 +136,42 @@ func (f *factory) publishOwned(ctx context.Context, ex *execution, completed boo
 
 // publishAndSettle posts one activity outcome back to the parent workflow and
 // finalises its inflight entry. Both publishOwned and watchAndPublish call it
-// on the runtime-lifetime runner: runCtx is the runner's context and base is
-// the caller's context minus cancellation; nothing else differs between the
-// two.
+// on the runtime-lifetime runner, with base set to the caller's context minus
+// cancellation; nothing else differs between the two.
 //
 // The publish runs on base, which has no deadline: it waits for a busy parent
-// for as long as the parent takes.
+// for as long as the parent takes. Only the factory's publish grace (see
+// newPublishGrace) cancels it.
 //
-// At shutdown, runCtx ends and the actor router's Run cancels every router
-// call in flight. So an AddWorkflowEvent call that waits for the parent ends
-// at once. The publish context stays live for publishShutdownGrace after
-// runCtx ends. With WorkflowsRemoteActivityReminder off, the publish then
-// settles at once with the recoverable "failed to invoke" error. With it on
-// (the default), publishResult creates a durable result reminder for the
-// parent on the publish context, and the grace bounds that create (and the
-// placement lookup before the call):
+// At shutdown, the runner's context ends and the actor router's Run cancels
+// every router call in flight. So an AddWorkflowEvent call that waits for the
+// parent ends at once. The publish context stays live for the graceful
+// shutdown duration after that. With WorkflowsRemoteActivityReminder off, the
+// publish then settles at once with the recoverable "failed to invoke" error.
+// With it on (the default), publishResult creates a durable result reminder
+// for the parent on the publish context, and the grace bounds that create
+// (and the placement lookup before the call):
 //   - The scheduler accepts the reminder: the result is not lost, and the
 //     publish settles as a success.
 //   - The create fails within the grace: the publish settles with the
 //     recoverable "failed to invoke" error.
-//   - The create still retries when the grace ends: the publish settles with
-//     errPublishAbandoned and logs a warning.
-func (f *factory) publishAndSettle(runCtx, base context.Context, ex *execution, completed bool) error {
+//   - The create still retries when the grace ends: the publish is abandoned
+//     (see abandonPublish).
+func (f *factory) publishAndSettle(base context.Context, ex *execution, completed bool) error {
 	// A lost race here means an eviction already finished the call and a
 	// fresh execution is running; publish anyway, the orchestrator's
 	// duplicate-completion dedup absorbs whichever copy arrives second.
 	_ = ex.call.BeginResolve()
 	ctx, cancel := context.WithCancel(base)
-	stop := context.AfterFunc(runCtx, func() {
-		time.AfterFunc(publishShutdownGrace(), cancel)
-	})
+	defer cancel()
+	stop := context.AfterFunc(f.publishGrace, cancel)
+	defer stop()
 	execErr := f.publishResult(ctx, ex, completed)
 	// base never cancels, so a cancelled ctx means the shutdown grace ended
 	// the publish.
-	abandoned := execErr != nil && ctx.Err() != nil
-	stop()
-	cancel()
-	if abandoned {
-		log.Warnf("Activity actor '%s': abandoning the result publish to workflow '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, ex.workflowID)
-		execErr = errPublishAbandoned
+	if execErr != nil && ctx.Err() != nil {
+		f.abandonPublish(ex)
+		return errPublishAbandoned
 	}
 	f.settle(ex.key, ex.call, execErr)
 	ex.unregister()
@@ -190,24 +199,9 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", ex.actorID, ex.wi.InstanceID, activityReminderName)
 
-	// Attach an attestation so the parent workflow can cryptographically
-	// verify this activity's identity, input, and output. No-op when
-	// signing is disabled (AttachActivityCompletionAttestation handles
-	// the nil-Signer case internally).
-	if ex.wi.Result != nil {
-		scheduled := ex.wi.NewEvent.GetTaskScheduled()
-		if scheduled == nil {
-			executionStatus = diag.StatusRecoverable
-			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", ex.actorID))
-		}
-		if attachErr := f.signing.AttachActivityCompletionAttestation(ctx, ex.wi.Result, signing.ActivityAttestationParams{
-			ParentInstanceID: ex.workflowID,
-			ActivityName:     ex.activityName,
-			Input:            scheduled.GetInput(),
-		}); attachErr != nil {
-			executionStatus = diag.StatusRecoverable
-			return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", ex.actorID, attachErr))
-		}
+	if err := f.attachAttestation(ctx, ex); err != nil {
+		executionStatus = diag.StatusRecoverable
+		return err
 	}
 
 	// send completed event to orchestrator wf actor
@@ -223,23 +217,28 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result)
 	} else {
 		// publish the result back to the workflow actor as a new event to be processed
-		var resultData []byte
-		resultData, err = proto.Marshal(ex.wi.Result)
-		if err != nil {
-			// Returning non-recoverable error
-			executionStatus = diag.StatusFailed
-			return err
-		}
+		for {
+			var resultData []byte
+			resultData, err = proto.Marshal(ex.wi.Result)
+			if err != nil {
+				// Returning non-recoverable error
+				executionStatus = diag.StatusFailed
+				return err
+			}
 
-		req := internalsv1pb.
-			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-			WithActor(wfActorType, ex.workflowID).
-			WithData(resultData).
-			WithContentType(invokev1.ProtobufContentType)
-		if ex.parentExecutionID != "" {
-			req = req.WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {ex.parentExecutionID}})
+			req := internalsv1pb.
+				NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+				WithActor(wfActorType, ex.workflowID).
+				WithData(resultData).
+				WithContentType(invokev1.ProtobufContentType)
+			if ex.parentExecutionID != "" {
+				req = req.WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {ex.parentExecutionID}})
+			}
+			_, err = f.router.Call(ctx, req)
+			if !f.signAgain(ctx, ex, err) {
+				break
+			}
 		}
-		_, err = f.router.Call(ctx, req)
 	}
 
 	switch {
@@ -250,7 +249,12 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 			return nil
 		}
 
-		if f.workflowsRemoteActivityReminder {
+		// The reminder can wait for the parent for a long time, so it holds
+		// the result signed again: the parent then has the full life of the
+		// current certificate. A result that the parent refused as expired
+		// goes back to the run-activity reminder: signAgain got no newer
+		// certificate for it.
+		if f.workflowsRemoteActivityReminder && !signing.IsSignerCertExpired(err) && f.attachAttestation(ctx, ex) == nil {
 			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result); cerr == nil {
 				return nil
 			}
@@ -268,6 +272,53 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	}
 
 	return nil
+}
+
+// attachAttestation signs the result, so the parent workflow can
+// cryptographically verify this activity's identity, input, and output. It
+// replaces an earlier signature. No-op when signing is disabled
+// (AttachActivityCompletionAttestation handles the nil-Signer case
+// internally).
+func (f *factory) attachAttestation(ctx context.Context, ex *execution) error {
+	if ex.wi.Result == nil {
+		return nil
+	}
+	scheduled := ex.wi.NewEvent.GetTaskScheduled()
+	if scheduled == nil {
+		return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': cannot build activity attestation without TaskScheduledEvent", ex.actorID))
+	}
+	if err := f.signing.AttachActivityCompletionAttestation(ctx, ex.wi.Result, signing.ActivityAttestationParams{
+		ParentInstanceID: ex.workflowID,
+		ActivityName:     ex.activityName,
+		Input:            scheduled.GetInput(),
+	}); err != nil {
+		return wferrors.NewRecoverable(fmt.Errorf("activity actor '%s': %w", ex.actorID, err))
+	}
+	return nil
+}
+
+// signAgain signs the result again after the parent refused it, because the
+// signer certificate expired while the result waited for the parent. It
+// reports whether the new signature uses a newer certificate: only then can a
+// delivery again succeed.
+func (f *factory) signAgain(ctx context.Context, ex *execution, err error) bool {
+	if !signing.IsSignerCertExpired(err) {
+		return false
+	}
+	refused := signerCertificate(ex.wi.Result)
+	if f.attachAttestation(ctx, ex) != nil || bytes.Equal(refused, signerCertificate(ex.wi.Result)) {
+		return false
+	}
+	log.Infof("Activity actor '%s': workflow '%s' refused the result because its signer certificate expired; delivering it again with the current certificate", ex.actorID, ex.workflowID)
+	return true
+}
+
+// signerCertificate returns the certificate chain that signed the result.
+func signerCertificate(e *backend.HistoryEvent) []byte {
+	if c := e.GetTaskCompleted(); c != nil {
+		return c.GetSignerCertificate()
+	}
+	return e.GetTaskFailed().GetSignerCertificate()
 }
 
 func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {

@@ -34,6 +34,7 @@ import (
 func newExecHarness(t *testing.T) (*factory, chan *backend.ActivityWorkItem) {
 	t.Helper()
 	scheduled := make(chan *backend.ActivityWorkItem, 2)
+	det := detached.New(t.Context())
 	f := &factory{
 		appID:             "testapp",
 		actorType:         "dapr.internal.default.testapp.activity",
@@ -42,7 +43,8 @@ func newExecHarness(t *testing.T) (*factory, chan *backend.ActivityWorkItem) {
 		inflight:          new(inflight.Map),
 		signing:           &signing.Signing{Namespace: "default"},
 		rootCtx:           t.Context(),
-		detached:          detached.New(t.Context()),
+		detached:          det,
+		publishGrace:      newPublishGrace(det.Context(), time.Minute),
 		// New always configures a positive grace, and the follower staleness
 		// re-check needs one to tick on.
 		staleClaimAfter: time.Hour,

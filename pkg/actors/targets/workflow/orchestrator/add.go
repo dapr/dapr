@@ -287,8 +287,9 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 // certificate into the ext-sigcert table, and strips it from the event.
 // Unmatched completions are dropped; genuine verification failures tombstone
 // the workflow. Both return ErrInstanceNotFound so the sender stops
-// re-delivering. No-op when signing is disabled; locally-authored synthetic
-// failures are exempt (no attestation by design).
+// re-delivering. A completion whose signer certificate expired before it got
+// here asks the sender to deliver it again. No-op when signing is disabled;
+// locally-authored synthetic failures are exempt (no attestation by design).
 func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wfenginestate.State, e *backend.HistoryEvent) error {
 	if o.isLocalSyntheticFailure(e) {
 		return nil
@@ -296,6 +297,15 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 	verr := o.signing.VerifyInboxAttestation(ctx, state, e)
 	if verr == nil {
 		return nil
+	}
+
+	// Not tampering: the completion waited for this workflow, for example
+	// behind a busy turn lock, for longer than its signer certificate was
+	// valid. Nothing is persisted. The sender signs the result again with
+	// its current certificate and delivers it again.
+	if signing.IsSignerCertExpired(verr) {
+		log.Infof("Workflow actor '%s': %s; asking the sender to deliver it again", o.actorID, verr)
+		return wferrors.NewRecoverable(verr)
 	}
 
 	// Reclassify against durable truth before acting: a stale cache can make
