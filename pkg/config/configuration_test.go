@@ -987,3 +987,45 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
 }
+
+func TestHasNiceness(t *testing.T) {
+	i32 := func(v int32) *int32 { return &v }
+	name := "wf"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.HasNiceness())
+	require.False(t, (&WorkflowSpec{}).HasNiceness())
+	require.False(t, (&WorkflowSpec{Niceness: &WorkflowNiceness{}}).HasNiceness())
+	require.True(t, (&WorkflowSpec{Niceness: &WorkflowNiceness{Default: i32(0)}}).HasNiceness(), "an explicit default counts, even 0")
+	require.True(t, (&WorkflowSpec{Niceness: &WorkflowNiceness{
+		Workflows: []NamedNiceness{{Name: name, Niceness: -5}},
+	}}).HasNiceness())
+	require.True(t, (&WorkflowSpec{Niceness: &WorkflowNiceness{
+		Activities: []NamedNiceness{{Name: name}},
+	}}).HasNiceness(), "a named entry counts, even at 0")
+	require.False(t, (&WorkflowSpec{Niceness: &WorkflowNiceness{
+		Workflows: []NamedNiceness{{Niceness: 1}},
+	}}).HasNiceness(), "entries without a name are ignored")
+}
+
+func TestWorkflowNicenessUnmarshal(t *testing.T) {
+	var spec WorkflowSpec
+	require.NoError(t, yaml.Unmarshal([]byte(`
+niceness:
+  default: 5
+  workflows:
+  - name: CheckoutWorkflow
+    niceness: -10
+  activities:
+  - name: SendNewsletter
+    niceness: 15
+`), &spec))
+
+	require.NotNil(t, spec.Niceness)
+	require.NotNil(t, spec.Niceness.Default)
+	assert.Equal(t, int32(5), *spec.Niceness.Default)
+	require.Len(t, spec.Niceness.Workflows, 1)
+	assert.Equal(t, NamedNiceness{Name: "CheckoutWorkflow", Niceness: -10}, spec.Niceness.Workflows[0])
+	require.Len(t, spec.Niceness.Activities, 1)
+	assert.Equal(t, NamedNiceness{Name: "SendNewsletter", Niceness: 15}, spec.Niceness.Activities[0])
+}

@@ -33,6 +33,7 @@ type Options struct {
 	Cron             api.Interface
 	CancelPool       context.CancelCauseFunc
 	PlacementEnabled bool
+	Adaptive         bool
 }
 
 type connectionLoop struct {
@@ -46,6 +47,7 @@ type namespaces struct {
 	cron             api.Interface
 	cancelPool       context.CancelCauseFunc
 	placementEnabled bool
+	adaptive         bool
 
 	// connections holds the active namespace connections.
 	connections map[string]*connectionLoop
@@ -67,6 +69,7 @@ func New(opts Options) loop.Interface[loops.EventNS] {
 		cron:             opts.Cron,
 		cancelPool:       opts.CancelPool,
 		placementEnabled: opts.PlacementEnabled,
+		adaptive:         opts.Adaptive,
 		connections:      make(map[string]*connectionLoop),
 		schedulerCount:   1,
 		schedulerIdx:     0,
@@ -103,6 +106,8 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 			Cron:             n.cron,
 			NamespaceLoop:    n.loop,
 			PlacementEnabled: n.placementEnabled,
+			Namespace:        add.Request.GetNamespace(),
+			Adaptive:         n.adaptive,
 		})
 
 		n.wg.Go(func() {

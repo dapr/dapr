@@ -13,19 +13,22 @@ limitations under the License.
 
 package connections
 
-import (
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
-)
-
-const maxPendingPerGate = 100_000
+import "time"
 
 // concurrencyGate enforces a local concurrency limit for a given gate key.
-// Each scheduler enforces a deterministic share of globalLimit so that the
-// cluster-wide sum equals globalLimit when globalLimit >= schedulerCount.
+// The limit is the smallest of up to three sources: a configured cluster-wide
+// limit, the sum of the per-sidecar limits advertised by the gate's hosts,
+// and an adaptive limit derived from acknowledgement latency and throughput.
+// Cluster-wide limits are divided among schedulers deterministically so that
+// the sum equals the limit when the limit >= schedulerCount. A gate with no
+// limit from any source is unlimited.
 type concurrencyGate struct {
 	globalLimit uint32
+	hostLimit   uint32
 	current     uint32
-	pending     []*loops.TriggerRequest
+
+	// est is nil when the gate has no adaptive limit.
+	est *estimator
 }
 
 // localLimitFromGlobal computes the local concurrency limit for a scheduler.
@@ -47,12 +50,46 @@ func localLimitFromGlobal(globalLimit, schedulerCount, schedulerIdx uint32) uint
 	return base
 }
 
-func (g *concurrencyGate) tryAcquire(schedulerCount, schedulerIdx uint32) bool {
-	if g.current < localLimitFromGlobal(g.globalLimit, schedulerCount, schedulerIdx) {
-		g.current++
-		return true
+// minLimit returns the smaller of two limits, where 0 is unlimited.
+func minLimit(a, b uint32) uint32 {
+	switch {
+	case a == 0:
+		return b
+	case b == 0:
+		return a
+	default:
+		return min(a, b)
 	}
-	return false
+}
+
+// ceiling is this scheduler's share of the configured and advertised limits.
+func (g *concurrencyGate) ceiling(schedulerCount, schedulerIdx uint32) uint32 {
+	var limit uint32
+	if g.globalLimit > 0 {
+		limit = localLimitFromGlobal(g.globalLimit, schedulerCount, schedulerIdx)
+	}
+	if g.hostLimit > 0 {
+		limit = minLimit(limit, localLimitFromGlobal(g.hostLimit, schedulerCount, schedulerIdx))
+	}
+	return limit
+}
+
+// localLimit is the effective limit of the gate on this scheduler, 0 when
+// unlimited.
+func (g *concurrencyGate) localLimit(schedulerCount, schedulerIdx uint32) uint32 {
+	limit := g.ceiling(schedulerCount, schedulerIdx)
+	if g.est != nil {
+		limit = minLimit(limit, g.est.limit)
+	}
+	return limit
+}
+
+func (g *concurrencyGate) tryAcquire(schedulerCount, schedulerIdx uint32) bool {
+	if limit := g.localLimit(schedulerCount, schedulerIdx); limit > 0 && g.current >= limit {
+		return false
+	}
+	g.current++
+	return true
 }
 
 func (g *concurrencyGate) release() {
@@ -61,42 +98,26 @@ func (g *concurrencyGate) release() {
 	}
 }
 
-func (g *concurrencyGate) enqueue(req *loops.TriggerRequest) bool {
-	if len(g.pending) >= maxPendingPerGate {
-		return false
+func (g *concurrencyGate) markBound(now time.Time) {
+	if g.est != nil {
+		g.est.lastBound = now
 	}
-	g.pending = append(g.pending, req)
-	return true
 }
 
-func (g *concurrencyGate) dequeue() *loops.TriggerRequest {
-	if len(g.pending) == 0 {
-		return nil
-	}
-	req := g.pending[0]
-	g.pending[0] = nil
-	g.pending = g.pending[1:]
-
-	if len(g.pending) == 0 {
-		g.pending = nil
-	} else if cap(g.pending) > 64 && len(g.pending)*4 <= cap(g.pending) {
-		pending := make([]*loops.TriggerRequest, len(g.pending))
-		copy(pending, g.pending)
-		g.pending = pending
-	}
-
-	return req
+// niceToWeight is the Linux CFS sched_prio_to_weight table, indexed by
+// niceness + 20. Each step is a factor of about 1.25.
+var niceToWeight = [40]uint64{
+	/* -20 */ 88761, 71755, 56483, 46273, 36291,
+	/* -15 */ 29154, 23254, 18705, 14949, 11916,
+	/* -10 */ 9548, 7620, 6100, 4904, 3906,
+	/*  -5 */ 3121, 2501, 1991, 1586, 1277,
+	/*   0 */ 1024, 820, 655, 526, 423,
+	/*   5 */ 335, 272, 215, 172, 137,
+	/*  10 */ 110, 87, 70, 56, 45,
+	/*  15 */ 36, 29, 23, 18, 15,
 }
 
-// requeueFront returns skipped requests to the front of the pending queue in
-// their original order, preserving their seniority over later arrivals.
-func (g *concurrencyGate) requeueFront(reqs []*loops.TriggerRequest) {
-	if len(reqs) == 0 {
-		return
-	}
-	g.pending = append(reqs, g.pending...)
-}
-
-func (g *concurrencyGate) pendingLen() int {
-	return len(g.pending)
+// weightOf maps a niceness to its scheduling weight, clamping to [-20, 19].
+func weightOf(niceness int32) uint64 {
+	return niceToWeight[min(max(niceness, -20), 19)+20]
 }
