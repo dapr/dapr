@@ -74,7 +74,11 @@ func (a *api) SetBinaryFileAlpha1(stream runtimev1pb.Dapr_SetBinaryFileAlpha1Ser
 	if setErr != nil {
 		select {
 		case wErr := <-writerDone:
-			if wErr != nil {
+			// Ignore the echo of the component's own error: closing the pipe
+			// reader with setErr makes the writer goroutine's next Write fail
+			// with that same error. Only genuine client-protocol errors (bad
+			// sequence, early close) should be rewrapped as ErrBadRequest.
+			if wErr != nil && !errors.Is(wErr, setErr) {
 				err = messages.ErrBadRequest.WithFormat(wErr)
 				a.logger.Debug(err)
 				return err
