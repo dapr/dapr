@@ -27,6 +27,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -381,14 +382,14 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 			return nil
 		},
 		func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.actorType,
 				ActorID:         o.actorID,
 				MatchIDAsPrefix: false,
 			})
 		},
 		func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.activityActorType,
 				ActorID:         o.actorID + "::",
 				MatchIDAsPrefix: true,
@@ -398,7 +399,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 
 	if includeRetentionReminder {
 		runners = append(runners, func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.retentionActorType,
 				ActorID:         o.actorID,
 				MatchIDAsPrefix: false,
