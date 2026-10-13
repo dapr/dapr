@@ -155,6 +155,8 @@ var (
 	BinaryStoreDelete       = ErrorCode{"ERR_BINARY_STORE_DELETE", "", CategoryBinaryStore}              // Error deleting binary file
 	BinaryStoreFileNotFound = ErrorCode{"ERR_BINARY_STORE_FILE_NOT_FOUND", "", CategoryBinaryStore}      // Binary file not found
 	BinaryStoreFileExists   = ErrorCode{"ERR_BINARY_STORE_FILE_ALREADY_EXISTS", "", CategoryBinaryStore} // Binary file already exists
+	BinaryStoreFileTooLarge = ErrorCode{"ERR_BINARY_STORE_FILE_TOO_LARGE", "", CategoryBinaryStore}      // Binary file exceeds maximum size
+	BinaryStoreFull         = ErrorCode{"ERR_BINARY_STORE_FULL", "", CategoryBinaryStore}                // Binary store is full
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service

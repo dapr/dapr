@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -382,4 +383,27 @@ func TestBinaryStore_mapBinaryStoreErrorPreservesAPIError(t *testing.T) {
 	err := mapBinaryStoreError(expected, "c", "f", messages.ErrBinaryStoreSet)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, expected)
+}
+
+func TestBinaryStore_mapBinaryStoreErrorSizeLimitSentinels(t *testing.T) {
+	tests := []struct {
+		name     string
+		sentinel error
+		expected messages.APIError
+	}{
+		{name: "file too large", sentinel: binarystore.ErrFileTooLarge, expected: messages.ErrBinaryStoreTooLarge},
+		{name: "store full", sentinel: binarystore.ErrStoreFull, expected: messages.ErrBinaryStoreFull},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := mapBinaryStoreError(fmt.Errorf("wrapped: %w", test.sentinel), "c", "f", messages.ErrBinaryStoreSet)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, test.expected)
+			apiErr, ok := err.(messages.APIError)
+			require.True(t, ok, "expected an APIError")
+			assert.Equal(t, test.expected.HTTPCode(), apiErr.HTTPCode())
+			assert.Equal(t, test.expected.GRPCStatus().Code(), apiErr.GRPCStatus().Code())
+		})
+	}
 }

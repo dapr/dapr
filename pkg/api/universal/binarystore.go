@@ -173,6 +173,10 @@ func mapBinaryStoreError(err error, componentName, fileName string, fallback mes
 		return messages.ErrBinaryStoreFileExists.WithFormat(fileName, componentName)
 	case errors.Is(err, binarystore.ErrMissingFileName):
 		return messages.ErrBinaryStoreNameMissing
+	case errors.Is(err, binarystore.ErrFileTooLarge):
+		return messages.ErrBinaryStoreTooLarge.WithFormat(fileName, componentName)
+	case errors.Is(err, binarystore.ErrStoreFull):
+		return messages.ErrBinaryStoreFull.WithFormat(componentName, fileName)
 	default:
 		return fallback.WithFormat(fileName, componentName, err.Error())
 	}

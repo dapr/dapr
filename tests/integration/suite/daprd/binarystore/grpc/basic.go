@@ -52,6 +52,8 @@ spec:
   metadata:
     - name: maxSize
       value: "6291456"
+    - name: maxTotalSize
+      value: "8388608"
 `
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -146,6 +148,47 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
+	// Runs before "total upload larger than default body limit succeeds" so
+	// the store still has enough total headroom to surface ErrFileTooLarge
+	// (per-file limit) rather than ErrStoreFull.
+	t.Run("upload exceeding component maxSize fails", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xAB}, 7<<20)
+		stream, err := client.SetBinaryFileAlpha1(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+					ComponentName: "mystore",
+					FileName:      "too-large.bin",
+					Overwrite:     new(true),
+				},
+			},
+		}))
+		const chunkSize = 1 << 20
+		var seq uint64
+		for offset := 0; offset < len(payload); offset += chunkSize {
+			end := min(offset+chunkSize, len(payload))
+			// The server aborts once the component rejects the upload, so a
+			// late Send may fail; the status comes from CloseAndRecv.
+			if stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+				SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
+					Payload: &commonv1pb.StreamPayload{
+						Data: payload[offset:end],
+						Seq:  seq,
+					},
+				},
+			}) != nil {
+				break
+			}
+			seq++
+		}
+		_, err = stream.CloseAndRecv()
+		require.Error(t, err)
+		assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+		assert.Contains(t, status.Convert(err).Message(), "exceeds the maximum size")
+	})
+
 	t.Run("total upload larger than default body limit succeeds with smaller chunks", func(t *testing.T) {
 		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
 		stream, err := client.SetBinaryFileAlpha1(ctx)
@@ -193,6 +236,44 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			got = append(got, msg.GetPayload().GetData()...)
 		}
 		assert.Equal(t, payload, got)
+	})
+
+	// The store holds ~5 MiB at this point, so a 4 MiB upload (under the
+	// per-file limit) overflows the 8 MiB maxTotalSize and fills the store.
+	t.Run("upload filling the store fails", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xCD}, 4<<20)
+		stream, err := client.SetBinaryFileAlpha1(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+			SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_InitialRequest{
+				InitialRequest: &rtv1.SetBinaryFileRequestInitialAlpha1{
+					ComponentName: "mystore",
+					FileName:      "fills-store.bin",
+					Overwrite:     new(true),
+				},
+			},
+		}))
+		const chunkSize = 1 << 20
+		var seq uint64
+		for offset := 0; offset < len(payload); offset += chunkSize {
+			end := min(offset+chunkSize, len(payload))
+			if stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+				SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
+					Payload: &commonv1pb.StreamPayload{
+						Data: payload[offset:end],
+						Seq:  seq,
+					},
+				},
+			}) != nil {
+				break
+			}
+			seq++
+		}
+		_, err = stream.CloseAndRecv()
+		require.Error(t, err)
+		assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+		assert.Contains(t, status.Convert(err).Message(), "store is full")
 	})
 
 	t.Run("chunk larger than default body limit fails", func(t *testing.T) {

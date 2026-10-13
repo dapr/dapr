@@ -53,6 +53,8 @@ spec:
   metadata:
     - name: maxSize
       value: "6291456"
+    - name: maxTotalSize
+      value: "8388608"
 `
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -163,6 +165,20 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
+	// Runs before "upload larger than default body limit succeeds" so the
+	// store still has enough total headroom to surface ErrFileTooLarge
+	// (per-file limit) rather than ErrStoreFull.
+	t.Run("upload exceeding component maxSize returns 413", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xAB}, 7<<20)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, base+"/too-large.bin", bytes.NewReader(payload))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	})
+
 	t.Run("upload larger than default body limit succeeds", func(t *testing.T) {
 		payload := bytes.Repeat([]byte{0xAB}, 5<<20)
 
@@ -183,6 +199,19 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		got, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		assert.Equal(t, payload, got)
+	})
+
+	// The store holds ~5 MiB at this point, so a 4 MiB upload (under the
+	// per-file limit) overflows the 8 MiB maxTotalSize and fills the store.
+	t.Run("upload filling the store returns 507", func(t *testing.T) {
+		payload := bytes.Repeat([]byte{0xCD}, 4<<20)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, base+"/fills-store.bin", bytes.NewReader(payload))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusInsufficientStorage, resp.StatusCode)
 	})
 
 	t.Run("POST without overwrite conflicts on existing file", func(t *testing.T) {
