@@ -150,6 +150,27 @@ type RunnerOpts[T any] struct {
 	Accumulator func(T)
 }
 
+// timeoutError returns the timeout to report for an attempt which returned
+// err after its deadline passed, and nil when the attempt did not time out.
+// The operation can observe the deadline before the runner does and fail with
+// its own error, such as a gRPC status derived from the cancelled context, or
+// a DeadlineExceeded answered by a downstream enforcing the propagated deadline
+// in the gap before the local timer cancels ctx. Reporting the timeout instead
+// keeps a retry condition matching on status codes from reading that as the
+// operation's answer and refusing the retry.
+func timeoutError(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if cerr := ctx.Err(); cerr != nil {
+		return cerr
+	}
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 // NewRunner returns a policy runner that encapsulates the configured resiliency policies in a simple execution wrapper.
 // We can't implement this as a method of the Resiliency struct because we can't yet use generic methods in structs.
 func NewRunner[T any](ctx context.Context, def *PolicyDefinition) Runner[T] {
@@ -204,6 +225,15 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 				select {
 				case v := <-done:
+					if terr := timeoutError(ctx, v.err); terr != nil {
+						if opts.Disposer != nil && !isZero(v.res) {
+							opts.Disposer(v.res)
+						}
+						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
+							def.addTimeoutActivatedMetric()
+						}
+						return zero, terr
+					}
 					return v.res, v.err
 				case <-ctx.Done():
 					// Because done has a capacity of 1, adding a message on the channel signals that there was a timeout

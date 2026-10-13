@@ -352,6 +352,7 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		WorkflowsFastPath:               globalConfig.IsFeatureEnabled(config.WorkflowsFastPath),
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
+		GracefulShutdownDuration:        runtimeConfig.gracefulShutdownDuration,
 		ComponentStore:                  compStore,
 		Security:                        sec,
 		Signer:                          wfSigner,
@@ -951,7 +952,7 @@ func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 		return
 	}
 
-	err := pluggable.Discover(ctx)
+	err := pluggable.Discover(ctx, a.runtimeConfig.maxRequestBodySize)
 	if err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}

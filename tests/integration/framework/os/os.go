@@ -38,6 +38,14 @@ func SkipMacOS(t *testing.T) {
 	}
 }
 
+func SkipNotWindows(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS != "windows" {
+		t.Skipf("test requires windows, got %s", runtime.GOOS)
+	}
+}
+
 func MustLinux(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
