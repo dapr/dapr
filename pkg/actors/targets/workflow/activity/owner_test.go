@@ -16,6 +16,7 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strconv"
 	"sync/atomic"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -225,6 +227,65 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		require.ErrorIs(t, <-ownerErr, errPublishAbandoned)
 		require.True(t, call.Settled())
 		require.ErrorIs(t, call.Err(), errPublishAbandoned)
+	})
+}
+
+// Test_publish_notFoundIsNotCachedAsDelivered pins that a result the parent
+// refuses as instance not found acks its caller without being cached as
+// delivered. It used to be cached for InflightCacheTTL, so when a lagging
+// state read made a live parent answer not found, every janitor re-dispatch
+// was acked from the cache and the activity never ran again.
+func Test_publish_notFoundIsNotCachedAsDelivered(t *testing.T) {
+	t.Parallel()
+
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
+
+	t.Run("the owner acks and the next arrival re-executes", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			return nil, fmt.Errorf("api error: %w", api.ErrInstanceNotFound)
+		})
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		run := func() chan error {
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			}()
+			return errCh
+		}
+
+		ownerErr := run()
+		wi := recvWorkItem(t, scheduled)
+		call, ok := f.inflight.Peek(key)
+		require.True(t, ok)
+
+		completeWorkItem(t, wi)
+		require.NoError(t, <-ownerErr, "a refused result is acked, not retried into a purged instance")
+		require.True(t, call.Settled())
+		require.ErrorIs(t, call.Err(), errResultUndelivered)
+		_, ok = f.inflight.Peek(key)
+		require.False(t, ok, "a refused result must not be cached as delivered")
+
+		retryErr := run()
+		completeWorkItem(t, recvWorkItem(t, scheduled))
+		require.NoError(t, <-retryErr)
+	})
+
+	t.Run("a follower of a refused result acks", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+
+		// Finished but not yet released: the instant inside settle at which a
+		// follower can still find the entry.
+		call, owner := f.inflight.Acquire(key)
+		require.True(t, owner)
+		call.Finish(errResultUndelivered)
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
+		assert.Empty(t, scheduled, "a follower must not dispatch a work item")
 	})
 }
 
