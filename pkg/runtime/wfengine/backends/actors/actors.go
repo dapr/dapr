@@ -1394,7 +1394,7 @@ func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
 	if !atable.ActorExists(abe.workflowActorType, id.String()) {
 		return
 	}
-	target, err := atable.GetOrCreate(abe.workflowActorType, id.String())
+	target, err := atable.GetOrCreate(ctx, abe.workflowActorType, id.String())
 	if err != nil {
 		log.Warnf("Force purge of '%s': cannot resolve the workflow actor to evict: %v", id, err)
 		return
