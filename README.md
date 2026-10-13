@@ -61,6 +61,17 @@ Instead of restarting from the beginning, execution picks up exactly where it le
 
 **Common use cases:** AI agents, customer onboarding, order processing, human-approval flows, document processing, and other multi-step business processes.
 
+Author workflows with the Dapr SDKs for .NET, Java, Python, Go, JavaScript/TypeScript, and Rust. The workflow engine gives you:
+
+- **Workflow patterns**: task chaining, fan-out/fan-in, monitors, human-in-the-loop with external events, and compensation
+- **Durable timers, retry policies, and child workflows**
+- **Multi-application workflows**: a workflow calls activities and child workflows hosted by other Dapr applications
+- **Versioning** to change workflow code while instances are in flight
+- **Management from the API and the `dapr workflow` CLI**: list, history, suspend, resume, terminate, rerun, raise event, and purge
+- **Access policies** that set which applications may call which workflows and activities
+
+Read the [workflow overview](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-overview/), [workflow patterns](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-patterns/), and [multi-application workflows](https://docs.dapr.io/developing-applications/building-blocks/workflow/workflow-multi-app/), or start with the [workflow quickstart](https://docs.dapr.io/getting-started/quickstarts/workflow-quickstart/).
+
 ## Build Reliable AI Agents
 
 AI agents need far more than model inference. To run in production they need state, orchestration, recovery, secure communication, and governance.
