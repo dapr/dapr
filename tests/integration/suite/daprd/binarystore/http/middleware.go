@@ -110,6 +110,21 @@ spec:
         type: middleware.http.bodyprobe
 `), 0o600))
 
+	probeComponentYAML := func(probeFile string) string {
+		return fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: bodyprobe
+spec:
+  type: middleware.http.bodyprobe
+  version: v1
+  metadata:
+    - name: path
+      value: %q
+`, filepath.ToSlash(probeFile))
+	}
+
 	m.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithResourceFiles(probeComponentYAML(m.probeFile), binarystoreYAML),
@@ -125,68 +140,51 @@ spec:
 	}
 }
 
-func probeComponentYAML(probeFile string) string {
-	return fmt.Sprintf(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: bodyprobe
-spec:
-  type: middleware.http.bodyprobe
-  version: v1
-  metadata:
-    - name: path
-      value: %q
-`, filepath.ToSlash(probeFile))
-}
-
-type probeRecord struct {
-	bytesRead int
-	readErr   bool
-}
-
-// lastProbeRecord returns the last record the bodyprobe middleware wrote to
-// probeFile for the given method and path. Records are
-// "METHOD path bytesRead readErr" lines.
-func lastProbeRecord(t *testing.T, probeFile, method, path string) probeRecord {
-	t.Helper()
-
-	content, err := os.ReadFile(probeFile)
-	require.NoError(t, err)
-
-	var found *probeRecord
-	for line := range strings.Lines(string(content)) {
-		fields := strings.Fields(line)
-		if len(fields) != 4 || fields[0] != method || fields[1] != path {
-			continue
-		}
-		bytesRead, err := strconv.Atoi(fields[2])
-		require.NoError(t, err)
-		readErr, err := strconv.ParseBool(fields[3])
-		require.NoError(t, err)
-		found = &probeRecord{bytesRead: bytesRead, readErr: readErr}
-	}
-	require.NotNil(t, found, "no bodyprobe record for %s %s", method, path)
-	return *found
-}
-
-func doRequest(t *testing.T, ctx context.Context, httpClient *http.Client, method, url string, body []byte) (int, string) {
-	t.Helper()
-
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
-	require.NoError(t, err)
-	resp, err := httpClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, string(respBody)
-}
-
 func (m *middleware) Run(t *testing.T, ctx context.Context) {
 	m.daprd.WaitUntilRunning(t, ctx)
 	m.denied.WaitUntilRunning(t, ctx)
 	httpClient := client.HTTP(t)
+
+	type probeRecord struct {
+		bytesRead int
+		readErr   bool
+	}
+
+	// Records are "METHOD path bytesRead readErr" lines.
+	lastProbeRecord := func(t *testing.T, probeFile, method, path string) probeRecord {
+		t.Helper()
+
+		content, err := os.ReadFile(probeFile)
+		require.NoError(t, err)
+
+		var found *probeRecord
+		for line := range strings.Lines(string(content)) {
+			fields := strings.Fields(line)
+			if len(fields) != 4 || fields[0] != method || fields[1] != path {
+				continue
+			}
+			bytesRead, err := strconv.Atoi(fields[2])
+			require.NoError(t, err)
+			readErr, err := strconv.ParseBool(fields[3])
+			require.NoError(t, err)
+			found = &probeRecord{bytesRead: bytesRead, readErr: readErr}
+		}
+		require.NotNil(t, found, "no bodyprobe record for %s %s", method, path)
+		return *found
+	}
+
+	doRequest := func(t *testing.T, method, url string, body []byte) (int, string) {
+		t.Helper()
+
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, string(respBody)
+	}
 
 	oversized := bytes.Repeat([]byte{0xAB}, 2*maxBodySize)
 
@@ -194,7 +192,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		// PUT metadata stores the raw body as the value, so a successful
 		// request here would mean the handler saw an uncapped body.
 		url := fmt.Sprintf("http://%s/v1.0/metadata/probe", m.daprd.HTTPAddress())
-		status, body := doRequest(t, ctx, httpClient, http.MethodPut, url, oversized)
+		status, body := doRequest(t, http.MethodPut, url, oversized)
 		assert.Equal(t, http.StatusBadRequest, status)
 		assert.Contains(t, body, "ERR_BODY_READ")
 
@@ -203,7 +201,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, rec.readErr, "expected the middleware to hit the body size limit")
 
 		// Within the limit, the same request succeeds through the probe.
-		status, _ = doRequest(t, ctx, httpClient, http.MethodPut, url, []byte("small"))
+		status, _ = doRequest(t, http.MethodPut, url, []byte("small"))
 		assert.Equal(t, http.StatusNoContent, status)
 		rec = lastProbeRecord(t, m.probeFile, http.MethodPut, "/v1.0/metadata/probe")
 		assert.Equal(t, len("small"), rec.bytesRead)
@@ -214,14 +212,14 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		payload := bytes.Repeat([]byte{0xCD}, maxBodySize+(512<<10))
 
 		url := fmt.Sprintf("http://%s/v1.0-alpha1/binarystore/mystore/probe.bin", m.daprd.HTTPAddress())
-		status, _ := doRequest(t, ctx, httpClient, http.MethodPut, url, payload)
+		status, _ := doRequest(t, http.MethodPut, url, payload)
 		require.Equal(t, http.StatusNoContent, status)
 
 		rec := lastProbeRecord(t, m.probeFile, http.MethodPut, "/v1.0-alpha1/binarystore/mystore/probe.bin")
 		assert.Equal(t, len(payload), rec.bytesRead)
 		assert.False(t, rec.readErr)
 
-		status, got := doRequest(t, ctx, httpClient, http.MethodGet, url, nil)
+		status, got := doRequest(t, http.MethodGet, url, nil)
 		require.Equal(t, http.StatusOK, status)
 		assert.Equal(t, payload, []byte(got))
 	})
@@ -230,7 +228,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		payload := bytes.Repeat([]byte{0xEF}, maxBodySize+(512<<10))
 
 		url := fmt.Sprintf("http://%s/v1.0-alpha1/binarystore/mystore/probe.bin", m.denied.HTTPAddress())
-		status, _ := doRequest(t, ctx, httpClient, http.MethodPut, url, payload)
+		status, _ := doRequest(t, http.MethodPut, url, payload)
 		assert.NotEqual(t, http.StatusNoContent, status)
 
 		rec := lastProbeRecord(t, m.deniedProbe, http.MethodPut, "/v1.0-alpha1/binarystore/mystore/probe.bin")
@@ -238,7 +236,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, rec.readErr, "expected the middleware to hit the body size limit")
 
 		// Still limited on the other side too: nothing was stored.
-		status, _ = doRequest(t, ctx, httpClient, http.MethodGet, url, nil)
+		status, _ = doRequest(t, http.MethodGet, url, nil)
 		assert.NotEqual(t, http.StatusOK, status)
 	})
 }
