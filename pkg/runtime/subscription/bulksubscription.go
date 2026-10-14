@@ -19,8 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/google/uuid"
-
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
@@ -196,7 +194,6 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 		if hasAnyError {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			bulkSubDiag.SetRetryReported()
 			dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route)
 			if dlqErr != nil {
 				todo.ReportBulkSubDiagnostics(ctx, topic, bulkSubDiag)
@@ -238,7 +235,11 @@ func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCal
 		}
 	}
 
-	bscData.BulkSubDiag.AddRetriesIfNotReported(int64(len(msg.Entries)))
+	// Entries that failed delivery were already counted as retries by the
+	// postman, so only count them here when none were delivered.
+	if sendAllEntries {
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(msg.Entries)))
+	}
 
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
@@ -286,17 +287,9 @@ func (s *Subscription) createEnvelopeAndInvokeSubscriber(ctx context.Context, bu
 ) error {
 	bscData := *bulkSubCallData
 
-	var id string
-
-	idObj, err := uuid.NewRandom()
-	if err != nil {
-		id = idObj.String()
-	}
-
 	psm.PubSubMessages = psm.PubSubMessages[:psm.Length]
 	psm.Path = path
 	envelope := rtpubsub.NewBulkSubscribeEnvelope(&rtpubsub.BulkSubscribeEnvelope{
-		ID:       id,
 		Topic:    bscData.Topic,
 		Pubsub:   bscData.PsName,
 		Metadata: msg.Metadata,
@@ -331,7 +324,13 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		data = data[:n]
 	}
 
-	bscData.BulkSubDiag.AddDeadLettered(int64(len(data)))
+	bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, int64(len(data)))
+	if !sendAllEntries {
+		// Entries whose delivery failed were counted as retries by the postman.
+		// Entries that failed before delivery, such as on an invalid event or a
+		// routing error, were not, but are taken out of the retry count too.
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, -int64(len(data)))
+	}
 
 	req := &contribpubsub.BulkPublishRequest{
 		Entries:    data,
