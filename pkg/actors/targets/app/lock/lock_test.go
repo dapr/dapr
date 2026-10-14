@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -216,4 +217,26 @@ func Test_header(t *testing.T) {
 		t.Cleanup(cancel)
 		assert.Empty(t, req.GetMetadata()["Dapr-Reentrancy-Id"])
 	})
+}
+
+func Test_MaxStackDepthRejectedCallReleasesDepth(t *testing.T) {
+	t.Parallel()
+
+	store := reentrancystore.New()
+	one := 1
+	store.Store("foo", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &one})
+	l := New(Options{ActorType: "foo", ConfigStore: store})
+
+	req := internalv1pb.NewInternalInvokeRequest("foo")
+	_, release, err := l.LockRequest(t.Context(), req)
+	require.NoError(t, err)
+	_, _, err = l.LockRequest(t.Context(), req)
+	require.ErrorIs(t, err, messages.ErrActorMaxStackDepthExceeded)
+	release()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	_, rel, err := l.LockRequest(ctx, internalv1pb.NewInternalInvokeRequest("foo"))
+	require.NoError(t, err, "actor lock stuck after a rejected reentrant call")
+	rel()
 }
