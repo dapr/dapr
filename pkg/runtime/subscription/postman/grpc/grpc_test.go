@@ -222,7 +222,7 @@ func TestDeliverBulkDoesNotPropagateEntryContext(t *testing.T) {
 	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
 	bscData := todo.BulkSubscribeCallData{
 		BulkResponses:   &bulkResponses,
-		BulkSubDiag:     &bulkSubDiag,
+		BulkSubDiag:     bulkSubDiag,
 		EntryIdIndexMap: &entryIDIndexMap,
 		PsName:          psm.Pubsub,
 		Topic:           psm.Topic,
