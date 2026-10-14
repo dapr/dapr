@@ -33,17 +33,24 @@ import (
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
 type Proxy interface {
+	// Handler returns the stream handler for the public API server, which only
+	// the local app reaches.
 	Handler() grpc.StreamHandler
+	// InternalHandler returns the stream handler for the internal server, which
+	// other daprds reach.
+	InternalHandler() grpc.StreamHandler
 	SetRemoteAppFn(func(context.Context, string) (remoteApp, error))
 	SetTelemetryFn(func(context.Context) context.Context)
 }
 
 type proxy struct {
 	appID              string
+	namespace          string
 	appClientFn        func() (grpc.ClientConnInterface, func(bool), error)
 	connectionFactory  messageClientConnection
 	remoteAppFn        func(ctx context.Context, appID string) (remoteApp, error)
@@ -59,6 +66,7 @@ type ProxyOpts struct {
 	AppClientFn        func() (grpc.ClientConnInterface, func(bool), error)
 	ConnectionFactory  messageClientConnection
 	AppID              string
+	Namespace          string
 	ACL                *config.AccessControlList
 	Resiliency         resiliency.Provider
 	MaxRequestBodySize int
@@ -70,6 +78,7 @@ func NewProxy(opts ProxyOpts) Proxy {
 	return &proxy{
 		appClientFn:        opts.AppClientFn,
 		appID:              opts.AppID,
+		namespace:          opts.Namespace,
 		connectionFactory:  opts.ConnectionFactory,
 		appendAppTokenFn:   opts.AppendAppTokenFn,
 		acl:                opts.ACL,
@@ -78,9 +87,21 @@ func NewProxy(opts ProxyOpts) Proxy {
 	}
 }
 
-// Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpcProxy.TransparentHandler(p.intercept,
+	return p.handler(true)
+}
+
+func (p *proxy) InternalHandler() grpc.StreamHandler {
+	return p.handler(false)
+}
+
+// handler returns a Stream Handler for handling requests that arrive for
+// services that are not recognized by the server. fromApp is true when the
+// server only receives requests from the local app.
+func (p *proxy) handler(fromApp bool) grpc.StreamHandler {
+	return grpcProxy.TransparentHandler(func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
+		return p.intercept(ctx, fullName, fromApp)
+	},
 		func(ctx context.Context, appID, methodName string) *resiliency.PolicyDefinition {
 			_, isLocal, err := p.isLocal(ctx, appID)
 			if err == nil && !isLocal {
@@ -98,7 +119,7 @@ func nopTeardown(destroy bool) {
 	// Nop
 }
 
-func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
+func (p *proxy) intercept(ctx context.Context, fullName string, fromApp bool) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	v := md[diagConsts.GRPCProxyCalleeIDKey]
@@ -137,6 +158,22 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			}
 		}
 
+		mdCopy := md.Copy()
+		delete(mdCopy, securityConsts.APITokenHeader)
+		// A self-invocation by the local app: caller == callee == this app.
+		callerAppID, callerNamespace := p.appID, p.namespace
+		if !fromApp {
+			id, _, idErr := spiffe.FromGRPCContext(ctx)
+			if idErr != nil {
+				return ctx, nil, nil, nopTeardown, status.Error(codes.PermissionDenied, idErr.Error())
+			}
+			callerAppID, callerNamespace = "", ""
+			if id != nil {
+				callerAppID, callerNamespace = id.AppID(), id.Namespace()
+			}
+		}
+		setLocalIdentityMetadata(mdCopy, callerAppID, callerNamespace, p.appID)
+
 		var appClient grpc.ClientConnInterface
 		var teardown func(bool)
 		appClient, teardown, err = p.appClientFn()
@@ -144,8 +181,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			return ctx, nil, nil, nopTeardown, err
 		}
 
-		mdCopy := md.Copy()
-		delete(mdCopy, securityConsts.APITokenHeader)
 		outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 		if p.appendAppTokenFn != nil {
 			outCtx = p.appendAppTokenFn(outCtx)
@@ -153,14 +188,17 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return outCtx, appClient.(*grpc.ClientConn), nil, teardown, nil
 	}
 
-	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
+	mdCopy := md.Copy()
+	mdCopy.Set(invokev1.CallerIDHeader, p.appID)
+	mdCopy.Set(invokev1.CallerNamespaceHeader, p.namespace)
+	mdCopy.Set(invokev1.CalleeIDHeader, target.id)
+	outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 
 	// proxy to a remote daprd
 	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace,
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	outCtx = p.telemetryFn(outCtx)
-	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
 
 	pt := &grpcProxy.ProxyTarget{
 		ID:        target.id,
@@ -169,6 +207,26 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	return outCtx, conn, pt, teardown, cErr
+}
+
+// setLocalIdentityMetadata replaces the caller/callee identity metadata of a
+// request proxied to the local app. With a known caller (the local app itself,
+// or the peer's SPIFFE ID with mTLS), the identity is stamped and the values
+// an older caller daprd forwarded from its app are discarded. Without mTLS
+// there is no peer identity to check against: an older caller daprd appends
+// its own values after those its app sent, so only the last value is kept.
+func setLocalIdentityMetadata(md metadata.MD, callerAppID, callerNamespace, appID string) {
+	if callerAppID != "" {
+		md.Set(invokev1.CallerIDHeader, callerAppID)
+		md.Set(invokev1.CallerNamespaceHeader, callerNamespace)
+		md.Set(invokev1.CalleeIDHeader, appID)
+		return
+	}
+	for _, k := range []string{invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader, invokev1.CalleeIDHeader} {
+		if v := md[k]; len(v) > 1 {
+			md[k] = v[len(v)-1:]
+		}
+	}
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.

@@ -15,6 +15,7 @@ package loadbalance
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,6 +58,8 @@ func (c *canorphan) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
 	orphanStarted := make(chan struct{})
+	// Activities are at-least-once, so the orphaned body may run again.
+	orphanStartedOnce := sync.OnceFunc(func() { close(orphanStarted) })
 	releaseOrphan := make(chan struct{})
 
 	require.NoError(t, c.workflow.RegistryN(0).AddWorkflowN("canorphan", func(ctx *task.WorkflowContext) (any, error) {
@@ -89,7 +92,7 @@ func (c *canorphan) Run(t *testing.T, ctx context.Context) {
 		}
 
 		if input == "first" {
-			close(orphanStarted)
+			orphanStartedOnce()
 			<-releaseOrphan
 			return "done-first", nil
 		}

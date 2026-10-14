@@ -25,6 +25,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -272,6 +274,43 @@ func TestPolicyRetry(t *testing.T) {
 	}
 }
 
+func TestTimeoutError(t *testing.T) {
+	// The status a proxied gRPC call fails with once its context is
+	// cancelled, which pkg/api/grpc/proxy wraps for retry matching.
+	statusErr := NewCodeError(int32(codes.DeadlineExceeded), status.Error(codes.DeadlineExceeded, "deadline exceeded"))
+
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+
+	require.ErrorIs(t, timeoutError(expired, statusErr), context.DeadlineExceeded, "an error returned after the deadline is the timeout")
+	require.ErrorIs(t, timeoutError(expired, errors.New("any")), context.DeadlineExceeded)
+	require.NoError(t, timeoutError(expired, nil), "a result returned as the deadline passes is still a result")
+	require.NoError(t, timeoutError(t.Context(), statusErr), "an error before the deadline is the operation's own")
+
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, timeoutError(cancelled, statusErr), context.Canceled, "a cancelled attempt reports its cancellation")
+
+	// The deadline has passed on the clock but the timer which cancels the
+	// context has not run yet: a downstream enforcing the same deadline
+	// answers in this gap.
+	stale := staleDeadline{Context: t.Context(), deadline: time.Now().Add(-time.Millisecond)}
+	require.ErrorIs(t, timeoutError(stale, statusErr), context.DeadlineExceeded, "an error after the deadline instant is the timeout")
+	require.NoError(t, timeoutError(stale, nil))
+	due := staleDeadline{Context: t.Context(), deadline: time.Now().Add(time.Minute)}
+	require.NoError(t, timeoutError(due, statusErr), "an error well before the deadline is the operation's own")
+}
+
+type staleDeadline struct {
+	context.Context
+	deadline time.Time
+}
+
+func (s staleDeadline) Deadline() (time.Time, bool) {
+	return s.deadline, true
+}
+
 func TestPolicyRetryWithMatch(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -435,4 +474,66 @@ func TestPolicyDisposer(t *testing.T) {
 	}
 	slices.Sort(disposed)
 	assert.Equal(t, []int32{1, 2, 3}, disposed)
+}
+
+func TestHasBoundedRetries(t *testing.T) {
+	t.Run("no retry configured", func(t *testing.T) {
+		assert.False(t, PolicyDefinition{}.HasBoundedRetries())
+	})
+
+	t.Run("bounded by attempt count", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 3}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries())
+	})
+
+	t.Run("try once then give up", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 0}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries(), "maxRetries 0 is an explicit give-up after one attempt")
+	})
+
+	t.Run("constant with unlimited retries", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: -1}, RetryConditionMatch{})}
+		assert.False(t, p.HasBoundedRetries(), "a constant policy with no attempt cap never runs out")
+	})
+
+	t.Run("exponential bounded by elapsed time", func(t *testing.T) {
+		// backoff enforces MaxElapsedTime independently of the attempt count,
+		// so this policy runs out even though MaxRetries is negative.
+		p := PolicyDefinition{r: NewRetry(retry.Config{
+			Policy:         retry.PolicyExponential,
+			MaxRetries:     -1,
+			MaxElapsedTime: time.Minute,
+		}, RetryConditionMatch{})}
+		assert.True(t, p.HasBoundedRetries())
+	})
+
+	t.Run("exponential with no elapsed time limit", func(t *testing.T) {
+		p := PolicyDefinition{r: NewRetry(retry.Config{
+			Policy:     retry.PolicyExponential,
+			MaxRetries: -1,
+		}, RetryConditionMatch{})}
+		assert.False(t, p.HasBoundedRetries())
+	})
+}
+
+func TestRetryExcluded(t *testing.T) {
+	match, err := ParseRetryConditionMatch(&resiliencyV1alpha.RetryMatching{HTTPStatusCodes: "500"})
+	require.NoError(t, err)
+	p := PolicyDefinition{r: NewRetry(retry.Config{Policy: retry.PolicyConstant, MaxRetries: 3}, match)}
+
+	t.Run("status the policy retries", func(t *testing.T) {
+		assert.False(t, p.RetryExcluded(NewCodeError(500, errors.New("server error"))))
+	})
+
+	t.Run("status the policy leaves out", func(t *testing.T) {
+		assert.True(t, p.RetryExcluded(NewCodeError(404, errors.New("not found"))))
+	})
+
+	t.Run("an error carrying no status code", func(t *testing.T) {
+		assert.False(t, p.RetryExcluded(errors.New("plain failure")))
+	})
+
+	t.Run("no retry configured", func(t *testing.T) {
+		assert.False(t, PolicyDefinition{}.RetryExcluded(NewCodeError(404, errors.New("not found"))))
+	})
 }
