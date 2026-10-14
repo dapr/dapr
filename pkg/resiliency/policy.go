@@ -160,7 +160,18 @@ func timeoutError(ctx context.Context, err error) error {
 	if cerr := ctx.Err(); cerr != nil {
 		return cerr
 	}
-	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil
+	}
+	if !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	// On Windows the monotonic clock only advances once per timer tick, so a
+	// downstream can answer DeadlineExceeded for the propagated deadline while
+	// time.Now() still reads before it.
+	var cErr CodeError
+	if errors.As(err, &cErr) && cErr.retryScenario == retryScenarioGRPCInvoke && cErr.StatusCode == grpcCodeDeadlineExceeded {
 		return context.DeadlineExceeded
 	}
 	return nil

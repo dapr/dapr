@@ -299,7 +299,16 @@ func TestTimeoutError(t *testing.T) {
 	require.ErrorIs(t, timeoutError(stale, statusErr), context.DeadlineExceeded, "an error after the deadline instant is the timeout")
 	require.NoError(t, timeoutError(stale, nil))
 	due := staleDeadline{Context: t.Context(), deadline: time.Now().Add(time.Minute)}
-	require.NoError(t, timeoutError(due, statusErr), "an error well before the deadline is the operation's own")
+	unavailableErr := NewCodeError(int32(codes.Unavailable), status.Error(codes.Unavailable, "unavailable"))
+	require.NoError(t, timeoutError(due, unavailableErr), "an error well before the deadline is the operation's own")
+	require.NoError(t, timeoutError(due, errors.New("any")))
+	require.NoError(t, timeoutError(due, nil))
+
+	// On Windows the clock can still read before the deadline when a
+	// downstream enforcing the propagated deadline answers.
+	require.ErrorIs(t, timeoutError(due, statusErr), context.DeadlineExceeded, "a gRPC DeadlineExceeded under a deadline is the timeout")
+	require.NoError(t, timeoutError(t.Context(), statusErr), "without a deadline, DeadlineExceeded is the operation's own")
+	require.NoError(t, timeoutError(due, NewCodeError(504, errors.New("gateway timeout"))), "an HTTP status is the operation's own")
 }
 
 type staleDeadline struct {
