@@ -211,14 +211,11 @@ func (a *api) onBatchQueryVectorsAlpha1() http.HandlerFunc {
 		a.universal.BatchQueryVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.BatchQueryVectorsRequestAlpha1, *runtimev1pb.BatchQueryVectorsResponseAlpha1]{
 			InModifier: func(r *http.Request, in *runtimev1pb.BatchQueryVectorsRequestAlpha1) (*runtimev1pb.BatchQueryVectorsRequestAlpha1, error) {
-				storeName := chi.URLParam(r, storeNameParam)
-				collection := chi.URLParam(r, collectionParam)
-				in.StoreName = storeName
-				in.Collection = collection
-				for _, query := range in.GetQueries() {
-					query.StoreName = storeName
-					query.Collection = collection
-				}
+				// Queries inherit the store and collection of the batch. One
+				// that names its own is left untouched so that the runtime
+				// rejects a mismatch rather than this handler masking it.
+				in.StoreName = chi.URLParam(r, storeNameParam)
+				in.Collection = chi.URLParam(r, collectionParam)
 				return in, nil
 			},
 		},

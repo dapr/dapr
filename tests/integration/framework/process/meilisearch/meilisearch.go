@@ -36,6 +36,10 @@ import (
 
 var _ process.Interface = (*Meilisearch)(nil)
 
+// imageTag is the Meilisearch release the search and vector components are
+// tested against in components-contrib. Keep the two in step.
+const imageTag = "v1.43"
+
 // Meilisearch is a Meilisearch process that can be used in integration tests.
 type Meilisearch struct {
 	name        string
@@ -90,7 +94,7 @@ func (m *Meilisearch) Run(t *testing.T, ctx context.Context) {
 		"-p", fmt.Sprintf("127.0.0.1:%d:7700", m.port),
 		"-e", "MEILI_MASTER_KEY="+m.apiKey,
 		"-e", "MEILI_NO_ANALYTICS=true",
-		"getmeili/meilisearch:latest",
+		"getmeili/meilisearch:"+imageTag,
 	)
 	cmd.Stderr = &stderr
 

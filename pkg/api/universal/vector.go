@@ -147,7 +147,8 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 		return nil, vectorInvalidRequest(storeName, fieldErrorFrom("records.id", idErr))
 	}
 
-	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())
+	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector)
+	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions(), policyDef)
 	if err != nil {
 		return nil, vectorInvalidRequest(storeName, err)
 	}
@@ -158,9 +159,7 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 		Metadata:   req.GetMetadata(),
 		Options:    options,
 	}
-	policyRunner := resiliency.NewRunner[*compvector.UpsertResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
-	)
+	policyRunner := resiliency.NewRunner[*compvector.UpsertResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.UpsertResponse, error) {
 		return comp.Upsert(ctx, compReq)
 	})
@@ -217,7 +216,8 @@ func (a *Universal) DeleteVectorsAlpha1(ctx context.Context, req *runtimev1pb.De
 		return nil, err
 	}
 
-	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())
+	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector)
+	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions(), policyDef)
 	if err != nil {
 		return nil, vectorInvalidRequest(storeName, err)
 	}
@@ -228,9 +228,7 @@ func (a *Universal) DeleteVectorsAlpha1(ctx context.Context, req *runtimev1pb.De
 		Metadata:   req.GetMetadata(),
 		Options:    options,
 	}
-	policyRunner := resiliency.NewRunner[*compvector.DeleteResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
-	)
+	policyRunner := resiliency.NewRunner[*compvector.DeleteResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.DeleteResponse, error) {
 		return comp.Delete(ctx, compReq)
 	})
@@ -282,7 +280,7 @@ func (a *Universal) BatchQueryVectorsAlpha1(ctx context.Context, req *runtimev1p
 	queries := make([]compvector.QueryRequest, 0, len(req.GetQueries()))
 	positions := make([]int, 0, len(req.GetQueries()))
 	for i, query := range req.GetQueries() {
-		compQuery, err := protoQueryVectorsRequestToComponent(query)
+		compQuery, err := protoBatchQueryToComponent(req, query)
 		if err != nil {
 			results[i] = &runtimev1pb.BatchQueryResultAlpha1{
 				Result: &runtimev1pb.BatchQueryResultAlpha1_Error{
@@ -291,7 +289,6 @@ func (a *Universal) BatchQueryVectorsAlpha1(ctx context.Context, req *runtimev1p
 			}
 			continue
 		}
-		compQuery.Collection = req.GetCollection()
 		queries = append(queries, *compQuery)
 		positions = append(positions, i)
 	}
@@ -399,6 +396,27 @@ func protoQueryVectorsRequestToComponent(req *runtimev1pb.QueryVectorsRequestAlp
 	if (out.Vector == nil) == (out.ByID == "") {
 		return nil, newFieldError("query", "exactly one of vector or by_id must be set")
 	}
+	return out, nil
+}
+
+// protoBatchQueryToComponent converts one query of a batch. The query runs
+// against the store and collection of the batch, which it inherits when it
+// leaves its own unset. Naming a different one is rejected rather than
+// ignored, so a query never silently returns matches from a collection other
+// than the one it asked for.
+func protoBatchQueryToComponent(batch *runtimev1pb.BatchQueryVectorsRequestAlpha1, query *runtimev1pb.QueryVectorsRequestAlpha1) (*compvector.QueryRequest, error) {
+	if name := query.GetStoreName(); name != "" && name != batch.GetStoreName() {
+		return nil, newFieldError("queries.store_name", "query store_name %q differs from the batch store_name %q", name, batch.GetStoreName())
+	}
+	if collection := query.GetCollection(); collection != "" && collection != batch.GetCollection() {
+		return nil, newFieldError("queries.collection", "query collection %q differs from the batch collection %q", collection, batch.GetCollection())
+	}
+
+	out, err := protoQueryVectorsRequestToComponent(query)
+	if err != nil {
+		return nil, err
+	}
+	out.Collection = batch.GetCollection()
 	return out, nil
 }
 

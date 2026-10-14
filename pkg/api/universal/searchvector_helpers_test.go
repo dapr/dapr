@@ -334,9 +334,57 @@ func TestProtoIndexingOptionsToComponent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := protoIndexingOptionsToComponent(t.Context(), tt.in)
+			got, err := protoIndexingOptionsToComponent(t.Context(), tt.in, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestProtoIndexingOptionsResiliencyTimeout(t *testing.T) {
+	t.Parallel()
+
+	waitFor := func(d time.Duration) *runtimev1pb.IndexingOptionsAlpha1 {
+		return &runtimev1pb.IndexingOptionsAlpha1{
+			Mode:          runtimev1pb.IndexingMode_INDEXING_MODE_WAIT_FOR_COMPLETION,
+			WaitTimeout:   durationpb.New(d),
+			OnWaitTimeout: runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST,
+		}
+	}
+	policy := func(timeout time.Duration) *resiliency.PolicyDefinition {
+		return resiliency.NewPolicyDefinition(testLogger, "test", timeout, nil, nil)
+	}
+
+	tests := []struct {
+		name    string
+		in      *runtimev1pb.IndexingOptionsAlpha1
+		policy  *resiliency.PolicyDefinition
+		wantErr bool
+	}{
+		{name: "a wait shorter than the policy timeout is accepted", in: waitFor(time.Second), policy: policy(2 * time.Second)},
+		{name: "a wait equal to the policy timeout is rejected", in: waitFor(2 * time.Second), policy: policy(2 * time.Second), wantErr: true},
+		{name: "a wait longer than the policy timeout is rejected", in: waitFor(3 * time.Second), policy: policy(2 * time.Second), wantErr: true},
+		{name: "a policy without a timeout does not constrain the wait", in: waitFor(time.Hour), policy: policy(0)},
+		{name: "no policy does not constrain the wait", in: waitFor(time.Hour), policy: nil},
+		{
+			name:   "a write that does not wait is not constrained",
+			in:     &runtimev1pb.IndexingOptionsAlpha1{Mode: runtimev1pb.IndexingMode_INDEXING_MODE_RETURN_ON_ACCEPTANCE},
+			policy: policy(time.Millisecond),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := protoIndexingOptionsToComponent(t.Context(), tt.in, tt.policy)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			var fe *fieldError
+			require.ErrorAs(t, err, &fe)
+			assert.Equal(t, "options.wait_timeout", fe.field)
 		})
 	}
 }

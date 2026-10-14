@@ -135,7 +135,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 		var getResp runtimev1pb.GetDocumentsResponseAlpha1
 		status, body = do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/documents/get", &runtimev1pb.GetDocumentsRequestAlpha1{
 			Ids:            []string{"doc-1", "doc-2"},
-			IncludeContent: true,
+			IncludeContent: new(true),
 		}, &getResp)
 		require.Equal(t, nethttp.StatusOK, status, string(body))
 		require.Len(t, getResp.GetDocuments(), 2)
@@ -248,8 +248,8 @@ func createIndex(t *testing.T, ctx context.Context, httpClient *nethttp.Client, 
 func searchRequest(text string) *runtimev1pb.SearchRequestAlpha1 {
 	return &runtimev1pb.SearchRequestAlpha1{
 		Query:          &runtimev1pb.SearchRequestAlpha1_Text{Text: text},
-		TopK:           10,
-		IncludeContent: true,
+		TopK:           new(uint32(10)),
+		IncludeContent: new(true),
 	}
 }
 

@@ -98,6 +98,12 @@ func (p PolicyDefinition) String() string {
 	)
 }
 
+// Timeout returns the timeout applied to each attempt of the operation, or
+// zero if the policy has none.
+func (p PolicyDefinition) Timeout() time.Duration {
+	return p.t
+}
+
 // HasRetries returns true if the policy is configured to have more than 1 retry.
 func (p PolicyDefinition) HasRetries() bool {
 	return p.r != nil && p.r.MaxRetries != 0

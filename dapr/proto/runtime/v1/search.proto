@@ -62,11 +62,6 @@ message SearchDocument {
   // It is not indexed, not filterable and not addressable by field-level
   // operations.
   map<string, string> metadata = 3;
-
-  // Reserved for a future content_type field. Alpha content is always a JSON
-  // object.
-  reserved 4;
-  reserved "content_type";
 }
 
 message SearchHit {
@@ -129,7 +124,9 @@ message IndexingOptionsAlpha1 {
   // Required positive limit for waiting on provider completion. Valid only with
   // INDEXING_MODE_WAIT_FOR_COMPLETION and must be shorter than the remaining
   // RPC context deadline when one is set.
-  google.protobuf.Duration wait_timeout = 2;
+  // When the store has a resiliency timeout policy, wait_timeout must also be
+  // shorter than that timeout.
+  optional google.protobuf.Duration wait_timeout = 2;
   // Required with INDEXING_MODE_WAIT_FOR_COMPLETION.
   IndexingWaitTimeoutAction on_wait_timeout = 3;
 }
@@ -184,7 +181,8 @@ message IndexDocumentsRequestAlpha1 {
   string index = 2;
   repeated SearchDocument documents = 3;
   map<string, string> metadata = 4;
-  IndexingOptionsAlpha1 options = 5;
+  // Omitted options behave as INDEXING_MODE_RETURN_ON_ACCEPTANCE.
+  optional IndexingOptionsAlpha1 options = 5;
 }
 
 message IndexDocumentsResponseAlpha1 {
@@ -198,7 +196,8 @@ message GetDocumentsRequestAlpha1 {
   string store_name = 1;
   string index = 2;
   repeated string ids = 3;
-  bool include_content = 4;
+  // Whether SearchDocument.content is returned. Defaults to false.
+  optional bool include_content = 4;
   map<string, string> metadata = 5;
 }
 
@@ -212,7 +211,8 @@ message DeleteDocumentsRequestAlpha1 {
   string index = 2;
   repeated string ids = 3;
   map<string, string> metadata = 4;
-  IndexingOptionsAlpha1 options = 5;
+  // Omitted options behave as INDEXING_MODE_RETURN_ON_ACCEPTANCE.
+  optional IndexingOptionsAlpha1 options = 5;
 }
 
 message DeleteDocumentsResponseAlpha1 {
@@ -224,19 +224,24 @@ message SearchRequestAlpha1 {
   string store_name = 1;
   string index = 2;
 
+  // At most one of text or native is set. A request that sets neither
+  // matches every document in the index, subject to filter.
   oneof query {
     string text = 3;
     google.protobuf.Struct native = 4;
   }
 
-  google.protobuf.Struct filter = 5;
-  // Maximum number of hits to return in this page.
-  uint32 top_k = 6;
-  // Opaque token returned by the previous SearchResponseAlpha1. Empty for the
-  // first page.
-  string continuation_token = 7;
+  optional google.protobuf.Struct filter = 5;
+  // Maximum number of hits to return in this page. When omitted or 0, the
+  // component's documented default page size applies.
+  optional uint32 top_k = 6;
+  // Opaque token returned by the previous SearchResponseAlpha1. Omitted for
+  // the first page.
+  optional string continuation_token = 7;
   repeated string return_fields = 8;
-  bool include_content = 9;
+  // Whether SearchDocument.content is returned with each hit. Defaults to
+  // false.
+  optional bool include_content = 9;
   repeated string search_fields = 10;
   repeated SortClause sort = 11;
   repeated string highlight_fields = 12;
@@ -255,8 +260,8 @@ message SearchResponseAlpha1 {
   repeated SearchHit hits = 1;
   // Best-effort total. Omitted when the provider cannot supply one.
   optional uint64 total_hits = 2;
-  // Opaque token for the next page. Empty when there are no more results.
-  string continuation_token = 3;
+  // Opaque token for the next page. Omitted when there are no more results.
+  optional string continuation_token = 3;
   // Describes the accuracy of total_hits. UNSPECIFIED when total_hits is
   // omitted.
   TotalHitsRelation total_hits_relation = 4;

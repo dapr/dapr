@@ -121,14 +121,14 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.GetVectorsResponseAlpha1
 			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/get",
-				&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1", "vec-2"}, IncludeValues: true}, &resp)
+				&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1", "vec-2"}, IncludeValues: new(true)}, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.Len(c, resp.GetRecords(), 2)
 		}, 10*time.Second, 100*time.Millisecond)
 
 		var getResp runtimev1pb.GetVectorsResponseAlpha1
 		status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/get",
-			&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1"}, IncludeValues: true}, &getResp)
+			&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1"}, IncludeValues: new(true)}, &getResp)
 		require.Equal(t, nethttp.StatusOK, status, string(body))
 		require.Len(t, getResp.GetRecords(), 1)
 		record := getResp.GetRecords()[0]
@@ -249,7 +249,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
 					queryRequest([]float32{1, 0, 0, 0}, 1),
-					{TopK: 1},
+					{TopK: new(uint32(1))},
 					queryRequest([]float32{0, 1, 0, 0}, 1),
 				},
 			}, &resp)
@@ -272,6 +272,43 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			assert.Nil(c, resp.GetResults()[2].GetError())
 			if assert.NotEmpty(c, resp.GetResults()[2].GetResponse().GetMatches()) {
 				assert.Equal(c, "vec-3", resp.GetResults()[2].GetResponse().GetMatches()[0].GetRecord().GetId())
+			}
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("batch-query-collection-mismatch", func(t *testing.T) {
+		collection := "http_batch_mismatch"
+		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		t.Cleanup(func() {
+			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
+		})
+		upsertVectors(t, ctx, httpClient, baseURL, collection)
+
+		// The collection in the path applies to every query. A query whose body
+		// names another one is rejected in its own slot rather than silently
+		// answered from the path collection.
+		other := queryRequest([]float32{1, 0, 0, 0}, 1)
+		other.Collection = "http_upsert"
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			var resp runtimev1pb.BatchQueryVectorsResponseAlpha1
+			status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
+				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
+					other,
+					queryRequest([]float32{1, 0, 0, 0}, 1),
+				},
+			}, &resp)
+			if !assert.Equal(c, nethttp.StatusOK, status, string(body)) {
+				return
+			}
+			if !assert.Len(c, resp.GetResults(), 2) {
+				return
+			}
+			assert.Nil(c, resp.GetResults()[0].GetResponse())
+			assert.Equal(c, int32(codes.InvalidArgument), resp.GetResults()[0].GetError().GetCode())
+			assert.Nil(c, resp.GetResults()[1].GetError())
+			if assert.NotEmpty(c, resp.GetResults()[1].GetResponse().GetMatches()) {
+				assert.Equal(c, "vec-1", resp.GetResults()[1].GetResponse().GetMatches()[0].GetRecord().GetId())
 			}
 		}, 10*time.Second, 100*time.Millisecond)
 	})
@@ -350,10 +387,10 @@ func upsertVectors(t *testing.T, ctx context.Context, httpClient *nethttp.Client
 func queryRequest(values []float32, topK uint32) *runtimev1pb.QueryVectorsRequestAlpha1 {
 	return &runtimev1pb.QueryVectorsRequestAlpha1{
 		Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: values}},
-		TopK:           topK,
+		TopK:           new(topK),
 		Metric:         runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE,
-		IncludeValues:  true,
-		IncludePayload: true,
+		IncludeValues:  new(true),
+		IncludePayload: new(true),
 	}
 }
 

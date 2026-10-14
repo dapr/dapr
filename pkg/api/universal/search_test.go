@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	compsearch "github.com/dapr/components-contrib/search"
 
@@ -200,7 +201,7 @@ func TestSearchGetDocumentsAlpha1(t *testing.T) {
 		{ID: "a", Content: []byte(`{"title":"Pride and Prejudice"}`), Metadata: map[string]string{"tenant": "Hertfordshire"}},
 	}}}
 	resp, err := newSearchAPI(fake).GetDocumentsAlpha1(t.Context(), &runtimev1pb.GetDocumentsRequestAlpha1{
-		StoreName: testSearchStore, Index: testIndex, Ids: []string{"a", "missing"}, IncludeContent: true,
+		StoreName: testSearchStore, Index: testIndex, Ids: []string{"a", "missing"}, IncludeContent: new(true),
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.GetDocuments(), 1)
@@ -253,7 +254,7 @@ func TestSearchAlpha1(t *testing.T) {
 			StoreName: testSearchStore,
 			Index:     testIndex,
 			Query:     &runtimev1pb.SearchRequestAlpha1_Text{Text: "prejudice"},
-			TopK:      10,
+			TopK:      new(uint32(10)),
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetHits(), 1)
@@ -267,6 +268,22 @@ func TestSearchAlpha1(t *testing.T) {
 		assert.Equal(t, uint32(10), fake.searchReq.TopK)
 	})
 
+	t.Run("a query with neither text nor native is forwarded to match every document", func(t *testing.T) {
+		filter, err := structpb.NewStruct(map[string]any{"genre": "novel"})
+		require.NoError(t, err)
+		fake := &fakeSearch{searchResp: &compsearch.SearchResponse{}}
+		resp, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{
+			StoreName: testSearchStore, Index: testIndex, Filter: filter,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, fake.searchReq)
+		assert.Empty(t, fake.searchReq.Text)
+		assert.Nil(t, fake.searchReq.Native)
+		assert.Equal(t, map[string]any{"genre": "novel"}, fake.searchReq.Filter)
+		// No further page: the token is omitted rather than empty.
+		assert.Nil(t, resp.ContinuationToken)
+	})
+
 	t.Run("an omitted total reports no relation", func(t *testing.T) {
 		fake := &fakeSearch{searchResp: &compsearch.SearchResponse{TotalHitsRelation: compsearch.TotalHitsRelationExact}}
 		resp, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
@@ -278,7 +295,7 @@ func TestSearchAlpha1(t *testing.T) {
 	t.Run("an expired continuation token keeps its canonical code", func(t *testing.T) {
 		fake := &fakeSearch{searchErr: compsearch.ContinuationExpiredError("cursor gone")}
 		_, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{
-			StoreName: testSearchStore, Index: testIndex, ContinuationToken: "tok",
+			StoreName: testSearchStore, Index: testIndex, ContinuationToken: new("tok"),
 		})
 		assert.Equal(t, codes.FailedPrecondition, grpcstatus.Code(err))
 	})

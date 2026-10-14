@@ -27,6 +27,7 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 func protoStructToMap(s *structpb.Struct) map[string]any {
@@ -134,7 +135,10 @@ func protoSortClausesToComponent(clauses []*runtimev1pb.SortClause) []compsearch
 	return out
 }
 
-func protoIndexingOptionsToComponent(ctx context.Context, opts *runtimev1pb.IndexingOptionsAlpha1) (compsearch.IndexingOptions, error) {
+// protoIndexingOptionsToComponent converts and validates the indexing options
+// of a write. policy is the resiliency policy the write runs under; it may be
+// nil.
+func protoIndexingOptionsToComponent(ctx context.Context, opts *runtimev1pb.IndexingOptionsAlpha1, policy *resiliency.PolicyDefinition) (compsearch.IndexingOptions, error) {
 	out := compsearch.IndexingOptions{
 		Mode:          compsearch.IndexingMode(opts.GetMode()),
 		OnWaitTimeout: compsearch.IndexingWaitTimeoutAction(opts.GetOnWaitTimeout()),
@@ -150,6 +154,16 @@ func protoIndexingOptionsToComponent(ctx context.Context, opts *runtimev1pb.Inde
 	// component, so CONTINUE_ASYNC is accepted here and rejected there.
 	if err := compsearch.ValidateIndexingOptions(ctx, out, true); err != nil {
 		return out, fieldErrorFrom("options", err)
+	}
+	// The component runs under the store's resiliency policy, whose timeout
+	// bounds every attempt. A wait that cannot finish within it is rejected
+	// here: left to the component, the rejection would lose its building block
+	// error code and be retried by the policy.
+	if policy != nil && out.Mode == compsearch.IndexingModeWaitForCompletion {
+		if timeout := policy.Timeout(); timeout > 0 && out.WaitTimeout >= timeout {
+			return out, newFieldError("options.wait_timeout",
+				"wait_timeout (%s) must be shorter than the resiliency timeout (%s) configured for the store", out.WaitTimeout, timeout)
+		}
 	}
 	return out, nil
 }

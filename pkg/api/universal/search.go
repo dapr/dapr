@@ -137,7 +137,8 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 		return nil, searchInvalidRequest(storeName, fieldErrorFrom("documents.id", idErr))
 	}
 
-	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())
+	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search)
+	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions(), policyDef)
 	if err != nil {
 		return nil, searchInvalidRequest(storeName, err)
 	}
@@ -169,9 +170,7 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 		Metadata:  req.GetMetadata(),
 		Options:   options,
 	}
-	policyRunner := resiliency.NewRunner[*compsearch.IndexDocumentsResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
-	)
+	policyRunner := resiliency.NewRunner[*compsearch.IndexDocumentsResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.IndexDocumentsResponse, error) {
 		return comp.IndexDocuments(ctx, compReq)
 	})
@@ -229,7 +228,8 @@ func (a *Universal) DeleteDocumentsAlpha1(ctx context.Context, req *runtimev1pb.
 		return nil, err
 	}
 
-	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions())
+	policyDef := a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search)
+	options, err := protoIndexingOptionsToComponent(ctx, req.GetOptions(), policyDef)
 	if err != nil {
 		return nil, searchInvalidRequest(storeName, err)
 	}
@@ -240,9 +240,7 @@ func (a *Universal) DeleteDocumentsAlpha1(ctx context.Context, req *runtimev1pb.
 		Metadata: req.GetMetadata(),
 		Options:  options,
 	}
-	policyRunner := resiliency.NewRunner[*compsearch.DeleteDocumentsResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
-	)
+	policyRunner := resiliency.NewRunner[*compsearch.DeleteDocumentsResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.DeleteDocumentsResponse, error) {
 		return comp.DeleteDocuments(ctx, compReq)
 	})
@@ -292,8 +290,10 @@ func (a *Universal) SearchAlpha1(ctx context.Context, req *runtimev1pb.SearchReq
 	out := &runtimev1pb.SearchResponseAlpha1{
 		Hits:              make([]*runtimev1pb.SearchHit, 0, len(resp.Hits)),
 		TotalHits:         resp.TotalHits,
-		ContinuationToken: resp.ContinuationToken,
 		TotalHitsRelation: runtimev1pb.TotalHitsRelation(resp.TotalHitsRelation),
+	}
+	if resp.ContinuationToken != "" {
+		out.ContinuationToken = &resp.ContinuationToken
 	}
 	if resp.TotalHits == nil {
 		// The relation only describes a total that was supplied.

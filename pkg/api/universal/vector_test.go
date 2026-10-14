@@ -25,6 +25,7 @@ import (
 	compsearch "github.com/dapr/components-contrib/search"
 	compvector "github.com/dapr/components-contrib/vector"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -133,7 +134,7 @@ func TestVectorGetVectorsAlpha1(t *testing.T) {
 		{ID: "a", Values: []float32{0.1}, Metadata: map[string]any{"tenant": "Hertfordshire"}},
 	}}}
 	got, err := newVectorAPI(fake).GetVectorsAlpha1(t.Context(), &runtimev1pb.GetVectorsRequestAlpha1{
-		StoreName: testVectorStore, Collection: testCollection, Ids: []string{"a", "missing"}, IncludeValues: true,
+		StoreName: testVectorStore, Collection: testCollection, Ids: []string{"a", "missing"}, IncludeValues: new(true),
 	})
 	require.NoError(t, err)
 	require.Len(t, got.GetRecords(), 1)
@@ -182,7 +183,7 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 			Collection:     testCollection,
 			Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Id: "ignored", Values: []float32{0.1, 0.2}}},
 			Filter:         filter,
-			TopK:           5,
+			TopK:           new(uint32(5)),
 			ScoreThreshold: new(0.6),
 		})
 		require.NoError(t, err)
@@ -240,8 +241,8 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 			StoreName:  testVectorStore,
 			Collection: testCollection,
 			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}, TopK: 5},
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.2}}}, TopK: 5},
+				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}, TopK: new(uint32(5))},
+				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.2}}}, TopK: new(uint32(5))},
 			},
 		})
 		require.NoError(t, err)
@@ -273,6 +274,43 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		assert.NotNil(t, resp.GetResults()[1].GetResponse())
 		// Only the valid query reached the component, and its slot was preserved.
 		require.Len(t, fake.batchQueryReq.Queries, 1)
+	})
+
+	t.Run("a query naming another store or collection fails only its own slot", func(t *testing.T) {
+		fake := &fakeVector{batchQueryResp: &compvector.BatchQueryResponse{Results: []compvector.BatchQueryResult{
+			{Response: &compvector.QueryResponse{Metric: compvector.DistanceMetricCosine}},
+			{Response: &compvector.QueryResponse{Metric: compvector.DistanceMetricCosine}},
+		}}}
+		query := &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "a"}
+		resp, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
+			StoreName:  testVectorStore,
+			Collection: testCollection,
+			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
+				{Query: query, Collection: "other"},
+				{Query: query}, // inherits both
+				{Query: query, StoreName: "other"},
+				{Query: query, StoreName: testVectorStore, Collection: testCollection},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetResults(), 4)
+
+		for i, field := range map[int]string{0: "queries.collection", 2: "queries.store_name"} {
+			rejected := grpcstatus.FromProto(resp.GetResults()[i].GetError()).Err()
+			assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(rejected))
+			assert.Equal(t, errorcodes.VectorInvalidRequest.GrpcCode, statusReason(t, rejected))
+			assert.Equal(t, []string{field}, fieldViolations(t, rejected))
+		}
+		assert.NotNil(t, resp.GetResults()[1].GetResponse())
+		assert.NotNil(t, resp.GetResults()[3].GetResponse())
+
+		// Every query that reached the component runs against the batch
+		// collection.
+		require.Len(t, fake.batchQueryReq.Queries, 2)
+		assert.Equal(t, testCollection, fake.batchQueryReq.Collection)
+		for _, q := range fake.batchQueryReq.Queries {
+			assert.Equal(t, testCollection, q.Collection)
+		}
 	})
 
 	t.Run("a provider-side per-query error keeps its canonical code", func(t *testing.T) {

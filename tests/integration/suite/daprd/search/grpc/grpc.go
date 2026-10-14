@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,7 +146,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 			StoreName:      storeName,
 			Index:          index,
 			Ids:            []string{"doc-1", "doc-2"},
-			IncludeContent: true,
+			IncludeContent: new(true),
 		})
 		require.NoError(t, err)
 		require.Len(t, getResp.GetDocuments(), 2)
@@ -272,6 +273,171 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("error missing index", func(t *testing.T) {
+		index := indexName("missing")
+
+		_, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: storeName, Index: index})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+
+		_, err = client.DeleteIndexAlpha1(ctx, &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: storeName, Index: index})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+
+		_, err = client.SearchAlpha1(ctx, searchRequest(index, "alpha"))
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("wait for completion", func(t *testing.T) {
+		index := indexName("wait")
+		requireCreateIndex(t, ctx, client, index)
+		t.Cleanup(func() { dropIndex(client, index) })
+
+		// A write that waits reports COMPLETED and is readable as soon as it
+		// returns, whichever timeout action is selected.
+		for i, action := range []runtimev1pb.IndexingWaitTimeoutAction{
+			runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST,
+			runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_CONTINUE_ASYNC,
+		} {
+			id := fmt.Sprintf("doc-%d", i)
+			idxResp, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
+				StoreName: storeName,
+				Index:     index,
+				Documents: []*runtimev1pb.SearchDocument{newDocument(t, id, map[string]any{"title": "alpha guide"})},
+				Options:   waitOptions(10*time.Second, action),
+			})
+			require.NoError(t, err)
+			assert.Empty(t, idxResp.GetFailedItems())
+			assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_COMPLETED, idxResp.GetAck())
+
+			getResp, err := client.GetDocumentsAlpha1(ctx, &runtimev1pb.GetDocumentsRequestAlpha1{
+				StoreName: storeName, Index: index, Ids: []string{id},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, []string{id}, documentIDs(getResp.GetDocuments()))
+		}
+
+		delResp, err := client.DeleteDocumentsAlpha1(ctx, &runtimev1pb.DeleteDocumentsRequestAlpha1{
+			StoreName: storeName,
+			Index:     index,
+			Ids:       []string{"doc-0", "doc-1"},
+			Options:   waitOptions(10*time.Second, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_COMPLETED, delResp.GetAck())
+
+		getResp, err := client.GetDocumentsAlpha1(ctx, &runtimev1pb.GetDocumentsRequestAlpha1{
+			StoreName: storeName, Index: index, Ids: []string{"doc-0", "doc-1"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, getResp.GetDocuments())
+	})
+
+	t.Run("wait timeout actions", func(t *testing.T) {
+		// A batch large enough that the provider cannot finish it within the
+		// shortest wait.
+		bulk := make([]*runtimev1pb.SearchDocument, 0, 5000)
+		for i := range cap(bulk) {
+			bulk = append(bulk, newDocument(t, fmt.Sprintf("doc-%d", i), map[string]any{
+				"title": fmt.Sprintf("alpha guide %d", i), "body": strings.Repeat("lorem ipsum ", 20),
+			}))
+		}
+
+		t.Run("continue async reports queued and the write still lands", func(t *testing.T) {
+			index := indexName("wait-async")
+			requireCreateIndex(t, ctx, client, index)
+			t.Cleanup(func() { dropIndex(client, index) })
+
+			resp, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
+				StoreName: storeName,
+				Index:     index,
+				Documents: bulk,
+				Options:   waitOptions(time.Millisecond, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_CONTINUE_ASYNC),
+			})
+			require.NoError(t, err)
+			assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_QUEUED, resp.GetAck())
+
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: storeName, Index: index})
+				if !assert.NoError(c, err) {
+					return
+				}
+				assert.Equal(c, uint64(len(bulk)), got.GetDocumentCount())
+			}, 30*time.Second, 100*time.Millisecond)
+		})
+
+		t.Run("fail request reports deadline exceeded", func(t *testing.T) {
+			index := indexName("wait-fail")
+			requireCreateIndex(t, ctx, client, index)
+			t.Cleanup(func() { dropIndex(client, index) })
+
+			_, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
+				StoreName: storeName,
+				Index:     index,
+				Documents: bulk,
+				Options:   waitOptions(time.Millisecond, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
+			})
+			assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
+		})
+	})
+
+	t.Run("continuation token lifecycle", func(t *testing.T) {
+		index := indexName("pages")
+		requireCreateIndex(t, ctx, client, index)
+		t.Cleanup(func() { dropIndex(client, index) })
+
+		_, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
+			StoreName: storeName,
+			Index:     index,
+			Documents: documents(t),
+			Options:   waitOptions(10*time.Second, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
+		})
+		require.NoError(t, err)
+
+		// A request with neither text nor native matches every document. One
+		// hit per page walks the whole index.
+		page := func(token *string) *runtimev1pb.SearchRequestAlpha1 {
+			return &runtimev1pb.SearchRequestAlpha1{
+				StoreName: storeName, Index: index, TopK: new(uint32(1)), ContinuationToken: token,
+			}
+		}
+
+		var (
+			seen  []string
+			token *string
+			first string
+		)
+		for range len(documents(t)) + 1 {
+			pageResp, pageErr := client.SearchAlpha1(ctx, page(token))
+			require.NoError(t, pageErr)
+			seen = append(seen, hitIDs(pageResp.GetHits())...)
+			// The token is omitted, not empty, once the last page is served.
+			token = pageResp.ContinuationToken
+			if token == nil {
+				break
+			}
+			require.NotEmpty(t, token)
+			if first == "" {
+				first = *token
+			}
+		}
+		assert.Nil(t, token, "the last page carries no continuation token")
+		assert.ElementsMatch(t, []string{"doc-1", "doc-2", "doc-3"}, seen)
+
+		// A token resumes the same page however often it is presented.
+		resp, err := client.SearchAlpha1(ctx, page(&first))
+		require.NoError(t, err)
+		require.Len(t, resp.GetHits(), 1)
+		assert.Equal(t, seen[1], resp.GetHits()[0].GetDocument().GetId())
+
+		// A token is bound to the query that produced it.
+		other := page(&first)
+		other.Query = &runtimev1pb.SearchRequestAlpha1_Text{Text: "alpha"}
+		_, err = client.SearchAlpha1(ctx, other)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		_, err = client.SearchAlpha1(ctx, page(new("not-a-token")))
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("error search missing store", func(t *testing.T) {
 		_, err := client.SearchAlpha1(ctx, &runtimev1pb.SearchRequestAlpha1{})
 		require.Error(t, err)
@@ -291,13 +457,21 @@ func dropIndex(client runtimev1pb.DaprClient, index string) {
 	_, _ = client.DeleteIndexAlpha1(context.Background(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: storeName, Index: index})
 }
 
+func waitOptions(wait time.Duration, action runtimev1pb.IndexingWaitTimeoutAction) *runtimev1pb.IndexingOptionsAlpha1 {
+	return &runtimev1pb.IndexingOptionsAlpha1{
+		Mode:          runtimev1pb.IndexingMode_INDEXING_MODE_WAIT_FOR_COMPLETION,
+		WaitTimeout:   durationpb.New(wait),
+		OnWaitTimeout: action,
+	}
+}
+
 func searchRequest(index string, text string) *runtimev1pb.SearchRequestAlpha1 {
 	return &runtimev1pb.SearchRequestAlpha1{
 		StoreName:      storeName,
 		Index:          index,
 		Query:          &runtimev1pb.SearchRequestAlpha1_Text{Text: text},
-		TopK:           10,
-		IncludeContent: true,
+		TopK:           new(uint32(10)),
+		IncludeContent: new(true),
 	}
 }
 

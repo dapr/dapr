@@ -34,7 +34,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 // filter DSL, which addresses VectorRecord.metadata.
 //
 // Sparse and named vectors, hybrid fusion and query pagination are deferred
-// to beta; their field numbers are reserved below.
+// to beta.
 // =============================================================================
 
 enum DistanceMetric {
@@ -101,13 +101,9 @@ message VectorRecord {
   repeated float values = 2;
   // Opaque caller payload stored with the record and returned unchanged. Not
   // filterable.
-  bytes payload = 3;
+  optional bytes payload = 3;
   // Structured, filterable attributes addressed by the filter DSL.
-  google.protobuf.Struct metadata = 6;
-
-  // Reserved for sparse and named vectors (deferred to beta).
-  reserved 4, 5;
-  reserved "sparse_values", "named_vectors";
+  optional google.protobuf.Struct metadata = 6;
 }
 
 message VectorMatch {
@@ -122,7 +118,8 @@ message UpsertVectorsRequestAlpha1 {
   string collection = 2;
   repeated VectorRecord records = 3;
   map<string, string> metadata = 4;
-  IndexingOptionsAlpha1 options = 5;
+  // Omitted options behave as INDEXING_MODE_RETURN_ON_ACCEPTANCE.
+  optional IndexingOptionsAlpha1 options = 5;
 }
 
 message UpsertVectorsResponseAlpha1 {
@@ -137,7 +134,8 @@ message DeleteVectorsRequestAlpha1 {
   string collection = 2;
   repeated string ids = 3;
   map<string, string> metadata = 4;
-  IndexingOptionsAlpha1 options = 5;
+  // Omitted options behave as INDEXING_MODE_RETURN_ON_ACCEPTANCE.
+  optional IndexingOptionsAlpha1 options = 5;
 }
 
 message DeleteVectorsResponseAlpha1 {
@@ -149,7 +147,8 @@ message GetVectorsRequestAlpha1 {
   string store_name = 1;
   string collection = 2;
   repeated string ids = 3;
-  bool include_values = 4;
+  // Whether VectorRecord.values is returned. Defaults to false.
+  optional bool include_values = 4;
   map<string, string> metadata = 5;
 }
 
@@ -168,10 +167,16 @@ message QueryVectorsRequestAlpha1 {
     string by_id = 4;
   }
 
-  uint32 top_k = 5;
-  google.protobuf.Struct filter = 6;
-  bool include_values = 7;
-  bool include_payload = 8;
+  // Maximum number of matches to return. When omitted or 0, the component's
+  // documented default applies.
+  optional uint32 top_k = 5;
+  optional google.protobuf.Struct filter = 6;
+  // Whether VectorRecord.values is returned with each match. Defaults to
+  // false.
+  optional bool include_values = 7;
+  // Whether VectorRecord.payload is returned with each match. Defaults to
+  // false.
+  optional bool include_payload = 8;
   // Determines how score and score_threshold are interpreted. UNSPECIFIED
   // uses the metric configured for the collection. A metric the component
   // cannot evaluate for this collection returns INVALID_ARGUMENT.
@@ -181,10 +186,6 @@ message QueryVectorsRequestAlpha1 {
   // this value for EUCLIDEAN. The value is not normalized.
   optional double score_threshold = 13;
   map<string, string> metadata = 14;
-
-  // Reserved for hybrid and named-vector queries (deferred to beta).
-  reserved 10, 11, 12;
-  reserved "sparse_query", "alpha", "vector_name";
 }
 
 message QueryVectorsResponseAlpha1 {
@@ -197,6 +198,10 @@ message QueryVectorsResponseAlpha1 {
 message BatchQueryVectorsRequestAlpha1 {
   string store_name = 1;
   string collection = 2;
+  // Every query runs against the store_name and collection of this request,
+  // which a query inherits when it leaves its own unset. A query that sets
+  // either to a different value yields an INVALID_ARGUMENT error result in
+  // its slot.
   repeated QueryVectorsRequestAlpha1 queries = 3;
   map<string, string> metadata = 4;
 }
