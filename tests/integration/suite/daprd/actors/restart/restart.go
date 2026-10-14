@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,8 +57,10 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.app.WaitUntilRunning(t, ctx)
 
-	r.invoke(t, ctx)
-	r.invoke(t, ctx)
+	foo := &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"}
+	client := r.app.GRPCClient(t, ctx)
+	activation.Invoke(t, ctx, client, foo)
+	activation.Invoke(t, ctx, client, foo)
 	before := r.rec.Take()
 	require.GreaterOrEqual(t, len(before), 2)
 	require.NotEmpty(t, before[0].ID)
@@ -71,8 +72,9 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.app.Daprd().WaitUntilRunning(t, ctx)
 	r.app.Daprd().WaitUntilActorTypeHosted(t, ctx, "abc")
 
-	r.invoke(t, ctx)
-	r.invoke(t, ctx)
+	client = r.app.GRPCClient(t, ctx)
+	activation.Invoke(t, ctx, client, foo)
+	activation.Invoke(t, ctx, client, foo)
 	after := r.rec.Take()
 	require.GreaterOrEqual(t, len(after), 2)
 	require.NotEmpty(t, after[0].ID)
@@ -80,17 +82,4 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, after[0].ID, e.ID)
 	}
 	assert.NotEqual(t, before[0].ID, after[0].ID)
-}
-
-func (r *restart) invoke(t *testing.T, ctx context.Context) {
-	t.Helper()
-	client := r.app.GRPCClient(t, ctx)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   "1",
-			Method:    "foo",
-		})
-		assert.NoError(c, err)
-	}, time.Second*8, time.Millisecond*10)
 }

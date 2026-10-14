@@ -62,10 +62,12 @@ func (a *reactivate) Setup(t *testing.T) []framework.Option {
 func (a *reactivate) Run(t *testing.T, ctx context.Context) {
 	a.app.WaitUntilRunning(t, ctx)
 
+	foo := &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"}
+	client := a.app.GRPCClient(t, ctx)
 	seen := make(map[string]bool)
 	for range 2 {
-		a.invoke(t, ctx)
-		a.invoke(t, ctx)
+		activation.Invoke(t, ctx, client, foo)
+		activation.Invoke(t, ctx, client, foo)
 		calls := a.rec.Take()
 		require.GreaterOrEqual(t, len(calls), 2)
 		require.NotEmpty(t, calls[0].ID)
@@ -81,17 +83,4 @@ func (a *reactivate) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, []activation.Event{{Kind: "DELETE"}}, events)
 		}, time.Second*8, time.Millisecond*10)
 	}
-}
-
-func (a *reactivate) invoke(t *testing.T, ctx context.Context) {
-	t.Helper()
-	client := a.app.GRPCClient(t, ctx)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   "1",
-			Method:    "foo",
-		})
-		assert.NoError(c, err)
-	}, time.Second*8, time.Millisecond*10)
 }

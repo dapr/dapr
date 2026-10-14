@@ -266,6 +266,45 @@ func Test_ActivationIDOverridesCaller(t *testing.T) {
 	assert.Equal(t, []string{"spoofed"}, req.GetMetadata()["dapr-actor-activation-id"].GetValues())
 }
 
+func Test_ActivationIDNotHopByHop(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		conn []string
+		want []string
+	}{
+		"only id":       {conn: []string{"Dapr-Actor-Activation-Id"}},
+		"id any case":   {conn: []string{"keep-alive, dapr-actor-activation-id"}, want: []string{"keep-alive"}},
+		"many values":   {conn: []string{"DAPR-ACTOR-ACTIVATION-ID", "x-a,Dapr-Actor-Activation-Id, x-b"}, want: []string{"x-a, x-b"}},
+		"no id":         {conn: []string{"keep-alive, x-a"}, want: []string{"keep-alive, x-a"}},
+		"empty entries": {conn: []string{" , ", "keep-alive,,"}, want: []string{"keep-alive"}},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var got *internalv1pb.ListStringValue
+			var gotOK bool
+			fact, _ := newActivationFactory(t, func(o *Options) {
+				o.AppChannel = fake.New().WithInvokeMethod(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+					got, gotOK = req.Metadata()["Connection"]
+					return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+				})
+			})
+
+			req := internalv1pb.NewInternalInvokeRequest("foo").WithActor("abc", "a").WithMetadata(map[string][]string{
+				"Connection": test.conn,
+			})
+			_, err := fact.GetOrCreate("a").InvokeMethod(t.Context(), req)
+			require.NoError(t, err)
+			assert.Equal(t, test.want != nil, gotOK)
+			assert.Equal(t, test.want, got.GetValues())
+			assert.Equal(t, test.conn, req.GetMetadata()["Connection"].GetValues())
+		})
+	}
+}
+
 func Test_ActivationIDReentrant(t *testing.T) {
 	t.Parallel()
 

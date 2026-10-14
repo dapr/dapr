@@ -72,14 +72,7 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 
 	client := h.app.GRPCClient(t, ctx)
 	invoke := func() {
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: "abc",
-				ActorId:   "1",
-				Method:    "foo",
-			})
-			assert.NoError(c, err)
-		}, time.Second*8, time.Millisecond*10)
+		activation.Invoke(t, ctx, client, &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
 	}
 
 	invoke()

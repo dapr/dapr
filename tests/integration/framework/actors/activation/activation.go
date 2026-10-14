@@ -14,10 +14,18 @@ limitations under the License.
 package activation
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // Header is the callback header and gRPC metadata key daprd sends the
@@ -127,4 +135,18 @@ func (c *Cache) Value(actorID string) int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.entries[actorID].value
+}
+
+// Invoke calls an actor method, retrying until daprd can place the actor.
+func Invoke(t *testing.T, ctx context.Context, client rtv1.DaprClient, req *rtv1.InvokeActorRequest) []byte {
+	t.Helper()
+
+	var data []byte
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := client.InvokeActor(ctx, req)
+		if assert.NoError(c, err) {
+			data = resp.GetData()
+		}
+	}, time.Second*8, time.Millisecond*10)
+	return data
 }

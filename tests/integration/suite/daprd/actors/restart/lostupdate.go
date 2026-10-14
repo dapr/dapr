@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -45,7 +46,9 @@ func init() {
 // actor state like the SDKs bumps 30 counters to 1, daprd restarts, host2 takes
 // some actors and bumps them to 2, then leaves. host1's app still caches the
 // stale 1, but drops it when the activation id changes like an updated SDK, so
-// the next increment must return 3 and the store must hold 3, not 2.
+// the next increment must return 3 and the store must hold 3, not 2. Each
+// increment has a request id, so a retry that already landed isn't counted
+// twice.
 type lostupdate struct {
 	host1  *actors.Actors
 	cache1 *counterApp
@@ -65,8 +68,14 @@ func (l *lostupdate) Setup(t *testing.T) []framework.Option {
 func (l *lostupdate) Run(t *testing.T, ctx context.Context) {
 	l.host1.WaitUntilRunning(t, ctx)
 
+	reqs := make([]string, lostupdateActors)
 	for i := range lostupdateActors {
-		assert.Equal(t, 1, incr(t, ctx, l.host1, strconv.Itoa(i)))
+		reqs[i] = uuid.NewString()
+		assert.Equal(t, 1, incr(t, ctx, l.host1, strconv.Itoa(i), reqs[i]))
+	}
+	for i := range lostupdateActors {
+		assert.Equal(t, 1, incr(t, ctx, l.host1, strconv.Itoa(i), reqs[i]))
+		assert.Equal(t, "1", l.cache1.stored(t, ctx, strconv.Itoa(i)))
 	}
 
 	l.host1.Daprd().Restart(t, ctx)
@@ -84,7 +93,12 @@ func (l *lostupdate) Run(t *testing.T, ctx context.Context) {
 	l.waitForHosts(t, ctx, 2)
 
 	for i := range lostupdateActors {
-		assert.Equal(t, 2, incr(t, ctx, host2, strconv.Itoa(i)))
+		reqs[i] = uuid.NewString()
+		assert.Equal(t, 2, incr(t, ctx, host2, strconv.Itoa(i), reqs[i]))
+	}
+	for i := range lostupdateActors {
+		assert.Equal(t, 2, incr(t, ctx, l.host1, strconv.Itoa(i), reqs[i]))
+		assert.Equal(t, "2", l.cache1.stored(t, ctx, strconv.Itoa(i)))
 	}
 
 	moved := cache2.servedIDs()
@@ -98,7 +112,7 @@ func (l *lostupdate) Run(t *testing.T, ctx context.Context) {
 	}
 
 	for _, id := range moved {
-		assert.Equal(t, 3, incr(t, ctx, l.host1, id), "actor %s", id)
+		assert.Equal(t, 3, incr(t, ctx, l.host1, id, uuid.NewString()), "actor %s", id)
 		assert.Equal(t, "3", l.cache1.stored(t, ctx, id), "actor %s", id)
 	}
 }
@@ -153,10 +167,25 @@ func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
 	defer c.lock.Unlock()
 
 	id := r.PathValue("id")
+	reqID, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	done, err := c.get(r.Context(), id, "req-"+string(reqID))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if done > 0 {
+		w.Write([]byte(strconv.Itoa(done)))
+		return
+	}
+
 	activationID := activation.FromHeader(r)
 	seq, ok := c.cache.Get(id, activationID)
 	if !ok {
-		stored, err := c.get(r.Context(), id)
+		stored, err := c.get(r.Context(), id, "seq")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -165,7 +194,7 @@ func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
 	}
 	seq++
 
-	if err := c.save(r.Context(), id, seq); err != nil {
+	if err := c.save(r.Context(), id, string(reqID), seq); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -175,17 +204,19 @@ func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(strconv.Itoa(seq)))
 }
 
-func (c *counterApp) get(ctx context.Context, id string) (int, error) {
-	body, err := c.do(ctx, http.MethodGet, "/v1.0/actors/abc/"+id+"/state/seq", "")
+func (c *counterApp) get(ctx context.Context, id, key string) (int, error) {
+	body, err := c.do(ctx, http.MethodGet, "/v1.0/actors/abc/"+id+"/state/"+key, "")
 	if err != nil || body == "" {
 		return 0, err
 	}
 	return strconv.Atoi(body)
 }
 
-func (c *counterApp) save(ctx context.Context, id string, seq int) error {
+func (c *counterApp) save(ctx context.Context, id, reqID string, seq int) error {
+	v := strconv.Itoa(seq)
 	_, err := c.do(ctx, http.MethodPost, "/v1.0/actors/abc/"+id+"/state",
-		`[{"operation":"upsert","request":{"key":"seq","value":`+strconv.Itoa(seq)+`}}]`)
+		`[{"operation":"upsert","request":{"key":"seq","value":`+v+`}},`+
+			`{"operation":"upsert","request":{"key":"req-`+reqID+`","value":`+v+`}}]`)
 	return err
 }
 
@@ -226,24 +257,17 @@ func (c *counterApp) cachedSeq(id string) int {
 	return c.cache.Value(id)
 }
 
-func incr(t *testing.T, ctx context.Context, via *actors.Actors, id string) int {
+func incr(t *testing.T, ctx context.Context, via *actors.Actors, id, reqID string) int {
 	t.Helper()
 
-	var seq int
-	daprClient := via.GRPCClient(t, ctx)
-	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		resp, err := daprClient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   id,
-			Method:    "incr",
-		})
-		if !assert.NoError(col, err) {
-			return
-		}
-		seq, err = strconv.Atoi(string(resp.GetData()))
-		assert.NoError(col, err)
-	}, time.Second*8, time.Millisecond*10)
-
+	data := activation.Invoke(t, ctx, via.GRPCClient(t, ctx), &rtv1.InvokeActorRequest{
+		ActorType: "abc",
+		ActorId:   id,
+		Method:    "incr",
+		Data:      []byte(reqID),
+	})
+	seq, err := strconv.Atoi(string(data))
+	require.NoError(t, err)
 	return seq
 }
 

@@ -62,7 +62,13 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	md := make(map[string]*internalv1pb.ListStringValue, len(req.GetMetadata())+1)
 	for k, v := range req.GetMetadata() {
-		if !strings.EqualFold(k, transport.ActivationIDHeader) {
+		switch {
+		case strings.EqualFold(k, transport.ActivationIDHeader):
+		case strings.EqualFold(k, "Connection"):
+			if conn := withoutActivationID(v); conn != nil {
+				md[k] = conn
+			}
+		default:
 			md[k] = v
 		}
 	}
@@ -188,6 +194,28 @@ func (a *app) setActivationID(req *internalv1pb.InternalInvokeRequest) {
 		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
 	}
 	req.GetMetadata()[transport.ActivationIDHeader] = a.activationMD
+}
+
+// withoutActivationID drops the activation id from a Connection header so a
+// caller can't strip it as a hop-by-hop header.
+func withoutActivationID(conn *internalv1pb.ListStringValue) *internalv1pb.ListStringValue {
+	var values []string
+	for _, v := range conn.GetValues() {
+		var tokens []string
+		for token := range strings.SplitSeq(v, ",") {
+			token = strings.TrimSpace(token)
+			if token != "" && !strings.EqualFold(token, transport.ActivationIDHeader) {
+				tokens = append(tokens, token)
+			}
+		}
+		if len(tokens) > 0 {
+			values = append(values, strings.Join(tokens, ", "))
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return &internalv1pb.ListStringValue{Values: values}
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler
