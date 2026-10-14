@@ -37,6 +37,8 @@ type Report struct {
 	ActorTypes []string
 }
 
+const internalActorTypePrefix = "dapr.internal."
+
 // Authorize rejects a report whose app ID or namespace does not match the
 // caller's SPIFFE identity, and reports claiming internal actor types
 // (dapr.internal.<namespace>.<appid>.*) which do not belong to the reporting
@@ -66,20 +68,34 @@ func Authorize(ctx context.Context, sec security.Handler, r Report) error {
 		}
 	}
 
-	const partDapr = "dapr"
-	const partInternal = "internal"
 	for _, actorType := range r.ActorTypes {
-		split := strings.Split(actorType, ".")
-		if len(split) >= 2 && split[0] == partDapr && split[1] == partInternal {
-			if len(split) < 4 || split[2] != r.Namespace || split[3] != r.AppID {
-				return status.Errorf(
-					codes.PermissionDenied,
-					"entity %s is not allowed for app ID %s in namespace %s",
-					actorType, r.AppID, r.Namespace,
-				)
-			}
+		if internal, owned := InternalActorType(actorType, r.Namespace, r.AppID); internal && !owned {
+			return status.Errorf(
+				codes.PermissionDenied,
+				"entity %s is not allowed for app ID %s in namespace %s",
+				actorType, r.AppID, r.Namespace,
+			)
 		}
 	}
 
 	return nil
+}
+
+// InternalActorType reports whether actorType is a reserved internal actor
+// type (dapr.internal.*) and, if so, whether it belongs to appID in namespace
+// ns, that is whether it is "dapr.internal.<ns>.<appID>" or starts with it
+// followed by a dot. The owner is matched as a prefix rather than parsed out
+// of the type because a self-hosted namespace may contain dots; an app ID
+// cannot, so the match is unambiguous within a namespace. A malformed
+// internal type, such as one with an empty segment, is internal and owned by
+// no one.
+func InternalActorType(actorType, ns, appID string) (internal, owned bool) {
+	if actorType != "dapr.internal" && !strings.HasPrefix(actorType, internalActorTypePrefix) {
+		return false, false
+	}
+	if ns == "" || appID == "" {
+		return true, false
+	}
+	owner := internalActorTypePrefix + ns + "." + appID
+	return true, actorType == owner || strings.HasPrefix(actorType, owner+".")
 }

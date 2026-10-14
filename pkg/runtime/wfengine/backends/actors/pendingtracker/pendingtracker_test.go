@@ -251,3 +251,23 @@ func Test_SupersededDeregisterKeepsNewRegistrationTracked(t *testing.T) {
 	assert.Equal(t, 1, newCalls)
 	require.ErrorIs(t, newErr, api.ErrTaskCancelled)
 }
+
+func Test_OlderRegistrationStaysTrackedAfterNewerDeregisters(t *testing.T) {
+	t.Parallel()
+
+	tr := New(local.NewTasksBackend())
+
+	var wfErr, actErr error
+	tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(_ *protos.WorkflowResponse, err error) {
+		wfErr = err
+	})
+	tr.OnActivityCompletion(actReq("wf1", 7), func(_ *protos.ActivityResponse, err error) {
+		actErr = err
+	})
+	tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(*protos.WorkflowResponse, error) {})()
+	tr.OnActivityCompletion(actReq("wf1", 7), func(*protos.ActivityResponse, error) {})()
+
+	tr.SetExecutorAvailable(false)
+	require.ErrorIs(t, wfErr, api.ErrTaskCancelled)
+	require.ErrorIs(t, actErr, api.ErrTaskCancelled)
+}

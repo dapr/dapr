@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -379,13 +380,13 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 
 func (w *Workflow) WorkflowClient(t *testing.T, ctx context.Context) *workflow.Client {
 	t.Helper()
-	return workflow.NewClient(w.Dapr().GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.Dapr().GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) WorkflowClientN(t *testing.T, ctx context.Context, index int) *workflow.Client {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
-	return workflow.NewClient(w.DaprN(index).GRPCConn(t, ctx))
+	return workflow.NewClientWithLogger(w.DaprN(index).GRPCConn(t, ctx), logger.New(t))
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
@@ -429,6 +430,16 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 	return w.daprds[0].GRPCClient(t, ctx)
 }
 
+// InternalGRPCClient returns a client for the internal gRPC API of the first
+// daprd, authenticated as that daprd's own app when mTLS is enabled. Tests
+// use it to drive the reserved workflow actors directly, as a peer daprd of
+// the same app would.
+func (w *Workflow) InternalGRPCClient(t *testing.T, ctx context.Context) internalv1pb.ServiceInvocationClient {
+	t.Helper()
+	d := w.daprds[0]
+	return d.InternalGRPCClient(t, ctx, w.sentry, d.AppID(), d.Namespace())
+}
+
 // GRPCClientForApp returns a GRPC client for the specified app index
 func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
 	t.Helper()
@@ -469,14 +480,14 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
+func (w *Workflow) ClusteredDeployment() bool {
+	return w.clustered
+}
+
 // SchedulerPlacement reports whether the scheduler serves actor placement
 // for this harness, in which case Placement returns nil.
 func (w *Workflow) SchedulerPlacement() bool {
 	return w.schedulerPlacement
-}
-
-func (w *Workflow) ClusteredDeployment() bool {
-	return w.clustered
 }
 
 // FastPath reports whether every daprd in this workflow runs with the

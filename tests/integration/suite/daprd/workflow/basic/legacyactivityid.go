@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -106,12 +106,11 @@ func (l *legacyactivityid) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	legacyActorID := fmt.Sprintf("%s::%d::3", wfID, scheduled.GetEventId())
-	_, err = l.workflow.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: l.workflow.ActivityActorType(0),
-		ActorId:   legacyActorID,
-		Method:    "Execute",
-		Data:      data,
-	})
+	_, err = l.workflow.InternalGRPCClient(t, ctx).CallActor(ctx,
+		internalv1pb.NewInternalInvokeRequest("Execute").
+			WithActor(l.workflow.ActivityActorType(0), legacyActorID).
+			WithData(data),
+	)
 	require.NoError(t, err)
 
 	meta, err := cl.WaitForWorkflowCompletion(ctx, wfID)

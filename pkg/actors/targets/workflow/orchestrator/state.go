@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -26,6 +27,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -208,7 +210,7 @@ func (o *orchestrator) invalidateCachedState() {
 // invalidateCachedState. Callers set o.state themselves: a caller priming the
 // views for a state that is not yet durable must not cache it.
 func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *protos.ExecutionStartedEvent) {
-	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, resolutionsAfterScheduling(state.History))
 	o.ometa = o.ometaFromState(o.rstate, startEvent)
 }
 
@@ -344,6 +346,26 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 // This method cleans up a workflow associated with the given actorID
 func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, includeRetentionReminder bool) error {
+	// Once a purge has been attempted the next load must come from the store,
+	// whatever else failed: the deactivation below is asynchronous and the
+	// actor stays tabled until it runs. Nothing is owed for an instance that
+	// no longer exists either, so the reuse guard goes with the cache: a late
+	// result for the purged instance is judged before this actor is reaped
+	// and would otherwise leave the flag set for the next generation.
+	// The cache goes whatever happened: a purge whose rows landed but whose
+	// reminder deletes failed must not keep serving them. The reuse guard is
+	// different, because it only stops an ID being reused while a result is
+	// still owed: clear it only once the rows are actually gone, or a purge
+	// that failed to delete anything would let a create through while the
+	// instance and its outstanding activity are both still live.
+	var rowsDeleted atomic.Bool
+	defer func() {
+		o.invalidateCachedState()
+		if rowsDeleted.Load() {
+			o.activityResultAwaited.Store(false)
+		}
+	}()
+
 	// This will create a request to purge everything.
 	req, err := state.GetPurgeRequest(o.actorID)
 	if err != nil {
@@ -353,17 +375,21 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	runners := []concurrency.Runner{
 		func(ctx context.Context) error {
 			// This will do the purging
-			return o.actorState.TransactionalStateOperation(ctx, true, req, false)
+			if terr := o.actorState.TransactionalStateOperation(ctx, true, req, false); terr != nil {
+				return terr
+			}
+			rowsDeleted.Store(true)
+			return nil
 		},
 		func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.actorType,
 				ActorID:         o.actorID,
 				MatchIDAsPrefix: false,
 			})
 		},
 		func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.activityActorType,
 				ActorID:         o.actorID + "::",
 				MatchIDAsPrefix: true,
@@ -373,7 +399,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 
 	if includeRetentionReminder {
 		runners = append(runners, func(ctx context.Context) error {
-			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, o.reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       o.retentionActorType,
 				ActorID:         o.actorID,
 				MatchIDAsPrefix: false,

@@ -68,6 +68,14 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 	)
 
 	var held atomic.Int32
+	// The churned host's activity never returns. Reporting the cancellation
+	// the disconnect raises would make the app call churn an activity failure,
+	// when a worker that goes away mid-activity answers nothing at all and its
+	// work item must be abandoned and re-dispatched. Released at cleanup so
+	// the blocked executions do not outlive the test.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+
 	for i := range daprds {
 		reg := w.workflow.RegistryN(i)
 		require.NoError(t, reg.AddWorkflowN("churn", func(ctx *task.WorkflowContext) (any, error) {
@@ -79,10 +87,10 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		}))
 		if i == churned {
-			require.NoError(t, reg.AddActivityN("step", func(actx task.ActivityContext) (any, error) {
+			require.NoError(t, reg.AddActivityN("step", func(task.ActivityContext) (any, error) {
 				held.Add(1)
-				<-actx.Context().Done()
-				return nil, actx.Context().Err()
+				<-release
+				return nil, nil
 			}))
 			continue
 		}
@@ -132,7 +140,7 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
 			assert.True(col, held.Load() > before || allCompleted(),
 				"the churned host must resume executing, or every instance must have completed")
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 250*time.Millisecond)
 	}
 	worker.Disconnect(t)
 	w.workflow.WaitForNoConnectedWorkersN(t, ctx, churned)

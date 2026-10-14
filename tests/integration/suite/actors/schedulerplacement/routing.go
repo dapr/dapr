@@ -127,7 +127,7 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 		return r.called1.Load()+r.called2.Load() >= numReminders
 	}, time.Second*20, time.Millisecond*10)
 
-	// Rendezvous hashing splits 50 actor IDs over 2 hosts; both must have
+	// Rendezvous hashing splits 50 actor IDs over 2 hosts. Both must have
 	// fired reminders.
 	assert.Positive(t, r.called1.Load())
 	assert.Positive(t, r.called2.Load())

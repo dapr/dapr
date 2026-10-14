@@ -128,7 +128,7 @@ func (a *adopt) Run(t *testing.T, ctx context.Context) {
 	invoke()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 	invokedBefore := a.invoked.Load()
 
 	// The flag flips on: the sidecar adopts the scheduler placement.
@@ -146,7 +146,7 @@ func (a *adopt) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, streams, float64(1))
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 	invoke()
 	assert.Greater(t, a.invoked.Load(), invokedBefore)
 	invokedBefore = a.invoked.Load()
@@ -168,7 +168,7 @@ func (a *adopt) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		assert.GreaterOrEqual(c, runtimes, float64(1))
-	}, time.Second*30, time.Millisecond*50)
+	}, time.Second*15, time.Millisecond*10)
 	invoke()
 	assert.Greater(t, a.invoked.Load(), invokedBefore)
 }

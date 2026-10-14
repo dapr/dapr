@@ -150,7 +150,7 @@ func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvoke
 // InvokeReminder delivers a reminder fire. The app-facing payload is the JSON
 // representation of api.ReminderResponse (Data is handled specially so SDKs
 // receive it as a base64-encoded JSON blob rather than an Any wrapper).
-func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
+func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error {
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
 		Period:  reminder.Period.String(),
@@ -164,6 +164,7 @@ func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) 
 		WithActor(reminder.ActorType, reminder.ActorID).
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
+	req.Metadata = md
 
 	_, err = t.Invoke(ctx, req)
 	return err
@@ -171,7 +172,7 @@ func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) 
 
 // InvokeTimer delivers a timer fire. Shape mirrors InvokeReminder with the
 // extra callback field.
-func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
+func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error {
 	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,
 		Data:     reminder.Data,
@@ -186,6 +187,7 @@ func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder) err
 		WithActor(reminder.ActorType, reminder.ActorID).
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
+	req.Metadata = md
 
 	_, err = t.Invoke(ctx, req)
 	return err
