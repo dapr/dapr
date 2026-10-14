@@ -26,13 +26,73 @@ import (
 )
 
 // MaxBodySizeMiddleware limits the body size to the given size (in bytes).
-func MaxBodySizeMiddleware(maxSize int64) func(next http.Handler) http.Handler {
+// It must be registered on the router before any other middleware so that no
+// middleware is invoked with an unbounded request body. Requests whose method
+// and path match one of the exempt route patterns are not limited.
+func MaxBodySizeMiddleware(maxSize int64, exemptRoutes ...routePattern) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			if !isExemptFromMaxBodySize(r, exemptRoutes) {
+				r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// isExemptFromMaxBodySize reports whether the request matches an exempt route.
+// The cleaned route path is preferred over the URL so duplicate slashes are
+// normalized the same way the router normalizes them.
+func isExemptFromMaxBodySize(r *http.Request, exemptRoutes []routePattern) bool {
+	if len(exemptRoutes) == 0 {
+		return false
+	}
+	reqPath := r.URL.EscapedPath()
+	if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePath != "" {
+		reqPath = rctx.RoutePath
+	}
+	for _, p := range exemptRoutes {
+		if p.matches(r.Method, reqPath) {
+			return true
+		}
+	}
+	return false
+}
+
+// routePattern matches requests against a chi route pattern, where "{param}"
+// segments match a single non-empty path segment.
+type routePattern struct {
+	method   string // empty matches any method
+	segments []string
+}
+
+func newRoutePattern(method, route string) routePattern {
+	return routePattern{
+		method:   method,
+		segments: strings.Split(strings.Trim(route, "/"), "/"),
+	}
+}
+
+func (p routePattern) matches(method, path string) bool {
+	if p.method != "" && p.method != method {
+		return false
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) != len(p.segments) {
+		return false
+	}
+	for i, seg := range p.segments {
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			if parts[i] == "" {
+				return false
+			}
+			continue
+		}
+		if seg != parts[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.

@@ -101,9 +101,8 @@ func NewServer(opts NewServerOpts) Server {
 func (s *server) StartNonBlocking(ctx context.Context) error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
-	if s.config.MaxRequestBodySize > 0 {
-		log.Infof("Enabled max body size HTTP handlers with size %d bytes", s.config.MaxRequestBodySize)
-	}
+	apiEndpoints := s.allowedEndpoints(s.api.APIEndpoints())
+	s.useMaxBodySize(r, apiEndpoints)
 	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
@@ -114,7 +113,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 	s.useAPILogging(r)
 
 	// Add all routes
-	s.setupRoutes(r, s.api.APIEndpoints())
+	s.setupRoutes(r, apiEndpoints)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -291,6 +290,38 @@ func (s *server) useMetrics(r chi.Router) {
 	r.Use(diag.DefaultHTTPMonitoring.HTTPMiddleware)
 }
 
+// useMaxBodySize limits the size of request bodies before any other
+// middleware runs, so the middleware pipeline is never invoked with an
+// unbounded body. Endpoints that opt out via SkipRequestBodySizeLimit (for
+// example streaming uploads) are matched by route and left unlimited.
+//
+// apiEndpoints must already be filtered by the API allowlist/denylist (see
+// allowedEndpoints) so that a disallowed endpoint can never be used to bypass
+// the limit.
+func (s *server) useMaxBodySize(r chi.Router, apiEndpoints []endpoints.Endpoint) {
+	if s.config.MaxRequestBodySize <= 0 {
+		return
+	}
+
+	var exemptRoutes []routePattern
+	for _, e := range apiEndpoints {
+		if !e.Settings.SkipRequestBodySizeLimit {
+			continue
+		}
+		if len(e.Methods) == 0 {
+			exemptRoutes = append(exemptRoutes, newRoutePattern("", "/"+e.Version+"/"+e.Route))
+			continue
+		}
+		for _, m := range e.Methods {
+			exemptRoutes = append(exemptRoutes, newRoutePattern(m, "/"+e.Version+"/"+e.Route))
+		}
+	}
+
+	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
+
+	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize), exemptRoutes...))
+}
+
 func (s *server) useContextSetup(mux chi.Router) {
 	// Adds an empty `endpoints.EndpointCtxData` value to the context so it can be later set by the handler
 	// This context value is used by the logging, tracing, and metrics middlewares
@@ -421,18 +452,25 @@ func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err er
 	return nil
 }
 
-func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
-	parameterFinder, _ := regexp.Compile("/{.*}")
-
-	// Build the API allowlist and denylist
+// allowedEndpoints returns the subset of eps permitted by the API
+// allowlist/denylist configured for HTTP.
+func (s *server) allowedEndpoints(eps []endpoints.Endpoint) []endpoints.Endpoint {
 	allowedAPIs := s.apiSpec.Allowed.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 	deniedAPIs := s.apiSpec.Denied.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
-	for _, e := range endpoints {
-		if !e.IsAllowed(allowedAPIs, deniedAPIs) {
-			continue
+	allowed := make([]endpoints.Endpoint, 0, len(eps))
+	for _, e := range eps {
+		if e.IsAllowed(allowedAPIs, deniedAPIs) {
+			allowed = append(allowed, e)
 		}
+	}
+	return allowed
+}
 
+func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
+	parameterFinder, _ := regexp.Compile("/{.*}")
+
+	for _, e := range s.allowedEndpoints(endpoints) {
 		path := "/" + e.Version + "/" + e.Route
 		s.handle(
 			e, path, r,
@@ -464,9 +502,6 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 
 	handler = s.addEndpointCtx(e, handler)
 
-	if s.config.MaxRequestBodySize > 0 && !e.Settings.SkipRequestBodySizeLimit {
-		handler = MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize))(handler)
-	}
 	handlerFunc := http.HandlerFunc(handler.ServeHTTP)
 
 	// If no method is defined, match any method
