@@ -29,9 +29,6 @@ var (
 	validGRPCStatusCodeRange = codeRange{0, 16}
 )
 
-// grpcCodeDeadlineExceeded is codes.DeadlineExceeded.
-const grpcCodeDeadlineExceeded = 4
-
 type retryScenario int
 
 const (
