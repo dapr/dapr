@@ -293,7 +293,8 @@ func (s *server) useMetrics(r chi.Router) {
 // useMaxBodySize limits the size of request bodies before any other
 // middleware runs, so the middleware pipeline is never invoked with an
 // unbounded body. Endpoints that opt out via SkipRequestBodySizeLimit (for
-// example streaming uploads) are matched by route and left unlimited.
+// example streaming uploads) are registered on a separate chi.Mux that the
+// middleware consults, so exemptions follow the router's own route matching.
 //
 // apiEndpoints must already be filtered by the API allowlist/denylist (see
 // allowedEndpoints) so that a disallowed endpoint can never be used to bypass
@@ -303,23 +304,24 @@ func (s *server) useMaxBodySize(r chi.Router, apiEndpoints []endpoints.Endpoint)
 		return
 	}
 
-	var exemptRoutes []routePattern
+	exempt := chi.NewRouter()
 	for _, e := range apiEndpoints {
 		if !e.Settings.SkipRequestBodySizeLimit {
 			continue
 		}
+		path := "/" + e.Version + "/" + e.Route
 		if len(e.Methods) == 0 {
-			exemptRoutes = append(exemptRoutes, newRoutePattern("", "/"+e.Version+"/"+e.Route))
+			exempt.Handle(path, http.NotFoundHandler())
 			continue
 		}
 		for _, m := range e.Methods {
-			exemptRoutes = append(exemptRoutes, newRoutePattern(m, "/"+e.Version+"/"+e.Route))
+			exempt.Method(m, path, http.NotFoundHandler())
 		}
 	}
 
 	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
 
-	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize), exemptRoutes...))
+	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize), exempt))
 }
 
 func (s *server) useContextSetup(mux chi.Router) {

@@ -47,12 +47,97 @@ func TestMaxBodySizeMiddleware(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	h := MaxBodySizeMiddleware(maxSize)(handler)
+	h := MaxBodySizeMiddleware(maxSize, nil)(handler)
 
 	r := httptest.NewRequest(http.MethodPost, "/v1.0/state/store", strings.NewReader("large"))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+}
+
+func TestMaxBodySizeMiddlewareRouteContext(t *testing.T) {
+	const maxSize = 4
+
+	exempt := chi.NewRouter()
+	exempt.Method(http.MethodPut, "/files/{name}", http.NotFoundHandler())
+
+	for _, test := range []struct {
+		name      string
+		path      string
+		routePath string
+		context   bool
+		limited   bool
+	}{
+		{
+			name: "escaped path without route context",
+			path: "/files/nested%2Ffile.bin",
+		},
+		{
+			name:    "escaped path with empty route path",
+			path:    "/files/nested%2Ffile.bin",
+			context: true,
+		},
+		{
+			name:      "cleaned route path takes precedence",
+			path:      "/files//file.bin",
+			routePath: "/files/file.bin",
+			context:   true,
+		},
+		{
+			name:      "non-exempt route path takes precedence",
+			path:      "/files/file.bin",
+			routePath: "/limited/file.bin",
+			context:   true,
+			limited:   true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPut, test.path, strings.NewReader("large"))
+			var rctx *chi.Context
+			if test.context {
+				rctx = chi.NewRouteContext()
+				rctx.RoutePath = test.routePath
+				rctx.URLParams.Add("parent", "original")
+				rctx.RoutePatterns = []string{"/parent/*"}
+				r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+			}
+
+			var (
+				body                 []byte
+				readErr              error
+				observedRouteContext *chi.Context
+			)
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, readErr = io.ReadAll(r.Body)
+				observedRouteContext = chi.RouteContext(r.Context())
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			w := httptest.NewRecorder()
+			MaxBodySizeMiddleware(maxSize, exempt)(handler).ServeHTTP(w, r)
+			require.Equal(t, http.StatusNoContent, w.Code)
+
+			if test.limited {
+				require.ErrorIs(t, readErr, streams.ErrStreamTooLarge)
+				require.Len(t, body, maxSize)
+			} else {
+				require.NoError(t, readErr)
+				require.Equal(t, "large", string(body))
+			}
+
+			if rctx == nil {
+				require.Nil(t, observedRouteContext)
+			} else {
+				// Exemption matching must not add parameters or patterns
+				// to the routing context used by downstream handlers.
+				require.Same(t, rctx, observedRouteContext)
+				require.Equal(t, test.routePath, rctx.RoutePath)
+				require.Equal(t, []string{"parent"}, rctx.URLParams.Keys)
+				require.Equal(t, []string{"original"}, rctx.URLParams.Values)
+				require.Equal(t, []string{"/parent/*"}, rctx.RoutePatterns)
+			}
+		})
+	}
 }
 
 func TestEndpointRequestBodySizeLimit(t *testing.T) {
@@ -87,9 +172,48 @@ func TestEndpointRequestBodySizeLimit(t *testing.T) {
 				SkipRequestBodySizeLimit: true,
 			},
 		},
+		{
+			Methods: []string{http.MethodPatch},
+			Route:   "binarystore/{name}/{fileName}",
+			Version: apiVersionV1alpha1,
+			Handler: handler,
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "wild/*",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "regex/{id:[a-z]+}",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "regex/{id:[0-9]+}",
+			Version: apiVersionV1,
+			Handler: handler,
+		},
+		{
+			Route:   "any/{name}",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
 	}
 	srv.useMaxBodySize(router, eps)
 	srv.setupRoutes(router, eps)
+	router.NotFound(handler)
 
 	tests := []struct {
 		name       string
@@ -110,9 +234,63 @@ func TestEndpointRequestBodySizeLimit(t *testing.T) {
 			statusCode: http.StatusNoContent,
 		},
 		{
+			name:       "POST streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "escaped file name is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/binarystore/store/nested%2Ffile.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
 			name:       "cleaned streaming endpoint is unlimited",
 			method:     http.MethodPut,
 			path:       "/v1.0-alpha1/binarystore//store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "same route with non-exempt method is limited",
+			method:     http.MethodPatch,
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "wildcard streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0/wild/a/b/c",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "regex param matching streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/abc",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "regex param matching regular endpoint is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/123",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "regex mismatch is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/abc123",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "all-method endpoint allows POST",
+			method:     http.MethodPost,
+			path:       "/v1.0/any/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "all-method endpoint allows DELETE",
+			method:     http.MethodDelete,
+			path:       "/v1.0/any/file.bin",
 			statusCode: http.StatusNoContent,
 		},
 	}
