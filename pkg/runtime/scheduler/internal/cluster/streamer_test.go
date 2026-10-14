@@ -219,3 +219,35 @@ func Test_handleJob_invalidTargetMetadata(t *testing.T) {
 		})
 	}
 }
+
+func Test_invokeActorReminder_SourceAppID(t *testing.T) {
+	t.Parallel()
+
+	var got *actorapi.Reminder
+	actors := routerfake.New().WithCallReminderFn(
+		func(_ context.Context, r *actorapi.Reminder) error {
+			got = r
+			return nil
+		},
+	)
+	s := &streamer{actors: actors, wfengine: wfenginefake.New()}
+
+	actor := &schedulerv1pb.TargetActorReminder{Type: "dapr.internal.default.target.workflow", Id: "instance-1"}
+	job := &schedulerv1pb.WatchJobsResponse{
+		Name: "activity-result-abc",
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     "creator",
+			Namespace: "default",
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{Actor: actor},
+			},
+		},
+	}
+
+	require.NoError(t, s.invokeActorReminder(t.Context(), job, actor))
+	require.NotNil(t, got)
+	assert.Equal(t, "creator", got.SourceAppID)
+	assert.Equal(t, "activity-result-abc", got.Name)
+	assert.Equal(t, "dapr.internal.default.target.workflow", got.ActorType)
+	assert.Equal(t, "instance-1", got.ActorID)
+}

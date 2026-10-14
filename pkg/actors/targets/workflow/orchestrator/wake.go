@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -31,8 +32,22 @@ const localWakeTimeout = time.Minute
 // failed drive; past it the janitor owns recovery.
 const driveRetryBudget = 6 * time.Second
 
-func (o *orchestrator) driveLost(wakeCtx context.Context, err error) bool {
-	return wakeCtx.Err() != nil || o.closed.Load() || targeterrors.IsClosed(err)
+// testArmHold is a test-only fault injection: the arming turn keeps the actor
+// lock for this long after posting its wake, so the detached drive resolves
+// this orchestrator object and parks on its lock behind any deactivation
+// queued before the turn ran. Not a supported production knob.
+var testArmHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ARM_HOLD", 0)
+})
+
+// driveLost reports whether the drive cannot be delivered from this host at
+// all: only the factory's wake context (cancelled by HaltAll) says so. A
+// closed lock means the orchestrator OBJECT was retired under the wake (a
+// purge, terminal turn or reaper deactivation queued before the arming
+// invocation ran): the retry's CallReminder re-resolves the target through
+// the table and lands on the fresh object.
+func (o *orchestrator) driveLost(wakeCtx context.Context) bool {
+	return wakeCtx.Err() != nil
 }
 
 // driveRetrySchedule yields the waits before each in-place retry of a failed
@@ -95,9 +110,10 @@ func (s *driveRetrySchedule) next() (time.Duration, bool) {
 // The loop is detached (the arming invocation holds the actor lock the turn
 // needs) and scoped to the factory's wake context, drained in HaltAll. A
 // failed turn is retried in place (bounded; see driveRetrySchedule) unless
-// the drive is lost outright (cancelled wakeCtx, closed actor); once the
-// retries are exhausted the loop exits and the janitor drives the pending
-// inbox within one period.
+// the drive is lost outright (cancelled wakeCtx); a turn refused by a closed
+// lock is retried at once on the fresh object the router resolves (see
+// driveLost). Once the retries are exhausted the loop exits and the janitor
+// drives the pending inbox within one period.
 //
 // The reminder name only selects the handleReminder arm (start or new-event
 // prefix); latest-wins is sufficient because any wake drains the whole inbox.
@@ -108,6 +124,10 @@ func (s *driveRetrySchedule) next() (time.Duration, bool) {
 func (o *orchestrator) localDrive(reminderName string, dueTime time.Time) {
 	if !o.fastPath || dueTime.After(time.Now()) {
 		return
+	}
+
+	if hold := testArmHold(); hold > 0 {
+		defer time.Sleep(hold)
 	}
 
 	o.driveName.Store(&reminderName)
@@ -186,9 +206,20 @@ func (o *orchestrator) driveLoop(wakeCtx context.Context) {
 		// Bounded in-place retries (same coverage, no scheduler
 		// involvement); they stop early when the drive is lost outright.
 		retries := o.newDriveRetrySchedule()
-		for err != nil && !o.driveLost(wakeCtx, err) {
+		for err != nil && !o.driveLost(wakeCtx) {
 			d, ok := retries.next()
-			if !ok || !sleepWake(wakeCtx, d) {
+			if !ok {
+				break
+			}
+			if targeterrors.IsClosed(err) {
+				// The object was retired under the wake; the router
+				// re-resolves the target through the table, so the fresh one
+				// is available now. The slot is still consumed, so a host
+				// that keeps retiring the actor stays within the budget.
+				log.Debugf("Workflow actor '%s': local wake '%s' refused by the retired object, retrying on the fresh one", actorID, name)
+				d = 0
+			}
+			if !sleepWake(wakeCtx, d) {
 				break
 			}
 			err = o.driveOnce(wakeCtx, actorType, actorID, name)

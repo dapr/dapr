@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	publisherfake "github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
 	fakepostman "github.com/dapr/dapr/pkg/runtime/subscription/postman/fake"
 )
 
@@ -124,5 +125,132 @@ func TestRebalanceCancelsInboundDelivery(t *testing.T) {
 			}, invoked)
 
 		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// TestExhaustedRetriesSignalTheComponent covers dapr/components-contrib#4362.
+//
+// A bounded retry policy that runs out with no dead letter topic to divert the
+// message to is a decision to stop trying. The component is told so with
+// contribpubsub.ErrRetriesExhausted, so a component that tracks its own
+// delivery position (Kafka committing a partition offset) can record the
+// message as handled instead of replaying it on the next reconnect.
+func TestExhaustedRetriesSignalTheComponent(t *testing.T) {
+	deliver := func(t *testing.T, prov resiliency.Provider, pubsubName string, deadLetterTopic string, deliverFn func(context.Context, *runtimePubsub.SubscribedMessage) error) error {
+		t.Helper()
+
+		comp := newPausablePubSub()
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+		_, err := New(Options{
+			Resiliency: prov,
+			Postman:    fakepostman.New().WithDeliverFn(deliverFn),
+			Adapter:    publisherfake.New(),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: pubsubName,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules:           []*runtimePubsub.Rule{{Path: "orders"}},
+				DeadLetterTopic: deadLetterTopic,
+			},
+		})
+		require.NoError(t, err)
+
+		return comp.deliver(t.Context(), "topic0", []byte(`{"data":"x"}`))
+	}
+
+	boundedRetries := func() resiliency.Provider {
+		return createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "1m",
+			resiliencyV1alpha.Retry{Policy: "constant", Duration: "1ms", MaxRetries: new(2)})
+	}
+
+	alwaysFails := func(context.Context, *runtimePubsub.SubscribedMessage) error {
+		return rterrors.NewRetriable(errors.New("app returned 500"))
+	}
+
+	t.Run("exhausted budget with no dead letter topic", func(t *testing.T) {
+		err := deliver(t, boundedRetries(), pubsubName, "", alwaysFails)
+		require.ErrorIs(t, err, contribpubsub.ErrRetriesExhausted)
+		require.ErrorContains(t, err, "app returned 500",
+			"the original failure must survive alongside the sentinel")
+	})
+
+	t.Run("no retry policy configured", func(t *testing.T) {
+		// A single attempt is not an exhausted budget: a retriable failure
+		// still means redeliver, and signalling otherwise would drop every
+		// failing message on components that act on the sentinel.
+		err := deliver(t, resiliency.New(log), "testpubsub", "", alwaysFails)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, contribpubsub.ErrRetriesExhausted)
+	})
+
+	t.Run("cancelled handler context", func(t *testing.T) {
+		// A rebalance or a component handler timeout interrupts the delivery
+		// rather than exhausting it, and the message has to go back. The
+		// error need not be context.Canceled itself: an in-flight call that
+		// is cancelled usually reports its own transport error.
+		comp := newPausablePubSub()
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+		_, err := New(Options{
+			Resiliency: boundedRetries(),
+			Postman: fakepostman.New().WithDeliverFn(func(ctx context.Context, _ *runtimePubsub.SubscribedMessage) error {
+				<-ctx.Done()
+				return rterrors.NewRetriable(errors.New("connection reset"))
+			}),
+			Adapter:    publisherfake.New(),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: pubsubName,
+			Topic:      "topic0",
+			Route:      runtimePubsub.Subscription{Rules: []*runtimePubsub.Rule{{Path: "orders"}}},
+		})
+		require.NoError(t, err)
+
+		sessionCtx, rebalance := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() {
+			done <- comp.deliver(sessionCtx, "topic0", []byte(`{"data":"x"}`))
+		}()
+		rebalance()
+
+		select {
+		case derr := <-done:
+			require.Error(t, derr)
+			require.NotErrorIs(t, derr, contribpubsub.ErrRetriesExhausted,
+				"an interrupted delivery must be redelivered, not recorded as handled")
+		case <-time.After(time.Second * 5):
+			t.Fatal("handler did not return after the component cancelled its context")
+		}
+	})
+
+	t.Run("error excluded by the retry condition", func(t *testing.T) {
+		// `matching` leaves this status out, so the policy stops after one
+		// attempt. That is a decision not to retry this failure, not a budget
+		// running out.
+		prov := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "1m",
+			resiliencyV1alpha.Retry{
+				Policy:     "constant",
+				Duration:   "1ms",
+				MaxRetries: new(2),
+				Matching:   &resiliencyV1alpha.RetryMatching{HTTPStatusCodes: "500"},
+			})
+
+		err := deliver(t, prov, pubsubName, "", func(context.Context, *runtimePubsub.SubscribedMessage) error {
+			return resiliency.NewCodeError(404, errors.New("app returned 404"))
+		})
+
+		require.Error(t, err)
+		require.NotErrorIs(t, err, contribpubsub.ErrRetriesExhausted)
+	})
+
+	t.Run("dead letter topic configured", func(t *testing.T) {
+		// The message has somewhere to go, so the give-up is recorded by the
+		// dead letter publish rather than by the component.
+		err := deliver(t, boundedRetries(), pubsubName, "dlq", alwaysFails)
+		if err != nil {
+			require.NotErrorIs(t, err, contribpubsub.ErrRetriesExhausted)
+		}
 	})
 }
