@@ -30,6 +30,7 @@ type Fake struct {
 	generateJWTFn         func(context.Context, *jwt.Request) (string, error)
 	jwksFn                func() jwk.Set
 	jwtSignatureAlgorithm func() jwa.KeyAlgorithm
+	runFn                 func(context.Context) error
 }
 
 func New() *Fake {
@@ -48,6 +49,10 @@ func New() *Fake {
 		},
 		jwtSignatureAlgorithm: func() jwa.KeyAlgorithm {
 			return jwa.PS256
+		},
+		runFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
 		},
 	}
 }
@@ -77,6 +82,11 @@ func (f *Fake) WithJWTSignatureAlgorithm(fn func() jwa.KeyAlgorithm) *Fake {
 	return f
 }
 
+func (f *Fake) WithRun(fn func(context.Context) error) *Fake {
+	f.runFn = fn
+	return f
+}
+
 func (f *Fake) SignIdentity(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 	return f.signIdentityFn(ctx, req)
 }
@@ -95,4 +105,8 @@ func (f *Fake) JWKS() jwk.Set {
 
 func (f *Fake) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
 	return f.jwtSignatureAlgorithm()
+}
+
+func (f *Fake) Run(ctx context.Context) error {
+	return f.runFn(ctx)
 }

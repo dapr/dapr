@@ -15,4 +15,5 @@ package operator
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/trustdistribution"
 )

@@ -398,17 +398,26 @@ func TestPatching(t *testing.T) {
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
 
-				assert.Len(t, daprdContainer.VolumeMounts, 1)
-				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
-				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
+				assert.Len(t, daprdContainer.VolumeMounts, 2)
+				assert.Equal(t, "dapr-trust-anchors", daprdContainer.VolumeMounts[0].Name)
+				assert.Equal(t, "/var/run/secrets/dapr.io/tls", daprdContainer.VolumeMounts[0].MountPath)
 				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
+				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[1].Name)
+				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[1].MountPath)
+				assert.True(t, daprdContainer.VolumeMounts[1].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
 				assert.Equal(t, 3501, daprdContainer.LivenessProbe.TCPSocket.Port.IntValue())
 
 				// Assertions on added volumes
-				assert.Len(t, pod.Spec.Volumes, 1)
-				tokenVolume := pod.Spec.Volumes[0]
+				assert.Len(t, pod.Spec.Volumes, 2)
+				trustAnchorsVolume := pod.Spec.Volumes[0]
+				assert.Equal(t, "dapr-trust-anchors", trustAnchorsVolume.Name)
+				require.NotNil(t, trustAnchorsVolume.ConfigMap)
+				assert.Equal(t, "dapr-root-ca.crt", trustAnchorsVolume.ConfigMap.Name)
+				require.NotNil(t, trustAnchorsVolume.ConfigMap.Optional)
+				assert.True(t, *trustAnchorsVolume.ConfigMap.Optional)
+				tokenVolume := pod.Spec.Volumes[1]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
 				require.Len(t, tokenVolume.Projected.Sources, 1)
@@ -440,12 +449,15 @@ func TestPatching(t *testing.T) {
 				assertDaprdContainerFn(t, pod)
 
 				// Check the presence of the volume
-				assert.Len(t, pod.Spec.Volumes, 2)
+				assert.Len(t, pod.Spec.Volumes, 3)
 				socketVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-unix-domain-socket", socketVolume.Name)
 				assert.NotNil(t, socketVolume.EmptyDir)
 				assert.Equal(t, corev1.StorageMediumMemory, socketVolume.EmptyDir.Medium)
-				tokenVolume := pod.Spec.Volumes[1]
+				trustAnchorsVolume := pod.Spec.Volumes[1]
+				assert.Equal(t, "dapr-trust-anchors", trustAnchorsVolume.Name)
+				assert.NotNil(t, trustAnchorsVolume.ConfigMap)
+				tokenVolume := pod.Spec.Volumes[2]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
 				require.Len(t, tokenVolume.Projected.Sources, 1)
@@ -460,9 +472,10 @@ func TestPatching(t *testing.T) {
 
 				// Check the presence of the volume mount in the daprd container
 				daprdContainer := pod.Spec.Containers[1]
-				assert.Len(t, daprdContainer.VolumeMounts, 2)
+				assert.Len(t, daprdContainer.VolumeMounts, 3)
 				assert.Equal(t, "dapr-unix-domain-socket", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
+				assert.Equal(t, "dapr-trust-anchors", daprdContainer.VolumeMounts[1].Name)
 
 				// Ensure the CLI flag is set
 				args := strings.Join(daprdContainer.Args, " ")
@@ -473,4 +486,49 @@ func TestPatching(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, testCaseFn(tc))
 	}
+}
+
+func TestPatchingTrustDistributionDisabled(t *testing.T) {
+	c := NewSidecarConfig(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod",
+			Namespace: "testns",
+			Annotations: map[string]string{
+				"dapr.io/enabled": "true",
+				"dapr.io/app-id":  "myapp",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "appcontainer"}},
+		},
+	})
+	c.TrustDistributionEnabled = false
+	c.CurrentTrustAnchors = []byte("pem")
+	c.SetFromPodAnnotations()
+
+	patch, err := c.GetPatch()
+	require.NoError(t, err)
+
+	pod, err := PatchPod(c.pod, patch)
+	require.NoError(t, err)
+
+	for _, volume := range pod.Spec.Volumes {
+		assert.NotEqual(t, "dapr-trust-anchors", volume.Name)
+	}
+
+	daprdContainer := pod.Spec.Containers[1]
+	require.Equal(t, "daprd", daprdContainer.Name)
+	for _, mount := range daprdContainer.VolumeMounts {
+		assert.NotEqual(t, "dapr-trust-anchors", mount.Name)
+	}
+
+	var foundLegacyEnv bool
+	for _, env := range daprdContainer.Env {
+		assert.NotEqual(t, "DAPR_TRUST_ANCHORS_FILE", env.Name)
+		if env.Name == "DAPR_TRUST_ANCHORS" {
+			assert.Equal(t, "pem", env.Value)
+			foundLegacyEnv = true
+		}
+	}
+	assert.True(t, foundLegacyEnv, "daprd must fall back to the deprecated inline trust anchors env var")
 }

@@ -30,26 +30,51 @@ type selfhosted struct {
 }
 
 // store saves the certificate bundle to the local filesystem.
-func (s *selfhosted) store(_ context.Context, bundle bundle.Bundle) error {
-	files := make(map[string][]byte)
-	files[s.config.RootCertPath] = bundle.X509.TrustAnchors
-	files[s.config.IssuerCertPath] = bundle.X509.IssChainPEM
-	files[s.config.IssuerKeyPath] = bundle.X509.IssKeyPEM
-
-	if s.config.JWT.Enabled {
-		files[s.config.JWT.SigningKeyPath] = bundle.JWT.SigningKeyPEM
-		files[s.config.JWT.JWKSPath] = bundle.JWT.JWKSJson
+func (s *selfhosted) store(_ context.Context, bndl bundle.Bundle) error {
+	type fileWrite struct {
+		path string
+		data []byte
 	}
 
-	// Files to write with their corresponding data
+	// Order matters for crash safety during CA renewal: the appended trust
+	// anchors are persisted before the pending issuer pair so a torn write
+	// never leaves a pending issuer which does not chain to a stored anchor.
+	writes := []fileWrite{
+		{s.config.RootCertPath, bndl.X509.TrustAnchors},
+		{s.config.NextIssuerKeyPath, bndl.X509.NextIssKeyPEM},
+		{s.config.NextIssuerCertPath, bndl.X509.NextIssChainPEM},
+		{s.config.IssuerCertPath, bndl.X509.IssChainPEM},
+		{s.config.IssuerKeyPath, bndl.X509.IssKeyPEM},
+	}
+
+	if s.config.JWT.Enabled && bndl.JWT != nil {
+		writes = append(writes,
+			fileWrite{s.config.JWT.SigningKeyPath, bndl.JWT.SigningKeyPEM},
+			fileWrite{s.config.JWT.JWKSPath, bndl.JWT.JWKSJson},
+		)
+	}
+
 	// Write each file if the path is specified and data exists
-	for path, data := range files {
-		if path == "" || data == nil {
+	for _, w := range writes {
+		if w.path == "" || w.data == nil {
 			continue
 		}
 
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", path, err)
+		if err := os.WriteFile(w.path, w.data, 0o600); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", w.path, err)
+		}
+	}
+
+	// Remove the pending issuer pair once it has been promoted (or was never
+	// present).
+	if bndl.X509.NextIssChainPEM == nil {
+		for _, path := range []string{s.config.NextIssuerCertPath, s.config.NextIssuerKeyPath} {
+			if path == "" {
+				continue
+			}
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove %s: %w", path, err)
+			}
 		}
 	}
 
@@ -106,6 +131,26 @@ func (s *selfhosted) loadAndValidateX509Bundle() (*bundle.X509, error) {
 	verifiedBundle, err := verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify CA bundle: %w", err)
+	}
+
+	// Read the pending issuer pair written during CA renewal, if any. Either
+	// both files exist, or neither: a single file indicates a torn renewal
+	// write which needs manual remediation.
+	nextChainPEM, chainErr := os.ReadFile(s.config.NextIssuerCertPath)
+	if chainErr != nil && !os.IsNotExist(chainErr) {
+		return nil, fmt.Errorf("failed to read pending issuer certificate: %w", chainErr)
+	}
+	nextKeyPEM, keyErr := os.ReadFile(s.config.NextIssuerKeyPath)
+	if keyErr != nil && !os.IsNotExist(keyErr) {
+		return nil, fmt.Errorf("failed to read pending issuer key: %w", keyErr)
+	}
+	if os.IsNotExist(chainErr) != os.IsNotExist(keyErr) {
+		return nil, fmt.Errorf("only one of the pending issuer credentials %q and %q exists; remove the orphan file or restore the missing one", s.config.NextIssuerCertPath, s.config.NextIssuerKeyPath)
+	}
+	if chainErr == nil && keyErr == nil {
+		if err := attachNextIssuer(verifiedBundle, nextChainPEM, nextKeyPEM); err != nil {
+			return nil, err
+		}
 	}
 
 	return verifiedBundle, nil

@@ -59,6 +59,11 @@ type X509Options struct {
 	RootCAFilename     string
 	IssuerCertFilename string
 	IssuerKeyFilename  string
+
+	CATTL                       time.Duration
+	CARenewalEnabled            bool
+	CARenewalThreshold          float64
+	TrustAnchorPropagationGrace time.Duration
 }
 
 type JWTOptions struct {
@@ -121,6 +126,10 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.X509.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
 	fs.StringVar(&opts.X509.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
 	fs.StringVar(&opts.X509.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
+	fs.DurationVar(&opts.X509.CATTL, "ca-ttl", config.DefaultCATTL, "Time-to-live used when generating or renewing the root and issuer certificates")
+	fs.BoolVar(&opts.X509.CARenewalEnabled, "ca-renewal-enabled", true, "Automatically renew the CA before the issuer certificate expires. Renewal appends a fresh trust anchor; the old anchors are never removed")
+	fs.Float64Var(&opts.X509.CARenewalThreshold, "ca-renewal-threshold", config.DefaultCARenewalThreshold, "Fraction of the issuer certificate's lifetime after which the CA is automatically renewed, in the range (0, 1)")
+	fs.DurationVar(&opts.X509.TrustAnchorPropagationGrace, "trust-anchor-propagation-grace", config.DefaultTrustAnchorPropagationGrace, "How long sentry keeps signing with the old issuer key after appending a renewed trust anchor, giving the new anchor time to propagate")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")
@@ -198,6 +207,25 @@ func (o *Options) Validate() error {
 
 	if o.JWT.Issuer != nil && !o.JWT.Enabled {
 		return errors.New("jwt-issuer cannot be set when jwt-enabled is false")
+	}
+
+	if o.X509.CARenewalEnabled {
+		if o.X509.TrustAnchorPropagationGrace <= 0 {
+			return errors.New("trust-anchor-propagation-grace must be greater than zero")
+		}
+		if o.X509.CARenewalThreshold <= 0 || o.X509.CARenewalThreshold >= 1 {
+			return errors.New("ca-renewal-threshold must be in the range (0, 1)")
+		}
+		if o.X509.CATTL <= 0 {
+			return errors.New("ca-ttl must be greater than zero")
+		}
+		// The old issuer validity remaining after renewal fires must exceed
+		// the propagation grace, so the renewed issuer is promoted before the
+		// old issuer expires.
+		remaining := time.Duration(float64(o.X509.CATTL) * (1 - o.X509.CARenewalThreshold))
+		if remaining <= o.X509.TrustAnchorPropagationGrace {
+			return fmt.Errorf("trust-anchor-propagation-grace (%s) must be less than the issuer validity remaining when renewal fires (%s, ca-ttl multiplied by 1 minus ca-renewal-threshold)", o.X509.TrustAnchorPropagationGrace, remaining)
+		}
 	}
 
 	return nil

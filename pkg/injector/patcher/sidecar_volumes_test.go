@@ -18,6 +18,7 @@ import (
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
@@ -323,4 +324,27 @@ func TestAddVolumeToContainers(t *testing.T) {
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
 	}
+}
+
+func TestGetTrustAnchorsVolume(t *testing.T) {
+	t.Run("default ConfigMap name", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{})
+		vol, mount := c.getTrustAnchorsVolume()
+		assert.Equal(t, "dapr-trust-anchors", vol.Name)
+		require.NotNil(t, vol.ConfigMap)
+		assert.Equal(t, "dapr-root-ca.crt", vol.ConfigMap.Name)
+		require.NotNil(t, vol.ConfigMap.Optional)
+		assert.True(t, *vol.ConfigMap.Optional)
+		assert.Equal(t, "dapr-trust-anchors", mount.Name)
+		assert.Equal(t, "/var/run/secrets/dapr.io/tls", mount.MountPath)
+		assert.True(t, mount.ReadOnly)
+	})
+
+	t.Run("custom ConfigMap name", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{})
+		c.TrustAnchorsConfigMapName = "my-trust-bundle"
+		vol, _ := c.getTrustAnchorsVolume()
+		require.NotNil(t, vol.ConfigMap)
+		assert.Equal(t, "my-trust-bundle", vol.ConfigMap.Name)
+	})
 }

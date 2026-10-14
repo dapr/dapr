@@ -36,6 +36,12 @@ type options struct {
 	namespace     *string
 	mode          *string
 
+	caTTL            *time.Duration
+	caRenewalEnabled *bool
+	renewalThreshold *float64
+	propagationGrace *time.Duration
+	credentialsDir   *string
+
 	jwt  jwtOptions
 	oidc oidcOptions
 }
@@ -214,5 +220,45 @@ func WithOIDCTLSKeyFile(keyFile string) Option {
 func WithJWTKeyID(kid string) Option {
 	return func(o *options) {
 		o.jwt.keyID = &kid
+	}
+}
+
+// WithCATTL sets the time-to-live used when generating or renewing the root
+// and issuer certificates.
+func WithCATTL(ttl time.Duration) Option {
+	return func(o *options) {
+		o.caTTL = &ttl
+	}
+}
+
+// WithCARenewalEnabled enables or disables automatic CA renewal.
+func WithCARenewalEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.caRenewalEnabled = &enabled
+	}
+}
+
+// WithCARenewalThreshold sets the fraction of the issuer certificate's
+// lifetime after which the CA is automatically renewed.
+func WithCARenewalThreshold(threshold float64) Option {
+	return func(o *options) {
+		o.renewalThreshold = &threshold
+	}
+}
+
+// WithPropagationGrace sets how long sentry keeps signing with the old issuer
+// key after appending a renewed trust anchor.
+func WithPropagationGrace(grace time.Duration) Option {
+	return func(o *options) {
+		o.propagationGrace = &grace
+	}
+}
+
+// WithCredentialsDir uses the given directory for the issuer credentials
+// instead of a fresh temporary directory. Lets a sentry process be restarted
+// against the credentials written by a previous one.
+func WithCredentialsDir(dir string) Option {
+	return func(o *options) {
+		o.credentialsDir = &dir
 	}
 }
