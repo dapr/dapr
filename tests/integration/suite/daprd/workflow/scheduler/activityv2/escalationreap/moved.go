@@ -24,11 +24,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -126,7 +126,7 @@ func (m *moved) Run(t *testing.T, ctx context.Context) {
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("EscalationReapMoved", wfFn))
 	require.NoError(t, registry.AddActivityN("Slow", actFn))
-	joinerClient := client.NewTaskHubGrpcClient(m.joiner.GRPCConn(t, ctx), backend.DefaultLogger())
+	joinerClient := client.NewTaskHubGrpcClient(m.joiner.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, m.joiner.GetMetadata(t, ctx).ActorRuntime.ActiveActors, m.workflow.ActorTypesCount())

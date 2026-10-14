@@ -323,12 +323,12 @@ func (h *httpMetrics) Init(meter view.Meter, appID string, config HTTPMonitoring
 	clientTags := []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 
 	views := []*view.View{
-		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution()),
+		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution()),
 		diagUtils.NewMeasureView(h.serverLatency, serverTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.serverRequestCount, serverTags, view.Count()),
-		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution()),
+		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution()),
 		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
 		diagUtils.NewMeasureView(h.healthProbeRoundtripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),

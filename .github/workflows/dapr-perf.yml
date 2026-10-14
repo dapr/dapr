@@ -348,11 +348,13 @@ jobs:
     # the actor and workflow tests, the ones placement affects, with actor
     # placement served by the Scheduler. Legs run sequentially on the same
     # cluster so the comparison shares its infrastructure.
+    # The daily schedule always runs both legs so scheduler placement is
+    # covered without a manual/dispatch trigger.
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        include: ${{ fromJSON((inputs.scheduler_placement == true || contains(github.event.client_payload.args, 'scheduler-placement')) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
+        include: ${{ fromJSON((github.event_name == 'schedule' || inputs.scheduler_placement == true || contains(github.event.client_payload.args, 'scheduler-placement')) && '[{"scheduler_placement":false,"perf_tests":""},{"scheduler_placement":true,"perf_tests":"actor_activation actor_double_activation actor_id_scale actor_reminder actor_timer actor_type_scale workflows"}]' || '[{"scheduler_placement":false,"perf_tests":""}]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -394,6 +396,9 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+          if [ "${{ matrix.perf_tests }}" != "" ] ; then
+            echo "DAPR_PERF_TEST=${{ matrix.perf_tests }}" >> $GITHUB_ENV
+          fi
         shell: bash
       - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'

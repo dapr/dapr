@@ -362,6 +362,10 @@ message SubscribeActorEventsResponseReminderRequestAlpha1 {
   string due_time = 5;
   string period = 6;
   google.protobuf.Any data = 7;
+  // metadata carries request-level headers, including "Dapr-Reentrancy-Id"
+  // when reentrancy is enabled for the actor type, so a callback can make
+  // reentrant calls the same way a method invocation can.
+  map<string, string> metadata = 8;
 }
 
 // SubscribeActorEventsResponseTimerRequestAlpha1 is the callback payload
@@ -375,6 +379,9 @@ message SubscribeActorEventsResponseTimerRequestAlpha1 {
   string period = 6;
   string callback = 7;
   google.protobuf.Any data = 8;
+  // metadata carries request-level headers, including "Dapr-Reentrancy-Id"
+  // when reentrancy is enabled for the actor type.
+  map<string, string> metadata = 9;
 }
 
 // SubscribeActorEventsResponseDeactivateRequestAlpha1 is the callback

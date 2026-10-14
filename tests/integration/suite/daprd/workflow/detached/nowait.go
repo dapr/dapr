@@ -59,7 +59,7 @@ func (n *nowait) Run(t *testing.T, ctx context.Context) {
 	const spawnedInstanceID = "spawned-nowait"
 
 	n.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("HeldSpawn",
+		_, err := ctx.ScheduleNewDetachedWorkflow("HeldSpawn",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID))
 		return nil, err
 	})

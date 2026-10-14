@@ -48,6 +48,9 @@ type execution struct {
 	wi           *backend.ActivityWorkItem
 	activityName string
 	workflowID   string
+	// parentExecutionID is the execution ID of the workflow generation that
+	// dispatched the activity, empty when the dispatching daprd predates it.
+	parentExecutionID string
 
 	// start anchors the execution-duration metric; set once the engine has
 	// accepted the WorkItem.
@@ -82,13 +85,14 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	// execution timeout, activities may run for hours.
 	callback := make(chan bool, 1)
 	ex := &execution{
-		actorID:      a.actorID,
-		key:          key,
-		call:         call,
-		unregister:   func() {},
-		callback:     callback,
-		activityName: activityName,
-		workflowID:   workflowID,
+		actorID:           a.actorID,
+		key:               key,
+		call:              call,
+		unregister:        func() {},
+		callback:          callback,
+		activityName:      activityName,
+		workflowID:        workflowID,
+		parentExecutionID: invocation.GetParentExecutionId(),
 		wi: &backend.ActivityWorkItem{
 			SequenceNumber:  int64(taskEvent.GetEventId()),
 			InstanceID:      api.InstanceID(workflowID),
