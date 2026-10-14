@@ -30,6 +30,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
@@ -117,20 +118,14 @@ type counterApp struct {
 	httpClient   *http.Client
 
 	lock   sync.Mutex
-	cache  map[string]cached
+	cache  activation.Cache
 	served map[string]bool
-}
-
-type cached struct {
-	seq          int
-	activationID string
 }
 
 func newCounterApp(t *testing.T, daprdAddress func() string) *counterApp {
 	return &counterApp{
 		daprdAddress: daprdAddress,
 		httpClient:   client.HTTP(t),
-		cache:        make(map[string]cached),
 		served:       make(map[string]bool),
 	}
 }
@@ -148,11 +143,9 @@ func (c *counterApp) deactivate(w http.ResponseWriter, r *http.Request) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if _, ok := c.cache[r.PathValue("id")]; !ok {
+	if !c.cache.Delete(r.PathValue("id")) {
 		w.WriteHeader(http.StatusNotFound)
-		return
 	}
-	delete(c.cache, r.PathValue("id"))
 }
 
 func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
@@ -160,10 +153,9 @@ func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
 	defer c.lock.Unlock()
 
 	id := r.PathValue("id")
-	activationID := r.Header.Get("Dapr-Actor-Activation-Id")
-	entry, ok := c.cache[id]
-	seq := entry.seq
-	if !ok || entry.activationID != activationID {
+	activationID := activation.FromHeader(r)
+	seq, ok := c.cache.Get(id, activationID)
+	if !ok {
 		stored, err := c.get(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -178,7 +170,7 @@ func (c *counterApp) handleIncr(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.cache[id] = cached{seq: seq, activationID: activationID}
+	c.cache.Set(id, activationID, seq)
 	c.served[id] = true
 	w.Write([]byte(strconv.Itoa(seq)))
 }
@@ -231,15 +223,16 @@ func (c *counterApp) servedIDs() []string {
 func (c *counterApp) cachedSeq(id string) int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	return c.cache[id].seq
+	return c.cache.Value(id)
 }
 
 func incr(t *testing.T, ctx context.Context, via *actors.Actors, id string) int {
 	t.Helper()
 
 	var seq int
+	daprClient := via.GRPCClient(t, ctx)
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		resp, err := via.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		resp, err := daprClient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   id,
 			Method:    "incr",
@@ -249,7 +242,7 @@ func incr(t *testing.T, ctx context.Context, via *actors.Actors, id string) int 
 		}
 		seq, err = strconv.Atoi(string(resp.GetData()))
 		assert.NoError(col, err)
-	}, time.Second*8, time.Millisecond*100)
+	}, time.Second*8, time.Millisecond*10)
 
 	return seq
 }

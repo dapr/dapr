@@ -15,8 +15,7 @@ package restart
 
 import (
 	"context"
-	"maps"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procgrpcapp "github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -45,13 +45,11 @@ type grpcstream struct {
 	place *placement.Placement
 	sched *scheduler.Scheduler
 
-	lock        sync.Mutex
-	ids         map[string]string
-	deactivated bool
+	rec         activation.Recorder
+	deactivated atomic.Bool
 }
 
 func (g *grpcstream) Setup(t *testing.T) []framework.Option {
-	g.ids = make(map[string]string)
 	srv := procgrpcapp.New(t,
 		procgrpcapp.WithDaprdGRPCAddrFn(func() string { return g.daprd.GRPCAddress() }),
 		procgrpcapp.WithActorRegistration(func() *rtv1.SubscribeActorEventsRequestInitialAlpha1 {
@@ -61,21 +59,19 @@ func (g *grpcstream) Setup(t *testing.T) []framework.Option {
 			}
 		}),
 		procgrpcapp.WithOnActorInvokeFn(func(_ context.Context, req *rtv1.SubscribeActorEventsResponseInvokeRequestAlpha1) (*rtv1.SubscribeActorEventsRequestInvokeResponseAlpha1, error) {
-			g.record("invoke", req.GetMetadata())
+			g.rec.Record("invoke", activation.FromMetadata(req.GetMetadata()))
 			return &rtv1.SubscribeActorEventsRequestInvokeResponseAlpha1{}, nil
 		}),
 		procgrpcapp.WithOnActorTimerFn(func(_ context.Context, req *rtv1.SubscribeActorEventsResponseTimerRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error) {
-			g.record("timer", req.GetMetadata())
+			g.rec.Record("timer", activation.FromMetadata(req.GetMetadata()))
 			return &rtv1.SubscribeActorEventsRequestReminderResponseAlpha1{}, nil
 		}),
 		procgrpcapp.WithOnActorReminderFn(func(_ context.Context, req *rtv1.SubscribeActorEventsResponseReminderRequestAlpha1) (*rtv1.SubscribeActorEventsRequestReminderResponseAlpha1, error) {
-			g.record("reminder", req.GetMetadata())
+			g.rec.Record("reminder", activation.FromMetadata(req.GetMetadata()))
 			return &rtv1.SubscribeActorEventsRequestReminderResponseAlpha1{}, nil
 		}),
 		procgrpcapp.WithOnActorDeactivateFn(func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error) {
-			g.lock.Lock()
-			defer g.lock.Unlock()
-			g.deactivated = true
+			g.deactivated.Store(true)
 			return &rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1{}, nil
 		}),
 	)
@@ -109,7 +105,7 @@ func (g *grpcstream) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			assert.NoError(c, err)
-		}, time.Second*8, time.Millisecond*100)
+		}, time.Second*8, time.Millisecond*10)
 	}
 
 	invoke()
@@ -123,8 +119,7 @@ func (g *grpcstream) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ids := g.take(false)
-		assert.Len(c, ids, 3)
+		assert.Len(c, activation.FirstIDs(g.rec.Peek()), 3)
 	}, time.Second*8, time.Millisecond*10)
 
 	_, err = client.UnregisterActorTimer(ctx, &rtv1.UnregisterActorTimerRequest{ActorType: "abc", ActorId: "1", Name: "t"})
@@ -132,7 +127,7 @@ func (g *grpcstream) Run(t *testing.T, ctx context.Context) {
 	_, err = client.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{ActorType: "abc", ActorId: "1", Name: "r"})
 	require.NoError(t, err)
 
-	ids := g.take(true)
+	ids := activation.FirstIDs(g.rec.Take())
 	require.Len(t, ids, 3)
 	first := ids["invoke"]
 	require.NotEmpty(t, first)
@@ -140,32 +135,12 @@ func (g *grpcstream) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, first, ids["reminder"])
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		g.lock.Lock()
-		defer g.lock.Unlock()
-		assert.True(c, g.deactivated)
+		assert.True(c, g.deactivated.Load())
 	}, time.Second*8, time.Millisecond*10)
-	g.take(true)
+	g.rec.Take()
 
 	invoke()
-	next := g.take(true)["invoke"]
+	next := activation.FirstIDs(g.rec.Take())["invoke"]
 	require.NotEmpty(t, next)
 	assert.NotEqual(t, first, next)
-}
-
-func (g *grpcstream) record(kind string, md map[string]string) {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	if _, ok := g.ids[kind]; !ok {
-		g.ids[kind] = md["Dapr-Actor-Activation-Id"]
-	}
-}
-
-func (g *grpcstream) take(reset bool) map[string]string {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	ids := maps.Clone(g.ids)
-	if reset {
-		g.ids = make(map[string]string)
-	}
-	return ids
 }

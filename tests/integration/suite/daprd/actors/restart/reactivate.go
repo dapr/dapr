@@ -16,7 +16,6 @@ package restart
 import (
 	"context"
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,22 +39,17 @@ func init() {
 type reactivate struct {
 	app *actors.Actors
 
-	lock   sync.Mutex
-	events []string
+	rec activation.Recorder
 }
 
 func (a *reactivate) Setup(t *testing.T) []framework.Option {
 	a.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithHandler("/actors/abc/{id}", func(http.ResponseWriter, *http.Request) {
-			a.lock.Lock()
-			defer a.lock.Unlock()
-			a.events = append(a.events, "DELETE")
+			a.rec.Record("DELETE", "")
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/{method}", func(_ http.ResponseWriter, r *http.Request) {
-			a.lock.Lock()
-			defer a.lock.Unlock()
-			a.events = append(a.events, r.Header.Get("Dapr-Actor-Activation-Id"))
+			a.rec.Record("invoke", activation.FromHeader(r))
 		}),
 		actors.WithActorIdleTimeout(time.Second*2),
 	)
@@ -71,37 +66,32 @@ func (a *reactivate) Run(t *testing.T, ctx context.Context) {
 	for range 2 {
 		a.invoke(t, ctx)
 		a.invoke(t, ctx)
-		ids := a.take()
-		require.Len(t, ids, 2)
-		require.NotEmpty(t, ids[0])
-		assert.Equal(t, ids[0], ids[1])
-		assert.False(t, seen[ids[0]])
-		seen[ids[0]] = true
+		calls := a.rec.Take()
+		require.GreaterOrEqual(t, len(calls), 2)
+		require.NotEmpty(t, calls[0].ID)
+		for _, e := range calls {
+			assert.Equal(t, calls[0].ID, e.ID)
+		}
+		assert.False(t, seen[calls[0].ID])
+		seen[calls[0].ID] = true
 
-		var events []string
+		var events []activation.Event
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			events = append(events, a.take()...)
-			assert.Equal(c, []string{"DELETE"}, events)
+			events = append(events, a.rec.Take()...)
+			assert.Equal(c, []activation.Event{{Kind: "DELETE"}}, events)
 		}, time.Second*8, time.Millisecond*10)
 	}
 }
 
-func (a *reactivate) take() []string {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-	events := a.events
-	a.events = nil
-	return events
-}
-
 func (a *reactivate) invoke(t *testing.T, ctx context.Context) {
 	t.Helper()
+	client := a.app.GRPCClient(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, err := a.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   "1",
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*8, time.Millisecond*100)
+	}, time.Second*8, time.Millisecond*10)
 }

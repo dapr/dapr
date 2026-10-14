@@ -38,7 +38,7 @@ type app struct {
 	*factory
 
 	actorID      string
-	activationID string
+	activationMD *internalv1pb.ListStringValue
 
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to
@@ -59,9 +59,20 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	defer cancel()
 
 	a.touchIdle()
-	req.Metadata = a.withActivationID(req.GetMetadata())
-	defer delete(req.GetMetadata(), transport.ActivationIDHeader)
-	return a.transport.Invoke(ctx, req)
+
+	md := make(map[string]*internalv1pb.ListStringValue, len(req.GetMetadata())+1)
+	for k, v := range req.GetMetadata() {
+		if !strings.EqualFold(k, transport.ActivationIDHeader) {
+			md[k] = v
+		}
+	}
+	md[transport.ActivationIDHeader] = a.activationMD
+	return a.transport.Invoke(ctx, &internalv1pb.InternalInvokeRequest{
+		Ver:      req.GetVer(),
+		Actor:    req.GetActor(),
+		Message:  req.GetMessage(),
+		Metadata: md,
+	})
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
@@ -80,7 +91,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	defer cancel()
 
 	a.touchIdle()
-	lockReq.Metadata = a.withActivationID(lockReq.GetMetadata())
+	a.setActivationID(lockReq)
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	if err := a.transport.InvokeReminder(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -115,7 +126,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	defer cancel()
 
 	a.touchIdle()
-	lockReq.Metadata = a.withActivationID(lockReq.GetMetadata())
+	a.setActivationID(lockReq)
 	log.Debug("Executing timer for actor " + reminder.Key())
 
 	if err := a.transport.InvokeTimer(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -172,19 +183,11 @@ func (a *app) InvokeStream(context.Context,
 	return errors.New("not implemented")
 }
 
-// withActivationID replaces any caller-supplied activation id, in any case,
-// so the app only ever sees the one daprd minted.
-func (a *app) withActivationID(md map[string]*internalv1pb.ListStringValue) map[string]*internalv1pb.ListStringValue {
-	if md == nil {
-		md = make(map[string]*internalv1pb.ListStringValue, 1)
+func (a *app) setActivationID(req *internalv1pb.InternalInvokeRequest) {
+	if req.GetMetadata() == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
 	}
-	for k := range md {
-		if strings.EqualFold(k, transport.ActivationIDHeader) {
-			delete(md, k)
-		}
-	}
-	md[transport.ActivationIDHeader] = &internalv1pb.ListStringValue{Values: []string{a.activationID}}
-	return md
+	req.GetMetadata()[transport.ActivationIDHeader] = a.activationMD
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler

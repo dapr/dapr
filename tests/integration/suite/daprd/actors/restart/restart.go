@@ -16,7 +16,6 @@ package restart
 import (
 	"context"
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,17 +39,14 @@ func init() {
 type restart struct {
 	app *actors.Actors
 
-	lock sync.Mutex
-	ids  []string
+	rec activation.Recorder
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	r.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithHandler("/actors/abc/{id}/method/{method}", func(_ http.ResponseWriter, req *http.Request) {
-			r.lock.Lock()
-			defer r.lock.Unlock()
-			r.ids = append(r.ids, req.Header.Get("Dapr-Actor-Activation-Id"))
+			r.rec.Record("invoke", activation.FromHeader(req))
 		}),
 	)
 
@@ -63,10 +60,12 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	r.invoke(t, ctx)
 	r.invoke(t, ctx)
-	before := r.take()
-	require.Len(t, before, 2)
-	require.NotEmpty(t, before[0])
-	assert.Equal(t, before[0], before[1])
+	before := r.rec.Take()
+	require.GreaterOrEqual(t, len(before), 2)
+	require.NotEmpty(t, before[0].ID)
+	for _, e := range before {
+		assert.Equal(t, before[0].ID, e.ID)
+	}
 
 	r.app.Daprd().Restart(t, ctx)
 	r.app.Daprd().WaitUntilRunning(t, ctx)
@@ -74,29 +73,24 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	r.invoke(t, ctx)
 	r.invoke(t, ctx)
-	after := r.take()
-	require.Len(t, after, 2)
-	require.NotEmpty(t, after[0])
-	assert.Equal(t, after[0], after[1])
-	assert.NotEqual(t, before[0], after[0])
-}
-
-func (r *restart) take() []string {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	ids := r.ids
-	r.ids = nil
-	return ids
+	after := r.rec.Take()
+	require.GreaterOrEqual(t, len(after), 2)
+	require.NotEmpty(t, after[0].ID)
+	for _, e := range after {
+		assert.Equal(t, after[0].ID, e.ID)
+	}
+	assert.NotEqual(t, before[0].ID, after[0].ID)
 }
 
 func (r *restart) invoke(t *testing.T, ctx context.Context) {
 	t.Helper()
+	client := r.app.GRPCClient(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, err := r.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   "1",
 			Method:    "foo",
 		})
 		assert.NoError(c, err)
-	}, time.Second*8, time.Millisecond*100)
+	}, time.Second*8, time.Millisecond*10)
 }

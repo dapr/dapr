@@ -18,6 +18,8 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/channel/fake"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -49,6 +52,12 @@ type callback struct {
 type callLog struct {
 	lock  sync.Mutex
 	calls []callback
+}
+
+func (c *callLog) peek() []callback {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	return slices.Clone(c.calls)
 }
 
 func (c *callLog) take() []callback {
@@ -176,7 +185,9 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 
 		require.Eventually(t, func() bool {
 			clock.Step(10 * time.Second)
-			return !fact.Exists("a")
+			return slices.ContainsFunc(calls.peek(), func(c callback) bool {
+				return c.call == "DELETE actors/abc/a"
+			})
 		}, 5*time.Second, 10*time.Millisecond)
 		calls.take()
 
@@ -197,6 +208,43 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 	})
 }
 
+func Test_GetOrCreateRaceQueuesWinner(t *testing.T) {
+	t.Parallel()
+
+	clock := clocktesting.NewFakeClock(time.Now())
+	fact, _ := newActivationFactory(t, func(o *Options) {
+		o.clock = clock
+		o.IdleTimeout = 10 * time.Second
+	})
+
+	winners := make([]*app, 50)
+	for i := range winners {
+		id := strconv.Itoa(i)
+		start := make(chan struct{})
+		got := make([]targets.Interface, 8)
+		var wg sync.WaitGroup
+		for j := range got {
+			wg.Go(func() {
+				<-start
+				got[j] = fact.GetOrCreate(id)
+			})
+		}
+		close(start)
+		wg.Wait()
+		for _, g := range got {
+			require.Same(t, got[0], g)
+		}
+		winners[i] = got[0].(*app)
+	}
+
+	require.Eventually(t, func() bool {
+		clock.Step(10 * time.Second)
+		return fact.Len() == 0 && !slices.ContainsFunc(winners, func(a *app) bool {
+			return !a.closed.Load()
+		})
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
 func Test_ActivationIDOverridesCaller(t *testing.T) {
 	t.Parallel()
 
@@ -214,8 +262,8 @@ func Test_ActivationIDOverridesCaller(t *testing.T) {
 	_, err := target.InvokeMethod(t.Context(), req)
 	require.NoError(t, err)
 	assert.Equal(t, want, activationID(t, calls))
-	assert.Equal(t, []string{"kept"}, req.GetMetadata()["other"].GetValues())
-	assert.Equal(t, []string{"other"}, slices.Collect(maps.Keys(req.GetMetadata())))
+	assert.Equal(t, []string{"DAPR-ACTOR-ACTIVATION-ID", "dapr-actor-activation-id", "other"}, slices.Sorted(maps.Keys(req.GetMetadata())))
+	assert.Equal(t, []string{"spoofed"}, req.GetMetadata()["dapr-actor-activation-id"].GetValues())
 }
 
 func Test_ActivationIDReentrant(t *testing.T) {
@@ -285,4 +333,122 @@ func TestInvokeTimerRemovedDuringCallbackCompletes(t *testing.T) {
 	require.NoError(t, a.InvokeTimer(t.Context(), timer))
 	assert.True(t, called.Load())
 	assert.True(t, alive.Load(), "removing the timer cancelled its running callback")
+}
+
+func Test_ActivationWaitsForPreviousDelete(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		idle    bool
+		trigger func(targets.Factory) error
+	}{
+		"halt all": {trigger: func(fact targets.Factory) error {
+			return fact.HaltAll(context.Background())
+		}},
+		"halt non hosted": {trigger: func(fact targets.Factory) error {
+			return fact.HaltNonHosted(context.Background(), func(*api.LookupActorRequest) bool { return false })
+		}},
+		"idle": {idle: true},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var lock sync.Mutex
+			var events []string
+			record := func(e string) {
+				lock.Lock()
+				defer lock.Unlock()
+				events = append(events, e)
+			}
+			snapshot := func() []string {
+				lock.Lock()
+				defer lock.Unlock()
+				return slices.Clone(events)
+			}
+
+			deleting := make(chan struct{})
+			release := make(chan struct{})
+			var once sync.Once
+			clock := clocktesting.NewFakeClock(time.Now())
+			fact := New(Options{
+				ActorType:   "abc",
+				Reentrancy:  reentrancystore.New(),
+				Resiliency:  resiliency.New(logger.NewLogger("test")),
+				Placement:   placementfake.New(),
+				IdleTimeout: 10 * time.Second,
+				clock:       clock,
+				AppChannel: fake.New().WithInvokeMethod(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+					if req.Message().GetHttpExtension().GetVerb().String() == http.MethodDelete {
+						record("DELETE start")
+						once.Do(func() { close(deleting) })
+						<-release
+						record("DELETE done")
+					} else {
+						record("PUT " + req.Metadata()[transport.ActivationIDHeader].GetValues()[0])
+					}
+					return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+				}),
+			})
+
+			old := fact.GetOrCreate("a")
+			invokeFoo(t, old)
+
+			halted := make(chan error, 1)
+			if test.idle {
+				require.Eventually(t, func() bool {
+					clock.Step(10 * time.Second)
+					select {
+					case <-deleting:
+						return true
+					default:
+						return false
+					}
+				}, 5*time.Second, 10*time.Millisecond)
+				close(halted)
+			} else {
+				go func() { halted <- test.trigger(fact) }()
+				select {
+				case <-deleting:
+				case <-time.After(5 * time.Second):
+					require.Fail(t, "DELETE never started")
+				}
+			}
+
+			_, err := old.InvokeMethod(t.Context(), internalv1pb.NewInternalInvokeRequest("foo").WithActor("abc", "a"))
+			require.Error(t, err)
+			assert.True(t, targetserrors.IsClosed(err), err)
+
+			invoked := make(chan error, 1)
+			go func() {
+				_, err := fact.GetOrCreate("a").InvokeMethod(t.Context(), internalv1pb.NewInternalInvokeRequest("foo").WithActor("abc", "a"))
+				invoked <- err
+			}()
+
+			select {
+			case err := <-invoked:
+				require.Failf(t, "new activation ran before the old DELETE returned", "err=%v events=%v", err, snapshot())
+			case <-time.After(200 * time.Millisecond):
+			}
+
+			close(release)
+			select {
+			case err := <-invoked:
+				require.NoError(t, err)
+			case <-time.After(5 * time.Second):
+				require.Fail(t, "new activation never ran")
+			}
+			if err, ok := <-halted; ok {
+				require.NoError(t, err)
+			}
+
+			got := snapshot()
+			require.Len(t, got, 4, got)
+			assert.Equal(t, []string{"DELETE start", "DELETE done"}, got[1:3])
+			assert.True(t, strings.HasPrefix(got[0], "PUT "), got)
+			assert.True(t, strings.HasPrefix(got[3], "PUT "), got)
+			assert.NotEqual(t, got[0], got[3])
+		})
+	}
 }

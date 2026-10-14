@@ -15,9 +15,8 @@ package restart
 
 import (
 	"context"
-	"maps"
 	"net/http"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -40,29 +40,25 @@ func init() {
 type httpcallbacks struct {
 	app *actors.Actors
 
-	lock        sync.Mutex
-	ids         map[string]string
-	deactivated bool
+	rec         activation.Recorder
+	deactivated atomic.Bool
 }
 
 func (h *httpcallbacks) Setup(t *testing.T) []framework.Option {
-	h.ids = make(map[string]string)
 	h.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorIdleTimeout(time.Second*2),
 		actors.WithHandler("/actors/abc/{id}", func(http.ResponseWriter, *http.Request) {
-			h.lock.Lock()
-			defer h.lock.Unlock()
-			h.deactivated = true
+			h.deactivated.Store(true)
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/foo", func(_ http.ResponseWriter, r *http.Request) {
-			h.record("invoke", r)
+			h.rec.Record("invoke", activation.FromHeader(r))
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/timer/{name}", func(_ http.ResponseWriter, r *http.Request) {
-			h.record("timer", r)
+			h.rec.Record("timer", activation.FromHeader(r))
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/remind/{name}", func(_ http.ResponseWriter, r *http.Request) {
-			h.record("reminder", r)
+			h.rec.Record("reminder", activation.FromHeader(r))
 		}),
 	)
 
@@ -83,7 +79,7 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			assert.NoError(c, err)
-		}, time.Second*8, time.Millisecond*100)
+		}, time.Second*8, time.Millisecond*10)
 	}
 
 	invoke()
@@ -97,7 +93,7 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, h.take(false), 3)
+		assert.Len(c, activation.FirstIDs(h.rec.Peek()), 3)
 	}, time.Second*8, time.Millisecond*10)
 
 	_, err = client.UnregisterActorTimer(ctx, &rtv1.UnregisterActorTimerRequest{ActorType: "abc", ActorId: "1", Name: "t"})
@@ -105,7 +101,7 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 	_, err = client.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{ActorType: "abc", ActorId: "1", Name: "r"})
 	require.NoError(t, err)
 
-	ids := h.take(true)
+	ids := activation.FirstIDs(h.rec.Take())
 	require.Len(t, ids, 3)
 	first := ids["invoke"]
 	require.NotEmpty(t, first)
@@ -113,32 +109,12 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, first, ids["reminder"])
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		h.lock.Lock()
-		defer h.lock.Unlock()
-		assert.True(c, h.deactivated)
+		assert.True(c, h.deactivated.Load())
 	}, time.Second*8, time.Millisecond*10)
-	h.take(true)
+	h.rec.Take()
 
 	invoke()
-	next := h.take(true)["invoke"]
+	next := activation.FirstIDs(h.rec.Take())["invoke"]
 	require.NotEmpty(t, next)
 	assert.NotEqual(t, first, next)
-}
-
-func (h *httpcallbacks) record(kind string, r *http.Request) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	if _, ok := h.ids[kind]; !ok {
-		h.ids[kind] = r.Header.Get("Dapr-Actor-Activation-Id")
-	}
-}
-
-func (h *httpcallbacks) take(reset bool) map[string]string {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	ids := maps.Clone(h.ids)
-	if reset {
-		h.ids = make(map[string]string)
-	}
-	return ids
 }
