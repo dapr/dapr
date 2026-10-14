@@ -25,8 +25,7 @@ import (
 
 const (
 	// RetryBackoffBase and RetryBackoffCap bound the jittered retry
-	// backoffs on the workflow drive and reminder paths, mirroring the
-	// create path's createRetryBackoff in the wfengine actors backend.
+	// backoffs on the workflow drive, reminder and create paths.
 	RetryBackoffBase = 50 * time.Millisecond
 	RetryBackoffCap  = 2 * time.Second
 )

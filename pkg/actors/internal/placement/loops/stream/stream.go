@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
@@ -34,13 +34,15 @@ var (
 )
 
 type Options struct {
-	Channel       v1pb.Placement_ReportDaprStatusClient
+	Channel       transport.Transport
+	Cancel        context.CancelFunc
 	PlacementLoop loop.Interface[loops.EventPlace]
 	IDx           uint64
 }
 
 type stream struct {
-	channel   v1pb.Placement_ReportDaprStatusClient
+	channel   transport.Transport
+	cancel    context.CancelFunc
 	placeLoop loop.Interface[loops.EventPlace]
 	idx       uint64
 
@@ -52,6 +54,7 @@ type stream struct {
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventStream] {
 	stream := streamCache.Get().(*stream)
 	stream.channel = opts.Channel
+	stream.cancel = opts.Cancel
 	stream.placeLoop = opts.PlacementLoop
 	stream.idx = opts.IDx
 
@@ -91,7 +94,10 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 }
 
 func (s *stream) handleSend(e *loops.StreamSend) error {
-	return s.channel.Send(e.Host)
+	if e.Report != nil {
+		return s.channel.SendReport(e.Report)
+	}
+	return s.channel.SendAck(e.Ack)
 }
 
 func (s *stream) handleShutdown(e *loops.Shutdown) {
@@ -104,6 +110,9 @@ func (s *stream) handleShutdown(e *loops.Shutdown) {
 		log.Infof("Closing connection to placement: %s", e.Error)
 	}
 	s.channel.CloseSend()
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.wg.Wait()
 	streamCache.Put(s)
 }

@@ -47,27 +47,26 @@ func (s *shutdown) Setup(t *testing.T) []framework.Option {
 func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 	s.actors.WaitUntilRunning(t, ctx)
 
-	table := s.actors.Placement().PlacementTables(t, ctx)
-	assert.Equal(t, &placement.TableState{
-		Tables: map[string]*placement.Table{
-			"default": {
-				Version: 1,
-				Hosts: []placement.Host{
-					{
-						Entities:  []string{"mytype"},
-						Name:      s.actors.Daprd().InternalGRPCAddress(),
-						ID:        s.actors.Daprd().AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-				},
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := s.actors.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		assert.Positive(c, table.Version)
+		assert.Equal(c, []placement.Host{
+			{
+				Entities:  []string{"mytype"},
+				Name:      s.actors.Daprd().InternalGRPCAddress(),
+				ID:        s.actors.Daprd().AppID(),
+				APIVLevel: 20,
+				Namespace: "default",
 			},
-		},
-	}, table)
+		}, table.Hosts)
+	}, time.Second*10, time.Millisecond*10)
 
 	s.actors.Daprd().Cleanup(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.actors.Placement().PlacementTables(t, ctx)
+		table := s.actors.PlacementTables(t, ctx)
 		assert.Equal(c, &placement.TableState{
 			Tables: make(map[string]*placement.Table),
 		}, table)

@@ -1,0 +1,94 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package workflow
+
+import (
+	"context"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
+)
+
+// AssertScheduledTimers asserts the scheduler holds exactly the given timer
+// reminders. Under fast path the instance also owns a single new-event-janitor
+// reminder once a fast-path drive has happened (janitorArmed); the janitor is
+// asserted lazily, so it is absent before the first raised event or activity.
+func AssertScheduledTimers(t *testing.T, c *assert.CollectT, ctx context.Context, w *procworkflow.Workflow, janitorArmed bool, timers ...string) {
+	t.Helper()
+
+	var janitors, others []string
+	for _, key := range w.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
+		if strings.Contains(key, "new-event-janitor") {
+			janitors = append(janitors, key)
+		} else {
+			others = append(others, key)
+		}
+	}
+
+	if w.FastPath() && janitorArmed {
+		assert.Len(c, janitors, 1)
+	} else {
+		assert.Empty(c, janitors)
+	}
+
+	if assert.Len(c, others, len(timers)) {
+		// Key listing order is not guaranteed: match expected timers against
+		// the key set as a multiset, consuming one key per expectation.
+		remaining := slices.Clone(others)
+		for _, timer := range timers {
+			idx := slices.IndexFunc(remaining, func(key string) bool {
+				return strings.Contains(key, timer)
+			})
+			if assert.GreaterOrEqual(c, idx, 0, "no scheduler key matches timer %q, keys: %v", timer, remaining) {
+				remaining = slices.Delete(remaining, idx, idx+1)
+			}
+		}
+	}
+}
+
+// WaitNoEventWakeups waits until no new-event wake-up reminder is left in the
+// scheduler. The fast-path janitor backstop shares the new-event prefix and is
+// reaped on its own period rather than at the terminal turn, so it is excluded:
+// it is not a wake-up left behind for an event.
+func WaitNoEventWakeups(t *testing.T, ctx context.Context, w *procworkflow.Workflow) {
+	t.Helper()
+
+	// Polled on the test goroutine rather than through EventuallyWithT:
+	// ListAllKeys reports a query failure on t, so a transient error inside
+	// a callback would fail the test permanently and could call FailNow from
+	// the wrong goroutine. Same shape as Scheduler.WaitJobKeyCount.
+	deadline := time.Now().Add(time.Second * 20)
+	for {
+		var wakeups []string
+		for _, key := range w.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
+			if strings.Contains(key, "new-event") && !strings.Contains(key, "new-event-janitor") {
+				wakeups = append(wakeups, key)
+			}
+		}
+		if len(wakeups) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Empty(t, wakeups, "no event wake-up may be left behind")
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+}

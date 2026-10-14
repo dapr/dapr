@@ -78,8 +78,6 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	APIListenAddress                    string
-	HealthzPort                         int
-	HealthzListenAddress                string
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz

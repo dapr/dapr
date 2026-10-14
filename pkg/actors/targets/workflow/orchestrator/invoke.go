@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
@@ -106,7 +107,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, parsedAddEvent)
+		return nil, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -137,7 +138,8 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderCascadeTerminate:
+		reminder.Name == reminderCascadeTerminate,
+		reminder.Name == reminderNameParentNotify:
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
@@ -145,7 +147,57 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		err := o.addWorkflowEvent(ctx, &ev)
+		// The Scheduler lets any app in the namespace create a reminder
+		// under this name on this actor. Only an activity result belongs
+		// here, plus the child failure this app synthesises for itself
+		// (failTaskViaReminder): anything else (a raised event, a
+		// termination, a timer firing that the persistable inbox cannot
+		// hold) is acked and dropped, whoever sent it.
+		_, _, isResolution := activityResolution(&ev)
+		isChild := ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
+		ownChild := isChild && (reminder.SourceAppID == "" || reminder.SourceAppID == o.appID)
+		if !isResolution && !ownChild {
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': payload is not an activity result (%T)", o.actorID, reminder.Name, reminder.SourceAppID, ev.GetEventType())
+			return nil
+		}
+		sender := completionSender{
+			parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name),
+			appID:             reminder.SourceAppID,
+		}
+		err := o.addWorkflowEvent(ctx, &ev, sender)
+		if common.IsSchedulingNotDurable(err) {
+			// This reminder IS the retry chain for the refusal, and it
+			// retries forever, so each fire drops the cache and reads again
+			// across the store's lag. Bounded, though: a completion whose
+			// scheduling is still committing resolves within the commit
+			// timeout, and one still refused past it is not ahead of its row
+			// but a straggler no history will ever admit. Unbounded, it is a
+			// permanent storm of full state loads under the turn lock.
+			//
+			// The timestamp is stamped by the host that ran the activity, so
+			// it is read against another clock; at this granularity skew is
+			// noise, and an event carrying none reads as ancient and is
+			// dropped, which is the safe direction. The creator chooses the
+			// stamp, though, and any app in the namespace may create this
+			// reminder: a stamp far in the future would otherwise never
+			// leave the window and keep the storm going forever, so one more
+			// than the window ahead of this clock is as expired as one more
+			// than the window behind it.
+			o.invalidateCachedState()
+			window := common.SchedulingDurableWindow()
+			if age := time.Since(ev.GetTimestamp().AsTime()); -window < age && age < window {
+				return err
+			}
+			// Past the bound this fire is the last word, and the refusal was
+			// judged on whatever history the actor held: judge once more on
+			// the reload the invalidate above forces before giving up.
+			err = o.addWorkflowEvent(ctx, &ev, sender)
+			if common.IsSchedulingNotDurable(err) {
+				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not become durable: %v", o.actorID, reminder.Name, err)
+				return nil
+			}
+			// Anything else the re-judge produced belongs to the arm below.
+		}
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			// The instance is gone (purged or never existed): ack so the scheduler
 			// deletes this one-shot reminder. It is created with a retry-forever
@@ -166,21 +218,32 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 // runJanitor handles a fire of the per-instance janitor backstop reminder
 // (WorkflowsFastPath). Semantics: self-delete against purged or
 // terminal instances; cheap no-op (WITHOUT deactivating, so idle instances
-// do not thrash the activation cache every period) when the inbox is empty;
-// drive a normal turn when inbox rows are pending, which is the recovery
-// event the janitor exists for.
+// do not thrash the activation cache every period) when the inbox holds
+// nothing a turn can consume (it may hold early results kept until their step
+// is scheduled); drive a normal turn when inbox rows are pending, which is
+// the recovery event the janitor exists for.
 func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Reminder) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
 
-	if state == nil || runtimestate.IsCompleted(o.rstate) {
+	if state == nil {
 		o.deleteJanitor(ctx)
 		return nil
 	}
 
-	if len(state.Inbox) == 0 {
+	if rst := o.rstate; runtimestate.IsCompleted(rst) {
+		// Settle before self-deleting: the janitor owns recovery of anything
+		// lost after a terminal commit, including across a restart.
+		if serr := o.settleTerminal(ctx, state, rst, true); serr != nil {
+			return fmt.Errorf("janitor terminal path: %w", serr)
+		}
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if onlyUnscheduled(state.History, state.Inbox) {
 		// Mirror the empty-inbox stale-cache guard of runWorkflow: a peer
 		// host may have written an inbox row since this cache was loaded
 		// (a zombie writer racing an activation). Only a store read can see
@@ -205,8 +268,8 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 		}
 	}
 
-	if len(state.Inbox) == 0 {
-		// No pending inbox rows, but the instance may have in-flight
+	if onlyUnscheduled(state.History, state.Inbox) {
+		// No inbox row a turn can consume, but the instance may have in-flight
 		// activities whose only durable re-driver is this janitor (their
 		// run-activity reminder is elided under
 		// WorkflowsFastPath). Stalled workflows are excluded:
@@ -227,8 +290,8 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 			// re-driving. At a placement handoff that assumption breaks both
 			// ways at once: the sender dies with its pod before re-delivering,
 			// and the arming drive of the folding turn is lost (a wakeCtx
-			// cancellation window, or a failed drive whose escalation was
-			// suppressed). The completion is then captive in memory with no
+			// cancellation window, or a drive that exhausted its retries).
+			// The completion is then captive in memory with no
 			// driver at all, and this fire is the only thing that ever runs on
 			// the instance. Drive a turn: runWorkflow folds pending
 			// completions into its commit even with an empty inbox, restoring
@@ -238,7 +301,7 @@ func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Remind
 				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
 				return o.runWorkflowFromReminder(ctx, reminder)
 			}
-			if unresolved := unresolvedScheduledTasks(state, o.foldEvents()); len(unresolved) > 0 {
+			if unresolved := unresolvedScheduledTasks(state, foldedEvents(o.foldPending)); len(unresolved) > 0 {
 				o.redispatchActivities(ctx, state, unresolved)
 			}
 		}

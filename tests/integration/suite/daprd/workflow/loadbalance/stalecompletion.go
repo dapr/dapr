@@ -24,12 +24,12 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -45,30 +45,17 @@ type stalecompletion struct {
 }
 
 func (s *stalecompletion) Setup(t *testing.T) []framework.Option {
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: clusteredfastpath
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-    - name: WorkflowsLocalWakeFastPath
-      enabled: true
-    - name: WorkflowsLocalActivityFastPath
-      enabled: true
-    - name: WorkflowsCompletionsFold
-      enabled: true
-`
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
+	// Clustered fast path in every leg: the features go through
+	// WithFeatureEnabled so they join the harness's feature list (daprd keeps
+	// only the last spec.features it loads).
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(1),
 		workflow.WithDaprdOptions(0,
 			daprd.WithAppID(uid.String()),
-			daprd.WithConfigManifests(t, config),
+			daprd.WithFeatureEnabled(t, "WorkflowsClusteredDeployment", "WorkflowsFastPath"),
 			daprd.WithExecOptions(exec.WithEnvVars(t,
 				"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
 				"DAPR_WORKFLOW_TEST_DUPLICATE_TURN_COMPLETIONS", "3",
@@ -99,7 +86,7 @@ func (s *stalecompletion) Run(t *testing.T, ctx context.Context) {
 		return "ok", nil
 	}))
 
-	cl := client.NewTaskHubGrpcClient(s.workflow.DaprN(0).GRPCConn(t, ctx), backend.DefaultLogger())
+	cl := client.NewTaskHubGrpcClient(s.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, registry))
 
 	resp, err := s.workflow.DaprN(0).GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{

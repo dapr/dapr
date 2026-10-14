@@ -46,8 +46,21 @@ type Store struct {
 
 	multiObserver func(*state.TransactionalStateRequest)
 
-	multiDeleteHold *holdSpec
-	bulkGetHold     *holdSpec
+	multiDeleteHold  *holdSpec
+	multiHold        *holdSpec
+	multiWriteBehind *holdSpec
+	bulkGetHold      *holdSpec
+	getHold          *holdSpec
+
+	multiCancelled atomic.Int32
+
+	getFailKeySubstring string
+	getFailRemaining    int
+	getFailNotifyCh     chan struct{}
+
+	getEmptyKeySubstring string
+	getEmptyRemaining    int
+	getEmptyNotifyCh     chan struct{}
 }
 
 // holdSpec is a one-shot arm-able hold on a store operation matching a key
@@ -59,6 +72,7 @@ type holdSpec struct {
 	arrived   chan struct{}
 	releaseCh chan struct{}
 	done      chan struct{}
+	err       error
 }
 
 // SetMultiObserver registers a callback invoked synchronously on every Multi
@@ -130,6 +144,64 @@ func (s *Store) ArmMultiDeleteHold(sub string) (arrived <-chan struct{}, release
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }, spec.done
 }
 
+// ArmMultiHold arms a one-shot hold on the next Multi touching a key
+// containing sub, whatever the operation type. arrived is closed when the
+// Multi is captured; it then blocks until release is called. Unlike the
+// in-memory store it wraps, a held Multi whose request context died while it
+// waited returns that context error, as every real transactional store does:
+// database/sql rolls a transaction back as soon as its context is cancelled.
+// Tests use this to hold a commit while the host cancels the caller.
+// release is idempotent, so it is safe to register with t.Cleanup.
+func (s *Store) ArmMultiHold(sub string) (arrived <-chan struct{}, release func()) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.multiHold = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// ArmMultiWriteBehind arms a one-shot write-behind on the next Multi touching
+// a key containing sub: the caller is answered success at once while the
+// request reaches the underlying store only when apply is called, so reads in
+// between serve the state from before the acknowledged write, as they do on
+// a store whose reads lag its writes. Armed from a SetMultiObserver callback
+// it captures the observed Multi itself. apply is idempotent and returns once
+// the request is applied, returning the store's verdict on it, so it is safe
+// to register with t.Cleanup.
+func (s *Store) ArmMultiWriteBehind(sub string) (arrived <-chan struct{}, apply func() error) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.multiWriteBehind = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() error {
+		once.Do(func() { close(spec.releaseCh) })
+		select {
+		case <-spec.arrived:
+			<-spec.done
+			return spec.err
+		default:
+			return nil
+		}
+	}
+}
+
+// MultiCancelled returns how many held Multi requests were abandoned because
+// their request context was cancelled while the hold was in place.
+func (s *Store) MultiCancelled() int { return int(s.multiCancelled.Load()) }
+
 // ArmBulkGetHold arms a one-shot hold on the next BulkGet touching a key
 // containing sub. arrived is closed when the BulkGet is captured; the call
 // blocks until release is called (or its context is done). release is
@@ -146,6 +218,86 @@ func (s *Store) ArmBulkGetHold(sub string) (arrived <-chan struct{}, release fun
 
 	var once sync.Once
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// ArmGetHold arms a one-shot hold on the next Get whose key contains sub.
+// The Get blocks until release is called (or its context is done).
+func (s *Store) ArmGetHold(sub string) (arrived <-chan struct{}, release func()) {
+	spec := &holdSpec{
+		sub:       sub,
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.getHold = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
+// ArmGetFailures arms the proxy to fail the next n Gets whose key contains
+// keySubstring with a transient error. n=0 disarms. notify, when non-nil, is
+// closed on the first injected failure.
+func (s *Store) ArmGetFailures(keySubstring string, n int, notify chan struct{}) {
+	s.mu.Lock()
+	s.getFailKeySubstring = keySubstring
+	s.getFailRemaining = n
+	s.getFailNotifyCh = notify
+	s.mu.Unlock()
+}
+
+// ArmGetEmpty arms the store to answer the next n Gets whose key contains
+// keySubstring with an empty response, as a store whose reads lag its own
+// writes would. n=0 disarms. notify, when non-nil, is closed on the first.
+func (s *Store) ArmGetEmpty(keySubstring string, n int, notify chan struct{}) {
+	s.mu.Lock()
+	s.getEmptyKeySubstring = keySubstring
+	s.getEmptyRemaining = n
+	s.getEmptyNotifyCh = notify
+	s.mu.Unlock()
+}
+
+// Get implements state.Store, honouring armed Get failures, empty answers
+// and holds.
+func (s *Store) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
+	s.mu.Lock()
+	if s.getEmptyKeySubstring != "" && s.getEmptyRemaining > 0 && strings.Contains(req.Key, s.getEmptyKeySubstring) {
+		s.getEmptyRemaining--
+		notify := s.getEmptyNotifyCh
+		s.getEmptyNotifyCh = nil
+		s.mu.Unlock()
+		if notify != nil {
+			close(notify)
+		}
+		return &state.GetResponse{}, nil
+	}
+	if s.getFailKeySubstring != "" && s.getFailRemaining > 0 && strings.Contains(req.Key, s.getFailKeySubstring) {
+		s.getFailRemaining--
+		notify := s.getFailNotifyCh
+		s.getFailNotifyCh = nil
+		s.mu.Unlock()
+		if notify != nil {
+			close(notify)
+		}
+		return nil, errors.New("fault.Store: injected transient get failure")
+	}
+	var hold *holdSpec
+	if s.getHold != nil && strings.Contains(req.Key, s.getHold.sub) {
+		hold = s.getHold
+		s.getHold = nil
+	}
+	s.mu.Unlock()
+
+	if hold != nil {
+		close(hold.arrived)
+		select {
+		case <-hold.releaseCh:
+		case <-ctx.Done():
+		}
+	}
+
+	return s.Store.Get(ctx, req)
 }
 
 // Multi implements state.TransactionalStore. If the store is armed and the
@@ -210,6 +362,44 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 		case <-ctx.Done():
 		}
 		defer close(hold.done)
+	}
+
+	s.mu.Lock()
+	var general *holdSpec
+	if s.multiHold != nil && anyHasSubstring(keys, s.multiHold.sub) {
+		general = s.multiHold
+		s.multiHold = nil
+	}
+	s.mu.Unlock()
+
+	if general != nil {
+		close(general.arrived)
+		select {
+		case <-general.releaseCh:
+		case <-ctx.Done():
+		}
+		if cerr := ctx.Err(); cerr != nil {
+			s.multiCancelled.Add(1)
+			return cerr
+		}
+	}
+
+	s.mu.Lock()
+	var behind *holdSpec
+	if s.multiWriteBehind != nil && anyHasSubstring(keys, s.multiWriteBehind.sub) {
+		behind = s.multiWriteBehind
+		s.multiWriteBehind = nil
+	}
+	s.mu.Unlock()
+
+	if behind != nil {
+		close(behind.arrived)
+		go func() {
+			<-behind.releaseCh
+			behind.err = s.Wrapped.Store.(state.TransactionalStore).Multi(context.Background(), req)
+			close(behind.done)
+		}()
+		return nil
 	}
 
 	return s.Wrapped.Store.(state.TransactionalStore).Multi(ctx, req)

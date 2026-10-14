@@ -64,6 +64,11 @@ func (a *activity0) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
+	expected := 5
+	if a.workflow.Signing() {
+		// Signing adds 2 rows: 1 sigcert and 1 signature (one history save).
+		expected = 7
+	}
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 5, count)
+	assert.Equal(t, expected, count)
 }

@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -45,6 +46,8 @@ func (o *orchestrator) handleStream(ctx context.Context,
 	if aerr := o.checkAccessPolicy(ctx, req.GetMessage().GetMethod(), req.GetMessage().GetData().GetValue(), nil, ometa, req.GetMetadata()); aerr != nil {
 		return false, aerr
 	}
+
+	o.redriveOverduePendingStart(state)
 
 	// A one-shot metadata fetch (cross-app GetWorkflowMetadata) must never
 	// park the stream: reply with the current metadata, or a not-found status
@@ -116,6 +119,10 @@ func (o *orchestrator) handleStream(ctx context.Context,
 	defer sf.done.Store(true)
 
 	o.streamFns[idx] = sf
+
+	if pending := pendingstart.Event(state); pending != nil {
+		defer o.redriveWhenOverdue(pending, sf)()
+	}
 
 	// unlock this orchestrator actor.
 	unlock()

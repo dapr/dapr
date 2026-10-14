@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
@@ -69,14 +71,8 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	// orchestration didn't exist
 	// create a new state entry if one doesn't already exist
 	if state == nil {
-		state = wfenginestate.NewState(wfenginestate.Options{
-			AppID:             o.appID,
-			Namespace:         o.namespace,
-			WorkflowActorType: o.actorType,
-			ActivityActorType: o.activityActorType,
-		})
-		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
-		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
+		state = wfenginestate.NewState(o.stateOptions())
+		o.primeCachedState(state, startEvent.GetExecutionStarted())
 
 		if propagatedHistory != nil {
 			if err := o.signing.VerifyAndAbsorbPropagatedHistory(propagatedHistory, state); err != nil {
@@ -96,25 +92,28 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
-		pending := pendingStartEvent(state)
+		pending := pendingstart.Event(state)
 
 		// This happens when the parent's runWorkflow created the child workflow
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
-		if o.isSameParentCreation(state, startEvent) {
+		sameParent, parentExecMismatch := o.isSameParentCreation(state, startEvent)
+		if sameParent {
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
 				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			// If the child saved its state but its start reminder was never
 			// armed (the save-first create failed), this retry is the only
 			// driver: re-assert idempotently from the SAVED event.
-			if pending != nil {
-				missing, err := o.startReminderMissing(ctx, pending)
-				if err != nil {
-					return err
-				}
-				if missing {
-					return o.assertStartReminder(ctx, pending)
-				}
+			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
+				return o.assertStartReminder(ctx, pending)
+			}
+			return nil
+		}
+
+		if o.isSameExecutionRetry(state, startEvent.GetExecutionStarted()) {
+			log.Debugf("Workflow actor '%s': ignoring create retry with matching execution ID", o.actorID)
+			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
+				return o.assertStartReminder(ctx, pending)
 			}
 			return nil
 		}
@@ -128,21 +127,29 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// so the deterministic name must come from the saved one) and report
 		// success. The reminder-missing check is what distinguishes a
 		// stranded start from a concurrent duplicate create of an identical
-		// workflow, which must keep failing with AlreadyExists: actor
-		// invocations serialize, so a healthy duplicate always observes the
-		// first create's reminder.
-		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) {
-			missing, err := o.startReminderMissing(ctx, pending)
-			if err != nil {
-				return err
-			}
-			if missing {
-				log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
-				return o.assertStartReminder(ctx, pending)
-			}
+		// workflow, which keeps failing with AlreadyExists while the check
+		// can reach the scheduler: actor invocations serialize, so a healthy
+		// duplicate always observes the first create's reminder.
+		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) &&
+			o.startReminderNeedsReassert(ctx, pending) {
+			log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
+			return o.assertStartReminder(ctx, pending)
+		}
+
+		if parentExecMismatch {
+			return status.Errorf(codes.AlreadyExists,
+				"an active workflow with ID '%s' already exists: it was created by a previous execution of parent workflow '%s' (e.g. before a ContinueAsNew); child workflow instance IDs must be unique across parent executions",
+				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 		}
 
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
+	}
+
+	// Child retries fall through to arrange the owed parent notification.
+	if startEvent.GetExecutionStarted().GetParentInstance() == nil &&
+		o.isSameExecutionRetry(state, startEvent.GetExecutionStarted()) {
+		log.Debugf("Workflow actor '%s': ignoring create retry with matching execution ID for a completed workflow", o.actorID)
+		return nil
 	}
 
 	// The create asked for instance ID uniqueness: a completed instance blocks
@@ -155,6 +162,37 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 
 	if o.activityResultAwaited.Load() {
 		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
+	}
+
+	// The parent re-dispatching the creation that produced this instance (a
+	// crash before it saved) is a replay, not a new workflow, and re-running
+	// the child would execute its activities twice. A pending completion is
+	// re-sent by its driver. A delivered one may have been dropped: a parent
+	// that never committed the creation has no record of the task, so under
+	// signing it refused the completion as unknown. It is owed again, and
+	// the re-send lands once the parent's turn has committed the creation,
+	// since the delivery waits on the parent's lock.
+	if same, _ := o.isSameParentCreation(state, startEvent); same {
+		log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation for a completed child", o.actorID)
+		if state.ParentNotifyPending {
+			return nil
+		}
+		state.SetParentNotifyPending(true)
+		if err := o.signAndSaveState(ctx, state); err != nil {
+			return err
+		}
+		return o.assertParentNotifyReminder(o.getExecutionStartedEvent(state).GetName())
+	}
+	// A later execution of the parent the completion is owed to (it continued
+	// as new) drops that completion as a straggler, so its create is the
+	// acknowledgement: the reset below clears the marker. Waiting for the
+	// delivery instead livelocks: it holds this child's lock while it waits
+	// on the parent's, which the creating turn holds.
+	if state.ParentNotifyPending && !o.isLaterParentExecution(state, startEvent) {
+		// Retryable, not AlreadyExists: the parent's ack frees the id.
+		// Aborted, not Unavailable: the actor router retries Unavailable from
+		// a remote actor inside the caller's turn, holding the caller's lock.
+		return status.Errorf(codes.Aborted, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
 	}
 
 	// An ID is reusable only once the previous execution's entire child
@@ -203,6 +241,7 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// The reminder schedules the actual workflow execution rather than
 	// running it on this thread, so the client is not blocked while the
 	// workflow logic runs.
+	state.KeepCreationInput(startEvent.GetExecutionStarted())
 	state.AddToInbox(startEvent)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
@@ -211,27 +250,21 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	return o.assertStartReminder(ctx, startEvent)
 }
 
-// pendingStartEvent returns the ExecutionStarted inbox event of a workflow
-// that was created (state durably saved) but has never executed a turn:
-// history is empty and the inbox holds an ExecutionStarted. The inbox may
-// also hold EventRaised rows (RaiseEvent against a pending instance), so only
-// the presence of the ExecutionStarted is required. Returns nil otherwise.
-func pendingStartEvent(state *wfenginestate.State) *backend.HistoryEvent {
-	if len(state.History) > 0 {
-		return nil
+// startReminderNeedsReassert reports whether the pending start's reminder is
+// absent from the scheduler, or the check itself failed. It fails open because
+// the outage that loses a start reminder is the one that makes the check fail,
+// and re-asserting an armed reminder is a harmless overwrite-by-name.
+func (o *orchestrator) startReminderNeedsReassert(ctx context.Context, saved *backend.HistoryEvent) bool {
+	missing, err := o.startReminderMissing(ctx, saved)
+	if err != nil {
+		log.Warnf("Workflow actor '%s': cannot verify the pending start reminder, re-asserting it: %v", o.actorID, err)
+		return true
 	}
-	for _, e := range state.Inbox {
-		if e.GetExecutionStarted() != nil {
-			return e
-		}
-	}
-	return nil
+	return missing
 }
 
 // startReminderMissing reports whether the pending start's wake-up reminder
-// is absent from the scheduler. Get errors are propagated so a transient
-// scheduler failure surfaces as a retryable error to the caller rather than
-// either a spurious re-drive or a permanent-looking AlreadyExists.
+// is absent from the scheduler.
 func (o *orchestrator) startReminderMissing(ctx context.Context, saved *backend.HistoryEvent) (bool, error) {
 	rem, err := o.reminders.Get(ctx, &actorapi.GetReminderRequest{
 		Name:      events.EventReminderName(reminderPrefixStart, saved),
@@ -252,8 +285,11 @@ func (o *orchestrator) startReminderMissing(ctx context.Context, saved *backend.
 
 // isSameLogicalStart reports whether an incoming ExecutionStarted event
 // describes the same logical creation as the saved pending one. Per-attempt
-// volatile fields (Timestamp, WorkflowInstance.ExecutionId, trace context)
-// are ignored: a client retry of the same logical create regenerates them. A
+// volatile fields (Timestamp, the child's own WorkflowInstance.ExecutionId,
+// trace context) are ignored: a client retry of the same logical create
+// regenerates them. The parent's ExecutionId inside ParentInstanceInfo is NOT
+// volatile (it is persisted in the parent's own history and changes only on
+// ContinueAsNew or recreate), so it is compared when present on both sides. A
 // mismatch means a genuinely conflicting create, which keeps today's
 // AlreadyExists behavior.
 func isSameLogicalStart(saved, incoming *protos.ExecutionStartedEvent) bool {
@@ -283,7 +319,8 @@ func isSameLogicalStart(saved, incoming *protos.ExecutionStartedEvent) bool {
 	}
 	if savedParent != nil {
 		if savedParent.GetWorkflowInstance().GetInstanceId() != incomingParent.GetWorkflowInstance().GetInstanceId() ||
-			savedParent.GetTaskScheduledId() != incomingParent.GetTaskScheduledId() {
+			savedParent.GetTaskScheduledId() != incomingParent.GetTaskScheduledId() ||
+			!sameParentExecution(savedParent, incomingParent) {
 			return false
 		}
 	}
@@ -291,17 +328,63 @@ func isSameLogicalStart(saved, incoming *protos.ExecutionStartedEvent) bool {
 	return true
 }
 
-func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEvent *backend.HistoryEvent) bool {
+// isSameParentCreation reports whether the incoming child creation is a
+// crash-replay duplicate of the creation that produced the existing state.
+// parentExecMismatch is true when the parent lineage and task slot match but
+// the parent's ExecutionId differs: the parent continued-as-new (or was
+// recreated) and scheduled a child whose instance ID collides with a live
+// child of a previous execution. That is a genuinely new creation, not a
+// replay, and must not be silently deduplicated.
+func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEvent *backend.HistoryEvent) (sameCreation bool, parentExecMismatch bool) {
 	newParent := startEvent.GetExecutionStarted().GetParentInstance()
 	if newParent == nil {
-		return false
+		return false, false
 	}
 
 	existingParent := o.getExecutionStartedEvent(state).GetParentInstance()
 	if existingParent == nil {
-		return false
+		return false, false
 	}
 
-	return existingParent.GetWorkflowInstance().GetInstanceId() == newParent.GetWorkflowInstance().GetInstanceId() &&
-		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
+	if existingParent.GetWorkflowInstance().GetInstanceId() != newParent.GetWorkflowInstance().GetInstanceId() ||
+		existingParent.GetTaskScheduledId() != newParent.GetTaskScheduledId() {
+		return false, false
+	}
+
+	if !sameParentExecution(existingParent, newParent) {
+		return false, true
+	}
+
+	return true, false
+}
+
+// isLaterParentExecution reports whether the create comes from another
+// execution of the parent this workflow's completion is owed to.
+func (o *orchestrator) isLaterParentExecution(state *wfenginestate.State, startEvent *backend.HistoryEvent) bool {
+	incoming := startEvent.GetExecutionStarted().GetParentInstance()
+	owed := o.getExecutionStartedEvent(state).GetParentInstance()
+	if incoming == nil || owed == nil ||
+		incoming.GetWorkflowInstance().GetInstanceId() != owed.GetWorkflowInstance().GetInstanceId() ||
+		cmp.Or(incoming.GetAppID(), o.appID) != cmp.Or(owed.GetAppID(), o.appID) {
+		return false
+	}
+	return !sameParentExecution(owed, incoming)
+}
+
+// sameParentExecution reports whether two parent references could belong to
+// the same parent execution. A nil ExecutionId on EITHER side (older
+// persisted state, rerun-path creations that omit it) conservatively returns
+// true, preserving crash-replay dedup. Only both-set-and-different returns
+// false.
+func sameParentExecution(existing, incoming *protos.ParentInstanceInfo) bool {
+	a := existing.GetWorkflowInstance().GetExecutionId()
+	b := incoming.GetWorkflowInstance().GetExecutionId()
+	return a == nil || b == nil || a.GetValue() == b.GetValue()
+}
+
+// isSameExecutionRetry reports whether the incoming create is a retry of the
+// committed create, since retries re-send the same ExecutionId.
+func (o *orchestrator) isSameExecutionRetry(state *wfenginestate.State, incoming *protos.ExecutionStartedEvent) bool {
+	saved := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue()
+	return saved != "" && saved == incoming.GetWorkflowInstance().GetExecutionId().GetValue()
 }

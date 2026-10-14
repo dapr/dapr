@@ -15,6 +15,7 @@ package common
 
 import (
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -36,6 +37,19 @@ func EnvDurationOr(name string, def time.Duration) time.Duration {
 	if v := os.Getenv(name); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
+		}
+		log.Warnf("Ignoring invalid %s %q", name, v)
+	}
+	return def
+}
+
+// EnvInt64Or returns the non-negative integer parsed from the named
+// environment variable, or def. Like EnvDurationOr, it backs test-only
+// overrides that are not supported production knobs.
+func EnvInt64Or(name string, def int64) int64 {
+	if v := os.Getenv(name); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			return n
 		}
 		log.Warnf("Ignoring invalid %s %q", name, v)
 	}
