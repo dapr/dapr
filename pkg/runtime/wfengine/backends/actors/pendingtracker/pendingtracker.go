@@ -52,17 +52,25 @@ type Tracker struct {
 	// arrival for registrations racing the flip.
 	available atomic.Bool
 
-	workflows  sync.Map // instanceID string -> token *byte
-	activities sync.Map // execution key string -> *activityKey
+	// Registrations pending per key. Several executions of the same task can
+	// be pending at once, and each must stay tracked until it deregisters.
+	lock       sync.Mutex
+	workflows  map[string]int
+	activities map[string]*activityKey
 }
 
 type activityKey struct {
 	instanceID string
 	taskID     int32
+	pending    int
 }
 
 func New(inner Backend) *Tracker {
-	t := &Tracker{Backend: inner}
+	t := &Tracker{
+		Backend:    inner,
+		workflows:  make(map[string]int),
+		activities: make(map[string]*activityKey),
+	}
 	// Available until an executor-count transition says otherwise: work items
 	// cannot be dispatched before the first executor registers actors, and
 	// defaulting to unavailable would cancel registrations made by callers
@@ -83,19 +91,28 @@ func (t *Tracker) SetExecutorAvailable(available bool) {
 		return
 	}
 
+	t.lock.Lock()
+	workflows := make([]string, 0, len(t.workflows))
+	for iid := range t.workflows {
+		workflows = append(workflows, iid)
+	}
+	activities := make([]*activityKey, 0, len(t.activities))
+	for _, ak := range t.activities {
+		activities = append(activities, ak)
+	}
+	t.lock.Unlock()
+
 	var wg sync.WaitGroup
-	t.workflows.Range(func(key, _ any) bool {
+	for _, iid := range workflows {
 		wg.Go(func() {
-			t.cancelWorkflow(key.(string))
+			t.cancelWorkflow(iid)
 		})
-		return true
-	})
-	t.activities.Range(func(_, value any) bool {
+	}
+	for _, ak := range activities {
 		wg.Go(func() {
-			t.cancelActivity(value.(*activityKey))
+			t.cancelActivity(ak)
 		})
-		return true
-	})
+	}
 	wg.Wait()
 }
 
@@ -106,39 +123,55 @@ func (t *Tracker) OnWorkflowTaskCompletion(req *protos.WorkflowRequest, cb func(
 	iid := req.GetInstanceId()
 	dereg := t.Backend.OnWorkflowTaskCompletion(req, cb)
 
-	// Unique token so a superseded attempt's late deregister cannot evict a
-	// newer attempt's tracking entry for the same instance. Non-zero-size:
-	// zero-size allocations share an address, which would defeat the compare.
-	token := new(byte)
-	t.workflows.Store(iid, token)
+	t.lock.Lock()
+	t.workflows[iid]++
+	t.lock.Unlock()
 
 	if !t.available.Load() {
 		t.cancelWorkflow(iid)
 	}
 
+	var once sync.Once
 	return func() {
-		t.workflows.CompareAndDelete(iid, token)
+		once.Do(func() {
+			t.lock.Lock()
+			if t.workflows[iid]--; t.workflows[iid] == 0 {
+				delete(t.workflows, iid)
+			}
+			t.lock.Unlock()
+		})
 		dereg()
 	}
 }
 
 // OnActivityCompletion implements Backend; see OnWorkflowTaskCompletion.
 func (t *Tracker) OnActivityCompletion(req *protos.ActivityRequest, cb func(*protos.ActivityResponse, error)) func() {
-	ak := &activityKey{
-		instanceID: req.GetWorkflowInstance().GetInstanceId(),
-		taskID:     req.GetTaskId(),
-	}
-	key := backend.GetActivityExecutionKey(ak.instanceID, ak.taskID)
+	iid, taskID := req.GetWorkflowInstance().GetInstanceId(), req.GetTaskId()
+	key := backend.GetActivityExecutionKey(iid, taskID)
 	dereg := t.Backend.OnActivityCompletion(req, cb)
 
-	t.activities.Store(key, ak)
+	t.lock.Lock()
+	ak, ok := t.activities[key]
+	if !ok {
+		ak = &activityKey{instanceID: iid, taskID: taskID}
+		t.activities[key] = ak
+	}
+	ak.pending++
+	t.lock.Unlock()
 
 	if !t.available.Load() {
 		t.cancelActivity(ak)
 	}
 
+	var once sync.Once
 	return func() {
-		t.activities.CompareAndDelete(key, ak)
+		once.Do(func() {
+			t.lock.Lock()
+			if ak.pending--; ak.pending == 0 && t.activities[key] == ak {
+				delete(t.activities, key)
+			}
+			t.lock.Unlock()
+		})
 		dereg()
 	}
 }
@@ -149,7 +182,9 @@ func (t *Tracker) cancelWorkflow(instanceID string) {
 			return t.CancelWorkflowTask(ctx, api.InstanceID(instanceID))
 		},
 		func() bool {
-			_, ok := t.workflows.Load(instanceID)
+			t.lock.Lock()
+			defer t.lock.Unlock()
+			_, ok := t.workflows[instanceID]
 			return ok
 		},
 		"workflow task for instance '"+instanceID+"'",
@@ -163,7 +198,9 @@ func (t *Tracker) cancelActivity(ak *activityKey) {
 			return t.CancelActivityTask(ctx, api.InstanceID(ak.instanceID), ak.taskID)
 		},
 		func() bool {
-			_, ok := t.activities.Load(key)
+			t.lock.Lock()
+			defer t.lock.Unlock()
+			_, ok := t.activities[key]
 			return ok
 		},
 		"activity task '"+key+"'",
