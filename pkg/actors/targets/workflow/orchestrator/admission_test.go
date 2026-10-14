@@ -195,3 +195,61 @@ func Test_cleanupWorkflowStateInternal_dropsTheCache(t *testing.T) {
 	assert.Nil(t, h.orch.rstate)
 	assert.Nil(t, h.orch.ometa)
 }
+
+func Test_classifyEvent_activityResultCreatorMustMatchDispatchTarget(t *testing.T) {
+	t.Parallel()
+
+	prime := func(t *testing.T, targetAppID string) *wakeHarness {
+		t.Helper()
+		h := newWakeHarness(t, "test-admit-creator", true)
+		h.primeRunning(t, "test-admit-creator", 7)
+		h.saved = true
+		if targetAppID != "" {
+			h.orch.state.FindHistoryEventByID(7).Router = &protos.TaskRouter{
+				SourceAppID: "testapp",
+				TargetAppID: &targetAppID,
+			}
+		}
+		return h
+	}
+
+	tests := map[string]struct {
+		targetAppID string
+		senderAppID string
+		expReason   string
+	}{
+		"local task from own app is admitted":              {senderAppID: "testapp"},
+		"local task from another app is dropped":           {senderAppID: "other", expReason: "it was sent by app 'other' but the task was dispatched to 'testapp'"},
+		"cross-app task from its target is admitted":       {targetAppID: "appB", senderAppID: "appB"},
+		"cross-app task from another app is dropped":       {targetAppID: "appB", senderAppID: "other", expReason: "it was sent by app 'other' but the task was dispatched to 'appB'"},
+		"cross-app task from the workflow app is admitted": {targetAppID: "appB", senderAppID: "testapp"},
+		"unknown creator skips the check (local task)":     {senderAppID: ""},
+		"unknown creator skips the check (cross-app task)": {targetAppID: "appB", senderAppID: ""},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := prime(t, tc.targetAppID)
+			sender := completionSender{appID: tc.senderAppID}
+			for _, canFold := range []bool{false, true} {
+				a := h.orch.classifyEvent(taskCompletedEvent(7), h.orch.state, sender, canFold)
+				require.NoError(t, a.err, "canFold=%v", canFold)
+				if tc.expReason != "" {
+					assert.Equal(t, admitDrop, a.outcome, "canFold=%v", canFold)
+					assert.Equal(t, tc.expReason, a.reason, "canFold=%v", canFold)
+					continue
+				}
+				assert.Empty(t, a.reason, "canFold=%v", canFold)
+				assert.NotEqual(t, admitDrop, a.outcome, "canFold=%v", canFold)
+			}
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), sender), "a drop is acked, not retried")
+			if tc.expReason != "" {
+				assert.Empty(t, h.orch.state.Inbox, "a forged result must not be persisted")
+			} else {
+				assert.Len(t, h.orch.state.Inbox, 1)
+			}
+		})
+	}
+}

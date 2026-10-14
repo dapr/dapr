@@ -72,6 +72,16 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           # Lowercase the value
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      # Docker on GitHub Windows runners sometimes fails to start at boot and
+      # stays stopped (actions/runner-images#13729). Start it before any step
+      # that needs the daemon.
+      - name: Start Docker service
+        shell: pwsh
+        run: |
+          $dockerState = Get-Service -Name "docker"
+          if ($dockerState.Status -ne "Running") {
+            Start-Service -Name "docker"
+          }
       - name: Docker Hub login
         if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
         env:
