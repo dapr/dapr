@@ -16,6 +16,8 @@ package subscription
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -218,8 +221,7 @@ func getInput() input {
 		Topic:  "topic0",
 		Pubsub: testBulkSubscribePubsub,
 	})
-	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
-	in.bscData.BulkSubDiag = &bulkSubDiag
+	in.bscData.BulkSubDiag = todo.NewBulkSubIngressDiagnostics()
 	in.bscData.Topic = "topic0"
 	in.bscData.PsName = testBulkSubscribePubsub
 
@@ -1351,5 +1353,124 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 func assertRetryCount(t *testing.T, expectedIDRetryCountMap map[string]int, actualRetryCountMap map[string]int) {
 	for k, v := range expectedIDRetryCountMap {
 		assert.Equal(t, v, actualRetryCountMap[k], "expected retry/try count to match")
+	}
+}
+
+// slowFirstAppChannel answers the first bulk delivery only after the policy
+// timeout has elapsed, so that the abandoned attempt is still running when the
+// attempt that replaced it completes and is accumulated. Later deliveries are
+// answered straight away, with half of the entries asking for a retry so that
+// the accumulator narrows the set of messages between attempts.
+type slowFirstAppChannel struct {
+	channel.AppChannel
+
+	delay time.Duration
+
+	lock  sync.Mutex
+	calls int
+
+	// firstDone is closed once the abandoned first delivery has finished, so
+	// that the test does not end while it is still writing.
+	firstDone chan struct{}
+}
+
+func (c *slowFirstAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	c.lock.Lock()
+	c.calls++
+	first := c.calls == 1
+	c.lock.Unlock()
+
+	body, err := req.RawDataFull()
+	if err != nil {
+		return nil, err
+	}
+
+	if first {
+		// Deliberately outlive the policy timeout, and ignore the cancelled
+		// context, the way an app that is slow to answer does.
+		defer close(c.firstDone)
+		time.Sleep(c.delay)
+
+		return nil, errors.New("app took too long to answer")
+	}
+
+	var bulkReq struct {
+		Entries []struct {
+			EntryID string `json:"entryId"`
+		} `json:"entries"`
+	}
+	if err = json.Unmarshal(body, &bulkReq); err != nil {
+		return nil, err
+	}
+
+	appResp := contribpubsub.AppBulkResponse{
+		AppResponses: make([]contribpubsub.AppBulkResponseEntry, len(bulkReq.Entries)),
+	}
+
+	for i, entry := range bulkReq.Entries {
+		status := contribpubsub.Success
+		if i%2 == 1 {
+			status = contribpubsub.Retry
+		}
+
+		appResp.AppResponses[i] = contribpubsub.AppBulkResponseEntry{
+			EntryId: entry.EntryID,
+			Status:  status,
+		}
+	}
+
+	b, err := json.Marshal(appResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(b).
+		WithContentType("application/json"), nil
+}
+
+// TestBulkSubscribeResiliencyAbandonedAttempt covers a timed out attempt that
+// is still delivering while the attempt that replaced it completes. Both hold
+// the same BulkSubscribeCallData, so anything they share has to be safe for
+// concurrent use.
+func TestBulkSubscribeResiliencyAbandonedAttempt(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	comp := inmemory.New(log)
+	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+	appChannel := &slowFirstAppChannel{
+		delay:     3 * time.Second,
+		firstDone: make(chan struct{}),
+	}
+
+	ps, err := New(Options{
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		Postman: http.New(http.Options{
+			Channels: new(channels.Channels).WithAppChannel(appChannel),
+		}),
+		PubSub: &runtimePubsub.PubsubItem{Component: comp},
+	})
+	require.NoError(t, err)
+
+	retry := resiliencyV1alpha.Retry{Policy: "constant", Duration: "1s"}
+	retry.MaxRetries = new(3)
+
+	policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, retry)
+	policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
+
+	in := getInput()
+	b, err := ps.applyBulkSubscribeResiliency(t.Context(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+
+	require.Error(t, err)
+	assert.Len(t, *b, 10)
+
+	// Wait for the abandoned first attempt, so that its writes land inside the
+	// test rather than after it.
+	select {
+	case <-appChannel.firstDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the abandoned attempt to finish")
 	}
 }

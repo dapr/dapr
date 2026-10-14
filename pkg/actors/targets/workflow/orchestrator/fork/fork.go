@@ -153,6 +153,16 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 	case *protos.HistoryEvent_TimerCreated:
 		f.activeTimers[his.GetEventId()] = his
 
+	case *protos.HistoryEvent_TimerFired:
+		// A timer that fired before the rerun point is done, like a completed
+		// activity: keep its creation just before the firing. Recreating it
+		// would fire it twice and leave this firing ahead of its creation.
+		if created, ok := f.activeTimers[his.GetTimerFired().GetTimerId()]; ok {
+			f.newState.AddToHistory(created)
+			delete(f.activeTimers, his.GetTimerFired().GetTimerId())
+		}
+		f.newState.AddToHistory(his)
+
 	case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
 		f.unfinishedChildWorkflows[his.GetEventId()] = his
 

@@ -69,6 +69,12 @@ func (rw *responseWriter) WriteHeader(s int) {
 		return
 	}
 
+	// Informational responses do not commit the final response, except for protocol switches.
+	if s >= 100 && s <= 199 && s != http.StatusSwitchingProtocols {
+		rw.ResponseWriter.WriteHeader(s)
+		return
+	}
+
 	rw.pendingStatus = s
 	rw.callBefore()
 
