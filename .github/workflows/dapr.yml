@@ -350,6 +350,17 @@ jobs:
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+      # Docker on GitHub Windows runners sometimes fails to start at boot and
+      # stays stopped (actions/runner-images#13729). Start it before any step
+      # that needs the daemon.
+      - name: Start Docker service
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dockerState = Get-Service -Name "docker"
+          if ($dockerState.Status -ne "Running") {
+            Start-Service -Name "docker"
+          }
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
