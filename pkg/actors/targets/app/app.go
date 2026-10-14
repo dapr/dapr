@@ -92,7 +92,17 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	lockReq := internalv1pb.NewInternalInvokeRequest("timer/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID)
 
-	ctx, cancel, err := a.lock.LockRequest(ctx, lockReq)
+	wctx, removed, wcancel := reminder.UntilRemoved(ctx)
+	defer wcancel()
+
+	ctx, cancel, err := a.lock.LockRequest(wctx, lockReq)
+	if removed() {
+		if err == nil {
+			cancel()
+		}
+		log.Debugf("Dropping timer %s: timer was removed", reminder.Key())
+		return actorerrors.ErrTimerFireStale
+	}
 	if err != nil {
 		return err
 	}
