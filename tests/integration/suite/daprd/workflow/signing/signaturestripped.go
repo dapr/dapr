@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -118,8 +119,9 @@ func (s *signatureStripped) scheduleAndComplete(t *testing.T, ctx context.Contex
 	reg.AddWorkflowN("sign-stripped", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		return "", nil
 	})
-	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
+	s.waitUntilWorkflowHosted(t, ctx)
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-stripped")
 	require.NoError(t, err)
@@ -135,9 +137,19 @@ func (s *signatureStripped) assertLoadFails(t *testing.T, ctx context.Context, i
 	s.daprd.Restart(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	client := dworkflow.NewClient(s.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(s.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, dworkflow.NewRegistry()))
+	s.waitUntilWorkflowHosted(t, ctx)
 
 	_, err := client.FetchWorkflowMetadata(ctx, id)
 	require.Error(t, err)
+}
+
+// waitUntilWorkflowHosted waits for the workflow actor type the worker just
+// registered: after a restart, daprd re-registers it only once healthy, so a
+// workflow call made straight after StartWorker can be refused with
+// "operations on actor reminders are only possible on hosted actor types".
+func (s *signatureStripped) waitUntilWorkflowHosted(t *testing.T, ctx context.Context) {
+	t.Helper()
+	s.daprd.WaitUntilActorTypeHosted(t, ctx, "dapr.internal."+s.daprd.Namespace()+"."+s.daprd.AppID()+".workflow")
 }

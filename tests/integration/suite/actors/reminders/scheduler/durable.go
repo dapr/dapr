@@ -101,12 +101,18 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	exp := []string{
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-	}
+	// The second repetition (R2, 3s apart) can legitimately fire before the
+	// handover on a slow runner, so only "every reminder fired at least
+	// once" is asserted here; the exact per-reminder count is asserted
+	// after the handover below.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, d.triggered.Slice())
+		seen := make(map[string]bool)
+		for _, name := range d.triggered.Slice() {
+			seen[name] = true
+		}
+		for i := range 20 {
+			assert.Truef(c, seen[strconv.Itoa(i)], "reminder %d must have fired", i)
+		}
 	}, time.Second*20, time.Millisecond*10)
 
 	d.daprd1.Cleanup(t)
@@ -115,7 +121,7 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { d.daprd2.Cleanup(t) })
 	d.daprd2.WaitUntilRunning(t, ctx)
 
-	exp = []string{
+	exp := []string{
 		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
 		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
 		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",

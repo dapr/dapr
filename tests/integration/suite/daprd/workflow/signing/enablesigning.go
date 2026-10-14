@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -85,7 +86,7 @@ func (e *enablesigning) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client1 := dworkflow.NewClient(e.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(e.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, reg))
 
 	id, err := client1.ScheduleWorkflow(ctx, "sign-enable")
@@ -117,7 +118,7 @@ spec:
 	t.Cleanup(func() { daprd2.Cleanup(t) })
 	daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := dworkflow.NewClient(daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorker(ctx, reg))
 
 	// The workflow should fail to load because the unsigned history

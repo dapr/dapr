@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/baggage"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -248,7 +250,11 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	if h.ch != nil {
-		h.ch <- struct{}{}
+		select {
+		case h.ch <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	// Emit metric when request is sent
@@ -403,7 +409,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// HTTP/1.1 is unaffected because TCP reads don't check the context.
 	reqCtx := ctx
 	var reqCancel context.CancelFunc
-	if _, ok := h.client.Transport.(*http2.Transport); ok {
+	if _, ok := h.client.Transport.(*http2.Transport); ok { //nolint:staticcheck
 		reqCtx, reqCancel = context.WithCancel(context.WithoutCancel(ctx))
 	}
 
@@ -416,7 +422,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if h.ch != nil {
-		h.ch <- struct{}{}
+		// Acquiring the max-concurrency slot must respect cancellation: a
+		// caller whose context is already dead would otherwise queue on the
+		// limiter forever.
+		select {
+		case h.ch <- struct{}{}:
+		case <-ctx.Done():
+			if reqCancel != nil {
+				reqCancel()
+			}
+			return nil, ctx.Err()
+		}
 	}
 
 	// Emit metric when request is sent
@@ -644,6 +660,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	ts := diag.TraceStateToW3CString(span.SpanContext())
 	if ts != "" {
 		channelReq.Header.Set("tracestate", ts)
+	}
+	if b := baggage.FromContext(ctx); b.Len() > 0 {
+		channelReq.Header.Set(diagConsts.BaggageHeader, b.String())
 	}
 
 	if h.appHeaderToken != "" {

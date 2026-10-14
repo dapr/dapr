@@ -18,16 +18,19 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 )
 
@@ -113,4 +116,141 @@ func TestProxyServesOnReservedListener(t *testing.T) {
 	require.True(t, ok, "expected a gRPC status error, got: %v", err)
 	require.Equal(t, codes.AlreadyExists, st.Code(), "expected forwarded RPC to reach the sentinel upstream: %v", err)
 	require.Equal(t, "sentinel upstream", st.Message())
+}
+
+type placementUpstream struct {
+	schedulerv1pb.UnimplementedSchedulerServer
+	failCode codes.Code
+}
+
+func (p placementUpstream) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	if _, err := stream.Recv(); err != nil {
+		return err
+	}
+	if p.failCode != codes.OK {
+		return status.Error(p.failCode, "upstream placement failure")
+	}
+	<-stream.Context().Done()
+	return nil
+}
+
+func runProxy(t *testing.T, ctx context.Context, upstream schedulerv1pb.SchedulerServer) *Proxy {
+	t.Helper()
+
+	fp := ports.Reserve(t, 2)
+	healthLis := fp.Listener(t)
+	healthSrv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		ReadHeaderTimeout: time.Second * 5,
+	}
+	go healthSrv.Serve(healthLis)
+	t.Cleanup(func() { healthSrv.Close() })
+
+	upstreamLis := fp.Listener(t)
+	upstreamSrv := grpc.NewServer()
+	schedulerv1pb.RegisterSchedulerServer(upstreamSrv, upstream)
+	go upstreamSrv.Serve(upstreamLis)
+	t.Cleanup(upstreamSrv.Stop)
+
+	sched := scheduler.New(t,
+		scheduler.WithEmbed(false),
+		scheduler.WithHealthzPort(healthLis.Addr().(*net.TCPAddr).Port),
+		scheduler.WithPort(upstreamLis.Addr().(*net.TCPAddr).Port),
+	)
+	p := New(t, sched)
+	t.Cleanup(func() { p.Cleanup(t) })
+	p.Run(t, ctx)
+	return p
+}
+
+func TestProxyReportActorTypesSurfacesUpstreamError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second*20)
+	defer cancel()
+
+	p := runProxy(t, ctx, placementUpstream{failCode: codes.Aborted})
+	conn, err := grpc.NewClient(p.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	stream, err := schedulerv1pb.NewSchedulerClient(conn).ReportActorTypes(ctx)
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(new(schedulerv1pb.ReportActorTypesRequest)))
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, rerr := stream.Recv()
+		errCh <- rerr
+	}()
+	select {
+	case rerr := <-errCh:
+		require.Equal(t, codes.Aborted, status.Code(rerr), rerr)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "upstream placement stream failure never reached daprd")
+	}
+}
+
+// Raw HTTP/2 pings, since a gRPC client cannot ping more often than every 10s.
+func TestProxyPermitsPlacementKeepalive(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second*20)
+	defer cancel()
+
+	p := runProxy(t, ctx, placementUpstream{})
+
+	conn, err := net.Dial("tcp", p.Address())
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	_, err = conn.Write([]byte(http2.ClientPreface))
+	require.NoError(t, err)
+
+	var wlock sync.Mutex
+	fr := http2.NewFramer(conn, conn)
+	require.NoError(t, fr.WriteSettings())
+
+	goaway := make(chan string, 1)
+	go func() {
+		for {
+			f, rerr := fr.ReadFrame()
+			if rerr != nil {
+				return
+			}
+			switch f := f.(type) {
+			case *http2.SettingsFrame:
+				if !f.IsAck() {
+					wlock.Lock()
+					fr.WriteSettingsAck()
+					wlock.Unlock()
+				}
+			case *http2.GoAwayFrame:
+				goaway <- f.ErrCode.String() + " " + string(f.DebugData())
+				return
+			}
+		}
+	}()
+
+	// gRPC's default policy sends GOAWAY on the fourth ping at this interval.
+	for i := range 4 {
+		if i > 0 {
+			select {
+			case msg := <-goaway:
+				require.Fail(t, "proxy rejected keepalive pings", msg)
+			case <-time.After(time.Millisecond * 5500):
+			}
+		}
+		wlock.Lock()
+		err = fr.WritePing(false, [8]byte{byte(i)})
+		wlock.Unlock()
+		require.NoError(t, err)
+	}
+
+	select {
+	case msg := <-goaway:
+		require.Fail(t, "proxy rejected keepalive pings", msg)
+	case <-time.After(time.Second):
+	}
 }

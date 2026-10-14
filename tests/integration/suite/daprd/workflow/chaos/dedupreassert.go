@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -26,14 +27,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -49,16 +53,23 @@ type dedupreassert struct {
 }
 
 func (d *dedupreassert) Setup(t *testing.T) []framework.Option {
-	d.sched = scheduler.New(t)
-	d.proxy = proxy.New(t, d.sched)
+	appID := uuid.New().String()
+	sen := sentry.New(t)
+	d.sched = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	d.proxy = proxy.New(t, d.sched, proxy.WithSentry(t, sen, "default", appID))
 
 	d.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithSchedulerInstance(d.sched),
 		workflow.WithSchedulerAddress(d.proxy.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(d.sched, d.proxy, d.workflow),
+		framework.WithProcesses(sen, d.sched, d.proxy, d.workflow),
 	}
 }
 
@@ -141,12 +152,11 @@ func (d *dedupreassert) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	wfActorType := fmt.Sprintf("dapr.internal.%s.%s.workflow", d.workflow.Dapr().Namespace(), d.workflow.Dapr().AppID())
-	_, _ = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: wfActorType,
-		ActorId:   wfID,
-		Method:    "AddWorkflowEvent",
-		Data:      dupBytes,
-	})
+	_, _ = d.workflow.InternalGRPCClient(t, ctx).CallActor(ctx,
+		internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+			WithActor(wfActorType, wfID).
+			WithData(dupBytes),
+	)
 
 	select {
 	case <-failedCh:

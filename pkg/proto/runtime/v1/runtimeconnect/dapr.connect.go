@@ -96,10 +96,14 @@ const (
 	DaprUnregisterActorRemindersByTypeProcedure = "/dapr.proto.runtime.v1.Dapr/UnregisterActorRemindersByType"
 	// DaprListActorRemindersProcedure is the fully-qualified name of the Dapr's ListActorReminders RPC.
 	DaprListActorRemindersProcedure = "/dapr.proto.runtime.v1.Dapr/ListActorReminders"
+	// DaprListActorTimersProcedure is the fully-qualified name of the Dapr's ListActorTimers RPC.
+	DaprListActorTimersProcedure = "/dapr.proto.runtime.v1.Dapr/ListActorTimers"
 	// DaprGetActorStateProcedure is the fully-qualified name of the Dapr's GetActorState RPC.
 	DaprGetActorStateProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorState"
 	// DaprGetActorReminderProcedure is the fully-qualified name of the Dapr's GetActorReminder RPC.
 	DaprGetActorReminderProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
+	// DaprGetActorTimerProcedure is the fully-qualified name of the Dapr's GetActorTimer RPC.
+	DaprGetActorTimerProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorTimer"
 	// DaprExecuteActorStateTransactionProcedure is the fully-qualified name of the Dapr's
 	// ExecuteActorStateTransaction RPC.
 	DaprExecuteActorStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
@@ -267,10 +271,14 @@ type DaprClient interface {
 	UnregisterActorReminder(context.Context, *connect.Request[v1.UnregisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
 	UnregisterActorRemindersByType(context.Context, *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error)
 	ListActorReminders(context.Context, *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error)
+	// Lists the timers registered on this host for an actor.
+	ListActorTimers(context.Context, *connect.Request[v1.ListActorTimersRequest]) (*connect.Response[v1.ListActorTimersResponse], error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
 	// Gets an actor reminder.
 	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -537,6 +545,12 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("ListActorReminders")),
 			connect.WithClientOptions(opts...),
 		),
+		listActorTimers: connect.NewClient[v1.ListActorTimersRequest, v1.ListActorTimersResponse](
+			httpClient,
+			baseURL+DaprListActorTimersProcedure,
+			connect.WithSchema(daprMethods.ByName("ListActorTimers")),
+			connect.WithClientOptions(opts...),
+		),
 		getActorState: connect.NewClient[v1.GetActorStateRequest, v1.GetActorStateResponse](
 			httpClient,
 			baseURL+DaprGetActorStateProcedure,
@@ -547,6 +561,12 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			httpClient,
 			baseURL+DaprGetActorReminderProcedure,
 			connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+			connect.WithClientOptions(opts...),
+		),
+		getActorTimer: connect.NewClient[v1.GetActorTimerRequest, v1.GetActorTimerResponse](
+			httpClient,
+			baseURL+DaprGetActorTimerProcedure,
+			connect.WithSchema(daprMethods.ByName("GetActorTimer")),
 			connect.WithClientOptions(opts...),
 		),
 		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, emptypb.Empty](
@@ -869,8 +889,10 @@ type daprClient struct {
 	unregisterActorReminder        *connect.Client[v1.UnregisterActorReminderRequest, emptypb.Empty]
 	unregisterActorRemindersByType *connect.Client[v1.UnregisterActorRemindersByTypeRequest, v1.UnregisterActorRemindersByTypeResponse]
 	listActorReminders             *connect.Client[v1.ListActorRemindersRequest, v1.ListActorRemindersResponse]
+	listActorTimers                *connect.Client[v1.ListActorTimersRequest, v1.ListActorTimersResponse]
 	getActorState                  *connect.Client[v1.GetActorStateRequest, v1.GetActorStateResponse]
 	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
+	getActorTimer                  *connect.Client[v1.GetActorTimerRequest, v1.GetActorTimerResponse]
 	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
 	subscribeActorEventsAlpha1     *connect.Client[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
@@ -1029,6 +1051,11 @@ func (c *daprClient) ListActorReminders(ctx context.Context, req *connect.Reques
 	return c.listActorReminders.CallUnary(ctx, req)
 }
 
+// ListActorTimers calls dapr.proto.runtime.v1.Dapr.ListActorTimers.
+func (c *daprClient) ListActorTimers(ctx context.Context, req *connect.Request[v1.ListActorTimersRequest]) (*connect.Response[v1.ListActorTimersResponse], error) {
+	return c.listActorTimers.CallUnary(ctx, req)
+}
+
 // GetActorState calls dapr.proto.runtime.v1.Dapr.GetActorState.
 func (c *daprClient) GetActorState(ctx context.Context, req *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error) {
 	return c.getActorState.CallUnary(ctx, req)
@@ -1037,6 +1064,11 @@ func (c *daprClient) GetActorState(ctx context.Context, req *connect.Request[v1.
 // GetActorReminder calls dapr.proto.runtime.v1.Dapr.GetActorReminder.
 func (c *daprClient) GetActorReminder(ctx context.Context, req *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
 	return c.getActorReminder.CallUnary(ctx, req)
+}
+
+// GetActorTimer calls dapr.proto.runtime.v1.Dapr.GetActorTimer.
+func (c *daprClient) GetActorTimer(ctx context.Context, req *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error) {
+	return c.getActorTimer.CallUnary(ctx, req)
 }
 
 // ExecuteActorStateTransaction calls dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction.
@@ -1354,10 +1386,14 @@ type DaprHandler interface {
 	UnregisterActorReminder(context.Context, *connect.Request[v1.UnregisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
 	UnregisterActorRemindersByType(context.Context, *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error)
 	ListActorReminders(context.Context, *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error)
+	// Lists the timers registered on this host for an actor.
+	ListActorTimers(context.Context, *connect.Request[v1.ListActorTimersRequest]) (*connect.Response[v1.ListActorTimersResponse], error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
 	// Gets an actor reminder.
 	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
+	// Gets a timer registered on this host for an actor.
+	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -1620,6 +1656,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		connect.WithSchema(daprMethods.ByName("ListActorReminders")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daprListActorTimersHandler := connect.NewUnaryHandler(
+		DaprListActorTimersProcedure,
+		svc.ListActorTimers,
+		connect.WithSchema(daprMethods.ByName("ListActorTimers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	daprGetActorStateHandler := connect.NewUnaryHandler(
 		DaprGetActorStateProcedure,
 		svc.GetActorState,
@@ -1630,6 +1672,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		DaprGetActorReminderProcedure,
 		svc.GetActorReminder,
 		connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetActorTimerHandler := connect.NewUnaryHandler(
+		DaprGetActorTimerProcedure,
+		svc.GetActorTimer,
+		connect.WithSchema(daprMethods.ByName("GetActorTimer")),
 		connect.WithHandlerOptions(opts...),
 	)
 	daprExecuteActorStateTransactionHandler := connect.NewUnaryHandler(
@@ -1970,10 +2018,14 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprUnregisterActorRemindersByTypeHandler.ServeHTTP(w, r)
 		case DaprListActorRemindersProcedure:
 			daprListActorRemindersHandler.ServeHTTP(w, r)
+		case DaprListActorTimersProcedure:
+			daprListActorTimersHandler.ServeHTTP(w, r)
 		case DaprGetActorStateProcedure:
 			daprGetActorStateHandler.ServeHTTP(w, r)
 		case DaprGetActorReminderProcedure:
 			daprGetActorReminderHandler.ServeHTTP(w, r)
+		case DaprGetActorTimerProcedure:
+			daprGetActorTimerHandler.ServeHTTP(w, r)
 		case DaprExecuteActorStateTransactionProcedure:
 			daprExecuteActorStateTransactionHandler.ServeHTTP(w, r)
 		case DaprInvokeActorProcedure:
@@ -2165,12 +2217,20 @@ func (UnimplementedDaprHandler) ListActorReminders(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListActorReminders is not implemented"))
 }
 
+func (UnimplementedDaprHandler) ListActorTimers(context.Context, *connect.Request[v1.ListActorTimersRequest]) (*connect.Response[v1.ListActorTimersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListActorTimers is not implemented"))
+}
+
 func (UnimplementedDaprHandler) GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorState is not implemented"))
 }
 
 func (UnimplementedDaprHandler) GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorReminder is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorTimer is not implemented"))
 }
 
 func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error) {

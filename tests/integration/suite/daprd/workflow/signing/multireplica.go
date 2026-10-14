@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -117,7 +118,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(m.daprd1.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(m.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-replica")
@@ -147,7 +148,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 		t.Cleanup(func() { newDaprd.Cleanup(t) })
 		newDaprd.WaitUntilRunning(t, ctx)
 
-		newClient := dworkflow.NewClient(newDaprd.GRPCConn(t, ctx))
+		newClient := dworkflow.NewClientWithLogger(newDaprd.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, newClient.StartWorker(ctx, reg))
 
 		require.NoError(t, newClient.RaiseEvent(ctx, id, fmt.Sprintf("event-%d", i)))
@@ -163,7 +164,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Wait for completion.
-	lastClient := dworkflow.NewClient(currentDaprd.GRPCConn(t, ctx))
+	lastClient := dworkflow.NewClientWithLogger(currentDaprd.GRPCConn(t, ctx), logger.New(t))
 	meta, err = lastClient.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus)
