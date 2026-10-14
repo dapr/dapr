@@ -87,6 +87,9 @@ type Options struct {
 	WorkflowsFastPath               bool
 	WorkflowHistorySigning          bool
 
+	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
+	GracefulShutdownDuration time.Duration
+
 	// MaxRequestBodySize is the gRPC server max message size in bytes. The
 	// orchestrator uses it to detect and gracefully stall workflows whose
 	// history payload would exceed the GetWorkItems stream limit.
@@ -174,6 +177,7 @@ func New(opts Options) (Interface, error) {
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		WorkflowsFastPath:               fastPath,
+		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
 	})
 	if err != nil {
 		return nil, err

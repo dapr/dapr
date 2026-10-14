@@ -99,10 +99,10 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-      - name: Set up Python 3.9
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: "3.9"
+          python-version: "3.12"
       - name: "Set up Go"
         id: setup-go
         uses: actions/setup-go@v6
@@ -130,15 +130,22 @@ jobs:
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement --healthz-port 9091 &
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
       - name: Install dependencies
+        working-directory: python-sdk
+        run: uv sync --frozen --all-packages --group tests
+      # The conversation examples need a local LLM. Same setup as python-sdk's own CI.
+      - name: Set up Llama
         run: |
-          cd python-sdk
-          python -m pip install --upgrade pip
-          pip install setuptools wheel twine tox
+          curl -fsSL https://github.com/ollama/ollama/releases/download/v0.32.0/ollama-linux-amd64.tar.zst | sudo tar --zstd -xf - -C /usr/local
+          sudo rm -f /usr/local/lib/ollama/libggml-cpu-sapphirerapids.so
+          nohup ollama serve > "$RUNNER_TEMP/ollama-serve.log" 2>&1 &
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:11434/api/tags > /dev/null; do sleep 1; done'
+          ollama pull llama3.2:latest
       - name: Check Python Examples
-        run: |
-          cd python-sdk || true
-          tox -e examples
+        working-directory: python-sdk
+        run: uv run pytest tests/examples/
       - name: Update PR comment for success
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
@@ -185,13 +192,12 @@ jobs:
       )
     name: "Java SDK verification tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
     env:
-      JDK_VER: 11
-      JAVA_SPRING_BOOT_VERSION: 2.7.8
-      TOXIPROXY_URL: https://github.com/Shopify/toxiproxy/releases/download/v2.5.0/toxiproxy-server-linux-amd64
+      JDK_VER: 17
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -236,7 +242,7 @@ jobs:
       - name: Set up OpenJDK ${{ env.JDK_VER }}
         uses: actions/setup-java@v3
         with:
-          distribution: 'adopt'
+          distribution: 'temurin'
           java-version: ${{ env.JDK_VER }}
       - name: "Set up Go"
         id: setup-go
@@ -248,52 +254,25 @@ jobs:
         with:
           repository: dapr/java-sdk
           path: java-sdk
-      - name: Set up Dapr CLI
-        uses: dapr/.github/.github/actions/setup-dapr-cli@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Initialize Dapr runtime
-        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and override daprd
+      # The java-sdk integration tests run daprd, placement and scheduler with
+      # Testcontainers, using the image tag pinned in DaprContainerConstants.
+      # Build those images from this commit and give them that tag, so the
+      # tests use them instead of pulling the release images.
+      - name: Build daprd, placement and scheduler images
         run: |
-          make
-          mkdir -p $HOME/.dapr/bin/
-          cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Override placement service
-        run: |
-          docker stop dapr_placement
-          ./dist/linux_amd64/release/placement &
-      - name: Spin local environment
-        run: |
-          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test.yml up -d mongo kafka
-          docker ps
-      - name: Install local ToxiProxy to simulate connectivity issues to Dapr sidecar
-        run: |
-          mkdir -p /home/runner/.local/bin
-          wget -q ${{ env.TOXIPROXY_URL }} -O /home/runner/.local/bin/toxiproxy-server
-          chmod +x /home/runner/.local/bin/toxiproxy-server
-          /home/runner/.local/bin/toxiproxy-server --version
-      - name: Clean up files
-        run: cd java-sdk && mvn clean -B
-      - name: Build sdk
-        run: cd java-sdk && mvn compile -B -q
-      - name: Install jars
-        run: cd java-sdk && mvn install -q -B -DskipTests
-      - name: Integration tests using spring boot version ${{ env.JAVA_SPRING_BOOT_VERSION }}
+          make build BINARIES="daprd placement scheduler"
+          DAPR_VERSION=$(sed -n 's/.*String DAPR_VERSION = "\(.*\)";.*/\1/p' java-sdk/testcontainers-dapr/src/main/java/io/dapr/testcontainers/DaprContainerConstants.java)
+          if [ -z "$DAPR_VERSION" ]; then
+            echo "Could not read DAPR_VERSION from java-sdk" && exit 1
+          fi
+          for bin in daprd placement scheduler; do
+            docker build --build-arg PKG_FILES=$bin -f docker/Dockerfile dist/linux_amd64/release -t daprio/$bin:$DAPR_VERSION
+          done
+      - name: Install java-sdk
+        run: cd java-sdk && ./mvnw clean install -B -q -DskipTests
+      - name: Integration tests
         id: integration_tests
-        run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ env.JAVA_SPRING_BOOT_VERSION }} mvn -B -f sdk-tests/pom.xml verify
-      - name: Upload test report for sdk
-        uses: actions/upload-artifact@v4
-        with:
-          name: report-dapr-java-sdk
-          path: java-sdk/sdk/target/jacoco-report/
-      - name: Upload test report for sdk-actors
-        uses: actions/upload-artifact@v4
-        with:
-          name: report-dapr-java-sdk-actors
-          path: java-sdk/sdk-actors/target/jacoco-report/
+        run: cd java-sdk && ./mvnw -B -pl '!durabletask-client' -Pintegration-tests dependency:copy-dependencies verify
       - name: Upload failsafe test report for sdk-tests on failure
         if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
         uses: actions/upload-artifact@v4
@@ -352,24 +331,12 @@ jobs:
       )
     name: "JS SDK verification tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
     env:
-      NODE_VER: 18
-    services:
-      emqx:
-        image: emqx/emqx
-        ports:
-          - 1883:1883
-          - 8081:8081
-          - 8083:8083
-          - 8883:8883
-          - 18083:18083
-      mongodb:
-        image: mongo
-        ports:
-          - 27017:27017
+      NODE_VER: 22
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -425,33 +392,29 @@ jobs:
         with:
           repository: dapr/js-sdk
           path: js-sdk
-      - name: Set up Dapr CLI
-        uses: dapr/.github/.github/actions/setup-dapr-cli@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Initialize Dapr runtime
-        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and override daprd
+      # The js-sdk e2e tests run daprd, placement and scheduler with
+      # Testcontainers, using daprio/<image>:$DAPR_RUNTIME_VERSION. Build those
+      # images from this commit under a local tag the tests are pointed at.
+      - name: Build daprd, placement and scheduler images
         run: |
-          make
-          mkdir -p $HOME/.dapr/bin/
-          cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
-      - name: Override placement service
-        run: |
-          docker stop dapr_placement
-          ./dist/linux_amd64/release/placement &
+          make build BINARIES="daprd placement scheduler"
+          for bin in daprd placement scheduler; do
+            docker build --build-arg PKG_FILES=$bin -f docker/Dockerfile dist/linux_amd64/release -t daprio/$bin:dev
+          done
+      - name: Install dependencies
+        run: cd js-sdk && npm ci
       - name: Build Package
         run: cd js-sdk && npm run build
       - name: Run E2E tests
         id: tests
         run: cd js-sdk && npm run test:e2e:all
+        env:
+          DAPR_RUNTIME_VERSION: dev
       - name: Run E2E test to show successful TypeScript build
         run: |
           cd js-sdk/test/e2e/typescript-build
           npm install
-          dapr run --app-id typescript-build npm run start
+          npm run start
       - name: Update PR comment for success
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0

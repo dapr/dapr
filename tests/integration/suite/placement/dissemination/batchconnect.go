@@ -25,6 +25,8 @@ import (
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -34,16 +36,23 @@ func init() {
 }
 
 type batchconnect struct {
-	place *placement.Placement
+	place   *placement.Placement
+	logline *logline.LogLine
 }
 
 func (b *batchconnect) Setup(t *testing.T) []framework.Option {
+	b.logline = logline.New(t, logline.WithCaptureAll())
+
 	b.place = placement.New(t,
 		placement.WithDisseminateTimeout(time.Second*5),
+		placement.WithExecOptions(
+			exec.WithStdout(b.logline.Stdout()),
+			exec.WithStderr(b.logline.Stderr()),
+		),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.place),
+		framework.WithProcesses(b.logline, b.place),
 	}
 }
 
@@ -90,6 +99,13 @@ func (b *batchconnect) Run(t *testing.T, ctx context.Context) {
 		}))
 		streams[i] = s
 	}
+
+	// Wait until the disseminator has queued all three new connections before
+	// finishing round 1. Otherwise a ConnAdd processed after the UNLOCK ack
+	// lands in a later round at a different version.
+	assert.Eventually(t, func() bool {
+		return b.logline.Count("Disseminator handling event (default): *loops.ConnAdd") >= numWaiting+1
+	}, time.Second*10, time.Millisecond*10)
 
 	// Complete the first dissemination round for stream1.
 	// Send report to advance to UPDATE.
