@@ -29,6 +29,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
@@ -95,6 +96,7 @@ type Options struct {
 	AdapterStreamer                 rtpubsub.AdapterStreamer
 	Reporter                        registry.Reporter
 	ProgrammaticSubscriptionEnabled bool
+	AppBindingOptionsTimeout        time.Duration
 }
 
 // Processor manages the lifecycle of all components, HTTP endpoints, MCP
@@ -113,6 +115,10 @@ type Processor struct {
 	compStore *compstore.ComponentStore
 	security  security.Handler
 	reporter  registry.Reporter
+
+	// actors is notified of actor state store changes by the hot reload
+	// reconciler. May be nil in tests.
+	actors actors.Interface
 
 	// Accessor interfaces used by the State/Secret/Binding/Subscriber
 	// methods. Backed by the concrete sub-processor instances constructed in
@@ -190,6 +196,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
+		Actors:         opts.Actors,
 	})
 
 	secretProc := secret.New(secret.Options{
@@ -197,17 +204,19 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		OperatorClient: opts.OperatorClient,
+		Security:       opts.Security,
 	})
 
 	bindingProc := binding.New(binding.Options{
-		Registry:       opts.Registry.Bindings(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		IsHTTP:         opts.IsHTTP,
-		Resiliency:     opts.Resiliency,
-		GRPC:           opts.GRPC,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		Channels:       opts.Channels,
+		Registry:                 opts.Registry.Bindings(),
+		ComponentStore:           opts.ComponentStore,
+		Meta:                     opts.Meta,
+		IsHTTP:                   opts.IsHTTP,
+		Resiliency:               opts.Resiliency,
+		GRPC:                     opts.GRPC,
+		TracingSpec:              opts.GlobalConfig.Spec.TracingSpec,
+		Channels:                 opts.Channels,
+		AppBindingOptionsTimeout: opts.AppBindingOptionsTimeout,
 	})
 
 	pubsubProc := pubsub.New(pubsub.Options{
@@ -255,6 +264,7 @@ func New(opts Options) *Processor {
 		compStore:      opts.ComponentStore,
 		security:       opts.Security,
 		reporter:       reporter,
+		actors:         opts.Actors,
 		state:          stateProc,
 		secret:         secretProc,
 		binding:        bindingProc,
@@ -358,7 +368,13 @@ func New(opts Options) *Processor {
 			if reg == nil {
 				return nil
 			}
-			return reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			policyRunner := resiliency.NewRunner[any](ctx,
+				opts.Resiliency.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+			)
+			_, err := policyRunner(func(ctx context.Context) (any, error) {
+				return nil, reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			})
+			return err
 		},
 		UnregisterMCPServer: func(name string) {
 			reg := p.getInProcessWorkflows()

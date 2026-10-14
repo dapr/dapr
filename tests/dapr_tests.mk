@@ -158,6 +158,14 @@ WINDOWS_VERSION=ltsc2022
 endif
 endif
 
+# The actor_sdks e2e test does not deploy actorphp on Windows (see
+# https://github.com/dapr/dapr/issues/2953), and the app's dependencies need
+# PHP 8.4 while the Windows PHP base image has PHP 8.0. Do not build it for
+# Windows.
+ifeq ($(TARGET_OS),windows)
+E2E_TEST_APPS := $(filter-out actorphp,$(E2E_TEST_APPS))
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -343,17 +351,59 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	command -v gotestsum || go install gotest.tools/gotestsum@latest
+	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
+
+.PHONY: test-integration-deps
+test-integration-deps: test-deps
+	# Pre-fetch modules with retries so the integration binary builds run
+	# offline; a single connection reset mid-build otherwise fails the run.
+	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
+		for i in 1 2 3 4 5; do go -C $$d mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done; \
+	done
+
+# Packages that must not run concurrently with the rest of the e2e suite:
+# - hotreloading creates and updates resources in the shared test namespace
+#   whose hot reload restarts every daprd sidecar in that namespace
+# - scheduler deletes a scheduler control plane pod, which actor reminders,
+#   jobs and workflows in other packages depend on
+# - job consumes pubsub topics shared with the pubsub packages and asserts on
+#   exact delivery counts
+# Names must be plain directory names: they are joined into a grep -E
+# alternation in test-e2e-all, so regex metacharacters would mis-match.
+# placementcutover is excluded from both passes there too: it moves the
+# cluster's placement authority, so only the scheduler placement tail runs
+# it, and its tests fatal when run without DAPR_E2E_PLACEMENT_CUTOVER.
+DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
+
+# Compile the e2e test binaries without running them, so that a later
+# test-e2e-all gets a warm build cache. -exec=true builds and links each test
+# binary but replaces its execution with /bin/true, so no TestMain runs and
+# nothing is deployed.
+.PHONY: build-e2e-tests
+build-e2e-tests:
+	GOOS=$(TARGET_OS_LOCAL) go test -tags=e2e -exec=true -count=1 -p 4 ./tests/e2e/...
+
+E2E_TEST_ENV_VARS := DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP)
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
-	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
-	# have to be sure and run them after the main test suite, so as not to alter the state of a running
-	# test
-	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
+	# The packages in DAPR_E2E_SERIAL_PACKAGES share cluster-wide state with the
+	# rest of the suite, so they run in a second, fully serial pass. Everything
+	# else runs at -p 3. Both passes always run; the target fails if either did.
+	# Note: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
+	ret=0; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) placementcutover | tr ' ' '|'))$$") || ret=$$?; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.xml --format standard-quiet -- -timeout 20m -p 1 -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(DAPR_E2E_SERIAL_PACKAGES)) || ret=$$?; \
+	exit $$ret
+     ifneq ($(DAPR_E2E_SKIP_SCHEDULER_PLACEMENT),true)
+	# Scheduler placement pass: cut the cluster over to scheduler placement
+	# live, re-run the actor and workflow suites against it, then roll the
+	# cluster back. Set DAPR_E2E_SKIP_SCHEDULER_PLACEMENT=true to skip.
+	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestPlacementToScheduler ./tests/e2e/placementcutover/...
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.xml --format standard-quiet -- -timeout 40m -p 2 -count=1 -v -tags=e2e ./tests/e2e/actor_activation/... ./tests/e2e/actor_features/... ./tests/e2e/actor_invocation/... ./tests/e2e/actor_reentrancy/... ./tests/e2e/actor_reminder/... ./tests/e2e/actor_sdks/... ./tests/e2e/actor_state/... ./tests/e2e/workflow_accesspolicy/... ./tests/e2e/workflow_crossapp/... ./tests/e2e/workflow_retention/... ./tests/e2e/workflows/...
+	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestSchedulerToPlacement ./tests/e2e/placementcutover/...
+     endif
      else
 	for app in $(DAPR_E2E_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
@@ -405,6 +455,10 @@ ifeq ($(DAPR_PERF_TEST),)
 			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
+	# gotestsum truncates its report files, so each package writes its own
+	# report and the JSON is appended to _perf.json. A run of several
+	# packages then keeps the results of all of them.
+	rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf.json
 	for app in $(DAPR_PERF_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
 		DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
@@ -415,12 +469,16 @@ else
 		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
 		NO_API_LOGGING=true \
 			gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
-			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
-		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+		status=$$? ; \
+		cat $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json >> $(TEST_OUTPUT_FILE_PREFIX)_perf.json ; \
+		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json | strings ; \
+		rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json ; \
+		[ $$status -eq 0 ] || exit -1 ; \
 	done
 endif
 

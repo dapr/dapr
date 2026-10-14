@@ -19,13 +19,19 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -33,7 +39,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -102,7 +107,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, parsedAddEvent)
+		return nil, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
 		return nil, o.purgeWorkflowState(ctx, meta)
@@ -125,10 +130,16 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
 
 	switch {
+	// Must precede the new-event prefix arm: the janitor shares the prefix
+	// deliberately (mixed-version routing) but has its own no-op semantics.
+	case reminder.Name == janitorReminderName:
+		return o.runJanitor(ctx, reminder)
+
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
 		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderCascadeTerminate:
+		reminder.Name == reminderCascadeTerminate,
+		reminder.Name == reminderNameParentNotify:
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
@@ -136,16 +147,194 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		if err := proto.Unmarshal(reminder.Data.GetValue(), &ev); err != nil {
 			return fmt.Errorf("failed to unmarshal activity-result HistoryEvent: %w", err)
 		}
-		return o.addWorkflowEvent(ctx, &ev)
+		// The Scheduler lets any app in the namespace create a reminder
+		// under this name on this actor. Only an activity result belongs
+		// here, plus the child failure this app synthesises for itself
+		// (failTaskViaReminder): anything else (a raised event, a
+		// termination, a timer firing that the persistable inbox cannot
+		// hold) is acked and dropped, whoever sent it.
+		_, _, isResolution := activityResolution(&ev)
+		isChild := ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
+		ownChild := isChild && (reminder.SourceAppID == "" || reminder.SourceAppID == o.appID)
+		if !isResolution && !ownChild {
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' from app '%s': payload is not an activity result (%T)", o.actorID, reminder.Name, reminder.SourceAppID, ev.GetEventType())
+			return nil
+		}
+		sender := completionSender{
+			parentExecutionID: common.ActivityResultParentExecutionID(reminder.Name),
+			appID:             reminder.SourceAppID,
+		}
+		err := o.addWorkflowEvent(ctx, &ev, sender)
+		if common.IsSchedulingNotDurable(err) {
+			// This reminder IS the retry chain for the refusal, and it
+			// retries forever, so each fire drops the cache and reads again
+			// across the store's lag. Bounded, though: a completion whose
+			// scheduling is still committing resolves within the commit
+			// timeout, and one still refused past it is not ahead of its row
+			// but a straggler no history will ever admit. Unbounded, it is a
+			// permanent storm of full state loads under the turn lock.
+			//
+			// The timestamp is stamped by the host that ran the activity, so
+			// it is read against another clock; at this granularity skew is
+			// noise, and an event carrying none reads as ancient and is
+			// dropped, which is the safe direction. The creator chooses the
+			// stamp, though, and any app in the namespace may create this
+			// reminder: a stamp far in the future would otherwise never
+			// leave the window and keep the storm going forever, so one more
+			// than the window ahead of this clock is as expired as one more
+			// than the window behind it.
+			o.invalidateCachedState()
+			window := common.SchedulingDurableWindow()
+			if age := time.Since(ev.GetTimestamp().AsTime()); -window < age && age < window {
+				return err
+			}
+			// Past the bound this fire is the last word, and the refusal was
+			// judged on whatever history the actor held: judge once more on
+			// the reload the invalidate above forces before giving up.
+			err = o.addWorkflowEvent(ctx, &ev, sender)
+			if common.IsSchedulingNotDurable(err) {
+				log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s', its scheduling did not become durable: %v", o.actorID, reminder.Name, err)
+				return nil
+			}
+			// Anything else the re-judge produced belongs to the arm below.
+		}
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			// The instance is gone (purged or never existed): ack so the scheduler
+			// deletes this one-shot reminder. It is created with a retry-forever
+			// failure policy, so an unclassified error here refires it every second
+			// indefinitely; a batch of such orphans (activities completing across an
+			// instance purge under placement churn) measurably degrades the whole
+			// host.
+			log.Warnf("Workflow actor '%s': dropping activity-result reminder '%s' for a purged instance", o.actorID, reminder.Name)
+			return nil
+		}
+		return err
 
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
 	}
 }
 
+// runJanitor handles a fire of the per-instance janitor backstop reminder
+// (WorkflowsFastPath). Semantics: self-delete against purged or
+// terminal instances; cheap no-op (WITHOUT deactivating, so idle instances
+// do not thrash the activation cache every period) when the inbox holds
+// nothing a turn can consume (it may hold early results kept until their step
+// is scheduled); drive a normal turn when inbox rows are pending, which is
+// the recovery event the janitor exists for.
+func (o *orchestrator) runJanitor(ctx context.Context, reminder *actorapi.Reminder) error {
+	state, _, err := o.loadInternalState(ctx)
+	if err != nil {
+		return err
+	}
+
+	if state == nil {
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if rst := o.rstate; runtimestate.IsCompleted(rst) {
+		// Settle before self-deleting: the janitor owns recovery of anything
+		// lost after a terminal commit, including across a restart.
+		if serr := o.settleTerminal(ctx, state, rst, true); serr != nil {
+			return fmt.Errorf("janitor terminal path: %w", serr)
+		}
+		o.deleteJanitor(ctx)
+		return nil
+	}
+
+	if onlyUnscheduled(state.History, state.Inbox) {
+		// Mirror the empty-inbox stale-cache guard of runWorkflow: a peer
+		// host may have written an inbox row since this cache was loaded
+		// (a zombie writer racing an activation). Only a store read can see
+		// it, but paying a full state load every period for every idle
+		// instance is the dominant janitor cost, so the probe backs off
+		// exponentially across consecutive no-op fires (1st, 2nd, 4th, 8th,
+		// then every 8th). Recovery of that rare double-failure window
+		// degrades from one period to at most eight; any real activity
+		// resets the cadence.
+		o.janitorIdleFires++
+		n := o.janitorIdleFires
+		if n <= 2 || n == 4 || n%8 == 0 {
+			o.invalidateCachedState()
+			state, _, err = o.loadInternalState(ctx)
+			if err != nil {
+				return err
+			}
+			if state == nil {
+				o.deleteJanitor(ctx)
+				return nil
+			}
+		}
+	}
+
+	if onlyUnscheduled(state.History, state.Inbox) {
+		// No inbox row a turn can consume, but the instance may have in-flight
+		// activities whose only durable re-driver is this janitor (their
+		// run-activity reminder is elided under
+		// WorkflowsFastPath). Stalled workflows are excluded:
+		// re-dispatching would replay the condition that stalled them.
+		if o.rstate.GetStalled() == nil {
+			if o.redispatchSuppressed() {
+				// Recent life: in-flight activities are covered by their live
+				// executions and the next period re-checks. Firing the re-dispatch
+				// machinery against a merely-slow instance replays full-cost turns
+				// through the scheduler (the measured collapse amplifier); a genuinely
+				// idle-stalled instance goes stale within one period and re-dispatches
+				// below.
+				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(ctx, diag.StatusJanitorRedispatchSuppressed)
+				return nil
+			}
+			// Completions held for folding suppress the re-dispatch of their
+			// tasks below, on the assumption their senders are alive and
+			// re-driving. At a placement handoff that assumption breaks both
+			// ways at once: the sender dies with its pod before re-delivering,
+			// and the arming drive of the folding turn is lost (a wakeCtx
+			// cancellation window, or a drive that exhausted its retries).
+			// The completion is then captive in memory with no
+			// driver at all, and this fire is the only thing that ever runs on
+			// the instance. Drive a turn: runWorkflow folds pending
+			// completions into its commit even with an empty inbox, restoring
+			// at-most-one-period recovery for captive completions.
+			if len(o.foldPending) > 0 {
+				o.janitorIdleFires = 0
+				diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorFoldRecovered)
+				return o.runWorkflowFromReminder(ctx, reminder)
+			}
+			if unresolved := unresolvedScheduledTasks(state, foldedEvents(o.foldPending)); len(unresolved) > 0 {
+				o.redispatchActivities(ctx, state, unresolved)
+			}
+		}
+		return nil
+	}
+
+	// Pending inbox with no drive in sight: this fire IS the recovery.
+	o.janitorIdleFires = 0
+	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusJanitorRecovered)
+	return o.runWorkflowFromReminder(ctx, reminder)
+}
+
 func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	completed, err := o.runWorkflow(ctx, reminder)
-	if completed == todo.RunCompletedTrue {
+	if o.rstate != nil && completed != todo.RunCompletedTrue && runtimestate.IsCompleted(o.rstate) {
+		// The workflow completed on THIS turn (which reports RunCompletedFalse
+		// because it consumed events). Release the cached state graph right here:
+		// the history is the heavy part of a resident completed actor, and
+		// dropping it in-turn frees the memory with no teardown machinery, no
+		// channel, and no race with the drive-loop reclaim handshake.
+		// The actor SHELL stays until swept by a follow-up empty-inbox ack or the
+		// factory's idle reaper; post-completion client calls (status, purge)
+		// reload the terminal state from the store.
+		o.invalidateCachedState()
+	}
+	if completed == todo.RunCompletedTrue && (o.rstate == nil || runtimestate.IsCompleted(o.rstate)) {
+		// Deactivate on empty-inbox acks only for terminal (or unknown-state)
+		// workflows. A live workflow acking an empty-inbox reminder (routine after
+		// batched turns) stays resident: its next event arrives shortly and the
+		// cached state saves a full history reload Residency is bounded by the
+		// engine's max concurrent workflow invocations, terminal turns releasing
+		// their state above, and the factory idle reaper; placement churn and host
+		// shutdown still halt resident actors.
 		defer o.deactivate(o)
 	}
 

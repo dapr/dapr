@@ -55,7 +55,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 	const spawnedInstanceID = "spawned-single"
 
 	s.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		id, err := ctx.ScheduleNewWorkflow("Spawned",
+		id, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			task.WithDetachedWorkflowInput("payload"),
 		)

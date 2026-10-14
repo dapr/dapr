@@ -54,21 +54,21 @@ func (d *defaultid) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
 	d.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		first, err := ctx.ScheduleNewWorkflow("Spawned")
+		first, err := ctx.ScheduleNewDetachedWorkflow("Spawned")
 		if err != nil {
 			return nil, err
 		}
-		second, err := ctx.ScheduleNewWorkflow("Spawned")
+		second, err := ctx.ScheduleNewDetachedWorkflow("Spawned")
 		if err != nil {
 			return nil, err
 		}
 		// An explicit-ID spawn between defaults must not advance the default counter.
-		_, err = ctx.ScheduleNewWorkflow("Spawned",
+		_, err = ctx.ScheduleNewDetachedWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(string(ctx.ID)+"-explicit"))
 		if err != nil {
 			return nil, err
 		}
-		third, err := ctx.ScheduleNewWorkflow("Spawned")
+		third, err := ctx.ScheduleNewDetachedWorkflow("Spawned")
 		if err != nil {
 			return nil, err
 		}

@@ -129,6 +129,8 @@ type DaprRuntime struct {
 	clock                 clock.Clock
 	reloader              *hotreload.Reloader
 
+	grpcServersLock    sync.Mutex
+	grpcServersClosed  bool
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
 	// grpcInternalServerListener is bound early (before components are
@@ -252,21 +254,25 @@ func newDaprRuntime(ctx context.Context,
 		ComponentContextFn:    resiliencyProvider.ComponentContextDecorator(),
 	})
 
+	schedulerPlacement := runtimeConfig.SchedulerPlacementEnabled()
+
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
 		Namespace: namespace,
 		Port:      runtimeConfig.internalGRPCPort,
 		// TODO: @joshvanl
-		PlacementAddresses:   strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
-		HealthEndpoint:       channels.AppHTTPEndpoint(),
-		Resiliency:           resiliencyProvider,
-		Security:             sec,
-		Healthz:              runtimeConfig.healthz,
-		CompStore:            compStore,
-		StateTTLEnabled:      globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		MaxRequestBodySize:   runtimeConfig.maxRequestBodySize,
-		Mode:                 runtimeConfig.mode,
-		DisseminationTimeout: runtimeConfig.actorsDisseminationTimeout,
+		PlacementAddresses:        strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
+		HealthEndpoint:            channels.AppHTTPEndpoint(),
+		Resiliency:                resiliencyProvider,
+		Security:                  sec,
+		Healthz:                   runtimeConfig.healthz,
+		CompStore:                 compStore,
+		StateTTLEnabled:           globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize:        runtimeConfig.maxRequestBodySize,
+		Mode:                      runtimeConfig.mode,
+		DisseminationTimeout:      runtimeConfig.actorsDisseminationTimeout,
+		PlacementStartupTimeout:   runtimeConfig.actorsPlacementStartupTimeout,
+		SchedulerPlacementEnabled: schedulerPlacement,
 	})
 	inProcessExec := inprocess.NewExecutor()
 
@@ -275,7 +281,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:                       namespace,
 		IsHTTP:                          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, DisableSubscribeInitEndpoint),
-		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0,
+		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0 || schedulerPlacement,
 		Actors:                          actors,
 		Registry:                        runtimeConfig.registry,
 		ComponentStore:                  compStore,
@@ -292,6 +298,7 @@ func newDaprRuntime(ctx context.Context,
 		Adapter:                         pubsubAdapter,
 		AdapterStreamer:                 pubsubAdapterStreamer,
 		Reporter:                        runtimeConfig.registry.Reporter(),
+		AppBindingOptionsTimeout:        runtimeConfig.appBindingOptionsTimeout,
 	})
 
 	var reloader *hotreload.Reloader
@@ -343,7 +350,9 @@ func newDaprRuntime(ctx context.Context,
 		EventSink:                       runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
+		WorkflowsFastPath:               globalConfig.IsFeatureEnabled(config.WorkflowsFastPath),
 		WorkflowHistorySigning:          globalConfig.IsFeatureEnabled(config.WorkflowHistorySigning),
+		GracefulShutdownDuration:        runtimeConfig.gracefulShutdownDuration,
 		ComponentStore:                  compStore,
 		Security:                        sec,
 		Signer:                          wfSigner,
@@ -358,17 +367,33 @@ func newDaprRuntime(ctx context.Context,
 	// Install the wfengine as the processor's internal workflow registrar.
 	processor.SetInProcessWorkflows(wfe)
 
+	var reportedPlacementAddresses []string
+	if addrs, ok := strings.CutPrefix(runtimeConfig.actorsService, "placement:"); ok {
+		for addr := range strings.SplitSeq(addrs, ",") {
+			if saddr := strings.TrimSpace(addr); saddr != "" {
+				reportedPlacementAddresses = append(reportedPlacementAddresses, saddr)
+			}
+		}
+	}
+
+	actorHost, err := actorHostAddress(runtimeConfig.internalGRPCListenAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	jobsManager, err := scheduler.New(scheduler.Options{
-		Namespace:        namespace,
-		AppID:            runtimeConfig.id,
-		Channels:         channels,
-		Actors:           actors,
-		Addresses:        runtimeConfig.schedulerAddress,
-		Security:         sec,
-		WFEngine:         wfe,
-		WorkflowSpec:     globalConfig.Spec.WorkflowSpec,
-		Healthz:          runtimeConfig.healthz,
-		SchedulerStreams: runtimeConfig.schedulerStreams,
+		Namespace:          namespace,
+		AppID:              runtimeConfig.id,
+		ActorAddress:       net.JoinHostPort(actorHost, strconv.Itoa(runtimeConfig.internalGRPCPort)),
+		Channels:           channels,
+		Actors:             actors,
+		Addresses:          runtimeConfig.schedulerAddress,
+		Security:           sec,
+		WFEngine:           wfe,
+		WorkflowSpec:       globalConfig.Spec.WorkflowSpec,
+		Healthz:            runtimeConfig.healthz,
+		SchedulerStreams:   runtimeConfig.schedulerStreams,
+		PlacementAddresses: reportedPlacementAddresses,
 	})
 	if err != nil {
 		return nil, err
@@ -449,7 +474,7 @@ func newDaprRuntime(ctx context.Context,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 
-			if server := rt.grpcInternalServer; server != nil {
+			if server := rt.closingGRPCServer(&rt.grpcInternalServer); server != nil {
 				// Closing the server also closes the reserved listener it was
 				// handed. If the server was never started, initRuntime's defer
 				// (closeUnstartedInternalGRPCListener) releases the reserved
@@ -462,7 +487,7 @@ func newDaprRuntime(ctx context.Context,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 
-			if server := rt.grpcAPIServer; server != nil {
+			if server := rt.closingGRPCServer(&rt.grpcAPIServer); server != nil {
 				return server.Close()
 			}
 
@@ -927,7 +952,7 @@ func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 		return
 	}
 
-	err := pluggable.Discover(ctx)
+	err := pluggable.Discover(ctx, a.runtimeConfig.maxRequestBodySize)
 	if err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}
@@ -1042,6 +1067,7 @@ func (a *DaprRuntime) initProxy() {
 		AppClientFn:        a.grpc.GetAppClient,
 		ConnectionFactory:  a.grpc.GetGRPCConnection,
 		AppID:              a.runtimeConfig.id,
+		Namespace:          a.namespace,
 		ACL:                a.accessControlList,
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
@@ -1137,6 +1163,12 @@ func (a *DaprRuntime) closeUnstartedInternalGRPCListener() error {
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API) error {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	if a.grpcServersClosed {
+		return errGRPCServersClosed
+	}
+
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	server := grpc.NewInternalServer(grpc.OptionsInternal{
@@ -1163,7 +1195,23 @@ func (a *DaprRuntime) startGRPCInternalServer(ctx context.Context, api grpc.API)
 	return nil
 }
 
+var errGRPCServersClosed = errors.New("gRPC servers are closed, runtime is shutting down")
+
+// closingGRPCServer stops new gRPC servers from starting and returns server.
+func (a *DaprRuntime) closingGRPCServer(server *grpc.Server) grpc.Server {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	a.grpcServersClosed = true
+	return *server
+}
+
 func (a *DaprRuntime) startGRPCAPIServer(ctx context.Context, api grpc.API, port int) error {
+	a.grpcServersLock.Lock()
+	defer a.grpcServersLock.Unlock()
+	if a.grpcServersClosed {
+		return errGRPCServersClosed
+	}
+
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	a.grpcAPIServer = grpc.NewAPIServer(grpc.Options{
 		API:            api,
@@ -1285,26 +1333,21 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
 
-	actorStateStoreName, ok := a.processor.State().ActorStateStoreName()
-	if !ok {
-		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
+	if _, ok := a.processor.State().ActorStateStoreName(); !ok {
+		log.Info("actors: state store is not configured - actor state and workflow operations will be unavailable until an actor state store component is loaded")
 	}
 
-	// Override host address if the internal gRPC listen address is localhost.
-	hostAddress := a.hostAddress
-	if utils.Contains(
-		[]string{"127.0.0.1", "localhost", "[::1]"},
-		a.runtimeConfig.internalGRPCListenAddress,
-	) {
-		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	hostAddress, err := actorHostAddress(a.runtimeConfig.internalGRPCListenAddress)
+	if err != nil {
+		return err
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:          hostAddress,
-		StateStoreName:    actorStateStoreName,
-		GRPC:              a.grpc,
-		SchedulerClient:   a.jobsManager.Client(),
-		SchedulerReloader: a.jobsManager,
+		Hostname:            hostAddress,
+		GRPC:                a.grpc,
+		SchedulerClient:     a.jobsManager.Client(),
+		SchedulerReloader:   a.jobsManager,
+		SchedulerLeadership: a.jobsManager.Leadership(),
 	}); err != nil {
 		return err
 	}
@@ -1518,4 +1561,18 @@ func (a *DaprRuntime) stopTrace(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func actorHostAddress(internalGRPCListenAddress string) (string, error) {
+	host, err := utils.GetHostAddress()
+	if err != nil {
+		return "", err
+	}
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		internalGRPCListenAddress,
+	) {
+		host = internalGRPCListenAddress
+	}
+	return host, nil
 }

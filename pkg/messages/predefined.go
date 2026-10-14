@@ -105,6 +105,12 @@ var (
 	ErrActorReminderNotFound         = APIError{"actor reminder not found: %s", errorcodes.ActorReminderNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrActorReminderAlreadyExists    = APIError{"actor reminder already exists: %s", errorcodes.ActorReminderAlreadyExists, http.StatusConflict, grpcCodes.AlreadyExists}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", errorcodes.ActorTimerCreate, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", errorcodes.ActorTimerDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerOpActorNotOwned     = APIError{"operations on actor timers are only possible on the host that owns the actor", errorcodes.ActorTimerNotOwned, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTimerList                = APIError{"error listing actor timers: %s", errorcodes.ActorTimerList, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerOpActorNotHosted    = APIError{"operations on actor timers are only possible on hosted actor types", errorcodes.ActorTimerNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTimerGet                 = APIError{"error getting actor timer: %s", errorcodes.ActorTimerGet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerNotFound            = APIError{"actor timer not found: %s", errorcodes.ActorTimerNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
@@ -136,6 +142,7 @@ var (
 	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", errorcodes.WorkflowPause, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", errorcodes.WorkflowResume, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrInvalidWorkflowAppID          = APIError{"workflow app ID '%s' is invalid: only alphanumeric, dash and underscore characters are allowed", errorcodes.WorkflowAppIDInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// Conversation
 	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}

@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/actor-activation-locker
 
-go 1.26.5
+go 1.26.9
 
 require (
 	github.com/bsm/redislock v0.8.2
@@ -19,7 +19,7 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/grpc v1.82.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

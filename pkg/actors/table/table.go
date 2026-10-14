@@ -19,12 +19,14 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/concurrency/slice"
@@ -37,7 +39,7 @@ type Interface interface {
 
 	Types() []string
 	IsActorTypeHosted(actorType string) bool
-	GetOrCreate(actorType, actorID string) (targets.Interface, error)
+	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
 	ActorExists(actorType, actorKey string) bool
 	RegisterActorTypes(opts RegisterActorTypeOptions)
 	UnRegisterActorTypes(actorTypes ...string) error
@@ -45,10 +47,22 @@ type Interface interface {
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
+	SuspendHosting(ctx context.Context) error
+	ResumeHosting()
 }
 
 type Options struct {
 	ReentrancyStore *reentrancystore.Store
+
+	// StartSuspended starts the table with hosting suspended: registered actor
+	// types are not advertised and no actor instances can be created until
+	// ResumeHosting is called. Used when no actor state store is configured at
+	// startup.
+	StartSuspended bool
+
+	// Timers is a closure because the timer storage is constructed after the
+	// table.
+	Timers func() internaltimers.Storage
 }
 
 type ActorTypeFactory struct {
@@ -68,24 +82,45 @@ type RegisterActorTypeOptions struct {
 
 type table struct {
 	factories   sync.Map
+	createLocks sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
 	entityConfigs map[string]api.EntityConfig
 
 	reentrancyStore *reentrancystore.Store
 	clock           clock.Clock
+	timers          func() internaltimers.Storage
+
+	// suspended hides all registered actor types from advertisement and
+	// blocks actor instance creation, without removing the registered
+	// factories. Hosting is suspended while no actor state store is
+	// configured; the store can be hot reloaded at runtime.
+	suspended atomic.Bool
 }
 
 func New(opts Options) Interface {
-	return &table{
+	t := &table{
 		entityConfigs:   make(map[string]api.EntityConfig),
 		clock:           clock.RealClock{},
 		typeUpdates:     broadcaster.New[[]string](),
 		reentrancyStore: opts.ReentrancyStore,
+		timers:          opts.Timers,
 	}
+	t.suspended.Store(opts.StartSuspended)
+	return t
 }
 
+// Types returns the actor types advertised by this host. While hosting is
+// suspended no types are advertised, even though factories remain registered.
 func (t *table) Types() []string {
+	if t.suspended.Load() {
+		return nil
+	}
+	return t.types()
+}
+
+// types returns the registered actor types regardless of suspension.
+func (t *table) types() []string {
 	var keys []string
 	t.factories.Range(func(key, _ any) bool {
 		keys = append(keys, key.(string))
@@ -105,15 +140,29 @@ func (t *table) Len() map[string]int {
 	return alen
 }
 
+// deleteTimersFunc is called before actors are halted so a timer can never
+// fire between its actor's halt and its own removal.
+func (t *table) deleteTimersFunc(ctx context.Context, fn func(actorType, actorID string) bool) {
+	if t.timers == nil {
+		return
+	}
+	if storage := t.timers(); storage != nil {
+		storage.DeleteFunc(ctx, fn)
+	}
+}
+
 func (t *table) HaltAll(ctx context.Context) error {
+	t.deleteTimersFunc(ctx, func(string, string) bool { return true })
+
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
-	t.factories.Range(func(_, factory any) bool {
+	t.factories.Range(func(key, factory any) bool {
 		wg.Add(1)
-		go func(factory targets.Factory) {
+		go func(actorType string, factory targets.Factory) {
 			defer wg.Done()
+			t.waitCreates(actorType)
 			errs.Append(factory.HaltAll(ctx))
-		}(factory.(targets.Factory))
+		}(key.(string), factory.(targets.Factory))
 
 		return true
 	})
@@ -123,14 +172,19 @@ func (t *table) HaltAll(ctx context.Context) error {
 }
 
 func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
+	t.deleteTimersFunc(ctx, func(actorType, actorID string) bool {
+		return !fn(&api.LookupActorRequest{ActorType: actorType, ActorID: actorID})
+	})
+
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
-	t.factories.Range(func(_, factory any) bool {
+	t.factories.Range(func(key, factory any) bool {
 		wg.Add(1)
-		go func(factory targets.Factory) {
+		go func(actorType string, factory targets.Factory) {
 			defer wg.Done()
+			t.waitCreates(actorType)
 			errs.Append(factory.HaltNonHosted(ctx, fn))
-		}(factory.(targets.Factory))
+		}(key.(string), factory.(targets.Factory))
 		return true
 	})
 	wg.Wait()
@@ -139,6 +193,9 @@ func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReque
 }
 
 func (t *table) IsActorTypeHosted(actorType string) bool {
+	if t.suspended.Load() {
+		return false
+	}
 	_, ok := t.factories.Load(actorType)
 	return ok
 }
@@ -151,13 +208,36 @@ func (t *table) ActorExists(actorType, actorID string) bool {
 	return v.(targets.Factory).Exists(actorID)
 }
 
-func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, error) {
+// GetOrCreate checks ctx under the type's create lock, which halts wait on.
+func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
+	l, ok := t.createLocks.Load(actorType)
+	if !ok {
+		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
+	}
+	l.(*sync.RWMutex).RLock()
+	defer l.(*sync.RWMutex).RUnlock()
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if t.suspended.Load() {
+		return nil, fmt.Errorf("%w: actor hosting is suspended: no actor state store configured", actorerrors.ErrCreatingActor)
+	}
+
 	factory, ok := t.factories.Load(actorType)
 	if !ok {
 		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
 
 	return factory.(targets.Factory).GetOrCreate(actorID), nil
+}
+
+func (t *table) waitCreates(actorType string) {
+	if l, ok := t.createLocks.Load(actorType); ok {
+		l.(*sync.RWMutex).Lock()
+		l.(*sync.RWMutex).Unlock() //nolint:staticcheck // SA2001: waits out the creates in progress
+	}
 }
 
 func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
@@ -171,6 +251,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
+		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
@@ -181,6 +262,15 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	if len(actorTypes) == 0 {
 		return nil
 	}
+
+	removed := make(map[string]struct{}, len(actorTypes))
+	for _, actorType := range actorTypes {
+		removed[actorType] = struct{}{}
+	}
+	t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
+		_, ok := removed[actorType]
+		return ok
+	})
 
 	errs := slice.New[error]()
 	var wg sync.WaitGroup
@@ -195,6 +285,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		wg.Add(1)
 
 		go func(fact targets.Factory) {
+			t.waitCreates(actorType)
 			errs.Append(fact.HaltAll(context.Background()))
 			wg.Done()
 		}(fact.(targets.Factory))
@@ -211,6 +302,35 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	ch := make(chan []string)
 	t.typeUpdates.Subscribe(ctx, ch)
 	return ch, t.Types()
+}
+
+// SuspendHosting stops this host from hosting actors: registered types are
+// de-advertised (an empty type list is broadcast to placement subscribers)
+// and all currently hosted actor instances are halted, delivering
+// deactivations to the app. Registered factories, reentrancy configs, and
+// entity configs are retained so hosting can resume without re-registration.
+// Called when the actor state store is removed at runtime.
+func (t *table) SuspendHosting(ctx context.Context) error {
+	if !t.suspended.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// De-advertise before halting so new work is routed away from this host
+	// while instances drain.
+	t.typeUpdates.Broadcast(nil)
+
+	return t.HaltAll(ctx)
+}
+
+// ResumeHosting re-advertises all registered actor types after a
+// SuspendHosting. Called when an actor state store becomes configured at
+// runtime.
+func (t *table) ResumeHosting() {
+	if !t.suspended.CompareAndSwap(true, false) {
+		return
+	}
+
+	t.typeUpdates.Broadcast(t.types())
 }
 
 func (t *table) Close() error {

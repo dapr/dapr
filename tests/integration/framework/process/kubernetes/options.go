@@ -120,6 +120,14 @@ func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
 	return handleClusterListResource(t, "/api/v1/pods", pods)
 }
 
+func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option {
+	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
+}
+
+func WithNamespacedPodListFromStore(t *testing.T, ns string, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/namespaces/"+ns+"/pods", store)
+}
+
 func WithClusterServiceList(t *testing.T, services *corev1.ServiceList) Option {
 	return handleClusterListResource(t, "/api/v1/services", services)
 }
@@ -182,6 +190,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 				},
 			}),
 			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
+			WithNamespacedPodList(t, ns, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),

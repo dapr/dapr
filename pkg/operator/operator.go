@@ -78,8 +78,6 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	APIListenAddress                    string
-	HealthzPort                         int
-	HealthzListenAddress                string
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz
@@ -214,7 +212,10 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	if opts.ServiceReconcilerEnabled {
-		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
+		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{
+			ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
+			MTLSEnabled:                         config.MTLSEnabled,
+		})
 		if err := daprHandler.Init(ctx); err != nil {
 			return nil, fmt.Errorf("unable to initialize handler: %w", err)
 		}

@@ -34,6 +34,12 @@ type KubeAPIOptions struct {
 	Namespace      string
 	ServiceAccount string
 	AppID          string
+
+	// Optional containers and statuses for the workload pod fixture.
+	PodContainers            []corev1.Container
+	PodInitContainers        []corev1.Container
+	PodContainerStatuses     []corev1.ContainerStatus
+	PodInitContainerStatuses []corev1.ContainerStatus
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
@@ -71,7 +77,15 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 						Namespace: opts.Namespace, Name: "mypod",
 						Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
 					},
-					Spec: corev1.PodSpec{ServiceAccountName: opts.ServiceAccount},
+					Spec: corev1.PodSpec{
+						ServiceAccountName: opts.ServiceAccount,
+						Containers:         opts.PodContainers,
+						InitContainers:     opts.PodInitContainers,
+					},
+					Status: corev1.PodStatus{
+						ContainerStatuses:     opts.PodContainerStatuses,
+						InitContainerStatuses: opts.PodInitContainerStatuses,
+					},
 				},
 			},
 		}),

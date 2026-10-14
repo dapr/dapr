@@ -23,12 +23,14 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -85,10 +87,22 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
 	}
 
-	if iTraceID != nil {
-		traceID := iTraceID.(string)
+	if traceID, ok := iTraceID.(string); ok {
 		sc, _ := diag.SpanContextFromW3CString(traceID)
+		if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+			sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+		}
 		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
+	} else if iTraceID != nil {
+		log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
+	}
+	if baggageString, ok := cloudEvent[diagConsts.BaggageHeader].(string); ok && baggageString != "" {
+		// Forward the raw string: re-serializing parsed baggage loses member order.
+		// Drop any ctx baggage, which the HTTP channel would otherwise prefer.
+		if _, err := baggage.Parse(baggageString); err == nil {
+			ctx = baggage.ContextWithoutBaggage(ctx)
+			req.WithCustomHTTPMetadata(map[string]string{diagConsts.BaggageHeader: baggageString})
+		}
 	}
 
 	start := time.Now()
@@ -215,7 +229,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			}
 		}
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
 
 		for _, item := range rawMsgEntries {
 			todo.AddBulkResponseEntry(&bsrr.Entries, item.EntryId, marshalErr)
@@ -243,17 +257,19 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			iTraceID = cloudEvent[contribpubsub.TraceIDField]
 		}
 
-		if iTraceID != nil {
-			traceID := iTraceID.(string)
+		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
+			if traceState, ok := cloudEvent[contribpubsub.TraceStateField].(string); ok && traceState != "" {
+				sc = sc.WithTraceState(*diag.TraceStateFromW3CString(traceState))
+			}
 
-			var span trace.Span
-
-			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+			_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
 			if span != nil {
 				spans[n] = span
 				n++
 			}
+		} else if iTraceID != nil {
+			log.Debugf("skipping tracing for pub/sub event %v: non-string trace id of type %T", cloudEvent[contribpubsub.IDField], iTraceID)
 		}
 	}
 
@@ -265,8 +281,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, err)
 
@@ -289,8 +305,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-			bscData.BulkSubDiag.Elapsed = elapsed
+			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+			bscData.BulkSubDiag.SetElapsed(elapsed)
 
 			todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, err)
 
@@ -306,18 +322,18 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
 					fallthrough
 				case contribpubsub.Retry:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					entryRespReceived[response.EntryId] = true
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 
 					hasAnyError = true
 				case contribpubsub.Success:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Success)]++
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Success, 1)
 					entryRespReceived[response.EntryId] = true
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Drop:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
@@ -333,7 +349,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 					}
 				default:
 					// Consider unknown status field as error and retry
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					entryRespReceived[response.EntryId] = true
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
 						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
@@ -353,11 +369,11 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				)
 
 				hasAnyError = true
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 			}
 		}
 
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		if hasAnyError {
 			return errors.New("few message(s) have failed during bulk subscribe operation")
@@ -372,8 +388,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		// https://cloud.google.com/apis/design/errors#handling_errors
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(rawMsgEntries))
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, int64(len(rawMsgEntries)))
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, nil)
 
@@ -385,8 +401,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	retriableError := errors.New(retriableErrorStr)
 	log.Warn(retriableErrorStr)
 
-	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-	bscData.BulkSubDiag.Elapsed = elapsed
+	bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+	bscData.BulkSubDiag.SetElapsed(elapsed)
 
 	todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, retriableError)
 
@@ -417,10 +433,7 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 		data = data[:n]
 	}
 
-	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(data))
-	if bscData.BulkSubDiag.RetryReported {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] -= int64(len(data))
-	}
+	bscData.BulkSubDiag.AddDeadLettered(int64(len(data)))
 
 	req := &contribpubsub.BulkPublishRequest{
 		Entries:    data,

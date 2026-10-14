@@ -28,6 +28,10 @@ message GetWorkflowRequest {
   string instance_id  = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 3 [json_name = "appID"];
 }
 
 // GetWorkflowResponse is the response for GetWorkflowBeta1.
@@ -58,6 +62,10 @@ message StartWorkflowRequest {
   map<string, string> options = 4;
   // Input data for the workflow instance.
   bytes input = 5;
+  // Optional App ID of the application that should host the workflow
+  // instance. Defaults to the local app. Must be in the same namespace; the
+  // target app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 6 [json_name = "appID"];
 }
 
 // StartWorkflowResponse is the response for StartWorkflowBeta1.
@@ -72,6 +80,10 @@ message TerminateWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 3 [json_name = "appID"];
 }
 
 // PauseWorkflowRequest is the request for PauseWorkflowBeta1.
@@ -80,6 +92,10 @@ message PauseWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 3 [json_name = "appID"];
 }
 
 // ResumeWorkflowRequest is the request for ResumeWorkflowBeta1.
@@ -88,6 +104,10 @@ message ResumeWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 3 [json_name = "appID"];
 }
 
 // RaiseEventWorkflowRequest is the request for RaiseEventWorkflowBeta1.
@@ -100,6 +120,10 @@ message RaiseEventWorkflowRequest {
   string event_name = 3 [json_name = "eventName"];
   // Data associated with the event.
   bytes event_data = 4;
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 5 [json_name = "appID"];
 }
 
 // PurgeWorkflowRequest is the request for PurgeWorkflowBeta1.
@@ -108,4 +132,8 @@ message PurgeWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Optional App ID of the application hosting the workflow instance.
+  // Defaults to the local app. Must be in the same namespace; the target
+  // app's WorkflowAccessPolicy governs whether the call is permitted.
+  optional string app_id = 3 [json_name = "appID"];
 }

@@ -68,6 +68,24 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// WorkflowsFastPath enables the workflow scheduler fast-path stack:
+	// wake-ups drive eagerly on the arming host instead of creating a
+	// per-event scheduler reminder (durability moves to a per-instance
+	// repeating janitor backstop plus on-failure escalation to the durable
+	// per-event reminder; delayed starts keep their scheduler due time);
+	// activities certified by that janitor run locally without their
+	// run-activity reminder, with crash recovery via janitor re-dispatch;
+	// and sender-retried completion events fold straight into the next
+	// turn's single state commit, acked only after that commit, with the
+	// sender's retry as the durability (external raised events keep the
+	// durable inbox path). Each leg removes scheduler job commits and
+	// trigger round trips from the workflow hot path. At-least-once
+	// execution is unchanged throughout. With scheduler-enforced workflow
+	// concurrency limits configured the fast path disables itself: the
+	// limits gate per job delivery, which local drives bypass. Preview
+	// feature; disabled by default.
+	WorkflowsFastPath Feature = "WorkflowsFastPath"
 )
 
 // end feature flags section
@@ -262,6 +280,30 @@ func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
 	return w.GlobalMaxConcurrentActivityInvocations
 }
 
+// HasSchedulerConcurrencyLimits reports whether any scheduler-enforced
+// concurrency limit is configured (global caps or per-name lists); the
+// worker-enforced per-host caps are excluded.
+func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
+	if w == nil {
+		return false
+	}
+	if w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
+		w.GetGlobalMaxConcurrentActivityInvocations() != nil {
+		return true
+	}
+	// Only entries the scheduler actually enforces count (mirrors
+	// cluster.buildConcurrencyLimits).
+	enforced := func(ls []NamedConcurrencyLimit) bool {
+		for _, l := range ls {
+			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
+}
+
 type SecretsSpec struct {
 	Scopes []SecretsScope `json:"scopes,omitempty"`
 }
@@ -403,8 +445,49 @@ type MetricSpec struct {
 	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty"  yaml:"recordErrorCodes,omitempty"`
 	HTTP             *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
-	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
-	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// Workflow holds metrics options specific to workflow and activity metrics.
+	Workflow *WorkflowMetrics `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+	Rules    []MetricsRule    `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+// WorkflowMetrics configures metrics options specific to workflows and activities.
+type WorkflowMetrics struct {
+	// LatencyDistributionBuckets overrides the latency distribution buckets used for the
+	// workflow and activity execution latency histograms. If not set or empty, those
+	// histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	// LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+	// expressed in (for example "1ms" or "1s"). It defaults to milliseconds. The buckets
+	// are scaled into the milliseconds the histograms are recorded in.
+	LatencyDistributionUnits *time.Duration `json:"latencyDistributionUnits,omitempty" yaml:"latencyDistributionUnits,omitempty"`
+}
+
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where LatencyDistributionUnits is encoded as a metav1.Duration string (for
+// example "1s" or "1ms"). Standalone configuration files parsed via YAML use the
+// YAML unmarshaling path instead, which handles Go duration strings natively.
+func (w *WorkflowMetrics) UnmarshalJSON(data []byte) error {
+	// alias drops WorkflowMetrics's methods to avoid recursing into this
+	// UnmarshalJSON. The embedded *alias decodes every other field normally,
+	// while the shallower LatencyDistributionUnits field shadows the alias's
+	// *time.Duration field so the metav1.Duration string form decodes.
+	type alias WorkflowMetrics
+	aux := &struct {
+		LatencyDistributionUnits *metav1.Duration `json:"latencyDistributionUnits,omitempty"`
+		*alias
+	}{
+		alias: (*alias)(w),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.LatencyDistributionUnits != nil {
+		d := aux.LatencyDistributionUnits.Duration
+		w.LatencyDistributionUnits = &d
+	}
+
+	return nil
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -424,7 +507,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
-// GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
+// GetLatencyDistribution returns a *view.Aggregation to be used for latency histograms
 func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 	metricSpecBytes, err := json.Marshal(m)
@@ -441,6 +524,31 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
 	for i, v := range *m.LatencyDistributionBuckets {
 		buckets[i] = float64(v)
+	}
+
+	return view.Distribution(buckets...)
+}
+
+// GetWorkflowLatencyDistribution returns the *view.Aggregation to use for workflow
+// latency histograms. When spec.metrics.workflow.latencyDistributionBuckets is set and
+// non-empty it returns a distribution built from those buckets; otherwise it returns
+// defaultDist (the shared latency distribution), making the workflow buckets an
+// optional override that defaults to the shared histogram.
+func (m MetricSpec) GetWorkflowLatencyDistribution(log logger.Logger, defaultDist *view.Aggregation) *view.Aggregation {
+	if m.Workflow == nil || m.Workflow.LatencyDistributionBuckets == nil || len(*m.Workflow.LatencyDistributionBuckets) == 0 {
+		return defaultDist
+	}
+	// Histograms are always recorded in milliseconds, so scale the configured
+	// buckets from their unit (default millisecond) into milliseconds.
+	unit := time.Millisecond
+	if m.Workflow.LatencyDistributionUnits != nil && *m.Workflow.LatencyDistributionUnits > 0 {
+		unit = *m.Workflow.LatencyDistributionUnits
+	}
+	scale := float64(unit) / float64(time.Millisecond)
+	log.Infof("Using custom workflow latency distribution buckets: %v (unit: %s)", *m.Workflow.LatencyDistributionBuckets, unit)
+	buckets := make([]float64, len(*m.Workflow.LatencyDistributionBuckets))
+	for i, v := range *m.Workflow.LatencyDistributionBuckets {
+		buckets[i] = float64(v) * scale
 	}
 
 	return view.Distribution(buckets...)
@@ -952,6 +1060,10 @@ func (c *Configuration) sortMetricsSpec() {
 
 	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
 		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
+	}
+
+	if c.Spec.MetricsSpec.Workflow != nil {
+		c.Spec.MetricSpec.Workflow = c.Spec.MetricsSpec.Workflow
 	}
 
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
