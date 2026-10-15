@@ -197,6 +197,10 @@ func TestJobs(t *testing.T) {
 		jobBody, err := json.Marshal(scheduledJob)
 		require.NoError(t, err)
 
+		// Use names distinct from the previous subtest, whose single-repeat
+		// jobs may not have been deleted by the scheduler yet.
+		const prefix = "sgd-"
+
 		var wg sync.WaitGroup
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
@@ -206,8 +210,8 @@ func TestJobs(t *testing.T) {
 
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
-					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
+					log.Printf("Scheduling job: testjob-%s-%s", prefix+strconv.Itoa(iteration), strconv.Itoa(i))
+					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, prefix+strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
 				}
 			}(iteration)
@@ -224,8 +228,8 @@ func TestJobs(t *testing.T) {
 
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to get job, send request to app which makes the dapr call
-					log.Printf("Getting job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					resp, err := utils.HTTPGet(fmt.Sprintf(getJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)))
+					log.Printf("Getting job: testjob-%s-%s", prefix+strconv.Itoa(iteration), strconv.Itoa(i))
+					resp, err := utils.HTTPGet(fmt.Sprintf(getJobURLFormat, externalURL, prefix+strconv.Itoa(iteration), strconv.Itoa(i)))
 					require.NoError(t, err)
 					assert.NotNil(t, resp)
 
@@ -233,7 +237,7 @@ func TestJobs(t *testing.T) {
 					err = json.Unmarshal(resp, &rJob)
 					require.NoError(t, err)
 
-					assert.Equal(t, jobName+"-"+strconv.Itoa(iteration)+"-"+strconv.Itoa(i), rJob.Name)
+					assert.Equal(t, jobName+"-"+prefix+strconv.Itoa(iteration)+"-"+strconv.Itoa(i), rJob.Name)
 					assert.Equal(t, scheduledJob.Schedule, rJob.Schedule)
 					assert.Equal(t, scheduledJob.Repeats, rJob.Repeats)
 					assert.Equal(t, scheduledJob.DueTime, rJob.DueTime)
@@ -252,8 +256,8 @@ func TestJobs(t *testing.T) {
 				// Call app to delete job, send request to app which makes the dapr call
 				t.Logf("(Delete job) Running iteration %d out of %d ...", iteration, numIterations)
 				for i := 0; i < numJobsPerGoRoutine; i++ {
-					log.Printf("Deleting job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err := utils.HTTPDelete(fmt.Sprintf(deleteJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)))
+					log.Printf("Deleting job: testjob-%s-%s", prefix+strconv.Itoa(iteration), strconv.Itoa(i))
+					_, err := utils.HTTPDelete(fmt.Sprintf(deleteJobURLFormat, externalURL, prefix+strconv.Itoa(iteration), strconv.Itoa(i)))
 					require.NoError(t, err)
 				}
 			}(iteration)
