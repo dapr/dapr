@@ -14,6 +14,7 @@ limitations under the License.
 package registry
 
 import (
+	"github.com/dapr/dapr/pkg/components/binarystore"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
@@ -38,6 +39,7 @@ type Options struct {
 	httpMiddleware     *http.Registry
 	crypto             *crypto.Registry
 	conversation       *conversation.Registry
+	binaryStore        *binarystore.Registry
 	componentsCallback ComponentsCallback
 	reporter           Reporter
 }
@@ -54,6 +56,7 @@ func NewOptions() *Options {
 		httpMiddleware: http.DefaultRegistry,
 		crypto:         crypto.DefaultRegistry,
 		conversation:   conversation.DefaultRegistry,
+		binaryStore:    binarystore.DefaultRegistry,
 	}
 }
 
@@ -114,6 +117,12 @@ func (o *Options) WithCryptoProviders(registry *crypto.Registry) *Options {
 // WithConversations adds conversation components to the runtime.
 func (o *Options) WithConversations(registry *conversation.Registry) *Options {
 	o.conversation = registry
+	return o
+}
+
+// WithBinaryStores adds binary store components to the runtime.
+func (o *Options) WithBinaryStores(registry *binarystore.Registry) *Options {
+	o.binaryStore = registry
 	return o
 }
 
