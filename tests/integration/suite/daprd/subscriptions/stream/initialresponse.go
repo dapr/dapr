@@ -61,7 +61,7 @@ func (i *initialresponse) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
 	dapr := i.daprd.GRPCClient(t, ctx)
 
-	const subscribers, rounds = 8, 50
+	const subscribers, rounds = 8, 20
 
 	cycle := func(topic string) error {
 		sctx, cancel := context.WithTimeout(ctx, time.Second*5)

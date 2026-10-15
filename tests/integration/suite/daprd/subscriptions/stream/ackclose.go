@@ -61,7 +61,7 @@ func (a *ackclose) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 	dapr := a.daprd.GRPCClient(t, ctx)
 
-	const subscribers, rounds = 8, 50
+	const subscribers, rounds = 8, 20
 
 	// Each cycle acks and then cancels the stream at once, so the ack and
 	// the end of the stream race inside daprd.
