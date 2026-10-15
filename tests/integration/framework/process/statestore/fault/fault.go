@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dapr/components-contrib/state"
 
@@ -53,6 +54,9 @@ type Store struct {
 	getHold          *holdSpec
 
 	multiCancelled atomic.Int32
+
+	multiDeadline    atomic.Int64
+	multiHasDeadline atomic.Bool
 
 	getFailKeySubstring string
 	getFailRemaining    int
@@ -202,6 +206,13 @@ func (s *Store) ArmMultiWriteBehind(sub string) (arrived <-chan struct{}, apply 
 // their request context was cancelled while the hold was in place.
 func (s *Store) MultiCancelled() int { return int(s.multiCancelled.Load()) }
 
+// MultiDeadline returns how much time the context of the most recent Multi
+// had left before its deadline when the request reached the store. ok is
+// false if that context has no deadline, or no Multi has been received.
+func (s *Store) MultiDeadline() (remaining time.Duration, ok bool) {
+	return time.Duration(s.multiDeadline.Load()), s.multiHasDeadline.Load()
+}
+
 // ArmBulkGetHold arms a one-shot hold on the next BulkGet touching a key
 // containing sub. arrived is closed when the BulkGet is captured; the call
 // blocks until release is called (or its context is done). release is
@@ -305,6 +316,13 @@ func (s *Store) Get(ctx context.Context, req *state.GetRequest) (*state.GetRespo
 // with the armed error; otherwise the request is delegated to the underlying
 // in-memory store.
 func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		s.multiDeadline.Store(int64(time.Until(deadline)))
+		s.multiHasDeadline.Store(true)
+	} else {
+		s.multiHasDeadline.Store(false)
+	}
+
 	s.mu.Lock()
 	obs := s.multiObserver
 	s.mu.Unlock()
