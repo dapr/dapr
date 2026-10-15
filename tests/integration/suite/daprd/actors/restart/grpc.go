@@ -37,9 +37,7 @@ func init() {
 	suite.Register(new(grpcstream))
 }
 
-// grpcstream checks the activation id reaches a gRPC app on the callback
-// stream. A method, timer and reminder in one activation share an id, and the
-// next activation after the actor idles out gets a new one.
+// grpcstream checks the activation id on the gRPC callback stream.
 type grpcstream struct {
 	daprd *daprd.Daprd
 	place *placement.Placement

@@ -32,9 +32,7 @@ func init() {
 	suite.Register(new(restart))
 }
 
-// restart kills daprd while the app keeps running. Every call in one
-// activation carries the same activation id, and the first call after the
-// restart carries a new one.
+// restart kills daprd while the app keeps running.
 type restart struct {
 	app *actors.Actors
 

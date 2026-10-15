@@ -34,9 +34,7 @@ func init() {
 	suite.Register(new(httpcallbacks))
 }
 
-// httpcallbacks checks the activation id reaches an HTTP app as a header. A
-// method, timer and reminder in one activation share an id, and the next
-// activation after the actor idles out gets a new one.
+// httpcallbacks checks the activation id header on HTTP callbacks.
 type httpcallbacks struct {
 	app *actors.Actors
 

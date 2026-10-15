@@ -38,7 +38,7 @@ const (
 	// response to ask Dapr to stop firing the recurring callback.
 	ReminderCancelHeader = "X-Daprremindercancel"
 
-	// ActivationIDHeader changes each time daprd activates the actor.
+	// ActivationIDHeader is new each time daprd activates the actor.
 	ActivationIDHeader = "Dapr-Actor-Activation-Id"
 )
 

@@ -28,16 +28,12 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-// Header is the callback header and gRPC metadata key daprd sends the
-// activation id under.
 const Header = "Dapr-Actor-Activation-Id"
 
-// FromHeader returns the activation id of an HTTP actor callback.
 func FromHeader(r *http.Request) string {
 	return r.Header.Get(Header)
 }
 
-// FromMetadata returns the activation id of a gRPC actor callback.
 func FromMetadata(md map[string]string) string {
 	for k, v := range md {
 		if strings.EqualFold(k, Header) {
@@ -52,7 +48,6 @@ type Event struct {
 	ID   string
 }
 
-// Recorder records actor callbacks in arrival order.
 type Recorder struct {
 	lock   sync.Mutex
 	events []Event
@@ -78,7 +73,6 @@ func (r *Recorder) Take() []Event {
 	return events
 }
 
-// FirstIDs returns the first activation id seen for each kind.
 func FirstIDs(events []Event) map[string]string {
 	ids := make(map[string]string)
 	for _, e := range events {
@@ -89,8 +83,7 @@ func FirstIDs(events []Event) map[string]string {
 	return ids
 }
 
-// Cache holds a value per actor the way an SDK caches actor state, and drops
-// a value cached under an older activation.
+// Cache mimics how SDKs cache actor state per activation.
 type Cache struct {
 	lock    sync.Mutex
 	entries map[string]entry
@@ -101,7 +94,6 @@ type entry struct {
 	activationID string
 }
 
-// Get returns the cached value only if it was cached under activationID.
 func (c *Cache) Get(actorID, activationID string) (int, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -121,7 +113,6 @@ func (c *Cache) Set(actorID, activationID string, value int) {
 	c.entries[actorID] = entry{value: value, activationID: activationID}
 }
 
-// Delete drops the actor's value and reports whether one was cached.
 func (c *Cache) Delete(actorID string) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -130,14 +121,13 @@ func (c *Cache) Delete(actorID string) bool {
 	return ok
 }
 
-// Value returns the cached value whatever activation it was cached under.
 func (c *Cache) Value(actorID string) int {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.entries[actorID].value
 }
 
-// Invoke calls an actor method, retrying until daprd can place the actor.
+// Invoke retries until daprd can place the actor.
 func Invoke(t *testing.T, ctx context.Context, client rtv1.DaprClient, req *rtv1.InvokeActorRequest) []byte {
 	t.Helper()
 
