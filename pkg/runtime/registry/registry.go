@@ -17,6 +17,7 @@ import (
 	"context"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components/binarystore"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
@@ -53,6 +54,7 @@ type Registry struct {
 	httpMiddleware *http.Registry
 	crypto         *crypto.Registry
 	conversations  *conversation.Registry
+	binaryStores   *binarystore.Registry
 	componentCb    ComponentsCallback
 	reporter       Reporter
 }
@@ -69,6 +71,7 @@ func New(opts *Options) *Registry {
 		httpMiddleware: opts.httpMiddleware,
 		crypto:         opts.crypto,
 		conversations:  opts.conversation,
+		binaryStores:   opts.binaryStore,
 		componentCb:    opts.componentsCallback,
 		reporter:       opts.reporter,
 	}
@@ -112,6 +115,10 @@ func (r *Registry) Crypto() *crypto.Registry {
 
 func (r *Registry) Conversations() *conversation.Registry {
 	return r.conversations
+}
+
+func (r *Registry) BinaryStores() *binarystore.Registry {
+	return r.binaryStores
 }
 
 func (r *Registry) ComponentsCallback() ComponentsCallback {
