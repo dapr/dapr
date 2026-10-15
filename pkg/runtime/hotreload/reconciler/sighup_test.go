@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/fake"
 )
@@ -62,13 +61,11 @@ func Test_SIGHUPReconciler(t *testing.T) {
 	fooB := endpoint("foo", "https://b")
 
 	tests := map[string]struct {
-		listed     []httpendpointapi.HTTPEndpoint
 		stored     []httpendpointapi.HTTPEndpoint
 		events     []*loader.Event[httpendpointapi.HTTPEndpoint]
 		expSignals int
 	}{
-		"UPDATED equal to the listed resource does not signal": {
-			listed: []httpendpointapi.HTTPEndpoint{fooA},
+		"UPDATED equal to the stored resource once resolved does not signal": {
 			stored: []httpendpointapi.HTTPEndpoint{resolved(fooA)},
 			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
 				event(operatorv1pb.ResourceEventType_UPDATED, fooA),
@@ -76,35 +73,31 @@ func Test_SIGHUPReconciler(t *testing.T) {
 			},
 			expSignals: 0,
 		},
-		"UPDATED with a changed spec signals once": {
-			listed: []httpendpointapi.HTTPEndpoint{fooA},
+		"UPDATED with a changed spec signals": {
 			stored: []httpendpointapi.HTTPEndpoint{resolved(fooA)},
 			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
-				event(operatorv1pb.ResourceEventType_UPDATED, fooB),
 				event(operatorv1pb.ResourceEventType_UPDATED, fooB),
 			},
 			expSignals: 1,
 		},
-		"unlisted name equal to the component store does not signal": {
-			stored: []httpendpointapi.HTTPEndpoint{fooA},
-			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
-				event(operatorv1pb.ResourceEventType_UPDATED, fooA),
-			},
-			expSignals: 0,
-		},
-		"unlisted name missing from the component store signals": {
+		"CREATED for a resource not in the store signals": {
 			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
 				event(operatorv1pb.ResourceEventType_CREATED, fooA),
 			},
 			expSignals: 1,
 		},
 		"DELETED of a stored resource signals": {
-			listed: []httpendpointapi.HTTPEndpoint{fooA},
 			stored: []httpendpointapi.HTTPEndpoint{resolved(fooA)},
 			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
 				event(operatorv1pb.ResourceEventType_DELETED, fooA),
 			},
 			expSignals: 1,
+		},
+		"DELETED of a resource not in the store does not signal": {
+			events: []*loader.Event[httpendpointapi.HTTPEndpoint]{
+				event(operatorv1pb.ResourceEventType_DELETED, fooA),
+			},
+			expSignals: 0,
 		},
 	}
 
@@ -120,15 +113,12 @@ func Test_SIGHUPReconciler(t *testing.T) {
 				CompStore: store,
 				Healthz:   healthz.New(),
 			})
+			r.resolve = func(_ context.Context, e httpendpointapi.HTTPEndpoint) httpendpointapi.HTTPEndpoint {
+				return resolved(e)
+			}
 
 			eventCh := make(chan *loader.Event[httpendpointapi.HTTPEndpoint])
 			r.loader = fake.NewFake[httpendpointapi.HTTPEndpoint]().
-				WithList(func(context.Context) (*differ.LocalRemoteResources[httpendpointapi.HTTPEndpoint], error) {
-					return &differ.LocalRemoteResources[httpendpointapi.HTTPEndpoint]{
-						Local:  store.ListHTTPEndpoints(),
-						Remote: test.listed,
-					}, nil
-				}).
 				WithStream(func(context.Context) (*loader.StreamConn[httpendpointapi.HTTPEndpoint], error) {
 					return &loader.StreamConn[httpendpointapi.HTTPEndpoint]{
 						EventCh:     eventCh,

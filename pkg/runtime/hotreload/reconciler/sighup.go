@@ -24,6 +24,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops/httpendpoint"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
 )
@@ -39,11 +40,11 @@ type SIGHUPReconciler[T differ.Resource] struct {
 	// name. Used to detect whether a resource has actually changed.
 	getExisting func(name string) (T, bool)
 
-	// known holds the last seen version of each resource as served by the
-	// loader. The component store copy cannot be used for comparison because
-	// the processor may have mutated it, for example by resolving secrets.
-	known  map[string]T
-	signal func() error
+	// resolve, when set, returns a copy of an incoming resource with its
+	// secrets resolved the way the processor resolved the stored copy, so the
+	// two compare equal when nothing changed.
+	resolve func(context.Context, T) T
+	signal  func() error
 
 	loop loop.Interface[Event]
 }
@@ -57,7 +58,6 @@ func NewSIGHUPConfigurations(opts Options[configapi.Configuration]) *SIGHUPRecon
 		htarget:     opts.Healthz.AddTarget("configuration-sighup-reconciler"),
 		loader:      opts.Loader.Configurations(),
 		getExisting: opts.CompStore.GetConfigurationResource,
-		known:       make(map[string]configapi.Configuration),
 		signal:      sendSIGHUP,
 	}
 	r.loop = loopFactory.NewLoop(r)
@@ -73,8 +73,15 @@ func NewSIGHUPHTTPEndpoints(opts Options[httpendpointapi.HTTPEndpoint]) *SIGHUPR
 		htarget:     opts.Healthz.AddTarget("httpendpoint-sighup-reconciler"),
 		loader:      opts.Loader.HTTPEndpoints(),
 		getExisting: opts.CompStore.GetHTTPEndpoint,
-		known:       make(map[string]httpendpointapi.HTTPEndpoint),
 		signal:      sendSIGHUP,
+	}
+	if opts.Processor != nil {
+		secret := opts.Processor.Secret()
+		r.resolve = func(ctx context.Context, e httpendpointapi.HTTPEndpoint) httpendpointapi.HTTPEndpoint {
+			e = *e.DeepCopy()
+			httpendpoint.ResolveSecrets(ctx, secret, &e)
+			return e
+		}
 	}
 	r.loop = loopFactory.NewLoop(r)
 	return r
@@ -89,7 +96,6 @@ func NewSIGHUPResiliencies(opts Options[resiliencyapi.Resiliency]) *SIGHUPReconc
 		htarget:     opts.Healthz.AddTarget("resiliency-sighup-reconciler"),
 		loader:      opts.Loader.Resiliencies(),
 		getExisting: opts.CompStore.GetResiliencyResource,
-		known:       make(map[string]resiliencyapi.Resiliency),
 		signal:      sendSIGHUP,
 	}
 	r.loop = loopFactory.NewLoop(r)
@@ -97,20 +103,6 @@ func NewSIGHUPResiliencies(opts Options[resiliencyapi.Resiliency]) *SIGHUPReconc
 }
 
 func (r *SIGHUPReconciler[T]) Run(ctx context.Context) error {
-	// List before opening the stream so that a change made in between is
-	// still delivered as an event and compared against the older listing.
-	resources, err := r.loader.List(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		log.Warnf("Error listing %s, falling back to the component store to detect changes: %s", r.kind, err)
-	} else if resources != nil {
-		for _, res := range resources.Remote {
-			r.known[res.GetName()] = res
-		}
-	}
-
 	conn, err := r.loader.Stream(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -152,7 +144,7 @@ func (r *SIGHUPReconciler[T]) watchConn(ctx context.Context, conn *loader.Stream
 func (r *SIGHUPReconciler[T]) Handle(ctx context.Context, event Event) error {
 	switch e := event.(type) {
 	case *resourceEvent[T]:
-		r.handleResourceEvent(e.Event)
+		r.handleResourceEvent(ctx, e.Event)
 	case *shutdown:
 		r.handleShutdown(e)
 	default:
@@ -162,12 +154,11 @@ func (r *SIGHUPReconciler[T]) Handle(ctx context.Context, event Event) error {
 	return nil
 }
 
-func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
+func (r *SIGHUPReconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) {
 	name := event.Resource.GetName()
 
 	switch event.Type {
 	case operatorv1pb.ResourceEventType_DELETED:
-		delete(r.known, name)
 		if _, exists := r.getExisting(name); !exists {
 			log.Debugf("Ignoring %s %s event for %s: resource not known",
 				r.kind, event.Type, event.Resource.LogName())
@@ -175,15 +166,16 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 		}
 
 	case operatorv1pb.ResourceEventType_CREATED, operatorv1pb.ResourceEventType_UPDATED:
-		existing, exists := r.known[name]
-		if !exists {
-			existing, exists = r.getExisting(name)
-		}
-		r.known[name] = event.Resource
-		if exists && differ.AreSame(existing, event.Resource) {
-			log.Debugf("Ignoring %s %s event for %s: resource has not changed",
-				r.kind, event.Type, event.Resource.LogName())
-			return
+		if existing, exists := r.getExisting(name); exists {
+			incoming := event.Resource
+			if r.resolve != nil {
+				incoming = r.resolve(ctx, incoming)
+			}
+			if differ.AreSame(existing, incoming) {
+				log.Debugf("Ignoring %s %s event for %s: resource has not changed",
+					r.kind, event.Type, event.Resource.LogName())
+				return
+			}
 		}
 
 	default:
