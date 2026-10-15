@@ -41,6 +41,5 @@ func TestEphemeralCeil(t *testing.T) {
 }
 
 func TestPortsCeil(t *testing.T) {
-	t.Logf("portsCeil=%d portsBase=%d", portsCeil, portsBase())
 	assert.Less(t, portsBase(), portsCeil)
 }
