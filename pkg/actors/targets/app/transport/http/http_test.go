@@ -137,21 +137,42 @@ func TestInvokeTimer_SerializesCallback(t *testing.T) {
 func TestDeactivate_UsesDELETE(t *testing.T) {
 	var seenPath string
 	var seenVerb string
-	var seenMD map[string]*internalv1pb.ListStringValue
 	tp := newHTTPTransport(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 		seenPath = req.Message().GetMethod()
 		seenVerb = req.Message().GetHttpExtension().GetVerb().String()
-		seenMD = req.Metadata()
 		return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
 	})
 
-	err := tp.Deactivate(t.Context(), "myactortype", "a", map[string]*internalv1pb.ListStringValue{
-		transport.ActivationIDHeader: {Values: []string{"act-1"}},
-	})
+	err := tp.Deactivate(t.Context(), "myactortype", "a", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "actors/myactortype/a", seenPath)
 	assert.Equal(t, "DELETE", seenVerb)
-	assert.Equal(t, []string{"act-1"}, seenMD[transport.ActivationIDHeader].GetValues())
+}
+
+func TestDeactivate_SendsMetadata(t *testing.T) {
+	tests := map[string]struct {
+		md   map[string]*internalv1pb.ListStringValue
+		want []string
+	}{
+		"activation id": {
+			md:   map[string]*internalv1pb.ListStringValue{transport.ActivationIDHeader: {Values: []string{"act-1"}}},
+			want: []string{"act-1"},
+		},
+		"no metadata": {},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var seenMD map[string]*internalv1pb.ListStringValue
+			tp := newHTTPTransport(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+				seenMD = req.Metadata()
+				return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+			})
+
+			require.NoError(t, tp.Deactivate(t.Context(), "myactortype", "a", test.md))
+			assert.Equal(t, test.want, seenMD[transport.ActivationIDHeader].GetValues())
+		})
+	}
 }
 
 func TestDeactivate_NonOKFails(t *testing.T) {

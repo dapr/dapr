@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package state
+package http
 
 import (
 	"context"
@@ -34,14 +34,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(etaghttp))
+	suite.Register(new(etag))
 }
 
-type etaghttp struct {
+type etag struct {
 	app *actors.Actors
 }
 
-func (e *etaghttp) Setup(t *testing.T) []framework.Option {
+func (e *etag) Setup(t *testing.T) []framework.Option {
 	e.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {}),
@@ -52,7 +52,7 @@ func (e *etaghttp) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *etaghttp) Run(t *testing.T, ctx context.Context) {
+func (e *etag) Run(t *testing.T, ctx context.Context) {
 	e.app.WaitUntilRunning(t, ctx)
 	activation.Invoke(t, ctx, e.app.GRPCClient(t, ctx), &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
 

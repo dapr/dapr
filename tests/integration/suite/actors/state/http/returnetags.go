@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package state
+package http
 
 import (
 	"context"
@@ -24,10 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -38,18 +34,11 @@ import (
 )
 
 func init() {
-	suite.Register(&returnetagsHTTP{returnetags{viaGRPC: false}})
-	suite.Register(&returnetagsGRPC{returnetags{viaGRPC: true}})
+	suite.Register(new(returnetags))
 }
 
-type (
-	returnetagsHTTP struct{ returnetags }
-	returnetagsGRPC struct{ returnetags }
-)
-
 type returnetags struct {
-	viaGRPC bool
-	app     *actors.Actors
+	app *actors.Actors
 }
 
 type etagOp struct {
@@ -62,8 +51,7 @@ type etagOp struct {
 
 type etagResult struct {
 	etags map[string]string
-	// "ok", the gRPC code, or the HTTP status and error code.
-	code string
+	code  string
 }
 
 func (r *returnetags) Setup(t *testing.T) []framework.Option {
@@ -79,41 +67,24 @@ func (r *returnetags) Setup(t *testing.T) []framework.Option {
 
 func (r *returnetags) Run(t *testing.T, ctx context.Context) {
 	r.app.WaitUntilRunning(t, ctx)
-	grpcCl := r.app.GRPCClient(t, ctx)
-	activation.Invoke(t, ctx, grpcCl, &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
+	activation.Invoke(t, ctx, r.app.GRPCClient(t, ctx), &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
 	httpCl := client.HTTP(t)
 	base := fmt.Sprintf("http://%s/v1.0/actors/abc/1/state", r.app.Daprd().HTTPAddress())
 
 	get := func(key string) (string, string) {
 		t.Helper()
-		resp, err := grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: "1", Key: key})
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, base+"/"+key, nil)
 		require.NoError(t, err)
-		return strings.Trim(string(resp.GetData()), `"`), resp.GetEtag()
+		resp, err := httpCl.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, []int{nethttp.StatusOK, nethttp.StatusNoContent}, resp.StatusCode, string(b))
+		return strings.Trim(string(b), `"`), resp.Header.Get("ETag")
 	}
 
-	txnGRPC := func(returnETags bool, ops ...etagOp) etagResult {
-		t.Helper()
-		in := &rtv1.ExecuteActorStateTransactionRequest{ActorType: "abc", ActorId: "1", ReturnEtags: returnETags}
-		for _, o := range ops {
-			op := &rtv1.TransactionalActorStateOperation{OperationType: "upsert", Key: o.key, Etag: o.etag, CreateOnly: o.createOnly}
-			if o.del {
-				op.OperationType = "delete"
-			} else {
-				op.Value = &anypb.Any{Value: []byte(`"` + o.value + `"`)}
-			}
-			in.Operations = append(in.Operations, op)
-		}
-		resp, err := grpcCl.ExecuteActorStateTransaction(ctx, in)
-		if err != nil {
-			return etagResult{code: status.Code(err).String()}
-		}
-		if !returnETags {
-			assert.Zero(t, proto.Size(resp))
-		}
-		return etagResult{etags: resp.GetEtags(), code: "ok"}
-	}
-
-	txnHTTP := func(returnETags bool, ops ...etagOp) etagResult {
+	txn := func(returnETags bool, ops ...etagOp) etagResult {
 		t.Helper()
 		reqs := make([]map[string]any, 0, len(ops))
 		for _, o := range ops {
@@ -164,12 +135,7 @@ func (r *returnetags) Run(t *testing.T, ctx context.Context) {
 		return etagResult{code: fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)}
 	}
 
-	txn := txnHTTP
 	mismatch, invalid, badRequest := "409 ERR_ACTOR_STATE_ETAG_MISMATCH", "400 ERR_ACTOR_STATE_ETAG_INVALID", "400 ERR_BAD_REQUEST"
-	if r.viaGRPC {
-		txn = txnGRPC
-		mismatch, invalid, badRequest = codes.Aborted.String(), codes.InvalidArgument.String(), codes.InvalidArgument.String()
-	}
 
 	t.Run("no opt-in keeps the old response", func(t *testing.T) {
 		res := txn(false, etagOp{key: "plain", value: "p"})

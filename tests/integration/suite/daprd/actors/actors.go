@@ -15,4 +15,6 @@ package actors
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/restart"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/restart/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/restart/http"
 )

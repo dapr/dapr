@@ -11,14 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package restart
+package grpc
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
+	nethttp "net/http"
 	"strings"
 	"testing"
 	"time"
@@ -37,21 +35,12 @@ import (
 )
 
 func init() {
-	suite.Register(&staleetagHTTP{staleetag{viaGRPC: false}})
-	suite.Register(&staleetagGRPC{staleetag{viaGRPC: true}})
+	suite.Register(new(staleetag))
 }
-
-type (
-	staleetagHTTP struct{ staleetag }
-	staleetagGRPC struct{ staleetag }
-)
 
 // staleetag kills daprd between an old activation's read and save.
 type staleetag struct {
-	viaGRPC bool
-
 	app     *actors.Actors
-	httpCl  *http.Client
 	grpcCl  rtv1.DaprClient
 	read    chan struct{}
 	release chan struct{}
@@ -59,23 +48,22 @@ type staleetag struct {
 }
 
 func (s *staleetag) Setup(t *testing.T) []framework.Option {
-	s.httpCl = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 	s.read = make(chan struct{})
 	s.release = make(chan struct{})
 	s.saved = make(chan string, 1)
 
 	s.app = actors.New(t,
 		actors.WithActorTypes("abc"),
-		actors.WithHandler("/actors/abc/{id}/method/write", func(w http.ResponseWriter, r *http.Request) {
+		actors.WithHandler("/actors/abc/{id}/method/write", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			value, _ := io.ReadAll(r.Body)
 			etag, err := s.get(r.Context(), r.PathValue("id"))
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 				return
 			}
 			w.Write([]byte(s.save(r.Context(), r.PathValue("id"), string(value), etag)))
 		}),
-		actors.WithHandler("/actors/abc/{id}/method/slow", func(w http.ResponseWriter, r *http.Request) {
+		actors.WithHandler("/actors/abc/{id}/method/slow", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			etag, err := s.get(r.Context(), r.PathValue("id"))
 			if err != nil {
 				s.saved <- err.Error()
@@ -124,11 +112,7 @@ func (s *staleetag) Run(t *testing.T, ctx context.Context) {
 	close(s.release)
 	select {
 	case got := <-s.saved:
-		if s.viaGRPC {
-			assert.Equal(t, "Aborted", got)
-		} else {
-			assert.Equal(t, "409 ERR_ACTOR_STATE_ETAG_MISMATCH", got)
-		}
+		assert.Equal(t, "Aborted", got)
 	case <-time.After(time.Second * 10):
 		require.Fail(t, "slow callback never saved")
 	}
@@ -144,69 +128,24 @@ func (s *staleetag) value(t *testing.T, ctx context.Context) string {
 }
 
 func (s *staleetag) get(ctx context.Context, id string) (string, error) {
-	if s.viaGRPC {
-		resp, err := s.grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"}, grpc.WaitForReady(true))
-		if err != nil {
-			return "", err
-		}
-		return resp.GetEtag(), nil
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state/k", nil)
+	resp, err := s.grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"}, grpc.WaitForReady(true))
 	if err != nil {
 		return "", err
 	}
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return "", fmt.Errorf("get state: %d", resp.StatusCode)
-	}
-	return resp.Header.Get("ETag"), nil
+	return resp.GetEtag(), nil
 }
 
-// save returns "ok" or the gRPC code or the HTTP status and error code.
+// save returns "ok" or the gRPC code.
 func (s *staleetag) save(ctx context.Context, id, value, etag string) string {
-	if s.viaGRPC {
-		_, err := s.grpcCl.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-			ActorType: "abc",
-			ActorId:   id,
-			Operations: []*rtv1.TransactionalActorStateOperation{{
-				OperationType: "upsert", Key: "k", Value: &anypb.Any{Value: []byte(value)}, Etag: etag,
-			}},
-		}, grpc.WaitForReady(true))
-		if err != nil {
-			return status.Code(err).String()
-		}
-		return "ok"
-	}
-
-	op := map[string]any{"key": "k", "value": value}
-	if etag != "" {
-		op["etag"] = etag
-	}
-	body, err := json.Marshal([]map[string]any{{"operation": "upsert", "request": op}})
+	_, err := s.grpcCl.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
+		ActorType: "abc",
+		ActorId:   id,
+		Operations: []*rtv1.TransactionalActorStateOperation{{
+			OperationType: "upsert", Key: "k", Value: &anypb.Any{Value: []byte(value)}, Etag: etag,
+		}},
+	}, grpc.WaitForReady(true))
 	if err != nil {
-		return err.Error()
+		return status.Code(err).String()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state", strings.NewReader(string(body)))
-	if err != nil {
-		return err.Error()
-	}
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return err.Error()
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNoContent {
-		return "ok"
-	}
-	var apiErr struct {
-		ErrorCode string `json:"errorCode"`
-	}
-	b, _ := io.ReadAll(resp.Body)
-	_ = json.Unmarshal(b, &apiErr)
-	return fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)
+	return "ok"
 }
