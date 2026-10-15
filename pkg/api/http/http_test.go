@@ -4143,6 +4143,21 @@ func (c fakeStateStore) Multi(ctx context.Context, request *state.TransactionalS
 	return nil
 }
 
+type multiContextKey struct{}
+
+type multiContextStore struct {
+	fakeStateStore
+	hasDeadline atomic.Bool
+	hasIdentity atomic.Bool
+}
+
+func (c *multiContextStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
+	_, ok := ctx.Deadline()
+	c.hasDeadline.Store(ok)
+	c.hasIdentity.Store(ctx.Value(multiContextKey{}) == "identity")
+	return nil
+}
+
 type fakeStateStoreQuerier struct {
 	state.Store
 	state.TransactionalStore
@@ -4602,6 +4617,47 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
+}
+
+func TestV1TransactionResiliencyContext(t *testing.T) {
+	store := &multiContextStore{fakeStateStore: newFakeStateStore()}
+	compStore := compstore.New()
+	compStore.AddStateStore("failStore", store)
+
+	res := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
+	res.SetComponentContextDecorator(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, multiContextKey{}, "identity")
+	})
+	testAPI := &api{
+		healthz: healthz.New(),
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: res,
+		}),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
+	}
+
+	f := newFakeHTTPServer()
+	t.Cleanup(f.Shutdown)
+	f.StartServer(testAPI.constructStateEndpoints(), nil)
+
+	b, err := json.Marshal(stateTransactionRequestBody{
+		Operations: []stateTransactionRequestBodyOperation{
+			{
+				Operation: string(state.OperationDelete),
+				Request:   map[string]string{"key": "key1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resp := f.DoRequest("POST", "v1.0/state/failStore/transaction", b, nil)
+
+	assert.Equal(t, 204, resp.StatusCode)
+	assert.True(t, store.hasDeadline.Load(), "store must receive the context with the resiliency timeout")
+	assert.True(t, store.hasIdentity.Load(), "store must receive the component context")
 }
 
 func TestV1TransactionEndpoints(t *testing.T) {
