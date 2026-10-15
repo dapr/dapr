@@ -231,7 +231,7 @@ func TestDeliverBulkTracing(t *testing.T) {
 		return &postman.DeliverBulkRequest{
 			BulkSubCallData: &todo.BulkSubscribeCallData{
 				BulkResponses:   &bulkResponses,
-				BulkSubDiag:     &bulkSubDiag,
+				BulkSubDiag:     bulkSubDiag,
 				EntryIdIndexMap: &entryIDIndexMap,
 				PsName:          "testpubsub",
 				Topic:           "topic1",
