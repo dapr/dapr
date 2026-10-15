@@ -196,9 +196,13 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	rawMsgEntries := make([]*pubsub.BulkSubscribeMessageItem, len(psm.PubSubMessages))
 
-	entryRespReceived := make(map[string]bool, len(psm.PubSubMessages))
+	// This attempt may carry only some of the bulk message's entries, so look
+	// them up by ID rather than by their index in the whole message. An entry
+	// is removed once the app answers for it, leaving those it did not.
+	attemptMsgs := make(map[string]todo.Message, len(psm.PubSubMessages))
 	for i, pubSubMsg := range psm.PubSubMessages {
 		rawMsgEntries[i] = pubSubMsg.RawData
+		attemptMsgs[pubSubMsg.Entry.EntryId] = pubSubMsg
 	}
 
 	bsrr.Envelope[pubsub.Entries] = rawMsgEntries
@@ -218,7 +222,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				Topic:    psm.Topic,
 				Metadata: psm.Metadata,
 			}
-			dlqErr := h.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, req.DeadLetterTopic, true)
+			dlqErr := h.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, req.DeadLetterTopic)
 			if dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				for _, item := range rawMsgEntries {
@@ -229,7 +233,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			}
 		}
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
 
 		for _, item := range rawMsgEntries {
 			todo.AddBulkResponseEntry(&bsrr.Entries, item.EntryId, marshalErr)
@@ -281,8 +285,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, err)
 
@@ -305,8 +309,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-			bscData.BulkSubDiag.Elapsed = elapsed
+			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+			bscData.BulkSubDiag.SetElapsed(elapsed)
 
 			todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, err)
 
@@ -316,30 +320,28 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		var hasAnyError bool
 
 		for _, response := range appBulkResponse.AppResponses {
-			if _, ok := (*bscData.EntryIdIndexMap)[response.EntryId]; ok {
+			if msg, ok := attemptMsgs[response.EntryId]; ok {
+				delete(attemptMsgs, response.EntryId)
+
 				switch response.Status {
 				case "":
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
 					fallthrough
 				case contribpubsub.Retry:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
-					entryRespReceived[response.EntryId] = true
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 
 					hasAnyError = true
 				case contribpubsub.Success:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Success)]++
-					entryRespReceived[response.EntryId] = true
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Success, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Drop:
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)]++
-					entryRespReceived[response.EntryId] = true
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 
 					if req.DeadLetterTopic != "" {
-						msg := psm.PubSubMessages[(*bscData.EntryIdIndexMap)[response.EntryId]]
 						_ = h.sendToDeadLetter(ctx, bscData.PsName, &contribpubsub.NewMessage{
 							Data:        msg.Entry.Event,
 							Topic:       bscData.Topic,
@@ -349,31 +351,30 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 					}
 				default:
 					// Consider unknown status field as error and retry
-					bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
-					entryRespReceived[response.EntryId] = true
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
 						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
 
 					hasAnyError = true
 				}
 			} else {
-				log.Warnf("Invalid entry id received from app while processing pub/sub event %v", response.EntryId)
+				log.Warnf("Invalid entry id received from app while processing pub/sub event %v: not in this delivery, or already answered", response.EntryId)
 				continue
 			}
 		}
 
 		for _, item := range rawMsgEntries {
-			if !entryRespReceived[item.EntryId] {
+			if _, ok := attemptMsgs[item.EntryId]; ok {
 				todo.AddBulkResponseEntry(&bsrr.Entries, item.EntryId,
 					fmt.Errorf("response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId),
 				)
 
 				hasAnyError = true
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 			}
 		}
 
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		if hasAnyError {
 			return errors.New("few message(s) have failed during bulk subscribe operation")
@@ -388,8 +389,8 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		// https://cloud.google.com/apis/design/errors#handling_errors
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(rawMsgEntries))
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, int64(len(rawMsgEntries)))
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, nil)
 
@@ -401,45 +402,25 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	retriableError := errors.New(retriableErrorStr)
 	log.Warn(retriableErrorStr)
 
-	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-	bscData.BulkSubDiag.Elapsed = elapsed
+	bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
+	bscData.BulkSubDiag.SetElapsed(elapsed)
 
 	todo.PopulateBulkSubscribeResponsesWithError(psm, &bsrr.Entries, retriableError)
 
 	return retriableError
 }
 
-// sendBulkToDeadLetter sends the bulk message to deadletter topic.
+// sendBulkToDeadLetter sends every entry of the bulk message to the dead letter
+// topic.
 func (h *http) sendBulkToDeadLetter(ctx context.Context,
 	bulkSubCallData *todo.BulkSubscribeCallData, msg *contribpubsub.BulkMessage, deadLetterTopic string,
-	sendAllEntries bool,
 ) error {
 	bscData := *bulkSubCallData
-	data := make([]contribpubsub.BulkMessageEntry, len(msg.Entries))
 
-	if sendAllEntries {
-		data = msg.Entries
-	} else {
-		n := 0
-
-		for _, message := range msg.Entries {
-			entryId := (*bscData.EntryIdIndexMap)[message.EntryId] //nolint:stylecheck
-			if (*bscData.BulkResponses)[entryId].Error != nil {
-				data[n] = message
-				n++
-			}
-		}
-
-		data = data[:n]
-	}
-
-	bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(data))
-	if bscData.BulkSubDiag.RetryReported {
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] -= int64(len(data))
-	}
+	bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, int64(len(msg.Entries)))
 
 	req := &contribpubsub.BulkPublishRequest{
-		Entries:    data,
+		Entries:    msg.Entries,
 		PubsubName: bscData.PsName,
 		Topic:      deadLetterTopic,
 		Metadata:   msg.Metadata,
