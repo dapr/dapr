@@ -19,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/windows"
@@ -32,9 +33,22 @@ func WriteFileHeld(t *testing.T, path string, data []byte) (release func()) {
 	t.Helper()
 	name, err := syscall.UTF16PtrFromString(path)
 	require.NoError(t, err)
-	handle, err := syscall.CreateFile(name, syscall.GENERIC_WRITE, 0,
-		nil, syscall.CREATE_ALWAYS, syscall.FILE_ATTRIBUTE_NORMAL, 0)
-	require.NoError(t, err)
+
+	// An exclusive open races with readers that share the file, such as the
+	// runtime's own resource scans and on-access scanners, which hold it
+	// open for a few milliseconds at a time. Retry while the open is
+	// refused with a sharing violation rather than fail on the transient.
+	var handle syscall.Handle
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		handle, err = syscall.CreateFile(name, syscall.GENERIC_WRITE, 0,
+			nil, syscall.CREATE_ALWAYS, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+		if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) || time.Now().After(deadline) {
+			require.NoError(t, err)
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	var written uint32
 	require.NoError(t, syscall.WriteFile(handle, data, &written, nil))
 	require.NoError(t, syscall.FlushFileBuffers(handle))

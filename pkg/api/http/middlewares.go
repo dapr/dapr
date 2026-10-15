@@ -26,13 +26,27 @@ import (
 )
 
 // MaxBodySizeMiddleware limits the body size to the given size (in bytes).
-func MaxBodySizeMiddleware(maxSize int64) func(next http.Handler) http.Handler {
+// Register it before middleware that reads request bodies. Requests matching
+// exempt are unlimited; chi handles wildcard and regex parameter matching.
+func MaxBodySizeMiddleware(maxSize int64, exempt *chi.Mux) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			if exempt == nil || !exempt.Match(chi.NewRouteContext(), r.Method, routePath(r)) {
+				r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// routePath returns the path the router will match against: the cleaned route
+// path when a middleware such as CleanPath has set it, else the escaped URL
+// path.
+func routePath(r *http.Request) string {
+	if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePath != "" {
+		return rctx.RoutePath
+	}
+	return r.URL.EscapedPath()
 }
 
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.
