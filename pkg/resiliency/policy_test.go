@@ -300,6 +300,14 @@ func TestTimeoutError(t *testing.T) {
 	require.NoError(t, timeoutError(stale, nil))
 	due := staleDeadline{Context: t.Context(), deadline: time.Now().Add(time.Minute)}
 	require.NoError(t, timeoutError(due, statusErr), "an error well before the deadline is the operation's own")
+
+	// On Windows the clock can still read before the deadline when a
+	// downstream enforcing the propagated deadline answers.
+	near := staleDeadline{Context: t.Context(), deadline: time.Now().Add(deadlineClockTolerance / 2)}
+	require.ErrorIs(t, timeoutError(near, statusErr), context.DeadlineExceeded, "a gRPC DeadlineExceeded within the clock tolerance is the timeout")
+	unavailableErr := NewCodeError(int32(codes.Unavailable), status.Error(codes.Unavailable, "unavailable"))
+	require.NoError(t, timeoutError(near, unavailableErr), "other codes within the clock tolerance are the operation's own")
+	require.NoError(t, timeoutError(near, errors.New("any")))
 }
 
 type staleDeadline struct {
@@ -372,6 +380,55 @@ func TestPolicyRetryWithMatch(t *testing.T) {
 			if err != nil {
 				assert.NotContains(t, err.Error(), "expected attempt in context to be")
 			}
+			assert.Equal(t, test.expected, called.Load())
+		})
+	}
+}
+
+func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
+	match, err := ParseRetryConditionMatch(&resiliencyV1alpha.RetryMatching{GRPCStatusCodes: "2"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		// wait returns how long the first attempt waits before failing with
+		// a gRPC DeadlineExceeded, given the time left until its deadline.
+		wait     func(left time.Duration) time.Duration
+		expected int32
+	}{
+		{
+			name:     "app DeadlineExceeded well before the deadline is not retried",
+			wait:     func(time.Duration) time.Duration { return 0 },
+			expected: 1,
+		},
+		{
+			name: "DeadlineExceeded within the clock tolerance is retried as the timeout",
+			wait: func(left time.Duration) time.Duration {
+				return left - deadlineClockTolerance/2
+			},
+			expected: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			called := atomic.Int32{}
+			fn := func(ctx context.Context) (struct{}, error) {
+				if called.Add(1) > 1 {
+					return struct{}{}, nil
+				}
+				deadline, _ := ctx.Deadline()
+				time.Sleep(test.wait(time.Until(deadline)))
+				return struct{}{}, NewCodeError(int32(codes.DeadlineExceeded), status.Error(codes.DeadlineExceeded, "deadline exceeded"))
+			}
+
+			policy := NewRunner[struct{}](t.Context(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    200 * time.Millisecond,
+				r:    NewRetry(retry.Config{Policy: retry.PolicyConstant, Duration: time.Millisecond, MaxRetries: 5}, match),
+			})
+			_, _ = policy(fn)
 			assert.Equal(t, test.expected, called.Load())
 		})
 	}
