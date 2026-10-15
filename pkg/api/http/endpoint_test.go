@@ -52,6 +52,7 @@ func TestAPIAllowlist(t *testing.T) {
 
 				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBinaryStoreEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
@@ -92,6 +93,7 @@ func TestAPIAllowlist(t *testing.T) {
 
 				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBinaryStoreEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)

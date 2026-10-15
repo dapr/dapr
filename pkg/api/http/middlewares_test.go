@@ -14,12 +14,14 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -27,8 +29,465 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/config"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/streams"
 )
+
+func TestMaxBodySizeMiddleware(t *testing.T) {
+	const maxSize = 4
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			assert.ErrorIs(t, err, streams.ErrStreamTooLarge)
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h := MaxBodySizeMiddleware(maxSize, nil)(handler)
+
+	r := httptest.NewRequest(http.MethodPost, "/v1.0/state/store", strings.NewReader("large"))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+}
+
+func TestMaxBodySizeMiddlewareRouteContext(t *testing.T) {
+	const maxSize = 4
+
+	exempt := chi.NewRouter()
+	exempt.Method(http.MethodPut, "/files/{name}", http.NotFoundHandler())
+
+	for _, test := range []struct {
+		name      string
+		path      string
+		routePath string
+		context   bool
+		limited   bool
+	}{
+		{
+			name: "escaped path without route context",
+			path: "/files/nested%2Ffile.bin",
+		},
+		{
+			name:    "escaped path with empty route path",
+			path:    "/files/nested%2Ffile.bin",
+			context: true,
+		},
+		{
+			name:      "cleaned route path takes precedence",
+			path:      "/files//file.bin",
+			routePath: "/files/file.bin",
+			context:   true,
+		},
+		{
+			name:      "non-exempt route path takes precedence",
+			path:      "/files/file.bin",
+			routePath: "/limited/file.bin",
+			context:   true,
+			limited:   true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPut, test.path, strings.NewReader("large"))
+			var rctx *chi.Context
+			if test.context {
+				rctx = chi.NewRouteContext()
+				rctx.RoutePath = test.routePath
+				rctx.URLParams.Add("parent", "original")
+				rctx.RoutePatterns = []string{"/parent/*"}
+				r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+			}
+
+			var (
+				body                 []byte
+				readErr              error
+				observedRouteContext *chi.Context
+			)
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, readErr = io.ReadAll(r.Body)
+				observedRouteContext = chi.RouteContext(r.Context())
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			w := httptest.NewRecorder()
+			MaxBodySizeMiddleware(maxSize, exempt)(handler).ServeHTTP(w, r)
+			require.Equal(t, http.StatusNoContent, w.Code)
+
+			if test.limited {
+				require.ErrorIs(t, readErr, streams.ErrStreamTooLarge)
+				require.Len(t, body, maxSize)
+			} else {
+				require.NoError(t, readErr)
+				require.Equal(t, "large", string(body))
+			}
+
+			if rctx == nil {
+				require.Nil(t, observedRouteContext)
+			} else {
+				// Exemption matching must not add parameters or patterns
+				// to the routing context used by downstream handlers.
+				require.Same(t, rctx, observedRouteContext)
+				require.Equal(t, test.routePath, rctx.RoutePath)
+				require.Equal(t, []string{"parent"}, rctx.URLParams.Keys)
+				require.Equal(t, []string{"original"}, rctx.URLParams.Values)
+				require.Equal(t, []string{"/parent/*"}, rctx.RoutePatterns)
+			}
+		})
+	}
+}
+
+func TestEndpointRequestBodySizeLimit(t *testing.T) {
+	const maxSize = 4
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			assert.ErrorIs(t, err, streams.ErrStreamTooLarge)
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	srv := newServer()
+	srv.config.MaxRequestBodySize = maxSize
+	router := srv.getRouter()
+	eps := []endpoints.Endpoint{
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "state/store",
+			Version: apiVersionV1,
+			Handler: handler,
+		},
+		{
+			Methods: []string{http.MethodPut, http.MethodPost},
+			Route:   "binarystore/{name}/{fileName}",
+			Version: apiVersionV1alpha1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+		{
+			Methods: []string{http.MethodPatch},
+			Route:   "binarystore/{name}/{fileName}",
+			Version: apiVersionV1alpha1,
+			Handler: handler,
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "wild/*",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "regex/{id:[a-z]+}",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "regex/{id:[0-9]+}",
+			Version: apiVersionV1,
+			Handler: handler,
+		},
+		{
+			Route:   "any/{name}",
+			Version: apiVersionV1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+	}
+	srv.useMaxBodySize(router, eps)
+	srv.setupRoutes(router, eps)
+	router.NotFound(handler)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		statusCode int
+	}{
+		{
+			name:       "regular endpoint is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/state/store",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "streaming endpoint is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "POST streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "escaped file name is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/binarystore/store/nested%2Ffile.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "cleaned streaming endpoint is unlimited",
+			method:     http.MethodPut,
+			path:       "/v1.0-alpha1/binarystore//store/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "same route with non-exempt method is limited",
+			method:     http.MethodPatch,
+			path:       "/v1.0-alpha1/binarystore/store/file.bin",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "wildcard streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0/wild/a/b/c",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "regex param matching streaming endpoint is unlimited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/abc",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "regex param matching regular endpoint is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/123",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "regex mismatch is limited",
+			method:     http.MethodPost,
+			path:       "/v1.0/regex/abc123",
+			statusCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:       "all-method endpoint allows POST",
+			method:     http.MethodPost,
+			path:       "/v1.0/any/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+		{
+			name:       "all-method endpoint allows DELETE",
+			method:     http.MethodDelete,
+			path:       "/v1.0/any/file.bin",
+			statusCode: http.StatusNoContent,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest(test.method, test.path, strings.NewReader("large"))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, r)
+			assert.Equal(t, test.statusCode, w.Code)
+		})
+	}
+}
+
+// The body limit must be applied before any other middleware so the
+// middleware pipeline never observes an unbounded body, while endpoints that
+// opt out via SkipRequestBodySizeLimit stream unbounded bodies through it.
+func TestMaxBodySizeMiddlewareRunsBeforePipeline(t *testing.T) {
+	const maxSize = 4
+
+	type observation struct {
+		path      string
+		bytesRead int
+		err       error
+	}
+	var observations []observation
+	probe := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			observations = append(observations, observation{r.URL.EscapedPath(), len(body), err})
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	srv := newServer()
+	srv.config.MaxRequestBodySize = maxSize
+	router := srv.getRouter()
+	eps := []endpoints.Endpoint{
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "state/store",
+			Version: apiVersionV1,
+			Handler: handler,
+		},
+		{
+			Methods: []string{http.MethodPut},
+			Route:   "binarystore/{name}/{fileName}",
+			Version: apiVersionV1alpha1,
+			Handler: handler,
+			Settings: endpoints.EndpointSettings{
+				SkipRequestBodySizeLimit: true,
+			},
+		},
+	}
+	srv.useMaxBodySize(router, eps)
+	// Registered after the limiter, like the components middleware pipeline.
+	router.Use(probe)
+	srv.setupRoutes(router, eps)
+
+	r := httptest.NewRequest(http.MethodPost, "/v1.0/state/store", strings.NewReader("large"))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusNoContent, w.Code)
+
+	r = httptest.NewRequest(http.MethodPut, "/v1.0-alpha1/binarystore/store/file.bin", strings.NewReader("large"))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusNoContent, w.Code)
+
+	require.Len(t, observations, 2)
+
+	assert.Equal(t, "/v1.0/state/store", observations[0].path)
+	assert.Equal(t, maxSize, observations[0].bytesRead)
+	require.ErrorIs(t, observations[0].err, streams.ErrStreamTooLarge)
+
+	assert.Equal(t, "/v1.0-alpha1/binarystore/store/file.bin", observations[1].path)
+	assert.Equal(t, len("large"), observations[1].bytesRead)
+	assert.NoError(t, observations[1].err)
+}
+
+// An endpoint that opts out of the body size limit must only be exempt when
+// it is actually registered: a denied or non-allowlisted endpoint must not
+// become a way to send an unbounded body through the middleware pipeline.
+func TestMaxBodySizeExemptionRespectsAPIAccessRules(t *testing.T) {
+	const maxSize = 4
+
+	newEndpoints := func(handler http.HandlerFunc) []endpoints.Endpoint {
+		return []endpoints.Endpoint{
+			{
+				Methods: []string{http.MethodPost},
+				Route:   "state/store",
+				Version: apiVersionV1,
+				Group: &endpoints.EndpointGroup{
+					Name:    endpoints.EndpointGroupState,
+					Version: endpoints.EndpointGroupVersion1,
+				},
+				Handler: handler,
+			},
+			{
+				Methods: []string{http.MethodPut},
+				Route:   "binarystore/{name}/{fileName}",
+				Version: apiVersionV1alpha1,
+				Group:   endpointGroupBinaryStoreV1Alpha1,
+				Handler: handler,
+				Settings: endpoints.EndpointSettings{
+					SkipRequestBodySizeLimit: true,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		apiSpec config.APISpec
+		// Whether the binarystore endpoint is expected to be registered.
+		registered bool
+	}{
+		{
+			name:       "no rules: exempt",
+			registered: true,
+		},
+		{
+			name: "denied: limited",
+			apiSpec: config.APISpec{
+				Denied: config.APIAccessRules{
+					{Name: "binarystore", Version: "v1alpha1", Protocol: config.APIAccessRuleProtocolHTTP},
+				},
+			},
+		},
+		{
+			name: "not in allowlist: limited",
+			apiSpec: config.APISpec{
+				Allowed: config.APIAccessRules{
+					{Name: "state", Version: "v1", Protocol: config.APIAccessRuleProtocolHTTP},
+				},
+			},
+		},
+		{
+			name: "in allowlist: exempt",
+			apiSpec: config.APISpec{
+				Allowed: config.APIAccessRules{
+					{Name: "binarystore", Version: "v1alpha1", Protocol: config.APIAccessRuleProtocolHTTP},
+				},
+			},
+			registered: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var (
+				probeBytes int
+				probeErr   error
+			)
+			probe := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					body, err := io.ReadAll(r.Body)
+					probeBytes, probeErr = len(body), err
+					r.Body = io.NopCloser(bytes.NewReader(body))
+					next.ServeHTTP(w, r)
+				})
+			}
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			srv := newServer()
+			srv.config.MaxRequestBodySize = maxSize
+			srv.apiSpec = test.apiSpec
+			router := srv.getRouter()
+			eps := srv.allowedEndpoints(newEndpoints(handler))
+			srv.useMaxBodySize(router, eps)
+			router.Use(probe)
+			srv.setupRoutes(router, eps)
+
+			r := httptest.NewRequest(http.MethodPut, "/v1.0-alpha1/binarystore/store/file.bin", strings.NewReader("large"))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, r)
+
+			if test.registered {
+				assert.Equal(t, http.StatusNoContent, w.Code)
+				assert.Equal(t, len("large"), probeBytes)
+				require.NoError(t, probeErr)
+			} else {
+				assert.NotEqual(t, http.StatusNoContent, w.Code)
+				assert.Equal(t, maxSize, probeBytes)
+				require.ErrorIs(t, probeErr, streams.ErrStreamTooLarge)
+			}
+		})
+	}
+}
 
 func TestAPITokenAuthMiddleware(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
