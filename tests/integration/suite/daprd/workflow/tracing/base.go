@@ -102,10 +102,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 			if len(spans) > 0 && spans[0].GetName() == "/TaskHubSidecarService/StartInstance" {
 				found = true
-				names := make([]string, len(spans))
-				for i, span := range spans {
-					names[i] = span.GetName()
-				}
+				names := workflowSpanNames(spans)
 				assert.Equal(c, []string{
 					"/TaskHubSidecarService/StartInstance",
 					"create_orchestration||foo",

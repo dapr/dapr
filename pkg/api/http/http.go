@@ -1523,7 +1523,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		return
 	}
 
-	transactionalStore, ok := store.(state.TransactionalStore)
+	transactionalStore, ok := stateLoader.As[state.TransactionalStore](store)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStore(storeName).TransactionsNotSupported()
 		respondWithError(w, err)
@@ -1615,7 +1615,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		}
 	}
 
-	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
+	if maxMulti, ok := stateLoader.As[state.TransactionalStoreMultiMaxSize](store); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
 			err := apierrors.StateStore(storeName).TooManyTransactionalOps(len(operations), max)
