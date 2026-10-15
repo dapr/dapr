@@ -289,9 +289,9 @@ func (n *NoBuffer) Execute(t *testing.T, ctx context.Context) {
 		case <-time.After(20 * time.Second):
 			require.Fail(t, "the child's terminal commit never started")
 		}
-		// The parent's retried turn starts within milliseconds of the failed
-		// save; give it time to block on the child's lock.
-		time.Sleep(time.Second)
+		// The parent's retried turn starts after a jittered backoff of at
+		// most 2s; give it time to block on the child's lock.
+		time.Sleep(time.Millisecond * 2500)
 		releaseChild()
 	}
 
