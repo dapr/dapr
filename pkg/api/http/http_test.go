@@ -3389,6 +3389,43 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	return f.doRequest("", method, path, body, params, headers...)
 }
 
+func TestV1StateTransactionUsesPolicyContext(t *testing.T) {
+	// failStore has a 100ms outbound timeout in testResiliency.
+	store := new(daprt.TransactionalStoreMock)
+	deadlineCh := make(chan bool, 1)
+	store.On("Multi", mock.Anything, mock.Anything).Return(func(ctx context.Context, _ *state.TransactionalStateRequest) error {
+		_, ok := ctx.Deadline()
+		deadlineCh <- ok
+		return nil
+	})
+
+	compStore := compstore.New()
+	compStore.AddStateStore("failStore", store)
+	testAPI := &api{
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
+		}),
+		outbox: outboxfake.New(),
+	}
+	fakeServer := newFakeHTTPServer()
+	t.Cleanup(fakeServer.Shutdown)
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+	b, err := json.Marshal(&stateTransactionRequestBody{
+		Operations: []stateTransactionRequestBodyOperation{{
+			Operation: string(state.OperationUpsert),
+			Request:   map[string]any{"key": "key1", "value": "value1"},
+		}},
+	})
+	require.NoError(t, err)
+
+	resp := fakeServer.DoRequest(nethttp.MethodPost, "v1.0/state/failStore/transaction", b, nil)
+	require.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	assert.True(t, <-deadlineCh, "Multi was not called with the resiliency policy context")
+}
+
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	var fakeStore state.Store = newFakeStateStoreQuerier()
