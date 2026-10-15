@@ -15,8 +15,10 @@ package orchestrator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -156,4 +158,36 @@ func Test_unresolvedScheduledTasks(t *testing.T) {
 		})
 		assert.Equal(t, []int32{4}, ids(unresolvedScheduledTasks(state, nil)))
 	})
+}
+
+// A janitor re-dispatch that lands after its task resolved and after the
+// activity's claim record expired re-executes the body. The record outlives
+// the resolution by at least one janitor period, so the call must be bounded
+// by it rather than by redispatchCallTimeout.
+func Test_redispatchActivities_callBoundedByJanitorPeriod(t *testing.T) {
+	period := janitorPeriod
+	janitorPeriod = func() time.Duration { return time.Second }
+	t.Cleanup(func() { janitorPeriod = period })
+	require.Less(t, janitorPeriod(), redispatchCallTimeout, "the test needs a janitor period below the call timeout to tell them apart")
+
+	h := newNotifyHarness(t, []*backend.HistoryEvent{startedEvent(), taskScheduledEvent(0), taskScheduledEvent(1)}, nil, false, nil)
+	state, _, err := h.orch.loadInternalState(t.Context())
+	require.NoError(t, err)
+	unresolved := unresolvedScheduledTasks(state, nil)
+	require.Len(t, unresolved, 2)
+
+	fired := time.Now()
+	h.orch.redispatchActivities(t.Context(), state, unresolved)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		assert.Len(c, h.deadlines, 2)
+	}, 5*time.Second, 10*time.Millisecond)
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	// The calls run one after another; every one must end within one janitor
+	// period of the fire, not of its own start.
+	assert.Equal(t, h.deadlines[0], h.deadlines[1])
+	assert.WithinDuration(t, fired.Add(janitorPeriod()), h.deadlines[1], 100*time.Millisecond)
 }

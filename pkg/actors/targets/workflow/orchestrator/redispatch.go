@@ -33,6 +33,16 @@ import (
 // fresh execution.
 const redispatchCallTimeout = 30 * time.Second
 
+// redispatchCallBound is the bound a janitor re-dispatch pass gets. A call
+// that lands after its task resolved is answered from the activity's durable
+// claim record, and that record is only guaranteed to outlive the resolution
+// by one janitor period (the activity factory's retention floor). A call that
+// outlives the record re-executes the body, so it must not outlive a janitor
+// period either; the next fire re-dispatches what is still unresolved.
+func redispatchCallBound() time.Duration {
+	return min(redispatchCallTimeout, janitorPeriod())
+}
+
 // redispatchSuppressed defers the re-dispatch pass only while a drive is
 // mid-flight on THIS instance: its commit may resolve tasks momentarily, and
 // the deferral is bounded (the drive ends and the next fire re-checks).
@@ -166,10 +176,12 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 
 	go func() {
 		defer o.wakeWG.Done()
+		// One deadline for the whole pass: the calls run one after another,
+		// and each must end within the bound of this fire.
+		pctx, cancel := context.WithTimeout(wakeCtx, redispatchCallBound())
+		defer cancel()
 		for _, e := range unresolved {
-			cctx, cancel := context.WithTimeout(wakeCtx, redispatchCallTimeout)
-			cerr := o.callActivity(cctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
-			cancel()
+			cerr := o.callActivity(pctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
 			switch {
 			case cerr == nil && durable[e.GetEventId()]:
 				log.Infof("Workflow actor '%s': janitor escalated unresolved activity '%s::%d' to its durable run-activity reminder (a prior re-dispatch did not resolve it)", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
