@@ -156,6 +156,10 @@ func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
+func WithPodGet(t *testing.T, pod *corev1.Pod) Option {
+	return handleGetResource(t, "/api/v1", "pods", pod.Namespace, pod.Name, pod)
+}
+
 func WithStatefulSetGet(t *testing.T, statefulset *appsv1.StatefulSet) Option {
 	return handleGetResource(t, "/apis/apps/v1", "statefulsets", statefulset.Namespace, statefulset.Name, statefulset)
 }

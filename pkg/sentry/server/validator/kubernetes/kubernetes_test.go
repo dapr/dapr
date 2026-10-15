@@ -29,12 +29,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/images"
 )
+
+type countingReader struct {
+	client.Reader
+	getCalls int
+}
+
+func (c *countingReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	c.getCalls++
+	return c.Reader.Get(ctx, key, obj, opts...)
+}
 
 func TestValidate(t *testing.T) {
 	newToken := func(t *testing.T, ns, name string) string {
@@ -58,12 +69,15 @@ func TestValidate(t *testing.T) {
 		pod     *corev1.Pod
 		config  *configapi.Configuration
 
-		sentryAudience string
+		sentryAudience    string
+		uncachedPod       *corev1.Pod
+		checkUncachedGets bool
 
-		expTD     spiffeid.TrustDomain
-		expAud    []string
-		expErr    bool
-		expImages []images.ContainerImage
+		expTD           spiffeid.TrustDomain
+		expAud          []string
+		expErr          bool
+		expImages       []images.ContainerImage
+		expUncachedGets int
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1267,6 +1281,62 @@ func TestValidate(t *testing.T) {
 			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
 			expAud: []string{"custom-audience-1", "custom-audience-2"},
 		},
+		"pod cache miss falls back to the uncached client": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+			},
+			uncachedPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "my-ns",
+					Annotations: map[string]string{
+						"dapr.io/app-id": "my-app-id",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			checkUncachedGets: true,
+			expUncachedGets:   1,
+			expTD:             spiffeid.RequireTrustDomainFromString("public"),
+		},
+		"pod missing from cache and API returns an error": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+			},
+			checkUncachedGets: true,
+			expUncachedGets:   1,
+			expErr:            true,
+		},
 		"valid request returns the pod's container images": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
@@ -1314,6 +1384,7 @@ func TestValidate(t *testing.T) {
 				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0", Digest: "sha256:aaa"},
 				{Role: images.RoleApp, ContainerName: "app", Image: "docker.io/library/myapp:v2", Digest: "sha256:bbb"},
 			},
+			checkUncachedGets: true,
 		},
 	}
 
@@ -1331,6 +1402,14 @@ func TestValidate(t *testing.T) {
 			require.NoError(t, corev1.AddToScheme(scheme))
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
+			var uncachedObjs []runtime.Object
+			if test.uncachedPod != nil {
+				uncachedObjs = append(uncachedObjs, test.uncachedPod)
+			}
+			uncachedClient := &countingReader{
+				Reader: clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(uncachedObjs...).Build(),
+			}
+
 			if test.config != nil {
 				require.NoError(t, client.Create(t.Context(), test.config))
 			}
@@ -1338,6 +1417,7 @@ func TestValidate(t *testing.T) {
 			k := &kubernetes{
 				auth:           kubeCl.AuthenticationV1(),
 				client:         client,
+				uncachedClient: uncachedClient,
 				controlPlaneNS: "dapr-test",
 				controlPlaneTD: sentryID.TrustDomain(),
 				sentryAudience: test.sentryAudience,
@@ -1348,8 +1428,42 @@ func TestValidate(t *testing.T) {
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
 			assert.Equal(t, test.expImages, res.ContainerImages)
+			if test.checkUncachedGets {
+				assert.Equal(t, test.expUncachedGets, uncachedClient.getCalls)
+			}
 		})
 	}
+}
+
+func Test_transformPod(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:          "mypod",
+			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: "myserviceaccount",
+			Containers:         []corev1.Container{{Name: "app", Image: "myapp:v1"}},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{Name: "app", ImageID: "myapp@sha256:abc"}},
+		},
+	}
+
+	gotObj, err := transformPod(pod)
+	require.NoError(t, err)
+	got, ok := gotObj.(*corev1.Pod)
+	require.True(t, ok)
+	require.NotSame(t, pod, got)
+	assert.Empty(t, got.ManagedFields)
+	assert.Equal(t, pod.Spec, got.Spec)
+	assert.Equal(t, pod.Status, got.Status)
+	assert.NotEmpty(t, pod.ManagedFields)
+
+	nonPod := &configapi.Configuration{}
+	gotObj, err = transformPod(nonPod)
+	require.NoError(t, err)
+	require.Same(t, nonPod, gotObj)
 }
 
 func Test_containerImages(t *testing.T) {

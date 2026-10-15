@@ -24,7 +24,9 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cl "k8s.io/client-go/kubernetes"
@@ -70,6 +72,7 @@ type Options struct {
 type kubernetes struct {
 	auth           clauthv1.AuthenticationV1Interface
 	client         client.Reader
+	uncachedClient client.Reader
 	ready          func(context.Context) bool
 	sentryAudience string
 	controlPlaneNS string
@@ -95,7 +98,23 @@ func New(opts Options) (validator.Validator, error) {
 	opts.RestConfig.RateLimiter = nil
 	opts.RestConfig.QPS = math.MaxFloat32
 	opts.RestConfig.Burst = math.MaxInt
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	podSelector, err := labels.Parse(injectorConsts.SidecarInjectedLabel)
+	if err != nil {
+		return nil, err
+	}
+	cache, err := cache.New(opts.RestConfig, cache.Options{
+		Scheme: scheme,
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {
+				Label:     podSelector,
+				Transform: transformPod,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	uncachedClient, err := client.New(opts.RestConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +122,7 @@ func New(opts Options) (validator.Validator, error) {
 	return &kubernetes{
 		auth:           kubeClient.AuthenticationV1(),
 		client:         cache,
+		uncachedClient: uncachedClient,
 		ready:          cache.WaitForCacheSync,
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
@@ -111,12 +131,23 @@ func New(opts Options) (validator.Validator, error) {
 	}, nil
 }
 
+func transformPod(obj any) (any, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return obj, nil
+	}
+
+	pod = pod.DeepCopy()
+	pod.ManagedFields = nil
+	return pod, nil
+}
+
 func (k *kubernetes) Start(ctx context.Context) error {
 	defer k.htarget.NotReady()
 
 	cache := k.client.(cache.Cache)
 	for _, obj := range []client.Object{
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"}},
+		&corev1.Pod{},
 		&configv1alpha1.Configuration{},
 	} {
 		if _, err := cache.GetInformer(ctx, obj); err != nil {
@@ -173,8 +204,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, errMissingPodClaim
 	}
 
+	key := types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
+	err = k.client.Get(ctx, key, &pod)
+	if apierrors.IsNotFound(err) {
+		err = k.uncachedClient.Get(ctx, key, &pod)
+	}
 	if err != nil {
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
 		return validator.ValidateResult{}, errors.New("failed to get pod of identity")

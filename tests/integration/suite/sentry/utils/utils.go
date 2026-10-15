@@ -40,10 +40,35 @@ type KubeAPIOptions struct {
 	PodInitContainers        []corev1.Container
 	PodContainerStatuses     []corev1.ContainerStatus
 	PodInitContainerStatuses []corev1.ContainerStatus
+
+	// ExcludePodFromList serves the workload pod only through the Pod GET
+	// endpoint, simulating a cache whose label selector excludes the pod.
+	ExcludePodFromList bool
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
+
+	pod := corev1.Pod{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: opts.Namespace, Name: "mypod",
+			Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: opts.ServiceAccount,
+			Containers:         opts.PodContainers,
+			InitContainers:     opts.PodInitContainers,
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses:     opts.PodContainerStatuses,
+			InitContainerStatuses: opts.PodInitContainerStatuses,
+		},
+	}
+	pods := []corev1.Pod{pod}
+	if opts.ExcludePodFromList {
+		pods = nil
+	}
 
 	return prockube.New(t,
 		prockube.WithClusterDaprConfigurationList(t, new(configapi.ConfigurationList)),
@@ -70,25 +95,9 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-			Items: []corev1.Pod{
-				{
-					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: opts.Namespace, Name: "mypod",
-						Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
-					},
-					Spec: corev1.PodSpec{
-						ServiceAccountName: opts.ServiceAccount,
-						Containers:         opts.PodContainers,
-						InitContainers:     opts.PodInitContainers,
-					},
-					Status: corev1.PodStatus{
-						ContainerStatuses:     opts.PodContainerStatuses,
-						InitContainerStatuses: opts.PodInitContainerStatuses,
-					},
-				},
-			},
+			Items:    pods,
 		}),
+		prockube.WithPodGet(t, &pod),
 		prockube.WithPath("/apis/authentication.k8s.io/v1/tokenreviews", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
