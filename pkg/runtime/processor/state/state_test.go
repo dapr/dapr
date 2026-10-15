@@ -14,8 +14,11 @@ limitations under the License.
 package state_test
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -249,6 +252,62 @@ func TestActorStateStore(t *testing.T) {
 		// Close does not notify; the second init does.
 		assert.Equal(t, int64(2), kicks.Load())
 	})
+}
+
+type nonStrictStore struct {
+	contribstate.Store
+}
+
+func (n nonStrictStore) Features() []contribstate.Feature {
+	return []contribstate.Feature{contribstate.FeatureETag, contribstate.FeatureTransactional}
+}
+
+func TestActorStateStoreSupportWarning(t *testing.T) {
+	var logs bytes.Buffer
+	actorStateLog := logger.NewLogger("dapr.runtime.actors.state")
+	actorStateLog.SetOutput(&logs)
+	t.Cleanup(func() { actorStateLog.SetOutput(os.Stdout) })
+
+	reg := registry.New(registry.NewOptions().WithStateStores(stateLoader.NewRegistry()))
+	reg.StateStores().RegisterComponent(inmemory.NewInMemoryStateStore, "in-memory")
+	reg.StateStores().RegisterComponent(func(l logger.Logger) contribstate.Store {
+		return nonStrictStore{inmemory.NewInMemoryStateStore(l)}
+	}, "nonstrict")
+
+	proc := processor.New(processor.Options{
+		Registry:       reg,
+		ComponentStore: compstore.New(),
+		GlobalConfig:   new(config.Configuration),
+		Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
+		Security:       fake.New(),
+		Outbox:         outboxfake.New(),
+		ActorsEnabled:  true,
+		Actors:         actorsfake.New(),
+	})
+
+	comp := func(name, typ string, marked bool) compapi.Component {
+		c := compapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec:       compapi.ComponentSpec{Type: typ, Version: "v1"},
+		}
+		if marked {
+			c.Spec.Metadata = []common.NameValuePair{{
+				Name:  "actorStateStore",
+				Value: common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}},
+			}}
+		}
+		return c
+	}
+
+	require.NoError(t, proc.Init(t.Context(), comp("strict", "state.in-memory", true)))
+	assert.Empty(t, logs.String())
+	require.NoError(t, proc.Close(t.Context(), comp("strict", "state.in-memory", true)))
+
+	require.NoError(t, proc.Init(t.Context(), comp("notactor", "state.nonstrict", false)))
+	assert.Empty(t, logs.String())
+
+	require.NoError(t, proc.Init(t.Context(), comp("legacy", "state.nonstrict", true)))
+	assert.Equal(t, 1, strings.Count(logs.String(), "Actor state etag protection is off: actor state store 'legacy' doesn't support the TRANSACTIONAL_ETAGS feature"))
 }
 
 func initMockStateStoreForRegistry(reg *registry.Registry, name, encryptKey string, e error) *daprt.MockStateStore {

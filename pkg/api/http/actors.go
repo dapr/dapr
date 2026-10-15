@@ -43,6 +43,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 var endpointGroupActorV1State = &endpoints.EndpointGroup{
@@ -367,9 +368,10 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := &actorapi.TransactionalRequest{
-		ActorID:    actorID,
-		ActorType:  actorType,
-		Operations: ops,
+		ActorID:        actorID,
+		ActorType:      actorType,
+		Operations:     ops,
+		FirstWriteETag: true,
 	}
 
 	state, err := a.universal.ActorState(ctx)
@@ -379,7 +381,13 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = state.TransactionalStateOperation(ctx, false, req, true)
+	returnETags := kitstrings.IsTruthy(r.Header.Get(returnETagsHeader))
+	var etags map[string]string
+	if returnETags {
+		etags, err = state.TransactionalStateOperationWithETags(ctx, false, req, true)
+	} else {
+		err = state.TransactionalStateOperation(ctx, false, req, true)
+	}
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
 			respondWithError(w, err)
@@ -393,7 +401,19 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if returnETags {
+		if etags == nil {
+			etags = map[string]string{}
+		}
+		respondWithJSON(w, http.StatusOK, actorStateTransactionResponse{ETags: etags})
+		return
+	}
+
 	respondWithEmpty(w)
+}
+
+type actorStateTransactionResponse struct {
+	ETags map[string]string `json:"etags"`
 }
 
 // actorReminderJSON is the HTTP representation of a reminder, shared by the
@@ -726,9 +746,10 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 
 	resp, err := astate.Get(ctx, &actorapi.GetStateRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Key:       key,
+		ActorType:  actorType,
+		ActorID:    actorID,
+		Key:        key,
+		StrictETag: true,
 	}, true)
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
@@ -743,13 +764,21 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if resp == nil || len(resp.Data) == 0 {
+	if resp == nil {
 		respondWithEmpty(w)
 		return
 	}
 
-	// Set headers
 	h := w.Header()
+	if resp.ETag != nil {
+		h.Set(etagHeader, *resp.ETag)
+	}
+
+	if len(resp.Data) == 0 {
+		respondWithEmpty(w)
+		return
+	}
+
 	h.Set(headerContentType, jsonContentTypeHeader)
 	setResponseMetadataHeaders(w, resp.Metadata)
 

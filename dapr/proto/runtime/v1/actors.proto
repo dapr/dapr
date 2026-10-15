@@ -83,6 +83,9 @@ message GetActorStateResponse {
 
   // The metadata which will be sent to app.
   map<string, string> metadata = 2;
+
+  // The etag of the stored value, empty if the key is missing or the store isn't strict.
+  string etag = 3;
 }
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
@@ -90,6 +93,15 @@ message ExecuteActorStateTransactionRequest {
   string actor_type = 1 [json_name = "actorType"];
   string actor_id = 2 [json_name = "actorId"];
   repeated TransactionalActorStateOperation operations = 3;
+
+  // Return the new etag of every upserted key.
+  bool return_etags = 4;
+}
+
+// ExecuteActorStateTransactionResponse is the response of ExecuteActorStateTransaction.
+message ExecuteActorStateTransactionResponse {
+  // New etag per upserted key, only set when return_etags is true.
+  map<string, string> etags = 1;
 }
 
 // TransactionalActorStateOperation is the message to execute a specified operation with a key-value pair.
@@ -102,6 +114,11 @@ message TransactionalActorStateOperation {
   // Common metadata property:
   // - ttlInSeconds : the time to live in seconds for the stored value.
   map<string, string> metadata = 4;
+  // Fails the transaction with ABORTED if the stored etag no longer matches.
+  string etag = 5;
+
+  // Upsert only. Fails the transaction with ABORTED if the key already exists.
+  bool create_only = 6;
 }
 
 // InvokeActorRequest is the message to call an actor.
@@ -390,6 +407,8 @@ message SubscribeActorEventsResponseDeactivateRequestAlpha1 {
   string id = 1;
   string actor_type = 2;
   string actor_id = 3;
+  // Includes Dapr-Actor-Activation-Id of the activation being deactivated.
+  map<string, string> metadata = 4;
 }
 
 // ActorEntityConfig overrides the default actor runtime configuration for

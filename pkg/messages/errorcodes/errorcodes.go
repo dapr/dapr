@@ -52,6 +52,9 @@ var (
 	ActorRuntimeNotFound          = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", "", CategoryActor}       // Actor runtime not found
 	ActorStateGet                 = ErrorCode{"ERR_ACTOR_STATE_GET", "", CategoryActor}               // Error getting actor state
 	ActorStateTransactionSave     = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", "", CategoryActor}  // Error saving actor transaction
+	ActorStateETagMismatch        = ErrorCode{"ERR_ACTOR_STATE_ETAG_MISMATCH", "", CategoryActor}     // Actor state etag did not match
+	ActorStateETagInvalid         = ErrorCode{"ERR_ACTOR_STATE_ETAG_INVALID", "", CategoryActor}      // Actor state etag is malformed for the state store
+	ActorStateETagUnsupported     = ErrorCode{"ERR_ACTOR_STATE_ETAG_UNSUPPORTED", "", CategoryActor}  // Actor state etag sent but the state store doesn't enforce etags in transactions
 	ActorReminderCreate           = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", "", CategoryActor}         // Error creating actor reminder
 	ActorReminderDelete           = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", "", CategoryActor}         // Error deleting actor reminder
 	ActorReminderGet              = ErrorCode{"ERR_ACTOR_REMINDER_GET", "", CategoryActor}            // Error getting actor reminder

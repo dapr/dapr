@@ -53,6 +53,9 @@ type GetStateRequest struct {
 	ActorID   string `json:"actorId"`
 	ActorType string `json:"actorType"`
 	Key       string `json:"key"`
+
+	// Set only by the public API so non-strict stores never leak an etag.
+	StrictETag bool `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this request.

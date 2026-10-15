@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
@@ -35,7 +37,8 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 type app struct {
 	*factory
 
-	actorID string
+	actorID      string
+	activationMD *internalv1pb.ListStringValue
 
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to
@@ -56,7 +59,26 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	defer cancel()
 
 	a.touchIdle()
-	return a.transport.Invoke(ctx, req)
+
+	md := make(map[string]*internalv1pb.ListStringValue, len(req.GetMetadata())+1)
+	for k, v := range req.GetMetadata() {
+		switch {
+		case strings.EqualFold(k, transport.ActivationIDHeader):
+		case strings.EqualFold(k, "Connection"):
+			if conn := withoutActivationID(v); conn != nil {
+				md[k] = conn
+			}
+		default:
+			md[k] = v
+		}
+	}
+	md[transport.ActivationIDHeader] = a.activationMD
+	return a.transport.Invoke(ctx, &internalv1pb.InternalInvokeRequest{
+		Ver:      req.GetVer(),
+		Actor:    req.GetActor(),
+		Message:  req.GetMessage(),
+		Metadata: md,
+	})
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
@@ -75,6 +97,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	defer cancel()
 
 	a.touchIdle()
+	a.setActivationID(lockReq)
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	if err := a.transport.InvokeReminder(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -109,6 +132,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	defer cancel()
 
 	a.touchIdle()
+	a.setActivationID(lockReq)
 	log.Debug("Executing timer for actor " + reminder.Key())
 
 	if err := a.transport.InvokeTimer(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -128,7 +152,8 @@ func (a *app) Deactivate(ctx context.Context) error {
 	a.lock.Close(ctx)
 	a.table.Delete(a.actorID)
 
-	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID); err != nil {
+	md := map[string]*internalv1pb.ListStringValue{transport.ActivationIDHeader: a.activationMD}
+	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID, md); err != nil {
 		return err
 	}
 
@@ -163,6 +188,35 @@ func (a *app) InvokeStream(context.Context,
 	func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
 	return errors.New("not implemented")
+}
+
+func (a *app) setActivationID(req *internalv1pb.InternalInvokeRequest) {
+	if req.GetMetadata() == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
+	}
+	req.GetMetadata()[transport.ActivationIDHeader] = a.activationMD
+}
+
+// withoutActivationID drops the activation id from a Connection header so a
+// caller can't strip it as a hop-by-hop header.
+func withoutActivationID(conn *internalv1pb.ListStringValue) *internalv1pb.ListStringValue {
+	var values []string
+	for _, v := range conn.GetValues() {
+		var tokens []string
+		for token := range strings.SplitSeq(v, ",") {
+			token = strings.TrimSpace(token)
+			if token != "" && !strings.EqualFold(token, transport.ActivationIDHeader) {
+				tokens = append(tokens, token)
+			}
+		}
+		if len(tokens) > 0 {
+			values = append(values, strings.Join(tokens, ", "))
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return &internalv1pb.ListStringValue{Values: values}
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler

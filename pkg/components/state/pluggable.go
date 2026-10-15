@@ -643,6 +643,12 @@ func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
 	return fromConnector(l, pluggable.NewGRPCConnector(socket, newStateStoreClient))
 }
 
+// IsPluggable reports whether store is a pluggable gRPC state store.
+func IsPluggable(store state.BaseStore) bool {
+	_, ok := store.(*grpcStateStore)
+	return ok
+}
+
 // newGRPCStateStore creates a new state store for the given pluggable component.
 func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {

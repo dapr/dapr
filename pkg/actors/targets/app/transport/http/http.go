@@ -195,7 +195,7 @@ func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder, md 
 
 // Deactivate issues a DELETE /actors/{type}/{id} to signal the app that the
 // actor instance is being rebalanced or has gone idle.
-func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) error {
+func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string, md map[string]*internalv1pb.ListStringValue) error {
 	if t.appChannel == nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return fmt.Errorf("app channel for actor type %s is nil", actorType)
@@ -206,6 +206,7 @@ func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) e
 		WithHTTPExtension(http.MethodDelete, "").
 		WithContentType(invokev1.ProtobufContentType)
 	defer req.Close()
+	req.Proto().Metadata = md
 
 	resp, err := t.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {

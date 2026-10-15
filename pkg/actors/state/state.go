@@ -18,6 +18,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+
+	"github.com/cenkalti/backoff/v4"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -27,7 +30,10 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.state")
 
 const (
 	metadataPartitionKey = "partitionKey"
@@ -46,6 +52,9 @@ type Interface interface {
 
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
 	TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
+
+	// TransactionalStateOperationWithETags returns new etags by key, empty unless the store is strict.
+	TransactionalStateOperationWithETags(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error)
 }
 
 type Backend interface {
@@ -70,6 +79,9 @@ type state struct {
 	resiliency resiliency.Provider
 	table      table.Interface
 	placement  placement.Interface
+
+	missingETagLogged  sync.Map
+	rejectedETagLogged sync.Map
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -127,11 +139,35 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 		return &api.StateResponse{}, nil
 	}
 
+	etag := resp.ETag
+	if req.StrictETag {
+		etag = s.strictETag(storeName, store, req.ActorType, resp)
+	}
+
 	return &api.StateResponse{
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
-		ETag:     resp.ETag,
+		ETag:     etag,
 	}, nil
+}
+
+func (s *state) strictETag(storeName string, store Backend, actorType string, resp *contribstate.GetResponse) *string {
+	if !supportOf(store).strict {
+		return nil
+	}
+	if resp.ETag == nil || *resp.ETag == "" {
+		if len(resp.Data) > 0 {
+			s.logMissingETag(storeName, actorType, "read")
+		}
+		return nil
+	}
+	return resp.ETag
+}
+
+func (s *state) logMissingETag(storeName, actorType, op string) {
+	if _, logged := s.missingETagLogged.LoadOrStore(op+"/"+storeName+"/"+actorType, struct{}{}); !logged {
+		log.Errorf("Actor state store '%s' advertises %s but returned no etag on a %s for actor type '%s'. The state is returned without an etag, so the next save of that key isn't guarded. Logged once per actor type", storeName, contribstate.FeatureTransactionalETags, op, actorType)
+	}
 }
 
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
@@ -192,18 +228,27 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 }
 
 func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
+	_, err := s.transactionalStateOperation(ctx, ignoreHosted, req, lock, false)
+	return err
+}
+
+func (s *state) TransactionalStateOperationWithETags(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error) {
+	return s.transactionalStateOperation(ctx, ignoreHosted, req, lock, true)
+}
+
+func (s *state) transactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool, returnETags bool) (map[string]string, error) {
 	if lock {
 		var cancel context.CancelCauseFunc
 		var err error
 		ctx, cancel, err = s.placement.Lock(ctx, req.ActorType)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer cancel(nil)
 	}
 
 	if !ignoreHosted && !s.table.ActorExists(req.ActorType, req.ActorID) {
-		return messages.ErrActorInstanceMissing
+		return nil, messages.ErrActorInstanceMissing
 	}
 
 	operations := make([]contribstate.TransactionalStateOperation, len(req.Operations))
@@ -216,38 +261,116 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 			Metadata: metadata,
 			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 			StateTTLEnabled: s.stateTTLEnabled,
+			FirstWriteETag:  req.FirstWriteETag,
 		})
 		if err != nil {
-			return err
+			if req.FirstWriteETag {
+				return nil, toETagAPIError(err)
+			}
+			return nil, err
 		}
 	}
 
-	return s.executeStateStoreTransaction(ctx, operations, metadata)
+	storeName, etags, err := s.executeStateStoreTransaction(ctx, req.ActorType, operations, metadata, req.FirstWriteETag, returnETags)
+	if req.FirstWriteETag {
+		err = toETagAPIError(err)
+	}
+	if err != nil || !returnETags {
+		return nil, err
+	}
+
+	res := make(map[string]string, len(etags))
+	if etags == nil {
+		return res, nil
+	}
+	for _, op := range operations {
+		switch o := op.(type) {
+		case contribstate.SetRequest:
+			k := strings.TrimPrefix(o.Key, baseKey)
+			if etag := etags[o.Key]; etag != "" {
+				res[k] = etag
+			} else {
+				delete(res, k)
+				s.logMissingETag(storeName, req.ActorType, "transaction")
+			}
+		case contribstate.DeleteRequest:
+			delete(res, strings.TrimPrefix(o.Key, baseKey))
+		}
+	}
+	return res, nil
 }
 
-func (s *state) executeStateStoreTransaction(ctx context.Context, operations []contribstate.TransactionalStateOperation, metadata map[string]string) error {
+func toETagAPIError(err error) error {
+	var etagErr *contribstate.ETagError
+	if errors.As(err, &etagErr) {
+		switch etagErr.Kind() {
+		case contribstate.ETagMismatch:
+			return messages.ErrActorStateETagMismatch.WithFormat(err)
+		case contribstate.ETagInvalid:
+			return messages.ErrActorStateETagInvalid.WithFormat(err)
+		}
+	}
+	return err
+}
+
+func (s *state) executeStateStoreTransaction(ctx context.Context, actorType string, operations []contribstate.TransactionalStateOperation, metadata map[string]string, public, returnETags bool) (string, map[string]string, error) {
 	storeName, store, err := s.stateStore()
 	if err != nil {
-		return err
+		return "", nil, err
+	}
+
+	var sup support
+	if public || returnETags {
+		sup = supportOf(store)
+	}
+	if public {
+		if err = s.check(sup, storeName, actorType, operations); err != nil {
+			return storeName, nil, err
+		}
 	}
 
 	if maxMulti, ok := store.(contribstate.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			return ErrTransactionsTooManyOperations
+			return storeName, nil, ErrTransactionsTooManyOperations
 		}
 	}
 	stateReq := &contribstate.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   metadata,
 	}
-	policyRunner := resiliency.NewRunner[struct{}](ctx,
+
+	var withETags contribstate.TransactionalStoreWithETags
+	if returnETags && sup.strict {
+		withETags = store.(contribstate.TransactionalStoreWithETags)
+	}
+
+	policyRunner := resiliency.NewRunner[map[string]string](ctx,
 		s.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
-	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, store.Multi(ctx, stateReq)
+	etags, err := policyRunner(func(ctx context.Context) (map[string]string, error) {
+		var (
+			etags map[string]string
+			mErr  error
+		)
+		if withETags != nil {
+			var res *contribstate.TransactionalStateResponse
+			res, mErr = withETags.MultiWithETags(ctx, stateReq)
+			if res != nil {
+				etags = res.ETags
+			}
+			if etags == nil {
+				etags = map[string]string{}
+			}
+		} else {
+			mErr = store.Multi(ctx, stateReq)
+		}
+		if public && errors.As(mErr, new(*contribstate.ETagError)) {
+			return nil, backoff.Permanent(mErr)
+		}
+		return etags, mErr
 	})
-	return err
+	return storeName, etags, err
 }
 
 // stateStore resolves the actor state store from the component store on

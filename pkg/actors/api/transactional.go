@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 // OperationType describes a CRUD operation performed against a state store.
@@ -39,6 +40,9 @@ type StateOperationOpts struct {
 	Metadata    map[string]string
 	ContentType *string
 
+	// Last-write would let a stale etag overwrite a newer value.
+	FirstWriteETag bool
+
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
 }
@@ -48,6 +52,9 @@ type TransactionalRequest struct {
 	Operations []TransactionalOperation `json:"operations"`
 	ActorType  string
 	ActorID    string
+
+	// Set only by the public actor state API.
+	FirstWriteETag bool `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this request.
@@ -120,10 +127,11 @@ func (t TransactionalOperation) StateOperation(baseKey string, opts StateOperati
 
 // TransactionalUpsert defines a key/value pair for an upsert operation.
 type TransactionalUpsert struct {
-	Key      string            `json:"key"`
-	Value    any               `json:"value"`
-	ETag     *string           `json:"etag,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Key        string            `json:"key"`
+	Value      any               `json:"value"`
+	ETag       *string           `json:"etag,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	CreateOnly bool              `json:"createOnly,omitempty"`
 }
 
 // StateOperation returns the state.TransactionalStateOperation object.
@@ -145,19 +153,30 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		}
 	}
 
-	return state.SetRequest{
+	req := state.SetRequest{
 		Key:         baseKey + t.Key,
 		Value:       t.Value,
 		Metadata:    t.Metadata,
 		ETag:        t.ETag,
 		ContentType: opts.ContentType,
-	}, nil
+	}
+	if opts.FirstWriteETag {
+		if req.HasETag() {
+			req.Options.Concurrency = state.FirstWrite
+		}
+		req.Options.CreateOnly = t.CreateOnly
+		if err := req.ValidateCreateOnly(); err != nil {
+			return op, err
+		}
+	}
+	return req, nil
 }
 
 // TransactionalDelete defined a delete operation.
 type TransactionalDelete struct {
-	Key  string  `json:"key"`
-	ETag *string `json:"etag,omitempty"`
+	Key        string  `json:"key"`
+	ETag       *string `json:"etag,omitempty"`
+	CreateOnly bool    `json:"createOnly,omitempty"`
 }
 
 // StateOperation returns the state.TransactionalStateOperation object.
@@ -166,9 +185,17 @@ func (t TransactionalDelete) StateOperation(baseKey string, opts StateOperationO
 		return op, errors.New("missing key")
 	}
 
-	return state.DeleteRequest{
+	if opts.FirstWriteETag && t.CreateOnly {
+		return op, messages.ErrBadRequest.WithFormat("createOnly is only valid on an upsert")
+	}
+
+	req := state.DeleteRequest{
 		Key:      baseKey + t.Key,
 		Metadata: opts.Metadata,
 		ETag:     t.ETag,
-	}, nil
+	}
+	if opts.FirstWriteETag && req.HasETag() {
+		req.Options.Concurrency = state.FirstWrite
+	}
+	return req, nil
 }
