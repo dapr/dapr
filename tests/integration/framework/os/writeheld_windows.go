@@ -19,22 +19,41 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/windows"
 )
 
+// sharingRetries and sharingRetryDelay bound how long WriteFileHeld waits for
+// daprd to close the file: 2s, above daprd's disk loader rescanDelay
+// (pkg/runtime/hotreload/loader/disk).
+const (
+	sharingRetries    = 100
+	sharingRetryDelay = 20 * time.Millisecond
+)
+
 // WriteFileHeld creates path with no sharing, writes data, and keeps the
 // handle open until the returned release is called, as an on-access scanner
 // does. Every other open of the file fails with a sharing violation while it
-// is held.
+// is held. It waits up to 2s for other handles on path to close first.
 func WriteFileHeld(t *testing.T, path string, data []byte) (release func()) {
 	t.Helper()
 	name, err := syscall.UTF16PtrFromString(path)
 	require.NoError(t, err)
-	handle, err := syscall.CreateFile(name, syscall.GENERIC_WRITE, 0,
-		nil, syscall.CREATE_ALWAYS, syscall.FILE_ATTRIBUTE_NORMAL, 0)
-	require.NoError(t, err)
+	// daprd may still be reading the file, for example a rescan it retries
+	// after an earlier hold, and an open with share mode 0 fails until it
+	// closes it.
+	var handle syscall.Handle
+	for range sharingRetries {
+		handle, err = syscall.CreateFile(name, syscall.GENERIC_WRITE, 0,
+			nil, syscall.CREATE_ALWAYS, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+		if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+			break
+		}
+		time.Sleep(sharingRetryDelay)
+	}
+	require.NoError(t, err, "opening %s with share mode 0, retried for %s", path, sharingRetries*sharingRetryDelay)
 	var written uint32
 	require.NoError(t, syscall.WriteFile(handle, data, &written, nil))
 	require.NoError(t, syscall.FlushFileBuffers(handle))
