@@ -106,12 +106,18 @@ func (r *redispatchstarve) Run(t *testing.T, ctx context.Context) {
 	})
 	go func() {
 		defer close(held)
+		var releases []func()
+		defer func() {
+			for _, release := range releases {
+				release()
+			}
+		}()
 		for {
 			arrived, release := r.store.ArmGetHold(id + "::0::0||execution-claim")
+			releases = append(releases, release)
 			select {
 			case <-arrived:
 			case <-stop:
-				release()
 				return
 			}
 		}

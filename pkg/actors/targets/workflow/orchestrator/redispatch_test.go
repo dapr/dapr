@@ -1,6 +1,5 @@
 /*
 Copyright 2026 The Dapr Authors
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
