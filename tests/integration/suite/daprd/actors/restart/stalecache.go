@@ -1,0 +1,279 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package restart
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(&stalecacheHTTP{stalecache{viaGRPC: false}})
+	suite.Register(&stalecacheGRPC{stalecache{viaGRPC: true}})
+}
+
+type (
+	stalecacheHTTP struct{ stalecache }
+	stalecacheGRPC struct{ stalecache }
+)
+
+// stalecache mimics an SDK that caches etags per activation and never re-reads.
+type stalecache struct {
+	viaGRPC bool
+
+	app    *actors.Actors
+	httpCl *http.Client
+	grpcCl rtv1.DaprClient
+
+	lock  sync.Mutex
+	cache map[string]cached
+	reads atomic.Int64
+
+	read    map[string]chan struct{}
+	release chan struct{}
+	saved   map[string]chan string
+}
+
+type cached struct {
+	activationID string
+	etag         string
+}
+
+func (s *stalecache) Setup(t *testing.T) []framework.Option {
+	s.httpCl = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	s.cache = make(map[string]cached)
+	s.release = make(chan struct{})
+	s.read = map[string]chan struct{}{"1": make(chan struct{}), "2": make(chan struct{})}
+	s.saved = map[string]chan string{"1": make(chan string, 1), "2": make(chan string, 1)}
+
+	s.app = actors.New(t,
+		actors.WithActorTypes("abc"),
+		actors.WithHandler("/actors/abc/{id}/method/write", func(w http.ResponseWriter, r *http.Request) {
+			value, _ := io.ReadAll(r.Body)
+			w.Write([]byte(s.write(r.Context(), r.PathValue("id"), activation.FromHeader(r), string(value))))
+		}),
+		actors.WithHandler("/actors/abc/{id}/method/slow", func(_ http.ResponseWriter, r *http.Request) {
+			id, act := r.PathValue("id"), activation.FromHeader(r)
+			etag, err := s.cachedETag(r.Context(), id, act)
+			if err != nil {
+				s.saved[id] <- err.Error()
+				return
+			}
+			close(s.read[id])
+			<-s.release
+			s.saved[id] <- s.save(context.Background(), id, act, "stale", etag)
+		}),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(s.app),
+	}
+}
+
+func (s *stalecache) Run(t *testing.T, ctx context.Context) {
+	s.app.WaitUntilRunning(t, ctx)
+	s.grpcCl = s.app.GRPCClient(t, ctx)
+
+	write := func(id, value string) string {
+		return string(activation.Invoke(t, ctx, s.app.GRPCClient(t, ctx), &rtv1.InvokeActorRequest{
+			ActorType: "abc", ActorId: id, Method: "write", Data: []byte(value),
+		}))
+	}
+
+	assert.Equal(t, "ok", write("1", "v1"))
+	assert.Equal(t, "ok", write("1", "v1b"))
+	assert.Equal(t, "ok", write("1", "v1c"))
+	assert.Equal(t, int64(1), s.reads.Load())
+	assert.Equal(t, "v1c", s.value(t, ctx, "1"))
+
+	slowCl := s.app.GRPCClient(t, ctx)
+	for _, id := range []string{"1", "2"} {
+		go func() {
+			_, _ = slowCl.InvokeActor(ctx, &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: id, Method: "slow"})
+		}()
+		select {
+		case <-s.read[id]:
+		case <-time.After(time.Second * 10):
+			require.Fail(t, "slow callback never got its cached etag", id)
+		}
+	}
+	assert.Equal(t, int64(2), s.reads.Load())
+
+	s.app.Daprd().Restart(t, ctx)
+	s.app.Daprd().WaitUntilRunning(t, ctx)
+	s.app.Daprd().WaitUntilActorTypeHosted(t, ctx, "abc")
+
+	assert.Equal(t, "ok", write("1", "v2"))
+	assert.Equal(t, "ok", write("2", "v2"))
+	assert.Equal(t, int64(4), s.reads.Load())
+
+	want := "409 ERR_ACTOR_STATE_ETAG_MISMATCH"
+	if s.viaGRPC {
+		want = "Aborted"
+	}
+	close(s.release)
+	for _, id := range []string{"1", "2"} {
+		select {
+		case got := <-s.saved[id]:
+			assert.Equal(t, want, got, id)
+		case <-time.After(time.Second * 10):
+			require.Fail(t, "slow callback never saved", id)
+		}
+		assert.Equal(t, "v2", s.value(t, ctx, id))
+	}
+}
+
+func (s *stalecache) value(t *testing.T, ctx context.Context, id string) string {
+	t.Helper()
+	resp, err := s.app.GRPCClient(t, ctx).GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"})
+	require.NoError(t, err)
+	return strings.Trim(string(resp.GetData()), `"`)
+}
+
+func (s *stalecache) write(ctx context.Context, id, act, value string) string {
+	etag, err := s.cachedETag(ctx, id, act)
+	if err != nil {
+		return err.Error()
+	}
+	return s.save(ctx, id, act, value, etag)
+}
+
+// An empty etag means the key was absent.
+func (s *stalecache) cachedETag(ctx context.Context, id, act string) (string, error) {
+	s.lock.Lock()
+	c, ok := s.cache[id]
+	s.lock.Unlock()
+	if ok && c.activationID == act {
+		return c.etag, nil
+	}
+
+	s.reads.Add(1)
+	etag, err := s.get(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	s.setCache(id, act, etag)
+	return etag, nil
+}
+
+func (s *stalecache) setCache(id, act, etag string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.cache[id] = cached{activationID: act, etag: etag}
+}
+
+func (s *stalecache) get(ctx context.Context, id string) (string, error) {
+	if s.viaGRPC {
+		resp, err := s.grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"}, grpc.WaitForReady(true))
+		if err != nil {
+			return "", err
+		}
+		return resp.GetEtag(), nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state/k", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := s.httpCl.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return "", fmt.Errorf("get state: %d", resp.StatusCode)
+	}
+	return resp.Header.Get("ETag"), nil
+}
+
+// save returns "ok" or the gRPC code or the HTTP status and error code.
+func (s *stalecache) save(ctx context.Context, id, act, value, etag string) string {
+	var etags map[string]string
+	if s.viaGRPC {
+		resp, err := s.grpcCl.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
+			ActorType: "abc",
+			ActorId:   id,
+			Operations: []*rtv1.TransactionalActorStateOperation{{
+				OperationType: "upsert", Key: "k", Value: &anypb.Any{Value: []byte(value)}, Etag: etag, CreateOnly: etag == "",
+			}},
+			ReturnEtags: true,
+		}, grpc.WaitForReady(true))
+		if err != nil {
+			return status.Code(err).String()
+		}
+		etags = resp.GetEtags()
+	} else {
+		op := map[string]any{"key": "k", "value": value}
+		if etag != "" {
+			op["etag"] = etag
+		} else {
+			op["createOnly"] = true
+		}
+		body, err := json.Marshal([]map[string]any{{"operation": "upsert", "request": op}})
+		if err != nil {
+			return err.Error()
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state", strings.NewReader(string(body)))
+		if err != nil {
+			return err.Error()
+		}
+		req.Header.Set("dapr-return-etags", "true")
+		resp, err := s.httpCl.Do(req)
+		if err != nil {
+			return err.Error()
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			var apiErr struct {
+				ErrorCode string `json:"errorCode"`
+			}
+			_ = json.Unmarshal(b, &apiErr)
+			return fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)
+		}
+		var res struct {
+			ETags map[string]string `json:"etags"`
+		}
+		if err := json.Unmarshal(b, &res); err != nil {
+			return err.Error()
+		}
+		etags = res.ETags
+	}
+
+	if etags["k"] == "" {
+		return "no etag returned"
+	}
+	s.setCache(id, act, etags["k"])
+	return "ok"
+}
