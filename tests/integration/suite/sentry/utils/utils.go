@@ -41,19 +41,22 @@ type KubeAPIOptions struct {
 	PodContainerStatuses     []corev1.ContainerStatus
 	PodInitContainerStatuses []corev1.ContainerStatus
 
-	// ExcludePodFromList serves the workload pod only through the Pod GET
-	// endpoint, simulating a cache whose label selector excludes the pod.
+	// ExcludePodFromList serves an unlabeled workload pod only through the Pod
+	// GET endpoint, simulating a cache whose label selector excludes the pod.
 	ExcludePodFromList bool
 }
 
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
+	const sidecarInjectedLabel = "dapr.io/sidecar-injected"
+
 	pod := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: opts.Namespace, Name: "mypod",
 			Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
+			Labels:      map[string]string{sidecarInjectedLabel: "true"},
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: opts.ServiceAccount,
@@ -67,10 +70,11 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	}
 	pods := []corev1.Pod{pod}
 	if opts.ExcludePodFromList {
+		pod.Labels = nil
 		pods = nil
 	}
 
-	return prockube.New(t,
+	kubeOpts := []prockube.Option{
 		prockube.WithClusterDaprConfigurationList(t, new(configapi.ConfigurationList)),
 		prockube.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -93,11 +97,21 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data:       map[string]string{"ca.crt": string(opts.Bundle.X509.TrustAnchors)},
 		}),
-		prockube.WithClusterPodList(t, &corev1.PodList{
-			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-			Items:    pods,
+		prockube.WithPath("/api/v1/pods", func(w http.ResponseWriter, r *http.Request) {
+			// The fake informer handles WATCH requests before this callback.
+			// Controller-runtime applies the same selector to LIST and WATCH.
+			assert.Equal(t, sidecarInjectedLabel, r.URL.Query().Get("labelSelector"),
+				"sentry must only list Dapr-injected pods")
+
+			resp, err := json.Marshal(&corev1.PodList{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+				Items:    pods,
+			})
+			assert.NoError(t, err)
+			w.Header().Add("Content-Type", "application/json")
+			_, err = w.Write(resp)
+			assert.NoError(t, err)
 		}),
-		prockube.WithPodGet(t, &pod),
 		prockube.WithPath("/apis/authentication.k8s.io/v1/tokenreviews", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -119,5 +133,19 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			w.Header().Add("Content-Type", "application/json")
 			w.Write(resp)
 		}),
-	)
+	}
+
+	if opts.ExcludePodFromList {
+		kubeOpts = append(kubeOpts, prockube.WithPodGet(t, &pod))
+	} else {
+		kubeOpts = append(kubeOpts, prockube.WithPath(
+			fmt.Sprintf("/api/v1/namespaces/%s/pods/%s", pod.Namespace, pod.Name),
+			func(w http.ResponseWriter, r *http.Request) {
+				assert.Fail(t, "unexpected direct Pod GET; pod should be served from cache")
+				w.WriteHeader(http.StatusNotFound)
+			},
+		))
+	}
+
+	return prockube.New(t, kubeOpts...)
 }

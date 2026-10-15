@@ -208,6 +208,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	var pod corev1.Pod
 	err = k.client.Get(ctx, key, &pod)
 	if apierrors.IsNotFound(err) {
+		// Control-plane Pods, manually injected sidecars, and Pods admitted by
+		// an older injector may not carry the label required by the cache.
 		err = k.uncachedClient.Get(ctx, key, &pod)
 	}
 	if err != nil {

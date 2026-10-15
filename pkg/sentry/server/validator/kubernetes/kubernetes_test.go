@@ -69,9 +69,8 @@ func TestValidate(t *testing.T) {
 		pod     *corev1.Pod
 		config  *configapi.Configuration
 
-		sentryAudience    string
-		uncachedPod       *corev1.Pod
-		checkUncachedGets bool
+		sentryAudience string
+		uncachedPod    *corev1.Pod
 
 		expTD           spiffeid.TrustDomain
 		expAud          []string
@@ -122,8 +121,9 @@ func TestValidate(t *testing.T) {
 					},
 				},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 
 		"if config in different namespace, expect error": {
@@ -169,8 +169,9 @@ func TestValidate(t *testing.T) {
 					},
 				},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 
 		"is missing app-id and app-id is the same as the pod name, expect no error": {
@@ -1064,8 +1065,9 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 		"if app ID is 64 characters long don't error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1310,9 +1312,8 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			checkUncachedGets: true,
-			expUncachedGets:   1,
-			expTD:             spiffeid.RequireTrustDomainFromString("public"),
+			expUncachedGets: 1,
+			expTD:           spiffeid.RequireTrustDomainFromString("public"),
 		},
 		"pod missing from cache and API returns an error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1333,9 +1334,8 @@ func TestValidate(t *testing.T) {
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
-			checkUncachedGets: true,
-			expUncachedGets:   1,
-			expErr:            true,
+			expUncachedGets: 1,
+			expErr:          true,
 		},
 		"valid request returns the pod's container images": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1384,7 +1384,6 @@ func TestValidate(t *testing.T) {
 				{Role: images.RoleDaprd, ContainerName: "daprd", Image: "ghcr.io/dapr/daprd:1.16.0", Digest: "sha256:aaa"},
 				{Role: images.RoleApp, ContainerName: "app", Image: "docker.io/library/myapp:v2", Digest: "sha256:bbb"},
 			},
-			checkUncachedGets: true,
 		},
 	}
 
@@ -1428,9 +1427,7 @@ func TestValidate(t *testing.T) {
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
 			assert.Equal(t, test.expImages, res.ContainerImages)
-			if test.checkUncachedGets {
-				assert.Equal(t, test.expUncachedGets, uncachedClient.getCalls)
-			}
+			assert.Equal(t, test.expUncachedGets, uncachedClient.getCalls)
 		})
 	}
 }

@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
@@ -39,8 +41,8 @@ func init() {
 	suite.Register(new(fallback))
 }
 
-// fallback tests that Sentry retrieves a Pod directly from the Kubernetes API
-// when the Pod is not present in the label-filtered cache.
+// fallback tests that Sentry retrieves an unlabeled Pod directly from the
+// Kubernetes API when the Pod is not present in the filtered cache.
 type fallback struct {
 	sentry *sentry.Sentry
 }
@@ -113,4 +115,14 @@ func (f *fallback) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetWorkloadCertificate())
+
+	_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
+		Id:                        "myappid",
+		Namespace:                 "mynamespace",
+		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
+		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
+		Token:                     `{"kubernetes.io":{"pod":{"name":"notmypod"}}}`,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
