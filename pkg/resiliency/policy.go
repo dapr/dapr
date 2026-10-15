@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
@@ -103,6 +104,11 @@ func (p PolicyDefinition) HasRetries() bool {
 	return p.r != nil && p.r.MaxRetries != 0
 }
 
+// Timeout returns the policy's timeout, or 0 if none is configured.
+func (p PolicyDefinition) Timeout() time.Duration {
+	return p.t
+}
+
 // HasBoundedRetries reports whether a retry policy is configured and can run
 // out of attempts on its own. A nil retry means no policy was configured for
 // this operation at all.
@@ -145,6 +151,10 @@ type RunnerOpts[T any] struct {
 	Accumulator func(T)
 }
 
+// Windows nanotime advances once per timer tick, so a downstream can enforce
+// the propagated deadline before time.Now() reads past it.
+const deadlineClockTolerance = 16 * time.Millisecond
+
 // timeoutError returns the timeout to report for an attempt which returned
 // err after its deadline passed, and nil when the attempt did not time out.
 // The operation can observe the deadline before the runner does and fail with
@@ -160,8 +170,18 @@ func timeoutError(ctx context.Context, err error) error {
 	if cerr := ctx.Err(); cerr != nil {
 		return cerr
 	}
-	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil
+	}
+	if !time.Now().Before(deadline) {
 		return context.DeadlineExceeded
+	}
+	if time.Until(deadline) <= deadlineClockTolerance {
+		var cErr CodeError
+		if errors.As(err, &cErr) && cErr.StatusCode == int32(codes.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
 	}
 	return nil
 }

@@ -16,7 +16,7 @@
 # is not a required check: a red result means master's scheduled tests are
 # failing, so reviewers can see that before merging.
 
-name: merge-checker
+name: master-health (maintainers only)
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ permissions: {}
 
 jobs:
   workflows:
-    name: Workflows on master
+    name: Scheduled tests on master
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
