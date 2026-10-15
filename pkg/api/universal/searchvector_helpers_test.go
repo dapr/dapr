@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -294,6 +295,52 @@ func TestComponentError(t *testing.T) {
 	err = componentError(errBoom)
 	assert.Equal(t, codes.Internal, grpcstatus.Code(err))
 	assert.Contains(t, err.Error(), "boom")
+
+	// A permanent error is unwrapped.
+	deadline := grpcstatus.Error(codes.DeadlineExceeded, "late")
+	assert.Equal(t, deadline, componentError(backoff.Permanent(deadline)))
+}
+
+func TestWaitExpiryNotRetried(t *testing.T) {
+	t.Parallel()
+
+	failRequest := compsearch.IndexingOptions{
+		Mode:          compsearch.IndexingModeWaitForCompletion,
+		WaitTimeout:   time.Second,
+		OnWaitTimeout: compsearch.IndexingWaitTimeoutActionFailRequest,
+	}
+	continueAsync := failRequest
+	continueAsync.OnWaitTimeout = compsearch.IndexingWaitTimeoutActionContinueAsync
+	deadline := grpcstatus.Error(codes.DeadlineExceeded, "late")
+
+	tests := []struct {
+		name          string
+		opts          compsearch.IndexingOptions
+		err           error
+		wantPermanent bool
+	}{
+		{name: "an expired FAIL_REQUEST wait is permanent", opts: failRequest, err: deadline, wantPermanent: true},
+		{name: "another code is left to the policy", opts: failRequest, err: grpcstatus.Error(codes.Unavailable, "down")},
+		{name: "a context deadline is left to the policy", opts: failRequest, err: context.DeadlineExceeded},
+		{name: "a CONTINUE_ASYNC write is left to the policy", opts: continueAsync, err: deadline},
+		{name: "a write that does not wait is left to the policy", opts: compsearch.IndexingOptions{}, err: deadline},
+		{name: "no error", opts: failRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := waitExpiryNotRetried(tt.opts, tt.err)
+			if tt.wantPermanent {
+				var permanent *backoff.PermanentError
+				require.ErrorAs(t, got, &permanent)
+				assert.Equal(t, tt.err, permanent.Unwrap())
+				return
+			}
+			assert.Equal(t, tt.err, got)
+		})
+	}
 }
 
 func TestProtoIndexingOptionsToComponent(t *testing.T) {

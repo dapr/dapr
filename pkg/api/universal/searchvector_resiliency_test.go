@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -208,6 +209,27 @@ func TestWritesWithResiliency(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, int32(1), calls)
 				assert.True(t, deadline.Load(), "the component runs under the policy timeout")
+			})
+
+			t.Run("an expired FAIL_REQUEST wait is not retried", func(t *testing.T) {
+				t.Parallel()
+
+				calls, _, err := do(t, waitForCompletion(writePolicyTimeout/2), func(context.Context, compsearch.IndexingOptions) error {
+					return grpcstatus.Error(codes.DeadlineExceeded, "wait expired")
+				})
+				assert.Equal(t, codes.DeadlineExceeded, grpcstatus.Code(err))
+				assert.NotErrorAs(t, err, new(*backoff.PermanentError))
+				assert.Equal(t, int32(1), calls)
+			})
+
+			t.Run("a deadline outside a FAIL_REQUEST wait is still retried", func(t *testing.T) {
+				t.Parallel()
+
+				calls, _, err := do(t, nil, func(context.Context, compsearch.IndexingOptions) error {
+					return grpcstatus.Error(codes.DeadlineExceeded, "provider slow")
+				})
+				assert.Equal(t, codes.DeadlineExceeded, grpcstatus.Code(err))
+				assert.Equal(t, int32(3), calls)
 			})
 
 			t.Run("a transient component failure is retried", func(t *testing.T) {

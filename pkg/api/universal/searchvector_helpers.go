@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -114,6 +115,11 @@ func componentError(err error) error {
 	if err == nil {
 		return nil
 	}
+	// Without a retry policy the runner returns a permanent error as is.
+	var permanent *backoff.PermanentError
+	if errors.As(err, &permanent) {
+		err = permanent.Unwrap()
+	}
 	if _, ok := grpcstatus.FromError(err); ok {
 		return err
 	}
@@ -166,6 +172,19 @@ func protoIndexingOptionsToComponent(ctx context.Context, opts *runtimev1pb.Inde
 		}
 	}
 	return out, nil
+}
+
+// waitExpiryNotRetried stops the resiliency policy retrying a write whose
+// FAIL_REQUEST wait expired, which would resubmit it and wait again.
+func waitExpiryNotRetried(opts compsearch.IndexingOptions, err error) error {
+	if opts.Mode != compsearch.IndexingModeWaitForCompletion ||
+		opts.OnWaitTimeout != compsearch.IndexingWaitTimeoutActionFailRequest {
+		return err
+	}
+	if st, ok := grpcstatus.FromError(err); ok && st.Code() == codes.DeadlineExceeded {
+		return backoff.Permanent(err)
+	}
+	return err
 }
 
 func componentIndexAckToProto(ack compsearch.IndexAck) runtimev1pb.IndexAck {

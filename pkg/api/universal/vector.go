@@ -161,7 +161,8 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 	}
 	policyRunner := resiliency.NewRunner[*compvector.UpsertResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.UpsertResponse, error) {
-		return comp.Upsert(ctx, compReq)
+		res, err := comp.Upsert(ctx, compReq)
+		return res, waitExpiryNotRetried(options, err)
 	})
 	if err != nil {
 		return nil, componentError(err)
@@ -230,7 +231,8 @@ func (a *Universal) DeleteVectorsAlpha1(ctx context.Context, req *runtimev1pb.De
 	}
 	policyRunner := resiliency.NewRunner[*compvector.DeleteResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.DeleteResponse, error) {
-		return comp.Delete(ctx, compReq)
+		res, err := comp.Delete(ctx, compReq)
+		return res, waitExpiryNotRetried(options, err)
 	})
 	if err != nil {
 		return nil, componentError(err)

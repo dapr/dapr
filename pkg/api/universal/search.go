@@ -172,7 +172,8 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 	}
 	policyRunner := resiliency.NewRunner[*compsearch.IndexDocumentsResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.IndexDocumentsResponse, error) {
-		return comp.IndexDocuments(ctx, compReq)
+		res, err := comp.IndexDocuments(ctx, compReq)
+		return res, waitExpiryNotRetried(options, err)
 	})
 	if err != nil {
 		return nil, componentError(err)
@@ -242,7 +243,8 @@ func (a *Universal) DeleteDocumentsAlpha1(ctx context.Context, req *runtimev1pb.
 	}
 	policyRunner := resiliency.NewRunner[*compsearch.DeleteDocumentsResponse](ctx, policyDef)
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.DeleteDocumentsResponse, error) {
-		return comp.DeleteDocuments(ctx, compReq)
+		res, err := comp.DeleteDocuments(ctx, compReq)
+		return res, waitExpiryNotRetried(options, err)
 	})
 	if err != nil {
 		return nil, componentError(err)
