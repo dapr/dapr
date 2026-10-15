@@ -99,7 +99,8 @@ func (i *interrupt) Run(t *testing.T, ctx context.Context) {
 	case <-ctx.Done():
 		require.Fail(t, "the restarted runtime never asked sentry for its identity")
 	}
-	assert.True(t, i.logOut.Contains("Received signal 'hangup'; restarting"))
 
+	// Cleanup interrupts daprd and waits for its output to be read.
 	i.daprd.Cleanup(t)
+	assert.True(t, i.logOut.Contains("Received signal 'hangup'; restarting"))
 }
