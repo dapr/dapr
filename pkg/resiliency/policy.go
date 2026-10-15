@@ -104,6 +104,11 @@ func (p PolicyDefinition) HasRetries() bool {
 	return p.r != nil && p.r.MaxRetries != 0
 }
 
+// Timeout returns the policy's timeout, or 0 if none is configured.
+func (p PolicyDefinition) Timeout() time.Duration {
+	return p.t
+}
+
 // HasBoundedRetries reports whether a retry policy is configured and can run
 // out of attempts on its own. A nil retry means no policy was configured for
 // this operation at all.

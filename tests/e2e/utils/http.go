@@ -19,9 +19,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -34,6 +36,10 @@ const (
 	// HTTPGetRawNTimes() to avoid cases where early requests hang and
 	// block all subsequent requests.
 	DefaultProbeTimeout = 30 * time.Second
+
+	// maxReusedConnAttempts is how many times doRequest sends a request that
+	// keeps failing on a pooled connection.
+	maxReusedConnAttempts = 3
 )
 
 var httpClient *http.Client
@@ -196,9 +202,54 @@ func HTTPGetRawWithHeaders(url string, header http.Header) (*http.Response, erro
 	return httpClient.Do(req)
 }
 
+// doRequest sends the request built by newReq. When the request fails on a
+// pooled connection, it is sent again, up to maxReusedConnAttempts times. The
+// load balancer in front of the test apps resets pooled connections whose
+// backend pod has gone away, and net/http only resends GET-like requests.
+func doRequest(newReq func() (*http.Request, error)) (*http.Response, error) {
+	var (
+		resp *http.Response
+		err  error
+	)
+	for range maxReusedConnAttempts {
+		var req *http.Request
+		req, err = newReq()
+		if err != nil {
+			return nil, err
+		}
+		// ClientTrace hooks may run concurrently with Do, so the flag is atomic.
+		var reused atomic.Bool
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) },
+		}))
+		resp, err = httpClient.Do(req)
+		if err == nil || !reused.Load() {
+			return resp, err
+		}
+	}
+	return resp, err
+}
+
+func newPostRequest(url string, data []byte) func() (*http.Request, error) {
+	return func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodPost, SanitizeHTTPURL(url), bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	}
+}
+
+func newDeleteRequest(url string) func() (*http.Request, error) {
+	return func() (*http.Request, error) {
+		return http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)
+	}
+}
+
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
+	resp, err := doRequest(newPostRequest(url, data))
 	if err != nil {
 		return nil, err
 	}
@@ -209,12 +260,14 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPPatch is a helper to make PATCH request call to url.
 func HTTPPatch(url string, data []byte) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodPatch, SanitizeHTTPURL(url), bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
+	resp, err := doRequest(func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodPatch, SanitizeHTTPURL(url), bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +278,7 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
+	resp, err := doRequest(newPostRequest(url, data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as
@@ -246,12 +299,7 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := httpClient.Do(req)
+	res, err := doRequest(newDeleteRequest(url))
 	if err != nil {
 		return nil, err
 	}
@@ -262,12 +310,7 @@ func HTTPDelete(url string) ([]byte, error) {
 
 // HTTPDeleteWithStatus calls a given URL with the HTTP DELETE method.
 func HTTPDeleteWithStatus(url string) ([]byte, int, error) {
-	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	res, err := httpClient.Do(req)
+	res, err := doRequest(newDeleteRequest(url))
 	if err != nil {
 		return nil, 0, err
 	}
