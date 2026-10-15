@@ -50,7 +50,7 @@ func (h *httpendpointlisterror) Setup(t *testing.T) []framework.Option {
 		"kind":       "HTTPEndpoint",
 		"apiVersion": "dapr.io/v1alpha1",
 		"metadata":   map[string]any{"name": "myendpoint", "namespace": "default"},
-		"spec":       map[string]any{"baseURL": "http://localhost:1234"},
+		"spec":       map[string]any{"baseUrl": "http://localhost:1234"},
 	})
 	require.NoError(t, err)
 

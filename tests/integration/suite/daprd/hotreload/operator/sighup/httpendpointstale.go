@@ -52,7 +52,7 @@ func (h *httpendpointstale) Setup(t *testing.T) []framework.Option {
 			"kind":       "HTTPEndpoint",
 			"apiVersion": "dapr.io/v1alpha1",
 			"metadata":   map[string]any{"name": "myendpoint", "namespace": "default"},
-			"spec":       map[string]any{"baseURL": baseURL},
+			"spec":       map[string]any{"baseUrl": baseURL},
 		})
 		require.NoError(t, err)
 		return b
