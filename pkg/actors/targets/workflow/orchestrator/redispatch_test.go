@@ -190,13 +190,13 @@ func Test_redispatchActivities_callBoundedByJanitorPeriod(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	// The calls run one after another; every one must end within one janitor
+	// The calls share one deadline: every one must end within one janitor
 	// period of the fire, not of its own start.
 	assert.Equal(t, h.deadlines[0], h.deadlines[1])
 	assert.WithinDuration(t, fired.Add(janitorPeriod()), h.deadlines[1], 100*time.Millisecond)
 }
 
-func Test_redispatchActivities_rotatesStartTask(t *testing.T) {
+func Test_redispatchActivities_callsDoNotWaitForEachOther(t *testing.T) {
 	period := janitorPeriod
 	janitorPeriod = func() time.Duration { return 200 * time.Millisecond }
 	t.Cleanup(func() { janitorPeriod = period })
@@ -222,9 +222,7 @@ func Test_redispatchActivities_rotatesStartTask(t *testing.T) {
 	}
 	h.lock.Unlock()
 
-	for range 2 {
-		h.orch.redispatchActivities(t.Context(), state, unresolved)
-		h.orch.wakeWG.Wait()
-	}
-	assert.True(t, task1Live.Load(), "task 1 must get a live call within two passes")
+	h.orch.redispatchActivities(t.Context(), state, unresolved)
+	h.orch.wakeWG.Wait()
+	assert.True(t, task1Live.Load(), "task 1 must get a live call in the same pass")
 }

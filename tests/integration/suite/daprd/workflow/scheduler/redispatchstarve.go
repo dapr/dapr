@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -40,10 +41,11 @@ func init() {
 
 // redispatchstarve loses both of a workflow's activity executions, then holds
 // every execution-claim read of the first one, so each janitor re-dispatch
-// call for it uses up the whole pass's deadline. The calls of a pass share
-// that deadline, so the second activity must still get a live re-dispatch in a
-// later pass and run.
+// call for it uses up the whole pass's deadline. The second activity's call
+// must not wait behind it: the first pass must re-dispatch it, and it must
+// run.
 type redispatchstarve struct {
+	logOut   *log.Log
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *fault.Store
@@ -52,6 +54,7 @@ type redispatchstarve struct {
 func (r *redispatchstarve) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
+	r.logOut = log.New()
 	r.store = fault.New(t)
 	var storeOpts []daprd.Option
 	r.ss, storeOpts = workflow.FaultStore(t, r.store)
@@ -60,9 +63,11 @@ func (r *redispatchstarve) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprdOptions(0, append(storeOpts,
 			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 			daprd.WithWorkflowJanitorPeriod(t, time.Second*2),
-			daprd.WithExecOptions(exec.WithEnvVars(t,
-				"DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES", "1000",
-			)),
+			daprd.WithExecOptions(
+				exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES", "1000"),
+				exec.WithStdout(r.logOut),
+				exec.WithStderr(r.logOut),
+			),
 		)...),
 	)
 
@@ -127,7 +132,12 @@ func (r *redispatchstarve) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool { return bRuns.Load() > 0 }, time.Second*20, time.Millisecond*10,
-		"B must get a live re-dispatch while A's call uses up every pass's deadline")
+		"B must run while A's call uses up every pass's deadline")
+	// A task is recorded as re-dispatched before its call runs, so a call
+	// that never reached B makes the next pass escalate it instead, and this
+	// line is never logged.
+	assert.True(t, r.logOut.Contains("janitor re-dispatched unresolved activity 'B::1'"),
+		"B's re-dispatch must not wait behind A's: a call that starts after the deadline never reaches B")
 	assert.Zero(t, aRuns.Load(), "A's re-dispatch must still be held")
 
 	close(stop)

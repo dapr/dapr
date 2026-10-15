@@ -16,8 +16,10 @@ package orchestrator
 import (
 	"context"
 	"errors"
-	"slices"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -43,6 +45,9 @@ const redispatchCallTimeout = 30 * time.Second
 func redispatchCallBound() time.Duration {
 	return min(redispatchCallTimeout, janitorPeriod())
 }
+
+// redispatchConcurrency caps the calls one re-dispatch pass has in flight.
+const redispatchConcurrency = 64
 
 // redispatchSuppressed defers the re-dispatch pass only while a drive is
 // mid-flight on THIS instance: its commit may resolve tasks momentarily, and
@@ -175,39 +180,49 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		}
 	}
 
-	// The calls share the pass's deadline, so start each pass at a different
-	// task: a call that keeps using up the deadline cannot starve the tasks
-	// after it.
-	if n := len(unresolved); n > 1 {
-		start := o.janitorPasses % n
-		unresolved = slices.Concat(unresolved[start:], unresolved[:start])
-	}
-	o.janitorPasses++
-
 	go func() {
 		defer o.wakeWG.Done()
-		// One deadline for the whole pass: the calls run one after another,
-		// and each must end within the bound of this fire.
+		// The calls run concurrently under one deadline: each starts at this
+		// fire and ends within the bound, and a call that uses up the
+		// deadline does not hold back the others. The cap keeps a large
+		// fan-out from sending every call at once.
 		pctx, cancel := context.WithTimeout(wakeCtx, redispatchCallBound())
 		defer cancel()
+		var (
+			g         errgroup.Group
+			lock      sync.Mutex
+			escalated []*backend.HistoryEvent
+		)
+		g.SetLimit(redispatchConcurrency)
 		for _, e := range unresolved {
-			cerr := o.callActivity(pctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
-			switch {
-			case cerr == nil && durable[e.GetEventId()]:
-				log.Infof("Workflow actor '%s': janitor escalated unresolved activity '%s::%d' to its durable run-activity reminder (a prior re-dispatch did not resolve it)", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
-				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchEscalated)
-				o.reapResolvedEscalation(wakeCtx, e)
-			case cerr == nil:
-				log.Infof("Workflow actor '%s': janitor re-dispatched unresolved activity '%s::%d'", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
-				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatched)
-			case errors.Is(cerr, context.DeadlineExceeded):
-				// The activity actor is busy executing: exactly the healthy
-				// in-flight case, nothing to recover.
-				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchBusy)
-			default:
-				log.Warnf("Workflow actor '%s': janitor re-dispatch of activity '%s::%d' failed; the next janitor period retries: %v", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId(), cerr)
-				diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchFailed)
-			}
+			g.Go(func() error {
+				cerr := o.callActivity(pctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
+				switch {
+				case cerr == nil && durable[e.GetEventId()]:
+					log.Infof("Workflow actor '%s': janitor escalated unresolved activity '%s::%d' to its durable run-activity reminder (a prior re-dispatch did not resolve it)", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+					diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchEscalated)
+					lock.Lock()
+					escalated = append(escalated, e)
+					lock.Unlock()
+				case cerr == nil:
+					log.Infof("Workflow actor '%s': janitor re-dispatched unresolved activity '%s::%d'", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+					diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatched)
+				case errors.Is(cerr, context.DeadlineExceeded):
+					// The activity actor is busy executing: exactly the healthy
+					// in-flight case, nothing to recover.
+					diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchBusy)
+				default:
+					log.Warnf("Workflow actor '%s': janitor re-dispatch of activity '%s::%d' failed; the next janitor period retries: %v", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId(), cerr)
+					diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusJanitorRedispatchFailed)
+				}
+				return nil
+			})
+		}
+		_ = g.Wait()
+
+		// Each reap takes the turn lock; do them one at a time.
+		for _, e := range escalated {
+			o.reapResolvedEscalation(wakeCtx, e)
 		}
 	}()
 }
