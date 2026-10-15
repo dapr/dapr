@@ -60,7 +60,9 @@ func run(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	c := pb.NewGreeterClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	// The maxsize case sends and receives 5 MiB through two daprd sidecars,
+	// which can take more than 2s on a loaded Windows node.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	// The target app id is overridable so that test suites can deploy this app
