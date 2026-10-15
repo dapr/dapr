@@ -93,6 +93,7 @@ type notifyHarness struct {
 	ops        []string
 	calls      []*internalv1pb.InternalInvokeRequest
 	callErr    error
+	onCall     func(context.Context, *internalv1pb.InternalInvokeRequest) error
 	deadlines  []time.Time
 	purged     atomic.Bool
 	confirmErr atomic.Bool
@@ -193,14 +194,20 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 
 	fakeRouter := routerfake.New().WithCallFn(func(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 		h.lock.Lock()
-		defer h.lock.Unlock()
 		h.ops = append(h.ops, "call:"+req.GetMessage().GetMethod())
 		if dl, ok := ctx.Deadline(); ok {
 			h.deadlines = append(h.deadlines, dl)
 		}
 		h.calls = append(h.calls, req)
-		if h.callErr != nil {
-			return nil, h.callErr
+		callErr, onCall := h.callErr, h.onCall
+		h.lock.Unlock()
+		if onCall != nil {
+			if cerr := onCall(ctx, req); cerr != nil {
+				return nil, cerr
+			}
+		}
+		if callErr != nil {
+			return nil, callErr
 		}
 		return &internalv1pb.InternalInvokeResponse{Status: &internalv1pb.Status{Code: http.StatusOK}}, nil
 	})

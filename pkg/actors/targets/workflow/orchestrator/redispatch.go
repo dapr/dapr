@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -173,6 +174,15 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 			}
 		}
 	}
+
+	// The calls share the pass's deadline, so start each pass at a different
+	// task: a call that keeps using up the deadline cannot starve the tasks
+	// after it.
+	if n := len(unresolved); n > 1 {
+		start := o.janitorPasses % n
+		unresolved = slices.Concat(unresolved[start:], unresolved[:start])
+	}
+	o.janitorPasses++
 
 	go func() {
 		defer o.wakeWG.Done()

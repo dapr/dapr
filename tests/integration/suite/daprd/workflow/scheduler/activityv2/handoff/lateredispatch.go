@@ -15,7 +15,6 @@ package handoff
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,10 +27,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
-	"github.com/dapr/dapr/tests/integration/framework/socket"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -64,31 +61,13 @@ func (l *lateredispatch) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
 	l.store = fault.New(t)
-	sock := socket.New(t)
-	ss := statestore.New(t,
-		statestore.WithSocket(sock),
-		statestore.WithStateStore(l.store),
-	)
-	component := fmt.Sprintf(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.%s
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: "true"
-`, ss.SocketName())
+	ss, storeOpts := workflow.FaultStore(t, l.store)
 
-	opts := []daprd.Option{
+	opts := append([]daprd.Option{
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
 		daprd.WithWorkflowJanitorPeriod(t, lateredispatchPeriod),
 		daprd.WithWorkflowClaimRetention(t, time.Millisecond),
-		daprd.WithSocket(t, sock),
-		daprd.WithResourceFiles(component),
-	}
+	}, storeOpts...)
 	l.workflow = workflow.New(t,
 		workflow.WithNoDB(),
 		workflow.WithDaprdOptions(0, opts...),

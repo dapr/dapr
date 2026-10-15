@@ -1,0 +1,132 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package scheduler
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/task"
+)
+
+func init() {
+	suite.Register(new(redispatchstarve))
+}
+
+// redispatchstarve loses both of a workflow's activity executions, then holds
+// every execution-claim read of the first one, so each janitor re-dispatch
+// call for it uses up the whole pass's deadline. The calls of a pass share
+// that deadline, so the second activity must still get a live re-dispatch in a
+// later pass and run.
+type redispatchstarve struct {
+	workflow *workflow.Workflow
+	ss       *statestore.StateStore
+	store    *fault.Store
+}
+
+func (r *redispatchstarve) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
+	r.store = fault.New(t)
+	var storeOpts []daprd.Option
+	r.ss, storeOpts = workflow.FaultStore(t, r.store)
+	r.workflow = workflow.New(t,
+		workflow.WithNoDB(),
+		workflow.WithDaprdOptions(0, append(storeOpts,
+			daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
+			daprd.WithWorkflowJanitorPeriod(t, time.Second*2),
+			daprd.WithExecOptions(exec.WithEnvVars(t,
+				"DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES", "1000",
+			)),
+		)...),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(r.ss, r.workflow),
+	}
+}
+
+func (r *redispatchstarve) Run(t *testing.T, ctx context.Context) {
+	r.workflow.WaitUntilRunning(t, ctx)
+
+	const id = "redispatchstarve"
+	var aRuns, bRuns atomic.Int32
+	require.NoError(t, r.workflow.Registry().AddWorkflowN("Starve", func(c *task.WorkflowContext) (any, error) {
+		a, b := c.CallActivity("A"), c.CallActivity("B")
+		if err := a.Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, b.Await(nil)
+	}))
+	require.NoError(t, r.workflow.Registry().AddActivityN("A", func(task.ActivityContext) (any, error) {
+		aRuns.Add(1)
+		return nil, nil
+	}))
+	require.NoError(t, r.workflow.Registry().AddActivityN("B", func(task.ActivityContext) (any, error) {
+		bRuns.Add(1)
+		return nil, nil
+	}))
+	client := r.workflow.BackendClient(t, ctx)
+
+	// Hold each claim read of A until its call's deadline ends it, and arm
+	// the next one at once.
+	stop := make(chan struct{})
+	held := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-stop:
+		default:
+			close(stop)
+		}
+	})
+	go func() {
+		defer close(held)
+		for {
+			arrived, release := r.store.ArmGetHold(id + "::0::0||execution-claim")
+			select {
+			case <-arrived:
+			case <-stop:
+				release()
+				return
+			}
+		}
+	}()
+
+	_, err := client.ScheduleNewWorkflow(ctx, "Starve", api.WithInstanceID(id))
+	require.NoError(t, err)
+
+	assert.Eventually(t, func() bool { return bRuns.Load() > 0 }, time.Second*20, time.Millisecond*10,
+		"B must get a live re-dispatch while A's call uses up every pass's deadline")
+	assert.Zero(t, aRuns.Load(), "A's re-dispatch must still be held")
+
+	close(stop)
+	<-held
+	meta, err := client.WaitForWorkflowCompletion(ctx, api.InstanceID(id))
+	require.NoError(t, err)
+	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+}

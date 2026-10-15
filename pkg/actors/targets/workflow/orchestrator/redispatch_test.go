@@ -1,5 +1,6 @@
 /*
 Copyright 2026 The Dapr Authors
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,6 +15,9 @@ limitations under the License.
 package orchestrator
 
 import (
+	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -190,4 +195,37 @@ func Test_redispatchActivities_callBoundedByJanitorPeriod(t *testing.T) {
 	// period of the fire, not of its own start.
 	assert.Equal(t, h.deadlines[0], h.deadlines[1])
 	assert.WithinDuration(t, fired.Add(janitorPeriod()), h.deadlines[1], 100*time.Millisecond)
+}
+
+func Test_redispatchActivities_rotatesStartTask(t *testing.T) {
+	period := janitorPeriod
+	janitorPeriod = func() time.Duration { return 200 * time.Millisecond }
+	t.Cleanup(func() { janitorPeriod = period })
+
+	h := newNotifyHarness(t, []*backend.HistoryEvent{startedEvent(), taskScheduledEvent(0), taskScheduledEvent(1)}, nil, false, nil)
+	state, _, err := h.orch.loadInternalState(t.Context())
+	require.NoError(t, err)
+	unresolved := unresolvedScheduledTasks(state, nil)
+	require.Len(t, unresolved, 2)
+
+	// Task 0's target never answers, so its call uses up the pass's deadline.
+	var task1Live atomic.Bool
+	h.lock.Lock()
+	h.onCall = func(ctx context.Context, req *internalv1pb.InternalInvokeRequest) error {
+		if strings.HasSuffix(req.GetActor().GetActorId(), "::0::0") {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		if ctx.Err() == nil {
+			task1Live.Store(true)
+		}
+		return nil
+	}
+	h.lock.Unlock()
+
+	for range 2 {
+		h.orch.redispatchActivities(t.Context(), state, unresolved)
+		h.orch.wakeWG.Wait()
+	}
+	assert.True(t, task1Live.Load(), "task 1 must get a live call within two passes")
 }

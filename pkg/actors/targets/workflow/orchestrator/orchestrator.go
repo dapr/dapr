@@ -90,6 +90,10 @@ type orchestrator struct {
 	// INVARIANT: only touched by janitor fires, which hold the turn lock.
 	janitorRedispatched map[int32]struct{}
 
+	// janitorPasses counts re-dispatch passes, so each pass starts at a
+	// different unresolved task. Same guard as janitorRedispatched.
+	janitorPasses int
+
 	// janitorEscalated records, per task ID, the TaskScheduled event whose
 	// re-dispatch escalated to the durable run-activity reminder this
 	// residency, so the turn that commits the task's resolution can reap the
