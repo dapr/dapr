@@ -117,7 +117,7 @@ service Dapr {
   rpc GetActorTimer(GetActorTimerRequest) returns (GetActorTimerResponse) {}
 
   // Executes state transactions for a specified actor
-  rpc ExecuteActorStateTransaction(ExecuteActorStateTransactionRequest) returns (google.protobuf.Empty) {}
+  rpc ExecuteActorStateTransaction(ExecuteActorStateTransactionRequest) returns (ExecuteActorStateTransactionResponse) {}
 
   // InvokeActor calls a method on an actor.
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}

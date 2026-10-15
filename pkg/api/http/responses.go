@@ -31,6 +31,7 @@ import (
 const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
+	returnETagsHeader     = "dapr-return-etags"
 	metadataPrefix        = "metadata."
 	headerContentType     = "content-type"
 	headerContentLength   = "content-length"

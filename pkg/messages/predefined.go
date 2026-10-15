@@ -99,6 +99,9 @@ var (
 	ErrActorInvoke                   = APIError{"error invoke actor method: %s", errorcodes.ActorInvokeMethod, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorStateGet                 = APIError{"error getting actor state: %s", errorcodes.ActorStateGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorStateTransactionSave     = APIError{"error saving actor transaction state: %s", errorcodes.ActorStateTransactionSave, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateETagMismatch        = APIError{"actor state etag mismatch: %s", errorcodes.ActorStateETagMismatch, http.StatusConflict, grpcCodes.Aborted}
+	ErrActorStateETagInvalid         = APIError{"invalid actor state etag: %s", errorcodes.ActorStateETagInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrActorStateETagUnsupported     = APIError{"actor state etags are not supported: actor state store '%s' %s", errorcodes.ActorStateETagUnsupported, http.StatusBadRequest, grpcCodes.FailedPrecondition}
 	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", errorcodes.ActorReminderCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", errorcodes.ActorReminderGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", errorcodes.ActorReminderDelete, http.StatusInternalServerError, grpcCodes.Internal}

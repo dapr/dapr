@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	contribstate "github.com/dapr/components-contrib/state"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compstate "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -142,6 +143,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 			}
 			log.Info("Using '" + comp.Name + "' as actor state store")
+			actorstate.LogSupport(comp.Name, store)
 
 			// Notify the actor runtime directly on the add side: components
 			// parked behind a not-yet-loaded secret store are initialized

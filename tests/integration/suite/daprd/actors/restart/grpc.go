@@ -37,9 +37,7 @@ func init() {
 	suite.Register(new(grpcstream))
 }
 
-// grpcstream checks the activation id reaches a gRPC app on the callback
-// stream. A method, timer and reminder in one activation share an id, and the
-// next activation after the actor idles out gets a new one.
+// grpcstream checks every callback of one activation, deactivate included, shares an id.
 type grpcstream struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
@@ -70,7 +68,8 @@ func (g *grpcstream) Setup(t *testing.T) []framework.Option {
 			g.rec.Record("reminder", activation.FromMetadata(req.GetMetadata()))
 			return &rtv1.SubscribeActorEventsRequestReminderResponseAlpha1{}, nil
 		}),
-		procgrpcapp.WithOnActorDeactivateFn(func(context.Context, *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error) {
+		procgrpcapp.WithOnActorDeactivateFn(func(_ context.Context, req *rtv1.SubscribeActorEventsResponseDeactivateRequestAlpha1) (*rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1, error) {
+			g.rec.Record("deactivate", activation.FromMetadata(req.GetMetadata()))
 			g.deactivated.Store(true)
 			return &rtv1.SubscribeActorEventsRequestDeactivateResponseAlpha1{}, nil
 		}),
@@ -130,10 +129,16 @@ func (g *grpcstream) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, g.deactivated.Load())
 	}, time.Second*8, time.Millisecond*10)
-	g.rec.Take()
+	assert.Equal(t, first, activation.FirstIDs(g.rec.Take())["deactivate"])
 
+	g.deactivated.Store(false)
 	invoke()
 	next := activation.FirstIDs(g.rec.Take())["invoke"]
 	require.NotEmpty(t, next)
 	assert.NotEqual(t, first, next)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, g.deactivated.Load())
+	}, time.Second*8, time.Millisecond*10)
+	assert.Equal(t, next, activation.FirstIDs(g.rec.Take())["deactivate"])
 }

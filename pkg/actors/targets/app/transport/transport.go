@@ -61,5 +61,5 @@ type Invoker interface {
 	// app with the same headers a method invocation carries.
 	InvokeReminder(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
 	InvokeTimer(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
-	Deactivate(ctx context.Context, actorType, actorID string) error
+	Deactivate(ctx context.Context, actorType, actorID string, md map[string]*internalv1pb.ListStringValue) error
 }

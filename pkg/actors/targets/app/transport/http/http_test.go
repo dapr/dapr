@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	"github.com/dapr/dapr/pkg/channel/fake"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -136,16 +137,21 @@ func TestInvokeTimer_SerializesCallback(t *testing.T) {
 func TestDeactivate_UsesDELETE(t *testing.T) {
 	var seenPath string
 	var seenVerb string
+	var seenMD map[string]*internalv1pb.ListStringValue
 	tp := newHTTPTransport(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 		seenPath = req.Message().GetMethod()
 		seenVerb = req.Message().GetHttpExtension().GetVerb().String()
+		seenMD = req.Metadata()
 		return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
 	})
 
-	err := tp.Deactivate(t.Context(), "myactortype", "a")
+	err := tp.Deactivate(t.Context(), "myactortype", "a", map[string]*internalv1pb.ListStringValue{
+		transport.ActivationIDHeader: {Values: []string{"act-1"}},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "actors/myactortype/a", seenPath)
 	assert.Equal(t, "DELETE", seenVerb)
+	assert.Equal(t, []string{"act-1"}, seenMD[transport.ActivationIDHeader].GetValues())
 }
 
 func TestDeactivate_NonOKFails(t *testing.T) {
@@ -153,6 +159,6 @@ func TestDeactivate_NonOKFails(t *testing.T) {
 		return invokev1.NewInvokeMethodResponse(http.StatusInternalServerError, "boom", nil), nil
 	})
 
-	err := tp.Deactivate(t.Context(), "myactortype", "a")
+	err := tp.Deactivate(t.Context(), "myactortype", "a", nil)
 	require.Error(t, err)
 }

@@ -23,6 +23,7 @@ type Fake struct {
 	getFn                         func(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error)
 	getBulkFn                     func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error)
 	transactionalStateOperationFn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
+	transactionalWithETagsFn      func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error)
 }
 
 func New() *Fake {
@@ -35,6 +36,9 @@ func New() *Fake {
 		},
 		transactionalStateOperationFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 			return nil
+		},
+		transactionalWithETagsFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error) {
+			return map[string]string{}, nil
 		},
 	}
 }
@@ -64,4 +68,13 @@ func (f *Fake) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock b
 
 func (f *Fake) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 	return f.transactionalStateOperationFn(ctx, ignoreHosted, req, lock)
+}
+
+func (f *Fake) WithTransactionalStateOperationWithETagsFn(fn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error)) *Fake {
+	f.transactionalWithETagsFn = fn
+	return f
+}
+
+func (f *Fake) TransactionalStateOperationWithETags(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) (map[string]string, error) {
+	return f.transactionalWithETagsFn(ctx, ignoreHosted, req, lock)
 }

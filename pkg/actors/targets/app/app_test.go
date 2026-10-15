@@ -134,6 +134,12 @@ func Test_ActivationIDOnEveryCallback(t *testing.T) {
 		assert.Equal(t, got[0].ids, c.ids, c.call)
 	}
 
+	require.NoError(t, target.Deactivate(t.Context()))
+	deleted := calls.take()
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "DELETE actors/abc/a", deleted[0].call)
+	assert.Equal(t, got[0].ids, deleted[0].ids)
+
 	invokeFoo(t, fact.GetOrCreate("b"))
 	assert.NotEqual(t, got[0].ids[0], activationID(t, calls))
 }
@@ -165,6 +171,7 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 			got := calls.take()
 			require.Len(t, got, 1)
 			assert.Equal(t, "DELETE actors/abc/a", got[0].call)
+			assert.Equal(t, []string{first}, got[0].ids)
 
 			invokeFoo(t, fact.GetOrCreate("a"))
 			assert.NotEqual(t, first, activationID(t, calls))
@@ -189,7 +196,7 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 				return c.call == "DELETE actors/abc/a"
 			})
 		}, 5*time.Second, 10*time.Millisecond)
-		calls.take()
+		assert.Equal(t, []callback{{call: "DELETE actors/abc/a", ids: []string{first}}}, calls.take())
 
 		invokeFoo(t, fact.GetOrCreate("a"))
 		assert.NotEqual(t, first, activationID(t, calls))
@@ -420,7 +427,7 @@ func Test_ActivationWaitsForPreviousDelete(t *testing.T) {
 				clock:       clock,
 				AppChannel: fake.New().WithInvokeMethod(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 					if req.Message().GetHttpExtension().GetVerb().String() == http.MethodDelete {
-						record("DELETE start")
+						record("DELETE start " + req.Metadata()[transport.ActivationIDHeader].GetValues()[0])
 						once.Do(func() { close(deleting) })
 						<-release
 						record("DELETE done")
@@ -484,8 +491,8 @@ func Test_ActivationWaitsForPreviousDelete(t *testing.T) {
 
 			got := snapshot()
 			require.Len(t, got, 4, got)
-			assert.Equal(t, []string{"DELETE start", "DELETE done"}, got[1:3])
 			assert.True(t, strings.HasPrefix(got[0], "PUT "), got)
+			assert.Equal(t, []string{"DELETE start " + strings.TrimPrefix(got[0], "PUT "), "DELETE done"}, got[1:3])
 			assert.True(t, strings.HasPrefix(got[3], "PUT "), got)
 			assert.NotEqual(t, got[0], got[3])
 		})

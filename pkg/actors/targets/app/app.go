@@ -152,7 +152,8 @@ func (a *app) Deactivate(ctx context.Context) error {
 	a.lock.Close(ctx)
 	a.table.Delete(a.actorID)
 
-	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID); err != nil {
+	md := map[string]*internalv1pb.ListStringValue{transport.ActivationIDHeader: a.activationMD}
+	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID, md); err != nil {
 		return err
 	}
 

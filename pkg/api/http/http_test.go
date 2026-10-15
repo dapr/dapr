@@ -87,6 +87,7 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -1324,6 +1325,228 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Get actor state - returns ETag header", func(t *testing.T) {
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+				return &actorsapi.StateResponse{Data: fakeData, ETag: ptr.Of("7")}, nil
+			}), nil
+		})
+
+		resp := fakeServer(t).DoRequest("GET", "v1.0/actors/fakeActorType/fakeActorID/state/key1", nil, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "7", resp.RawHeader.Get("ETag"))
+	})
+
+	t.Run("Get actor state - no ETag header without etag", func(t *testing.T) {
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+				return &actorsapi.StateResponse{Data: fakeData}, nil
+			}), nil
+		})
+
+		resp := fakeServer(t).DoRequest("GET", "v1.0/actors/fakeActorType/fakeActorID/state/key1", nil, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.NotContains(t, resp.RawHeader, "Etag")
+	})
+
+	t.Run("Get actor state - empty value still returns ETag header", func(t *testing.T) {
+		for name, data := range map[string][]byte{"nil": nil, "empty": {}} {
+			t.Run(name, func(t *testing.T) {
+				actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+					return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+						return &actorsapi.StateResponse{Data: data, ETag: ptr.Of("7")}, nil
+					}), nil
+				})
+
+				resp := fakeServer(t).DoRequest("GET", "v1.0/actors/fakeActorType/fakeActorID/state/key1", nil, nil)
+				assert.Equal(t, 204, resp.StatusCode)
+				assert.Equal(t, "7", resp.RawHeader.Get("ETag"))
+				assert.Empty(t, resp.RawBody)
+			})
+		}
+	})
+
+	t.Run("Get actor state - missing key has no ETag header", func(t *testing.T) {
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+				return &actorsapi.StateResponse{}, nil
+			}), nil
+		})
+
+		resp := fakeServer(t).DoRequest("GET", "v1.0/actors/fakeActorType/fakeActorID/state/key1", nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.NotContains(t, resp.RawHeader, "Etag")
+	})
+
+	t.Run("Transaction - passes etags with first write", func(t *testing.T) {
+		var got *actorsapi.TransactionalRequest
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorsapi.TransactionalRequest, _ bool) error {
+				got = req
+				return nil
+			}), nil
+		})
+
+		body := []byte(`[
+			{"operation":"upsert","request":{"key":"k1","value":"v","etag":"1"}},
+			{"operation":"delete","request":{"key":"k2","etag":"2"}},
+			{"operation":"upsert","request":{"key":"k3","value":"v"}},
+			{"operation":"delete","request":{"key":"k4"}}
+		]`)
+		resp := fakeServer(t).DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		require.NotNil(t, got)
+		assert.True(t, got.FirstWriteETag)
+		require.Len(t, got.Operations, 4)
+
+		opts := actorsapi.StateOperationOpts{FirstWriteETag: got.FirstWriteETag}
+		ops := make([]state.TransactionalStateOperation, len(got.Operations))
+		for i, o := range got.Operations {
+			var err error
+			ops[i], err = o.StateOperation("base||", opts)
+			require.NoError(t, err)
+		}
+		assert.Equal(t, state.SetRequest{
+			Key: "base||k1", Value: "v", ETag: ptr.Of("1"),
+			Options: state.SetStateOption{Concurrency: state.FirstWrite},
+		}, ops[0])
+		assert.Equal(t, state.DeleteRequest{
+			Key: "base||k2", ETag: ptr.Of("2"),
+			Options: state.DeleteStateOption{Concurrency: state.FirstWrite},
+		}, ops[1])
+		assert.Equal(t, state.SetRequest{Key: "base||k3", Value: "v"}, ops[2])
+		assert.Equal(t, state.DeleteRequest{Key: "base||k4"}, ops[3])
+	})
+
+	t.Run("Get actor state - asks for strict etags", func(t *testing.T) {
+		var got *actorsapi.GetStateRequest
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithGetFn(func(_ context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
+				got = req
+				return &actorsapi.StateResponse{}, nil
+			}), nil
+		})
+
+		resp := fakeServer(t).DoRequest("GET", "v1.0/actors/fakeActorType/fakeActorID/state/key1", nil, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		require.NotNil(t, got)
+		assert.True(t, got.StrictETag)
+	})
+
+	t.Run("Transaction - passes create-only", func(t *testing.T) {
+		var got *actorsapi.TransactionalRequest
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorsapi.TransactionalRequest, _ bool) error {
+				got = req
+				return nil
+			}), nil
+		})
+
+		body := []byte(`[
+			{"operation":"upsert","request":{"key":"k1","value":"v","createOnly":true}},
+			{"operation":"upsert","request":{"key":"k2","value":"v","createOnly":false}},
+			{"operation":"delete","request":{"key":"k3","createOnly":true}}
+		]`)
+		resp := fakeServer(t).DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil)
+		assert.Equal(t, 204, resp.StatusCode)
+		require.NotNil(t, got)
+		require.Len(t, got.Operations, 3)
+
+		opts := actorsapi.StateOperationOpts{FirstWriteETag: got.FirstWriteETag}
+		op, err := got.Operations[0].StateOperation("base||", opts)
+		require.NoError(t, err)
+		assert.Equal(t, state.SetRequest{
+			Key: "base||k1", Value: "v",
+			Options: state.SetStateOption{CreateOnly: true},
+		}, op)
+		op, err = got.Operations[1].StateOperation("base||", opts)
+		require.NoError(t, err)
+		assert.Equal(t, state.SetRequest{Key: "base||k2", Value: "v"}, op)
+		_, err = got.Operations[2].StateOperation("base||", opts)
+		require.ErrorIs(t, err, messages.ErrBadRequest)
+	})
+
+	t.Run("Transaction - returned etags are opt-in", func(t *testing.T) {
+		var plain, withETags int
+		returned := map[string]string{"k1": "9"}
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().
+				WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
+					plain++
+					return nil
+				}).
+				WithTransactionalStateOperationWithETagsFn(func(_ context.Context, _ bool, req *actorsapi.TransactionalRequest, _ bool) (map[string]string, error) {
+					withETags++
+					assert.True(t, req.FirstWriteETag)
+					return returned, nil
+				}), nil
+		})
+		body := []byte(`[{"operation":"upsert","request":{"key":"k1","value":"v"}}]`)
+		server := fakeServer(t)
+
+		for _, headers := range [][]string{nil, {"dapr-return-etags", "false"}, {"dapr-return-etags", ""}} {
+			resp := server.DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil, headers...)
+			assert.Equal(t, 204, resp.StatusCode)
+			assert.Empty(t, resp.RawBody)
+		}
+		assert.Equal(t, 3, plain)
+		assert.Equal(t, 0, withETags)
+
+		for _, v := range []string{"true", "1", "yes"} {
+			resp := server.DoRequest("PUT", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil, "Dapr-Return-ETags", v)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.ContentType)
+			assert.JSONEq(t, `{"etags":{"k1":"9"}}`, string(resp.RawBody))
+		}
+		assert.Equal(t, 3, withETags)
+
+		for _, r := range []map[string]string{nil, {}} {
+			returned = r
+			resp := server.DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil, "dapr-return-etags", "true")
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.JSONEq(t, `{"etags":{}}`, string(resp.RawBody))
+		}
+		assert.Equal(t, 3, plain)
+	})
+
+	t.Run("Transaction - returned etags errors", func(t *testing.T) {
+		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+			return statefake.New().WithTransactionalStateOperationWithETagsFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) (map[string]string, error) {
+				return nil, messages.ErrActorStateETagMismatch.WithFormat("x")
+			}), nil
+		})
+
+		body := []byte(`[{"operation":"upsert","request":{"key":"k1","value":"v","etag":"1"}}]`)
+		resp := fakeServer(t).DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil, "dapr-return-etags", "true")
+		assert.Equal(t, 409, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_STATE_ETAG_MISMATCH", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Transaction - etag errors", func(t *testing.T) {
+		for name, test := range map[string]struct {
+			err    error
+			status int
+			code   string
+		}{
+			"mismatch":         {err: messages.ErrActorStateETagMismatch.WithFormat("x"), status: 409, code: "ERR_ACTOR_STATE_ETAG_MISMATCH"},
+			"invalid":          {err: messages.ErrActorStateETagInvalid.WithFormat("x"), status: 400, code: "ERR_ACTOR_STATE_ETAG_INVALID"},
+			"etag unsupported": {err: messages.ErrActorStateETagUnsupported.WithFormat("s", "r"), status: 400, code: "ERR_ACTOR_STATE_ETAG_UNSUPPORTED"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				actors.WithState(func(context.Context) (actorsstate.Interface, error) {
+					return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
+						return test.err
+					}), nil
+				})
+
+				body := []byte(`[{"operation":"upsert","request":{"key":"k1","value":"v","etag":"1"}}]`)
+				resp := fakeServer(t).DoRequest("POST", "v1.0/actors/fakeActorType/fakeActorID/state", body, nil)
+				assert.Equal(t, test.status, resp.StatusCode)
+				assert.Equal(t, test.code, resp.ErrorBody["errorCode"])
+			})
+		}
 	})
 
 	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {

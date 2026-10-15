@@ -280,7 +280,7 @@ type DaprClient interface {
 	// Gets a timer registered on this host for an actor.
 	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
+	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[v1.ExecuteActorStateTransactionResponse], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
 	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
@@ -569,7 +569,7 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("GetActorTimer")),
 			connect.WithClientOptions(opts...),
 		),
-		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, emptypb.Empty](
+		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, v1.ExecuteActorStateTransactionResponse](
 			httpClient,
 			baseURL+DaprExecuteActorStateTransactionProcedure,
 			connect.WithSchema(daprMethods.ByName("ExecuteActorStateTransaction")),
@@ -893,7 +893,7 @@ type daprClient struct {
 	getActorState                  *connect.Client[v1.GetActorStateRequest, v1.GetActorStateResponse]
 	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
 	getActorTimer                  *connect.Client[v1.GetActorTimerRequest, v1.GetActorTimerResponse]
-	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
+	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, v1.ExecuteActorStateTransactionResponse]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
 	subscribeActorEventsAlpha1     *connect.Client[v1.SubscribeActorEventsRequestAlpha1, v1.SubscribeActorEventsResponseAlpha1]
 	getConfigurationAlpha1         *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
@@ -1072,7 +1072,7 @@ func (c *daprClient) GetActorTimer(ctx context.Context, req *connect.Request[v1.
 }
 
 // ExecuteActorStateTransaction calls dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction.
-func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, req *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, req *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[v1.ExecuteActorStateTransactionResponse], error) {
 	return c.executeActorStateTransaction.CallUnary(ctx, req)
 }
 
@@ -1395,7 +1395,7 @@ type DaprHandler interface {
 	// Gets a timer registered on this host for an actor.
 	GetActorTimer(context.Context, *connect.Request[v1.GetActorTimerRequest]) (*connect.Response[v1.GetActorTimerResponse], error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
+	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[v1.ExecuteActorStateTransactionResponse], error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *connect.Request[v1.InvokeActorRequest]) (*connect.Response[v1.InvokeActorResponse], error)
 	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
@@ -2233,7 +2233,7 @@ func (UnimplementedDaprHandler) GetActorTimer(context.Context, *connect.Request[
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorTimer is not implemented"))
 }
 
-func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[v1.ExecuteActorStateTransactionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction is not implemented"))
 }
 

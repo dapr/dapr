@@ -165,7 +165,7 @@ type DaprClient interface {
 	// Gets a timer registered on this host for an actor.
 	GetActorTimer(ctx context.Context, in *GetActorTimerRequest, opts ...grpc.CallOption) (*GetActorTimerResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*ExecuteActorStateTransactionResponse, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
 	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
@@ -537,8 +537,8 @@ func (c *daprClient) GetActorTimer(ctx context.Context, in *GetActorTimerRequest
 	return out, nil
 }
 
-func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*ExecuteActorStateTransactionResponse, error) {
+	out := new(ExecuteActorStateTransactionResponse)
 	err := c.cc.Invoke(ctx, Dapr_ExecuteActorStateTransaction_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -1158,7 +1158,7 @@ type DaprServer interface {
 	// Gets a timer registered on this host for an actor.
 	GetActorTimer(context.Context, *GetActorTimerRequest) (*GetActorTimerResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*ExecuteActorStateTransactionResponse, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
 	// SubscribeActorEventsAlpha1 is the app-initiated stream over which an
@@ -1353,7 +1353,7 @@ func (UnimplementedDaprServer) GetActorReminder(context.Context, *GetActorRemind
 func (UnimplementedDaprServer) GetActorTimer(context.Context, *GetActorTimerRequest) (*GetActorTimerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorTimer not implemented")
 }
-func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*ExecuteActorStateTransactionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
 }
 func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error) {

@@ -177,7 +177,7 @@ func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder, md 
 }
 
 // Deactivate issues a deactivate callback through the stream.
-func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) error {
+func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string, md map[string]*internalv1pb.ListStringValue) error {
 	_, err := t.stream.Send(ctx, func(id string) *runtimev1pb.SubscribeActorEventsResponseAlpha1 {
 		return &runtimev1pb.SubscribeActorEventsResponseAlpha1{
 			ResponseType: &runtimev1pb.SubscribeActorEventsResponseAlpha1_DeactivateRequest{
@@ -185,6 +185,7 @@ func (t *Transport) Deactivate(ctx context.Context, actorType, actorID string) e
 					Id:        id,
 					ActorType: actorType,
 					ActorId:   actorID,
+					Metadata:  flattenFirstValue(md),
 				},
 			},
 		}
