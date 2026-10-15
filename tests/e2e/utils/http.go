@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -216,12 +217,13 @@ func doRequest(newReq func() (*http.Request, error)) (*http.Response, error) {
 		if err != nil {
 			return nil, err
 		}
-		var reused bool
+		// ClientTrace hooks may run concurrently with Do, so the flag is atomic.
+		var reused atomic.Bool
 		req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
-			GotConn: func(info httptrace.GotConnInfo) { reused = info.Reused },
+			GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) },
 		}))
 		resp, err = httpClient.Do(req)
-		if err == nil || !reused {
+		if err == nil || !reused.Load() {
 			return resp, err
 		}
 	}
