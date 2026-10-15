@@ -19,14 +19,12 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -40,27 +38,11 @@ func init() {
 	suite.Register(new(transactionresiliency))
 }
 
-// deadlineStore records how long the context handed to Multi has left
-// before its deadline.
-type deadlineStore struct {
-	*fault.Store
-	remaining atomic.Int64
-	hasLimit  atomic.Bool
-}
-
-func (s *deadlineStore) Multi(ctx context.Context, req *state.TransactionalStateRequest) error {
-	if deadline, ok := ctx.Deadline(); ok {
-		s.remaining.Store(int64(time.Until(deadline)))
-		s.hasLimit.Store(true)
-	}
-	return s.Store.Multi(ctx, req)
-}
-
 // transactionresiliency ensures that the resiliency policy timeout of a
 // state store reaches the store when a transaction is sent over HTTP.
 type transactionresiliency struct {
 	daprd *procdaprd.Daprd
-	store *deadlineStore
+	store *fault.Store
 }
 
 func (r *transactionresiliency) Setup(t *testing.T) []framework.Option {
@@ -68,7 +50,7 @@ func (r *transactionresiliency) Setup(t *testing.T) []framework.Option {
 		t.Skip("skipping unix socket based test on windows")
 	}
 
-	r.store = &deadlineStore{Store: fault.New(t)}
+	r.store = fault.New(t)
 
 	sock := socket.New(t)
 	ss := statestore.New(t,
@@ -131,7 +113,8 @@ func (r *transactionresiliency) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	require.True(t, r.store.hasLimit.Load(), "the store context has no deadline")
-	assert.Positive(t, r.store.remaining.Load())
-	assert.LessOrEqual(t, time.Duration(r.store.remaining.Load()), time.Second)
+	remaining, ok := r.store.MultiDeadline()
+	require.True(t, ok, "the store context has no deadline")
+	assert.Positive(t, remaining)
+	assert.LessOrEqual(t, remaining, time.Second)
 }
