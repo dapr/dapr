@@ -30,7 +30,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/concurrency"
@@ -307,7 +306,6 @@ func (p *provider) Run(ctx context.Context) error {
 			}
 			p.sec.id = id.ID
 			close(p.readyCh)
-			diagnostics.DefaultMonitoring.MTLSInitCompleted()
 			p.htarget.Ready()
 			<-ctx.Done()
 			return nil
