@@ -19,7 +19,9 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
@@ -547,4 +550,430 @@ func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
 		}
 	}
 	assert.Equal(t, expected.JWT, actual.JWT)
+}
+
+func TestKube_getRotationState(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T, extraSecretData map[string][]byte) *kube {
+		t.Helper()
+
+		secretData := map[string][]byte{
+			"ca.crt":                      base.X509.TrustAnchors,
+			"tls.crt":                     base.X509.IssChainPEM,
+			"tls.key":                     base.X509.IssKeyPEM,
+			"rotation.phase":              []byte(ca_bundle.RotationPhaseDistributing),
+			"rotation.new-ca.crt":         pending.X509.TrustAnchors,
+			"rotation.new-issuer.crt":     pending.X509.IssChainPEM,
+			"rotation.new-issuer.key":     pending.X509.IssKeyPEM,
+			"rotation.distributed-at":     []byte("2026-01-01T00:00:00Z"),
+			"rotation.old-root-not-after": []byte("2027-01-01T00:00:00Z"),
+		}
+		for k, v := range extraSecretData {
+			secretData[k] = v
+		}
+
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       secretData,
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(base.X509.TrustAnchors)},
+			},
+		)
+
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+				JWT: config.ConfigJWT{
+					SigningKeyPath: "jwt.key",
+					JWKSPath:       "jwks.json",
+					TTL:            config.DefaultJWTTTL,
+				},
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("valid rotation state is loaded", func(t *testing.T) {
+		k := newKube(t, nil)
+		bndl, err := k.get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, bndl.Rotation)
+		assert.Equal(t, ca_bundle.RotationPhaseDistributing, bndl.Rotation.Phase)
+		assert.Equal(t, pending.X509.TrustAnchors, bndl.Rotation.NewTrustAnchors)
+		assert.Equal(t, "2026-01-01T00:00:00Z", bndl.Rotation.DistributedAt.Format(time.RFC3339))
+		assert.NotNil(t, bndl.Rotation.NewIssChain)
+		assert.NotNil(t, bndl.Rotation.NewIssKey)
+	})
+
+	t.Run("malformed distributed-at returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.distributed-at": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
+
+	t.Run("malformed signing-at returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.signing-at": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
+
+	t.Run("malformed old-root-not-after returns error", func(t *testing.T) {
+		k := newKube(t, map[string][]byte{"rotation.old-root-not-after": []byte("not-a-timestamp")})
+		_, err := k.get(t.Context())
+		require.ErrorContains(t, err, "invalid rotation state")
+	})
+}
+
+func TestKube_getRotationStateValidation(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+	// Reuse the fixture from TestKube_getRotationState via table of overrides.
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T, overrides map[string][]byte) *kube {
+		t.Helper()
+		secretData := map[string][]byte{
+			"ca.crt":                      base.X509.TrustAnchors,
+			"tls.crt":                     base.X509.IssChainPEM,
+			"tls.key":                     base.X509.IssKeyPEM,
+			"rotation.phase":              []byte(ca_bundle.RotationPhaseDistributing),
+			"rotation.new-ca.crt":         pending.X509.TrustAnchors,
+			"rotation.new-issuer.crt":     pending.X509.IssChainPEM,
+			"rotation.new-issuer.key":     pending.X509.IssKeyPEM,
+			"rotation.distributed-at":     []byte("2026-01-01T00:00:00Z"),
+			"rotation.old-root-not-after": []byte("2027-01-01T00:00:00Z"),
+		}
+		for k, v := range overrides {
+			if v == nil {
+				delete(secretData, k)
+			} else {
+				secretData[k] = v
+			}
+		}
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       secretData,
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(base.X509.TrustAnchors)},
+			},
+		)
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	tests := map[string]struct {
+		overrides map[string][]byte
+		expErr    string
+	}{
+		"unknown phase": {
+			overrides: map[string][]byte{"rotation.phase": []byte("bogus")},
+			expErr:    "unknown rotation phase",
+		},
+		"missing distributed-at": {
+			overrides: map[string][]byte{"rotation.distributed-at": nil},
+			expErr:    "missing the distributed timestamp",
+		},
+		"missing old-root-not-after": {
+			overrides: map[string][]byte{"rotation.old-root-not-after": nil},
+			expErr:    "missing the old root CA expiry",
+		},
+		"signing phase without signing-at": {
+			overrides: map[string][]byte{"rotation.phase": []byte(ca_bundle.RotationPhaseSigning)},
+			expErr:    "missing the signing timestamp",
+		},
+		"missing pending credentials": {
+			overrides: map[string][]byte{"rotation.new-issuer.key": nil},
+			expErr:    "missing pending rotation credentials",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			k := newKube(t, test.overrides)
+			_, err := k.get(t.Context())
+			require.ErrorContains(t, err, test.expErr)
+		})
+	}
+}
+
+func TestKube_storeRotationState(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	newKube := func(t *testing.T) *kube {
+		t.Helper()
+		fakeclient := fake.NewSimpleClientset(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+			},
+		)
+		return &kube{
+			client: fakeclient,
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	newRotation := func() *ca_bundle.RotationState {
+		return &ca_bundle.RotationState{
+			Phase:           ca_bundle.RotationPhaseDistributing,
+			NewTrustAnchors: pending.X509.TrustAnchors,
+			NewIssChainPEM:  pending.X509.IssChainPEM,
+			NewIssKeyPEM:    pending.X509.IssKeyPEM,
+			DistributedAt:   time.Now(),
+			OldRootNotAfter: time.Now().Add(time.Hour),
+		}
+	}
+
+	t.Run("zero SigningAt is stored by omitting the key, not as nil", func(t *testing.T) {
+		k := newKube(t)
+		bndl := ca_bundle.Bundle{X509: base.X509, Rotation: newRotation()}
+		require.NoError(t, k.store(t.Context(), bndl))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		_, ok := secret.Data["rotation.signing-at"]
+		assert.False(t, ok, "zero SigningAt must not be stored")
+		assert.NotEmpty(t, secret.Data["rotation.distributed-at"])
+		assert.NotEmpty(t, secret.Data["rotation.old-root-not-after"])
+		for key, value := range secret.Data {
+			assert.NotNil(t, value, "secret value for %q must never be nil", key)
+		}
+	})
+
+	t.Run("non-zero SigningAt is stored", func(t *testing.T) {
+		k := newKube(t)
+		rot := newRotation()
+		rot.Phase = ca_bundle.RotationPhaseSigning
+		rot.SigningAt = time.Now()
+		bndl := ca_bundle.Bundle{X509: base.X509, Rotation: rot}
+		require.NoError(t, k.store(t.Context(), bndl))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.NotEmpty(t, secret.Data["rotation.signing-at"])
+	})
+
+	t.Run("stale signing-at from a previous write is removed when zero", func(t *testing.T) {
+		k := newKube(t)
+		rot := newRotation()
+		rot.Phase = ca_bundle.RotationPhaseSigning
+		rot.SigningAt = time.Now()
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: base.X509, Rotation: rot}))
+
+		require.NoError(t, k.store(t.Context(), ca_bundle.Bundle{X509: base.X509, Rotation: newRotation()}))
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		_, ok := secret.Data["rotation.signing-at"]
+		assert.False(t, ok, "a zero SigningAt must remove any previously stored value")
+	})
+}
+
+func TestKube_storePartialFailure(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	base := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+
+	origAnchors := []byte("orig-anchors")
+	newObjects := func() (*corev1.Secret, *corev1.ConfigMap) {
+		return &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string][]byte{"ca.crt": origAnchors},
+			}, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: "dapr-system-test"},
+				Data:       map[string]string{"ca.crt": string(origAnchors)},
+			}
+	}
+
+	rotationBundle := ca_bundle.Bundle{
+		X509: base.X509,
+		Rotation: &ca_bundle.RotationState{
+			Phase:           ca_bundle.RotationPhaseDistributing,
+			NewTrustAnchors: pending.X509.TrustAnchors,
+			NewIssChainPEM:  pending.X509.IssChainPEM,
+			NewIssKeyPEM:    pending.X509.IssKeyPEM,
+			DistributedAt:   time.Now(),
+			OldRootNotAfter: time.Now().Add(time.Hour),
+		},
+	}
+
+	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
+		t.Helper()
+		return &kube{
+			client: fake.NewSimpleClientset(objects...),
+			config: config.Config{
+				RootCertPath:   "ca.crt",
+				IssuerCertPath: "tls.crt",
+				IssuerKeyPath:  "tls.key",
+			},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("failed ConfigMap update leaves the Secret untouched", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+		k.client.(*fake.Clientset).PrependReactor("update", "configmaps", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("configmap update failed")
+		})
+
+		require.Error(t, k.store(t.Context(), rotationBundle))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, origAnchors, secret.Data["ca.crt"], "the Secret must not be written before the ConfigMap")
+		_, ok := secret.Data["rotation.phase"]
+		assert.False(t, ok, "no rotation state may be persisted when the ConfigMap update fails")
+	})
+
+	t.Run("failed Secret update restores the ConfigMap", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+		k.client.(*fake.Clientset).PrependReactor("update", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("secret update failed")
+		})
+
+		require.Error(t, k.store(t.Context(), rotationBundle))
+
+		configMap, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(origAnchors), configMap.Data["ca.crt"],
+			"the ConfigMap must be restored when the Secret update fails")
+	})
+
+	t.Run("successful store updates both objects consistently", func(t *testing.T) {
+		sec, cm := newObjects()
+		k := newKube(t, sec, cm)
+
+		require.NoError(t, k.store(t.Context(), rotationBundle))
+
+		secret, err := k.client.CoreV1().Secrets("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		configMap, err := k.client.CoreV1().ConfigMaps("dapr-system-test").Get(t.Context(), "dapr-trust-bundle", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, string(secret.Data["ca.crt"]), configMap.Data["ca.crt"],
+			"Secret and ConfigMap trust anchors must match after store")
+		assert.NotEmpty(t, secret.Data["rotation.phase"])
+	})
+}
+
+func TestKube_verifyPropagation(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-ns")
+
+	old := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	pending := makeTestX509Bundle(t, time.Now().Add(365*24*time.Hour))
+	combined := string(old.X509.TrustAnchors) + string(pending.X509.TrustAnchors)
+
+	rot := &ca_bundle.RotationState{NewTrustAnchors: pending.X509.TrustAnchors}
+
+	trustBundleCM := func(ns, anchors string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle", Namespace: ns},
+			Data:       map[string]string{"ca.crt": anchors},
+		}
+	}
+	daprPod := func(ns, name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns,
+				Labels:    map[string]string{"dapr.io/sidecar-injected": "true"},
+			},
+		}
+	}
+
+	newKube := func(t *testing.T, objects ...runtime.Object) *kube {
+		t.Helper()
+		return &kube{
+			client:    fake.NewSimpleClientset(objects...),
+			config:    config.Config{RootCertPath: "ca.crt"},
+			namespace: "dapr-system-test",
+		}
+	}
+
+	t.Run("every namespace with Dapr pods carries the new root", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("appns", combined),
+			daprPod("appns", "pod1"),
+		)
+		require.NoError(t, k.verifyPropagation(t.Context(), rot))
+	})
+
+	t.Run("stale configmaps in namespaces without Dapr pods are ignored", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("stalens", string(old.X509.TrustAnchors)),
+		)
+		require.NoError(t, k.verifyPropagation(t.Context(), rot),
+			"a stale copy in a namespace without Dapr workloads must not block cleanup")
+	})
+
+	t.Run("a lagging namespace defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("appns", string(old.X509.TrustAnchors)),
+			daprPod("appns", "pod1"),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "appns")
+	})
+
+	t.Run("a namespace with Dapr pods but no configmap defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			daprPod("missingns", "pod1"),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "missingns",
+			"pods in a namespace without the ConfigMap run on static trust anchors and must block cleanup")
+	})
+
+	t.Run("the control-plane namespace source is always required", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", string(old.X509.TrustAnchors)),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "dapr-system-test")
+	})
+
+	t.Run("an empty trust bundle configmap defers propagation", func(t *testing.T) {
+		k := newKube(t,
+			trustBundleCM("dapr-system-test", combined),
+			trustBundleCM("emptyns", ""),
+			daprPod("emptyns", "pod1"),
+		)
+		err := k.verifyPropagation(t.Context(), rot)
+		require.ErrorContains(t, err, "emptyns")
+	})
 }

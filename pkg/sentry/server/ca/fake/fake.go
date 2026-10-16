@@ -77,6 +77,10 @@ func (f *Fake) WithJWTSignatureAlgorithm(fn func() jwa.KeyAlgorithm) *Fake {
 	return f
 }
 
+func (f *Fake) Run(_ context.Context) error {
+	return nil
+}
+
 func (f *Fake) SignIdentity(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 	return f.signIdentityFn(ctx, req)
 }
