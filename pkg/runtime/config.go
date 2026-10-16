@@ -115,6 +115,8 @@ type Config struct {
 	ApplicationPort               string
 	DaprGracefulShutdownSeconds   int
 	DaprBlockShutdownDuration     *time.Duration
+	// OnShutdownStart is called when the runtime begins closing its resources.
+	OnShutdownStart               func()
 	ActorsService                 string
 	ActorsDisseminationTimeout    time.Duration
 	ActorsPlacementStartupTimeout time.Duration
@@ -177,6 +179,7 @@ type internalConfig struct {
 	readBufferSize                int // In bytes
 	gracefulShutdownDuration      time.Duration
 	blockShutdownDuration         *time.Duration
+	onShutdownStart               func()
 	enableAPILogging              *bool
 	disableBuiltinK8sSecretStore  bool
 	config                        []string
@@ -398,6 +401,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		registry:                      registry.New(c.Registry),
 		metricsExporter:               metrics.New(c.Metrics),
 		blockShutdownDuration:         c.DaprBlockShutdownDuration,
+		onShutdownStart:               c.OnShutdownStart,
 		actorsService:                 c.ActorsService,
 		actorsDisseminationTimeout:    c.ActorsDisseminationTimeout,
 		actorsPlacementStartupTimeout: c.ActorsPlacementStartupTimeout,
