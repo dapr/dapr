@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -113,10 +114,11 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			// The metadata row exists once something was saved, as the
-			// post-save etag refresh expects.
+			// post-save etag refresh expects, and describes the cache: the
+			// store is in step with it.
 			if h.saved && req.Key == wfenginestate.MetadataKey {
 				etag := "etag"
-				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+				return &actorapi.StateResponse{Data: h.metadataRow(), ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
 		}).
@@ -179,6 +181,19 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 	h.orch = fact.GetOrCreate(instanceID).(*orchestrator)
 
 	return h
+}
+
+func (h *wakeHarness) metadataRow() []byte {
+	s := h.orch.state
+	if s == nil {
+		return []byte{1}
+	}
+	row, _ := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		InboxLength:   uint64(len(s.Inbox)),
+		HistoryLength: uint64(len(s.History)),
+		Generation:    s.Generation,
+	})
+	return row
 }
 
 // primeRunning primes the orchestrator with a running workflow that has an
