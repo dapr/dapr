@@ -19,6 +19,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/helm"
 	_ "github.com/dapr/dapr/tests/integration/suite/injector"
+	_ "github.com/dapr/dapr/tests/integration/suite/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
