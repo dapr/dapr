@@ -15,6 +15,7 @@ package remote
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -115,8 +116,25 @@ func (s *stream) Run(t *testing.T, ctx context.Context) {
 		return err
 	}
 
-	// Both hosts have registered with placement, but wait until the table has
-	// settled so ownership answers are stable.
+	// HostReady does not wait for the app to register its actor types, so wait
+	// until placement lists both hosts for abc: probing ownership under a
+	// one-host table picks IDs that move when the second host joins.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := s.place.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		var hosts int
+		for _, host := range table.Hosts {
+			if slices.Contains(host.Entities, "abc") {
+				hosts++
+			}
+		}
+		assert.Equal(c, 2, hosts)
+	}, time.Second*10, time.Millisecond*100)
+
+	// Placement lists both hosts before the daprds apply the new table; wait
+	// until exactly one host answers for an ID.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		err1 := register(client1, "probe")
 		err2 := register(client2, "probe")
@@ -147,16 +165,26 @@ func (s *stream) Run(t *testing.T, ctx context.Context) {
 		return false
 	}
 
-	owner1, owner2 := "", ""
-	for i := 0; owner1 == "" || owner2 == ""; i++ {
-		require.Less(t, i, 100, "actor IDs never hashed to both hosts")
-		id := strconv.Itoa(i)
-		if ownerOf(id) {
-			if owner1 == "" {
-				owner1 = id
+	// Finding an ID the second host owns shows both hosts route with the
+	// two-host table, but an ID found before it may have been decided under
+	// the one-host table. Search again until both answers still hold.
+	var owner1, owner2 string
+	for attempt := 0; ; attempt++ {
+		require.Less(t, attempt, 5, "actor ownership never settled")
+		owner1, owner2 = "", ""
+		for i := 0; owner1 == "" || owner2 == ""; i++ {
+			require.Less(t, i, 100, "actor IDs never hashed to both hosts")
+			id := strconv.Itoa(i)
+			if ownerOf(id) {
+				if owner1 == "" {
+					owner1 = id
+				}
+			} else if owner2 == "" {
+				owner2 = id
 			}
-		} else if owner2 == "" {
-			owner2 = id
+		}
+		if ownerOf(owner1) && !ownerOf(owner2) {
+			break
 		}
 	}
 
