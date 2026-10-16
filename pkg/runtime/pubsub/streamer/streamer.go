@@ -65,23 +65,23 @@ func New(ctx context.Context, opts Options) rtpubsub.AdapterStreamer {
 	}
 }
 
-func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, connectionID rtpubsub.ConnectionID) error {
-	s.lock.Lock()
+func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, connectionID rtpubsub.ConnectionID, start func() error) error {
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
 
 	connection := &conn{
 		stream:           stream,
 		connectionID:     connectionID,
 		closeCh:          make(chan struct{}),
+		ready:            make(chan struct{}),
 		publishResponses: make(PublishResponses),
 	}
+
+	s.lock.Lock()
 	if s.subscribers[key] == nil {
 		s.subscribers[key] = make(Connections)
 	}
 
 	s.subscribers[key][connectionID] = connection
-
-	log.Infof("Subscribing to pubsub '%s' topic '%s' ConnectionID %d", req.GetPubsubName(), req.GetTopic(), connectionID)
 	s.lock.Unlock()
 
 	defer func() {
@@ -101,6 +101,26 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		}
 		s.lock.Unlock()
 	}()
+
+	// The connection is registered before the subscription starts, so a
+	// message delivered as soon as it starts finds it, and waits in Publish
+	// until the initial response is sent.
+	if err := start(); err != nil {
+		return err
+	}
+	connection.streamLock.Lock()
+	err := stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
+		SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_InitialResponse{
+			InitialResponse: new(rtv1pb.SubscribeTopicEventsResponseInitialAlpha1),
+		},
+	})
+	connection.streamLock.Unlock()
+	if err != nil {
+		return err
+	}
+	close(connection.ready)
+
+	log.Infof("Subscribing to pubsub '%s' topic '%s' ConnectionID %d", req.GetPubsubName(), req.GetTopic(), connectionID)
 
 	// TODO: @joshvanl: remove after pubsub refactor.
 	errCh := make(chan error, 2)
@@ -186,6 +206,14 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return nil, rtpubsub.ErrSubscriptionClosed
 	}
 
+	select {
+	case <-connection.ready:
+	case <-connection.closeCh:
+		return nil, errors.New("stream closed")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
 	ctx, envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
 	if err != nil {
 		return nil, err
@@ -225,12 +253,19 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	}
 
 	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-connection.closeCh:
-		return nil, errors.New("stream closed")
 	case resp := <-ch:
 		return resp, nil
+	case <-ctx.Done():
+		err = ctx.Err()
+	case <-connection.closeCh:
+		err = errors.New("stream closed")
+	}
+	// The client may have acked just before the stream closed.
+	select {
+	case resp := <-ch:
+		return resp, nil
+	default:
+		return nil, err
 	}
 }
 
