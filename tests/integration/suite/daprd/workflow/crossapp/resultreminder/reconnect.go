@@ -88,10 +88,14 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		list := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs/actorreminder")
 		var janitors, results []string
+		// A start-es reminder that could not be deleted because the worker had
+		// just gone fires later as a designed no-op, so it is not counted.
 		for _, key := range list {
-			if strings.Contains(key, "new-event-janitor") {
+			switch {
+			case strings.Contains(key, "new-event-janitor"):
 				janitors = append(janitors, key)
-			} else {
+			case strings.Contains(key, "||start-es-"):
+			default:
 				results = append(results, key)
 			}
 		}
