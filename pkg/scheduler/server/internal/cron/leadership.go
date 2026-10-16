@@ -118,10 +118,10 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	// withhold: with no placement service present, nothing can serve it, so
 	// withholding would only halt the capable sidecars' actors too.
 	awaitingLeadership := placementPresent || !ready || (!advertised && !gateCapable)
-	// The placement service is the authority while it is present or not yet
-	// looked for, so the capability bit is masked too: sidecars use the
-	// placement service rather than wait.
-	placementServiceAuthority := placementPresent || !ready
+	// Only an observed placement service turns off SchedulerPlacementEnabled.
+	// Sidecars read that as no scheduler placement and switch to the
+	// placement service, so an unknown authority only withholds the leader.
+	placementServiceAuthority := placementConfirmed
 
 	electedAddr := placementLeader(hosts)
 	// An old sidecar cannot take scheduler placement, and no placement

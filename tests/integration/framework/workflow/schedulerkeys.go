@@ -18,8 +18,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	procworkflow "github.com/dapr/dapr/tests/integration/framework/process/workflow"
 )
@@ -58,5 +60,35 @@ func AssertScheduledTimers(t *testing.T, c *assert.CollectT, ctx context.Context
 				remaining = slices.Delete(remaining, idx, idx+1)
 			}
 		}
+	}
+}
+
+// WaitNoEventWakeups waits until no new-event wake-up reminder is left in the
+// scheduler. The fast-path janitor backstop shares the new-event prefix and is
+// reaped on its own period rather than at the terminal turn, so it is excluded:
+// it is not a wake-up left behind for an event.
+func WaitNoEventWakeups(t *testing.T, ctx context.Context, w *procworkflow.Workflow) {
+	t.Helper()
+
+	// Polled on the test goroutine rather than through EventuallyWithT:
+	// ListAllKeys reports a query failure on t, so a transient error inside
+	// a callback would fail the test permanently and could call FailNow from
+	// the wrong goroutine. Same shape as Scheduler.WaitJobKeyCount.
+	deadline := time.Now().Add(time.Second * 20)
+	for {
+		var wakeups []string
+		for _, key := range w.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
+			if strings.Contains(key, "new-event") && !strings.Contains(key, "new-event-janitor") {
+				wakeups = append(wakeups, key)
+			}
+		}
+		if len(wakeups) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			require.Empty(t, wakeups, "no event wake-up may be left behind")
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
 	}
 }

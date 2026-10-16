@@ -24,6 +24,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/security/fake"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
@@ -65,4 +66,91 @@ func TestHandleHostsReloadDedup(t *testing.T) {
 
 	require.NoError(t, w.handleHosts(t.Context(), resp("127.0.0.1:1", "127.0.0.1:2")))
 	assert.Equal(t, int64(2), reloads.Load(), "a changed list must reload")
+}
+
+// TestHandleHostsLeadership asserts only a broadcast with no capable host
+// reports unsupported. Capable without a leader means wait.
+func TestHandleHostsLeadership(t *testing.T) {
+	t.Parallel()
+
+	host := func(addr string, capable, leader bool) *schedulerv1pb.Host {
+		return &schedulerv1pb.Host{Address: addr, SchedulerPlacementEnabled: capable, Leader: leader}
+	}
+
+	newWatchHosts := func() (*WatchHosts, *leadership.Leadership) {
+		ldr := leadership.New()
+		return New(Options{
+			Addresses:  []string{"127.0.0.1:1"},
+			Healthz:    healthz.New(),
+			Security:   fake.New(),
+			Clients:    clients.New(clients.Options{Security: fake.New()}),
+			HostLoop:   loopfake.New[loops.EventHost](),
+			Leadership: ldr,
+		}), ldr
+	}
+
+	t.Run("capable with a leader sets the leader", func(t *testing.T) {
+		t.Parallel()
+		w, ldr := newWatchHosts()
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", true, true), host("127.0.0.1:2", true, false),
+		}}))
+		addr, unsupported, _ := ldr.Leader()
+		assert.Equal(t, "127.0.0.1:1", addr)
+		assert.False(t, unsupported)
+	})
+
+	t.Run("capable but leaderless waits", func(t *testing.T) {
+		t.Parallel()
+		w, ldr := newWatchHosts()
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", true, false), host("127.0.0.1:2", true, false),
+		}}))
+		addr, unsupported, _ := ldr.Leader()
+		assert.Empty(t, addr)
+		assert.False(t, unsupported, "a leaderless broadcast must not report the cluster as not serving placement")
+		assert.True(t, ldr.Reachable())
+	})
+
+	t.Run("one capable host is enough to wait", func(t *testing.T) {
+		t.Parallel()
+		w, ldr := newWatchHosts()
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", false, false), host("127.0.0.1:2", true, false),
+		}}))
+		_, unsupported, _ := ldr.Leader()
+		assert.False(t, unsupported)
+	})
+
+	t.Run("no capable host reports unsupported", func(t *testing.T) {
+		t.Parallel()
+		w, ldr := newWatchHosts()
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", false, false), host("127.0.0.1:2", false, false),
+		}}))
+		addr, unsupported, _ := ldr.Leader()
+		assert.Empty(t, addr)
+		assert.True(t, unsupported)
+	})
+
+	t.Run("a leaderless broadcast after a leader keeps the sidecar waiting, not defecting", func(t *testing.T) {
+		t.Parallel()
+		w, ldr := newWatchHosts()
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", true, true),
+		}}))
+		_, _, changed := ldr.Leader()
+
+		require.NoError(t, w.handleHosts(t.Context(), &schedulerv1pb.WatchHostsResponse{Hosts: []*schedulerv1pb.Host{
+			host("127.0.0.1:1", true, false), host("127.0.0.1:3", true, false),
+		}}))
+		select {
+		case <-changed:
+		default:
+			require.Fail(t, "the leader change must be signalled")
+		}
+		addr, unsupported, _ := ldr.Leader()
+		assert.Empty(t, addr)
+		assert.False(t, unsupported)
+	})
 }

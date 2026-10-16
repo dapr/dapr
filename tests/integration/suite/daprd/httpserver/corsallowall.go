@@ -50,7 +50,7 @@ func (h *corsallowall) Run(t *testing.T, ctx context.Context) {
 
 	h1Client := client.HTTP(t)
 	h2cClient := &http.Client{
-		Transport: &http2.Transport{
+		Transport: &http2.Transport{ //nolint:staticcheck
 			// Allow http2.Transport to use protocol "http"
 			AllowHTTP: true,
 			// Pretend we are dialing a TLS endpoint

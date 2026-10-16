@@ -158,6 +158,14 @@ WINDOWS_VERSION=ltsc2022
 endif
 endif
 
+# The actor_sdks e2e test does not deploy actorphp on Windows (see
+# https://github.com/dapr/dapr/issues/2953), and the app's dependencies need
+# PHP 8.4 while the Windows PHP base image has PHP 8.0. Do not build it for
+# Windows.
+ifeq ($(TARGET_OS),windows)
+E2E_TEST_APPS := $(filter-out actorphp,$(E2E_TEST_APPS))
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -345,6 +353,14 @@ test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
 
+.PHONY: test-integration-deps
+test-integration-deps: test-deps
+	# Pre-fetch modules with retries so the integration binary builds run
+	# offline; a single connection reset mid-build otherwise fails the run.
+	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
+		for i in 1 2 3 4 5; do go -C $$d mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done; \
+	done
+
 # Packages that must not run concurrently with the rest of the e2e suite:
 # - hotreloading creates and updates resources in the shared test namespace
 #   whose hot reload restarts every daprd sidecar in that namespace
@@ -439,6 +455,10 @@ ifeq ($(DAPR_PERF_TEST),)
 			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
+	# gotestsum truncates its report files, so each package writes its own
+	# report and the JSON is appended to _perf.json. A run of several
+	# packages then keeps the results of all of them.
+	rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf.json
 	for app in $(DAPR_PERF_TEST); do \
 		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
 		DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
@@ -449,12 +469,16 @@ else
 		DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
 		NO_API_LOGGING=true \
 			gotestsum \
-			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json \
-			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
-		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... ; \
+		status=$$? ; \
+		cat $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json >> $(TEST_OUTPUT_FILE_PREFIX)_perf.json ; \
+		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json | strings ; \
+		rm -f $(TEST_OUTPUT_FILE_PREFIX)_perf_$$app.json ; \
+		[ $$status -eq 0 ] || exit -1 ; \
 	done
 endif
 

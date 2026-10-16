@@ -25,7 +25,7 @@ type Fake struct {
 	closeFn                  func() error
 	typesFn                  func() []string
 	isActorTypeHostedFn      func(string) bool
-	getOrCreateFn            func(string, string) (targets.Interface, error)
+	getOrCreateFn            func(context.Context, string, string) (targets.Interface, error)
 	actorExistsFn            func(string, string) bool
 	registerActorTypesFn     func(table.RegisterActorTypeOptions)
 	unRegisterActorTypesFn   func(...string) error
@@ -42,7 +42,7 @@ func New() *Fake {
 		closeFn:                  func() error { return nil },
 		typesFn:                  func() []string { return nil },
 		isActorTypeHostedFn:      func(string) bool { return false },
-		getOrCreateFn:            func(string, string) (targets.Interface, error) { return nil, nil },
+		getOrCreateFn:            func(context.Context, string, string) (targets.Interface, error) { return nil, nil },
 		actorExistsFn:            func(string, string) bool { return false },
 		registerActorTypesFn:     func(table.RegisterActorTypeOptions) {},
 		unRegisterActorTypesFn:   func(...string) error { return nil },
@@ -62,7 +62,7 @@ func (f *Fake) WithIsActorTypeHosted(fn func(string) bool) *Fake {
 	return f
 }
 
-func (f *Fake) WithGetOrCreate(fn func(string, string) (targets.Interface, error)) *Fake {
+func (f *Fake) WithGetOrCreate(fn func(context.Context, string, string) (targets.Interface, error)) *Fake {
 	f.getOrCreateFn = fn
 	return f
 }
@@ -101,8 +101,8 @@ func (f *Fake) WithResumeHosting(fn func()) *Fake {
 func (f *Fake) Close() error                            { return f.closeFn() }
 func (f *Fake) Types() []string                         { return f.typesFn() }
 func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHostedFn(actorType) }
-func (f *Fake) GetOrCreate(actorType, actorID string) (targets.Interface, error) {
-	return f.getOrCreateFn(actorType, actorID)
+func (f *Fake) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
+	return f.getOrCreateFn(ctx, actorType, actorID)
 }
 
 func (f *Fake) ActorExists(actorType, actorKey string) bool {

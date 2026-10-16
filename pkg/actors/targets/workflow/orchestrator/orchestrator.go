@@ -102,7 +102,11 @@ type orchestrator struct {
 	lastStartRedrive atomic.Int64
 	lock             *lock.Stallable
 	closed           atomic.Bool
-	wg               sync.WaitGroup
+	// wg tracks in-flight invocations. Add only through enter, so every Add
+	// is ordered before Deactivate's Wait.
+	wg         sync.WaitGroup
+	retireLock sync.Mutex
+	retired    bool
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
@@ -119,7 +123,9 @@ type streamFn struct {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	o.wg.Add(1)
+	if err := o.enter("method"); err != nil {
+		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	// The completions fold manages its own lock lifecycle (early release
@@ -139,7 +145,9 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	o.wg.Add(1)
+	if err := o.enter("reminder"); err != nil {
+		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	unlock, err := o.contextLockMeasured(ctx, "reminder")
@@ -153,8 +161,12 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 
 // contextLockMeasured acquires the per-actor turn lock and records the wait
 // as the lock_wait histogram (sampled 1-in-16), splitting observed
-// invocation latency into queueing vs turn body.
+// invocation latency into queueing vs turn body. While it waits it counts in
+// the pending actor calls gauge, as the app actor lock does.
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
+	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
+	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)
 		if err != nil {
@@ -191,7 +203,9 @@ func (o *orchestrator) InvokeTimer(ctx context.Context, reminder *actorapi.Remin
 }
 
 func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
-	o.wg.Add(1)
+	if err := o.enter("stream"); err != nil {
+		return fmt.Errorf("failed to invoke stream for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	unlock, err := o.contextLockMeasured(ctx, "stream")
@@ -205,6 +219,18 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 		unlock()
 	}
 	return err
+}
+
+// enter registers an invocation, or fails closed once Deactivate has run. On
+// nil the caller must call o.wg.Done.
+func (o *orchestrator) enter(kind string) error {
+	o.retireLock.Lock()
+	defer o.retireLock.Unlock()
+	if o.retired {
+		return targeterrors.NewClosed(kind)
+	}
+	o.wg.Add(1)
+	return nil
 }
 
 // DeactivateActor implements actors.InternalActor
@@ -224,6 +250,9 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	o.table.Delete(o.actorID)
 	o.invalidateCachedState()
 	o.lock.Close()
+	o.retireLock.Lock()
+	o.retired = true
+	o.retireLock.Unlock()
 	o.foldFlush()
 	for _, stream := range o.streamFns {
 		stream.errCh <- targeterrors.NewClosed("deactivated")

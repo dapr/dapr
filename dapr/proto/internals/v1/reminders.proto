@@ -32,6 +32,10 @@ message Reminder {
   google.protobuf.Timestamp expiration_time = 8;
   bool is_timer = 9;
   bool skip_lock = 10;
+  // source_app_id is the app that created the reminder, as verified by the
+  // Scheduler when the job was scheduled. Carried when a replica forwards a
+  // fired reminder to the actor's owner. Unset when unknown.
+  optional string source_app_id = 11;
 }
 
 // Reminders is a collection of reminders.

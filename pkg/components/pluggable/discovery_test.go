@@ -14,6 +14,7 @@ limitations under the License.
 package pluggable
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -23,6 +24,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type fakeReflectService struct {
@@ -185,6 +191,60 @@ func TestComponentDiscovery(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, services, len(svcList))
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
+	})
+}
+
+func TestDiscover(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	t.Run("discovered components should accept responses up to the max recv message size", func(t *testing.T) {
+		const (
+			fakeSvcName    = "dapr.my.service.large"
+			fakeMethodName = "Large"
+			respSize       = 5 << 20
+		)
+		fakeSocketFolder, err := nettest.LocalPath()
+		require.NoError(t, err)
+		require.NoError(t, os.Mkdir(fakeSocketFolder, 0o700))
+		t.Cleanup(func() { require.NoError(t, os.RemoveAll(fakeSocketFolder)) })
+		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+
+		listener, err := net.Listen("unix", fakeSocketFolder+"/large.sock")
+		require.NoError(t, err)
+		defer listener.Close()
+
+		s := grpc.NewServer()
+		s.RegisterService(&grpc.ServiceDesc{
+			ServiceName: fakeSvcName,
+			HandlerType: (*any)(nil),
+			Methods: []grpc.MethodDesc{{
+				MethodName: fakeMethodName,
+				Handler: func(any, context.Context, func(any) error, grpc.UnaryServerInterceptor) (any, error) {
+					return wrapperspb.Bytes(make([]byte, respSize)), nil
+				},
+			}},
+		}, struct{}{})
+		reflection.Register(s)
+		go s.Serve(listener)
+		defer s.Stop()
+
+		var dialer GRPCConnectionDialer
+		AddServiceDiscoveryCallback(fakeSvcName, func(_ string, d GRPCConnectionDialer) {
+			dialer = d
+		})
+		defer delete(onServiceDiscovered, fakeSvcName)
+
+		require.NoError(t, Discover(t.Context(), 16<<20))
+		require.NotNil(t, dialer)
+
+		conn, err := dialer(t.Context(), "large")
+		require.NoError(t, err)
+		defer conn.Close()
+
+		resp := &wrapperspb.BytesValue{}
+		require.NoError(t, conn.Invoke(t.Context(), "/"+fakeSvcName+"/"+fakeMethodName, &emptypb.Empty{}, resp))
+		assert.Len(t, resp.GetValue(), respSize)
 	})
 }
 

@@ -15,6 +15,7 @@ package http
 
 import (
 	nethttp "net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -143,28 +144,32 @@ func TestPipeline_http(t *testing.T) {
 }
 
 func TestPipeline_buildChain(t *testing.T) {
-	t.Run("if spec is nil, chain should be nil", func(t *testing.T) {
+	t.Run("if spec is nil, root is called directly", func(t *testing.T) {
 		store := store.New[middleware.HTTP]("test")
+		middle := newTestMiddle("test")
+		store.Add(middle.item)
 		p := newPipeline("test", store, nil)
-		p.chain = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {})
-		assert.NotNil(t, p.chain)
 		p.buildChain()
-		assert.Nil(t, p.chain)
+
+		var called bool
+		p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true })).ServeHTTP(nil, nil)
+		assert.True(t, called)
+		assert.Equal(t, int32(0), middle.invoked.Load())
 	})
 
-	t.Run("if spec handlers is empty, chain should be nil", func(t *testing.T) {
+	t.Run("if spec handlers is empty, root is called directly", func(t *testing.T) {
 		store := store.New[middleware.HTTP]("test")
-		p := newPipeline("test", store, &config.PipelineSpec{Handlers: nil})
-		p.chain = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {})
-		assert.NotNil(t, p.chain)
-		p.buildChain()
-		assert.Nil(t, p.chain)
+		middle := newTestMiddle("test")
+		store.Add(middle.item)
+		for _, spec := range []*config.PipelineSpec{{Handlers: nil}, {Handlers: []config.HandlerSpec{}}} {
+			p := newPipeline("test", store, spec)
+			p.buildChain()
 
-		p = newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{}})
-		p.chain = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {})
-		assert.NotNil(t, p.chain)
-		p.buildChain()
-		assert.Nil(t, p.chain)
+			var called bool
+			p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true })).ServeHTTP(nil, nil)
+			assert.True(t, called)
+		}
+		assert.Equal(t, int32(0), middle.invoked.Load())
 	})
 
 	t.Run("if spec references handler that does not exist, chain should just be root", func(t *testing.T) {
@@ -173,12 +178,10 @@ func TestPipeline_buildChain(t *testing.T) {
 			{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
 		}})
 		var called bool
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true })
-		assert.Nil(t, p.chain)
 		p.buildChain()
-		assert.NotNil(t, p.chain)
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true }))
 		assert.False(t, called)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.True(t, called)
 	})
 
@@ -190,12 +193,10 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var called bool
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true })
-		assert.Nil(t, p.chain)
 		p.buildChain()
-		assert.NotNil(t, p.chain)
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { called = true }))
 		assert.False(t, called)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.True(t, called)
 	})
 
@@ -208,15 +209,13 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
-		assert.Nil(t, p.chain)
 		p.buildChain()
-		assert.NotNil(t, p.chain)
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle.invoked.Load())
 	})
@@ -233,15 +232,15 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
 		p.buildChain()
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle1.invoked.Load())
 		assert.Equal(t, int32(1), middle2.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle1.invoked.Load())
 		assert.Equal(t, int32(2), middle2.invoked.Load())
@@ -258,15 +257,15 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
 		p.buildChain()
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
@@ -284,15 +283,15 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
 		p.buildChain()
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle1.invoked.Load())
 		assert.Equal(t, int32(1), middle2.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle1.invoked.Load())
 		assert.Equal(t, int32(2), middle2.invoked.Load())
@@ -310,15 +309,15 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
 		p.buildChain()
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
@@ -336,15 +335,15 @@ func TestPipeline_buildChain(t *testing.T) {
 		}})
 
 		var invoked int
-		p.root = nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ })
 		p.buildChain()
+		chain := p.wrap(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
 
 		assert.Equal(t, 0, invoked)
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 1, invoked)
 		assert.Equal(t, int32(1), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
-		p.chain.ServeHTTP(nil, nil)
+		chain.ServeHTTP(nil, nil)
 		assert.Equal(t, 2, invoked)
 		assert.Equal(t, int32(2), middle1.invoked.Load())
 		assert.Equal(t, int32(0), middle2.invoked.Load())
@@ -355,6 +354,7 @@ type testmiddle struct {
 	item    store.Item[middleware.HTTP]
 	comp    compapi.Component
 	invoked atomic.Int32
+	built   atomic.Int32
 	wait    chan struct{}
 }
 
@@ -377,6 +377,7 @@ func newTestMiddle(name string) *testmiddle {
 			Version: "v1",
 		},
 		Middleware: func(next nethttp.Handler) nethttp.Handler {
+			tm.built.Add(1)
 			return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 				<-tm.wait
 				tm.invoked.Add(1)
@@ -385,4 +386,171 @@ func newTestMiddle(name string) *testmiddle {
 		},
 	}
 	return tm
+}
+
+func TestPipeline_concurrentRoots(t *testing.T) {
+	store := store.New[middleware.HTTP]("test")
+	middle := newTestMiddle("test")
+	store.Add(middle.item)
+	mw := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+		{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+	}}).http()
+
+	var wg sync.WaitGroup
+	for i := range 64 {
+		wg.Go(func() {
+			var ran atomic.Int32
+			mw(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {
+				ran.Add(1)
+			})).ServeHTTP(nil, nil)
+			assert.Equal(t, int32(1), ran.Load(), "root %d must run exactly once, for its own request", i)
+		})
+	}
+	wg.Wait()
+	assert.Equal(t, int32(64), middle.invoked.Load())
+}
+
+func TestPipeline_cachedChain(t *testing.T) {
+	t.Run("long-lived root should build chain once", func(t *testing.T) {
+		store := store.New[middleware.HTTP]("test")
+		middle1 := newTestMiddle("test")
+		middle2 := newTestMiddle("test2")
+		store.Add(middle1.item)
+		store.Add(middle2.item)
+		p := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+			{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+			{Name: "test2", Type: "middleware.http.fakemw", Version: "v1"},
+		}})
+
+		var invoked int
+		handler := p.http()(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
+		for range 100 {
+			handler.ServeHTTP(nil, nil)
+		}
+		assert.Equal(t, 100, invoked)
+		assert.Equal(t, int32(100), middle1.invoked.Load())
+		assert.Equal(t, int32(100), middle2.invoked.Load())
+		assert.Equal(t, int32(1), middle1.built.Load())
+		assert.Equal(t, int32(1), middle2.built.Load())
+	})
+
+	t.Run("rebuilding the pipeline should rebuild the chain once on next request", func(t *testing.T) {
+		store := store.New[middleware.HTTP]("test")
+		middle1 := newTestMiddle("test")
+		middle2 := newTestMiddle("test2")
+		store.Add(middle1.item)
+		p := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+			{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+			{Name: "test2", Type: "middleware.http.fakemw", Version: "v1"},
+		}})
+
+		var invoked int
+		handler := p.http()(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { invoked++ }))
+		for range 10 {
+			handler.ServeHTTP(nil, nil)
+		}
+		assert.Equal(t, int32(1), middle1.built.Load())
+		assert.Equal(t, int32(0), middle2.built.Load())
+
+		store.Add(middle2.item)
+		p.buildChain()
+		assert.Equal(t, int32(1), middle1.built.Load())
+		assert.Equal(t, int32(0), middle2.built.Load())
+		for range 10 {
+			handler.ServeHTTP(nil, nil)
+		}
+		assert.Equal(t, 20, invoked)
+		assert.Equal(t, int32(20), middle1.invoked.Load())
+		assert.Equal(t, int32(10), middle2.invoked.Load())
+		assert.Equal(t, int32(2), middle1.built.Load())
+		assert.Equal(t, int32(1), middle2.built.Load())
+
+		store.Remove("test")
+		p.buildChain()
+		for range 10 {
+			handler.ServeHTTP(nil, nil)
+		}
+		assert.Equal(t, 30, invoked)
+		assert.Equal(t, int32(20), middle1.invoked.Load())
+		assert.Equal(t, int32(20), middle2.invoked.Load())
+		assert.Equal(t, int32(2), middle1.built.Load())
+		assert.Equal(t, int32(2), middle2.built.Load())
+	})
+
+	t.Run("concurrent requests and rebuilds on one root", func(t *testing.T) {
+		store := store.New[middleware.HTTP]("test")
+		middle := newTestMiddle("test")
+		store.Add(middle.item)
+		p := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+			{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+		}})
+
+		var ran atomic.Int32
+		handler := p.http()(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { ran.Add(1) }))
+
+		var wg sync.WaitGroup
+		for range 32 {
+			wg.Go(func() {
+				for range 100 {
+					handler.ServeHTTP(nil, nil)
+				}
+			})
+		}
+		for range 8 {
+			wg.Go(p.buildChain)
+		}
+		wg.Wait()
+		assert.Equal(t, int32(3200), ran.Load())
+		assert.Equal(t, int32(3200), middle.invoked.Load())
+
+		handler.ServeHTTP(nil, nil)
+		built := middle.built.Load()
+		for range 10 {
+			handler.ServeHTTP(nil, nil)
+		}
+		assert.Equal(t, built, middle.built.Load())
+	})
+
+	t.Run("concurrent requests across many long-lived roots", func(t *testing.T) {
+		store := store.New[middleware.HTTP]("test")
+		middle := newTestMiddle("test")
+		store.Add(middle.item)
+		mw := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+			{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+		}}).http()
+
+		var wg sync.WaitGroup
+		ran := make([]atomic.Int32, 32)
+		for i := range ran {
+			handler := mw(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) { ran[i].Add(1) }))
+			for range 4 {
+				wg.Go(func() {
+					for range 50 {
+						handler.ServeHTTP(nil, nil)
+					}
+				})
+			}
+		}
+		wg.Wait()
+		for i := range ran {
+			assert.Equal(t, int32(200), ran[i].Load(), "root %d must only run for its own requests", i)
+		}
+		assert.Equal(t, int32(32*200), middle.invoked.Load())
+		assert.Equal(t, int32(32), middle.built.Load())
+	})
+}
+
+func BenchmarkPipeline_longLivedRoot(b *testing.B) {
+	store := store.New[middleware.HTTP]("test")
+	store.Add(newTestMiddle("test").item)
+	store.Add(newTestMiddle("test2").item)
+	handler := newPipeline("test", store, &config.PipelineSpec{Handlers: []config.HandlerSpec{
+		{Name: "test", Type: "middleware.http.fakemw", Version: "v1"},
+		{Name: "test2", Type: "middleware.http.fakemw", Version: "v1"},
+	}}).http()(nethttp.HandlerFunc(func(nethttp.ResponseWriter, *nethttp.Request) {}))
+
+	b.ReportAllocs()
+	for b.Loop() {
+		handler.ServeHTTP(nil, nil)
+	}
 }

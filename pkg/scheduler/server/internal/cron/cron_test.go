@@ -42,6 +42,8 @@ func (f *fakeEtcd) Client(context.Context) (*clientv3.Client, error) {
 	return f.client, nil
 }
 
+func (f *fakeEtcd) TransferLeadership() {}
+
 // Test_quorum_convergence_after_scaleup tests that the dapr cron wrapper
 // survives rapid quorum changes. The fix uses an events/loop to decouple the
 // WatchLeadership channel read from host broadcast processing, preventing the

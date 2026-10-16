@@ -209,6 +209,9 @@ func (e *Exec) checkExit(t *testing.T) {
 
 	iowriter.Eventf(t, "waiting for %s to exit", e.name())
 
+	// cmd.Wait closes the stdout and stderr pipes, so drain them first or the
+	// last lines the process wrote may never reach the log or the loglines.
+	e.wg.Wait()
 	err := e.cmd.Wait()
 
 	// A test which has already failed tears its processes down mid flight, so

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,6 +132,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			newEvents = append(newEvents, f.event)
 		}
 	}
+	newEvents = unscheduledLast(state.History, newEvents)
 	wi := &backend.WorkflowWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
 		NewEvents:  newEvents,
@@ -318,7 +320,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 	compactPatches(rs)
-	o.stripUnmatchedResolutions(state, rs)
+	early := o.stripUnmatchedResolutions(state, rs)
 
 	// Reject a turn whose response provably came from a stale or duplicate
 	// completion delivery  BEFORE any side effect.
@@ -419,6 +421,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
+	for _, e := range early {
+		state.AddToInbox(e)
+	}
 	if !wasCompleted && runtimestate.IsCompleted(rs) && o.getExecutionStartedEvent(state).GetParentInstance() != nil {
 		state.SetParentNotifyPending(true)
 	}
@@ -905,27 +910,30 @@ func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeS
 	return "", 0, false
 }
 
-// stripUnmatchedResolutions removes from rs.NewEvents any task or child
-// workflow resolution event that resolves nothing: no matching TaskScheduled
-// or ChildWorkflowInstanceCreated with the same event ID exists in persisted
-// history or among this execution's new events. The app-side SDK silently
-// ignores such events, so without this they would be persisted into history
-// with no effect, where they poison dedup.IsDuplicateCompletion for a later
-// operation that legitimately reuses the same event ID (the ID sequence resets
-// on ContinueAsNew, so a straggler completion from an abandoned
-// previous-generation child collides with the current generation's
-// operations). Timer events are not stripped: stale timer firings are already
-// rejected by the generation check on the timer reminder path.
-func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) {
-	scheduledTaskIDs := make(map[int32]struct{})
-	createdChildIDs := make(map[int32]struct{})
+// stripUnmatchedResolutions removes from rs.NewEvents any resolution that
+// resolves nothing: an activity result, timer firing or child workflow result
+// with no matching TaskScheduled, TimerCreated or ChildWorkflowInstanceCreated
+// in persisted history or among this execution's new events. The app-side
+// SDK ignores such events, so without this they would be persisted into
+// history with no effect, where they poison dedup for a later operation that
+// legitimately reuses the same event ID.
+//
+// It returns early: the removed activity and child workflow results that may
+// still be consumed, to be kept in the inbox for a later turn. A turn dispatches its activities,
+// creates its timers and starts its child workflows before it saves, so when
+// that save fails a resolution can arrive before the event that schedules it
+// is saved, and the workflow may schedule the step again only in a later
+// turn. A resolution is dropped instead once it can never be consumed: the
+// workflow completed or continued as new, or this generation has already
+// passed the event ID it resolves, the rule admission applies (activityDrop).
+// A straggler from a previous generation is dropped at admission by the
+// execution ID it carries back.
+func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) (early []*backend.HistoryEvent) {
+	scheduled := make(map[scheduling]struct{})
 	index := func(events []*backend.HistoryEvent) {
 		for _, e := range events {
-			switch {
-			case e.GetTaskScheduled() != nil:
-				scheduledTaskIDs[e.GetEventId()] = struct{}{}
-			case e.GetChildWorkflowInstanceCreated() != nil:
-				createdChildIDs[e.GetEventId()] = struct{}{}
+			if k, ok := schedules(e); ok {
+				scheduled[k] = struct{}{}
 			}
 		}
 	}
@@ -933,43 +941,184 @@ func (o *orchestrator) stripUnmatchedResolutions(state *wfenginestate.State, rs 
 	index(rs.GetNewEvents())
 
 	matched := func(e *backend.HistoryEvent) bool {
-		switch {
-		case e.GetTaskCompleted() != nil:
-			_, ok := scheduledTaskIDs[e.GetTaskCompleted().GetTaskScheduledId()]
-			return ok
-		case e.GetTaskFailed() != nil:
-			_, ok := scheduledTaskIDs[e.GetTaskFailed().GetTaskScheduledId()]
-			return ok
-		case e.GetChildWorkflowInstanceCompleted() != nil:
-			_, ok := createdChildIDs[e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()]
-			return ok
-		case e.GetChildWorkflowInstanceFailed() != nil:
-			_, ok := createdChildIDs[e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()]
-			return ok
-		default:
+		k, ok := resolves(e)
+		if !ok {
 			return true
 		}
+		_, found := scheduled[k]
+		return found
 	}
 
 	events := rs.GetNewEvents()
-	for _, e := range events {
-		if matched(e) {
+	if !slices.ContainsFunc(events, func(e *backend.HistoryEvent) bool { return !matched(e) }) {
+		return nil
+	}
+	keep := !runtimestate.IsCompleted(rs) && !rs.GetContinuedAsNew()
+	// Rebuild into a fresh backing array so callers holding the original
+	// slice are unaffected.
+	filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
+	for _, ev := range events {
+		if matched(ev) {
+			filtered = append(filtered, ev)
 			continue
 		}
+		k, _ := resolves(ev)
+		if ev.GetTimerFired() != nil {
+			// A timer firing has no inbox row to keep: its durable home is
+			// the timer's reminder. The timer is not recorded as fired, so
+			// when the workflow creates it again it gets a new reminder,
+			// which fires at once.
+			log.Warnf("Workflow actor '%s': dropping the firing of timer %d, which the workflow has not created; it fires again when the workflow creates it", o.actorID, k.id)
+			continue
+		}
+		if keep && !passedID(state.History, k.id) && !passedID(events, k.id) {
+			log.Warnf("Workflow actor '%s': keeping the resolution of %s %d in the inbox until the workflow schedules it", o.actorID, k.kind, k.id)
+			early = append(early, ev)
+			continue
+		}
+		log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+	}
+	rs.NewEvents = filtered
+	return early
+}
 
-		// At least one orphan: rebuild into a fresh backing array so callers
-		// holding the original slice are unaffected.
-		filtered := make([]*backend.HistoryEvent, 0, len(events)-1)
-		for _, ev := range events {
-			if !matched(ev) {
-				log.Warnf("Workflow actor '%s': discarding resolution event %T that matches no operation scheduled in persisted history or in this execution (stale event from a previous generation?)", o.actorID, ev.GetEventType())
+// unscheduledLast returns events with the resolutions whose step history has
+// not scheduled moved to the end, keeping the order within each group. A
+// worker replays new events in order, and a worker that does not buffer an
+// early resolution ignores one whose step does not exist yet; handed after
+// the events that lead the workflow to schedule the step, it resolves the
+// step in the same turn.
+func unscheduledLast(history, events []*backend.HistoryEvent) []*backend.HistoryEvent {
+	var scheduled map[scheduling]struct{}
+	unscheduled := func(e *backend.HistoryEvent) bool {
+		k, ok := resolves(e)
+		if !ok {
+			return false
+		}
+		if scheduled == nil {
+			scheduled = make(map[scheduling]struct{})
+			for _, h := range history {
+				if hk, isScheduling := schedules(h); isScheduling {
+					scheduled[hk] = struct{}{}
+				}
+			}
+		}
+		_, found := scheduled[k]
+		return !found
+	}
+	i := slices.IndexFunc(events, unscheduled)
+	if i < 0 {
+		return events
+	}
+	out := make([]*backend.HistoryEvent, 0, len(events))
+	out = append(out, events[:i]...)
+	var last []*backend.HistoryEvent
+	for _, e := range events[i:] {
+		if unscheduled(e) {
+			last = append(last, e)
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, last...)
+}
+
+// onlyUnscheduled reports whether every event in events is a resolution whose
+// step history has not scheduled. A turn only keeps such events in the inbox
+// again, so an inbox holding nothing else gives a turn nothing to consume.
+func onlyUnscheduled(history, events []*backend.HistoryEvent) bool {
+	for _, e := range events {
+		k, ok := resolves(e)
+		if !ok || slices.ContainsFunc(history, func(h *backend.HistoryEvent) bool {
+			hk, isScheduling := schedules(h)
+			return isScheduling && hk == k
+		}) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolutionsAfterScheduling returns history with each activity result,
+// timer firing or child workflow result that precedes the event scheduling
+// its step moved to just after that event. A worker that does not buffer an
+// early resolution ignores one replayed before the workflow has scheduled
+// the step, so a history persisted in that shape (release 1.17 could persist
+// a completion ahead of the event that led the workflow to schedule the
+// step) would never resolve it. Only the replayed view is reordered; the
+// persisted rows are untouched. A resolution of a step the history never
+// schedules stays where it is. The slice is returned as is when nothing has
+// to move.
+func resolutionsAfterScheduling(history []*backend.HistoryEvent) []*backend.HistoryEvent {
+	var at map[scheduling]int
+	var out []*backend.HistoryEvent
+	var moved map[int][]*backend.HistoryEvent
+	for i, e := range history {
+		if k, ok := resolves(e); ok {
+			if at == nil {
+				at = make(map[scheduling]int)
+				for j, h := range history {
+					if sk, isScheduling := schedules(h); isScheduling {
+						at[sk] = j
+					}
+				}
+			}
+			if j, found := at[k]; found && j > i {
+				if out == nil {
+					out = append(make([]*backend.HistoryEvent, 0, len(history)), history[:i]...)
+					moved = make(map[int][]*backend.HistoryEvent)
+				}
+				moved[j] = append(moved[j], e)
 				continue
 			}
-			filtered = append(filtered, ev)
 		}
-		rs.NewEvents = filtered
-		return
+		if out != nil {
+			out = append(append(out, e), moved[i]...)
+		}
 	}
+	if out == nil {
+		return history
+	}
+	return out
+}
+
+// scheduling names a step of a workflow by its kind and the event ID of the
+// history event that scheduled it.
+type scheduling struct {
+	kind string
+	id   int32
+}
+
+// schedules returns the step e schedules, if e is a TaskScheduled,
+// TimerCreated or ChildWorkflowInstanceCreated.
+func schedules(e *backend.HistoryEvent) (scheduling, bool) {
+	switch {
+	case e.GetTaskScheduled() != nil:
+		return scheduling{"task", e.GetEventId()}, true
+	case e.GetTimerCreated() != nil:
+		return scheduling{"timer", e.GetEventId()}, true
+	case e.GetChildWorkflowInstanceCreated() != nil:
+		return scheduling{"child workflow", e.GetEventId()}, true
+	}
+	return scheduling{}, false
+}
+
+// resolves returns the step e resolves, if e is an activity result, a timer
+// firing or a child workflow result.
+func resolves(e *backend.HistoryEvent) (scheduling, bool) {
+	switch {
+	case e.GetTaskCompleted() != nil:
+		return scheduling{"task", e.GetTaskCompleted().GetTaskScheduledId()}, true
+	case e.GetTaskFailed() != nil:
+		return scheduling{"task", e.GetTaskFailed().GetTaskScheduledId()}, true
+	case e.GetTimerFired() != nil:
+		return scheduling{"timer", e.GetTimerFired().GetTimerId()}, true
+	case e.GetChildWorkflowInstanceCompleted() != nil:
+		return scheduling{"child workflow", e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()}, true
+	case e.GetChildWorkflowInstanceFailed() != nil:
+		return scheduling{"child workflow", e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()}, true
+	}
+	return scheduling{}, false
 }
 
 // filterValidInboxEvents returns inbox events that pass validation. Result

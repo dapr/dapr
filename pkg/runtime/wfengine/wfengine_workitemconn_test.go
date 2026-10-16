@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/table"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/durabletask-go/api/protos"
 
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
@@ -81,4 +82,41 @@ func TestEngine_WorkItemConnectionFailurePairing(t *testing.T) {
 
 	require.NoError(t, wfe.onWorkItemDisconnection(t.Context()))
 	assert.Equal(t, int32(0), wfe.getWorkItemsCount.Load())
+}
+
+// TestEngine_WorkItemDisconnectionStreamCancelled pins that the last worker's
+// disconnect removes the workflow actor types even when the transport cancels
+// the stream's context during the call. The actors runtime can fail the table
+// lookup for a done context, and actorsRegistered is reset either way, so no
+// later disconnect would retry: the host would keep the types with no worker
+// to run them.
+func TestEngine_WorkItemDisconnectionStreamCancelled(t *testing.T) {
+	var unregistered atomic.Bool
+	tbl := tablefake.New().WithUnRegisterActorTypes(func(...string) error {
+		unregistered.Store(true)
+		return nil
+	})
+	fa := actorsfake.New().WithTable(func(ctx context.Context) (table.Interface, error) {
+		// The actors runtime returns ErrActorRuntimeNotFound when ctx is
+		// done, even if the runtime is ready.
+		select {
+		case <-ctx.Done():
+			return nil, messages.ErrActorRuntimeNotFound
+		default:
+			return tbl, nil
+		}
+	})
+
+	wfe, _ := newTestEngine(t, fa)
+	require.NoError(t, wfe.onWorkItemConnection(t.Context()))
+	require.True(t, wfe.actorsRegistered)
+
+	// The transport closes just after onWorkItemDisconnection checks the
+	// stream context: Err still reports nil, but Done is already closed.
+	done := make(chan struct{})
+	close(done)
+	ctx := closingContext{Context: context.Background(), done: done}
+	require.NoError(t, wfe.onWorkItemDisconnection(ctx))
+	assert.True(t, unregistered.Load(), "the workflow actor types must be removed from the table")
+	assert.False(t, wfe.actorsRegistered)
 }

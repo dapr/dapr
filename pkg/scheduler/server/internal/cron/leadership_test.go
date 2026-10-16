@@ -469,7 +469,7 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 
 	t.Run("present placement withholds the leader and masks the capability", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{present: true, capable: true}
+		hoff := &fakeHandoff{present: true, confirmed: true, capable: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
 
@@ -499,7 +499,7 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 
 	t.Run("reappearing placement withholds an advertised leader", func(t *testing.T) {
 		t.Parallel()
-		hoff := &fakeHandoff{present: true, advertised: true, capable: true}
+		hoff := &fakeHandoff{present: true, confirmed: true, advertised: true, capable: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true)}
 
@@ -545,9 +545,49 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		assert.True(t, hosts[0].GetSchedulerPlacementEnabled())
 	})
 
-	t.Run("not ready withholds and masks until the first detection", func(t *testing.T) {
+	t.Run("not ready withholds only the leader until the first detection", func(t *testing.T) {
 		t.Parallel()
 		hoff := &fakeHandoff{capable: true, notReady: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		for _, host := range hosts {
+			assert.False(t, host.GetLeader())
+			assert.True(t, host.GetSchedulerPlacementEnabled(),
+				"an undetected authority is unknown, so sidecars must wait rather than defect")
+		}
+		assert.Zero(t, hoff.advertisedCalls)
+		require.NotNil(t, l.placement.(*fakePlacementLeader).leader)
+		assert.False(t, *l.placement.(*fakePlacementLeader).leader)
+	})
+
+	t.Run("unprobed reported address withholds only the leader", func(t *testing.T) {
+		t.Parallel()
+		// Presumed for an unprobed address, not observed.
+		hoff := &fakeHandoff{present: true, capable: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", true), anyHost(t, "b:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		for _, host := range hosts {
+			assert.False(t, host.GetLeader())
+			assert.True(t, host.GetSchedulerPlacementEnabled(),
+				"a presumed placement service must not tell sidecars the cluster does not serve placement")
+		}
+		assert.Zero(t, hoff.advertisedCalls, "a withheld advertisement must not set advertised")
+	})
+
+	t.Run("observed placement reports not serving before the first detection", func(t *testing.T) {
+		t.Parallel()
+		// The kubernetes informer can see a pod before the first detection.
+		hoff := &fakeHandoff{present: true, confirmed: true, capable: true, notReady: true}
 		l, ch := newLeadership(hoff)
 		table := []*anypb.Any{anyHost(t, "a:1", true)}
 
@@ -558,4 +598,82 @@ func TestLeadershipPlacementPresence(t *testing.T) {
 		assert.False(t, hosts[0].GetLeader())
 		assert.False(t, hosts[0].GetSchedulerPlacementEnabled())
 	})
+
+	t.Run("an old scheduler's own incapable host stays incapable", func(t *testing.T) {
+		t.Parallel()
+		hoff := &fakeHandoff{capable: true, notReady: true}
+		l, ch := newLeadership(hoff)
+		table := []*anypb.Any{anyHost(t, "a:1", false), anyHost(t, "b:1", true)}
+
+		require.NoError(t, l.Handle(t.Context(), table))
+
+		hosts := <-ch
+		require.Len(t, hosts, 2)
+		assert.False(t, hosts[0].GetSchedulerPlacementEnabled())
+		assert.True(t, hosts[1].GetSchedulerPlacementEnabled())
+		assert.False(t, hosts[0].GetLeader())
+		assert.False(t, hosts[1].GetLeader())
+	})
+}
+
+// TestLeadershipColdStartKeepsServing replays a scheduler cold start with no
+// placement service deployed. No broadcast may report the scheduler as not
+// serving placement.
+func TestLeadershipColdStartKeepsServing(t *testing.T) {
+	t.Parallel()
+
+	a, err := anypb.New(&schedulerv1pb.Host{Address: "a:1", SchedulerPlacementEnabled: true})
+	require.NoError(t, err)
+	b, err := anypb.New(&schedulerv1pb.Host{Address: "b:1", SchedulerPlacementEnabled: true})
+	require.NoError(t, err)
+
+	var lock sync.RWMutex
+	var broadcastHosts []*schedulerv1pb.Host
+	hoff := &fakeHandoff{notReady: true, sticky: true}
+	place := new(fakePlacementLeader)
+	l := &leadership{
+		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
+		lock:            &lock,
+		broadcastHosts:  &broadcastHosts,
+		readyCh:         make(chan struct{}),
+		ownAddress:      "a:1",
+		pool:            new(fakePool),
+		placement:       place,
+		handoff:         hoff,
+	}
+
+	steps := []struct {
+		name   string
+		apply  func()
+		table  []*anypb.Any
+		leader bool
+	}{
+		{name: "first table before the first detection", table: []*anypb.Any{a, b}},
+		{name: "first detection completes, no capable sidecar", apply: func() { hoff.notReady = false }},
+		{name: "capable sidecar registers with an unprobed address", apply: func() {
+			hoff.capable = true
+			hoff.present = true
+		}},
+		{name: "probe finds no placement service", apply: func() { hoff.present = false }, leader: true},
+	}
+
+	for _, step := range steps {
+		if step.apply != nil {
+			step.apply()
+		}
+		require.NoError(t, l.Handle(t.Context(), step.table), step.name)
+
+		// broadcastHosts holds exactly what each Handle broadcast.
+		hosts := broadcastHosts
+		require.Len(t, hosts, 2, step.name)
+		for _, host := range hosts {
+			assert.True(t, host.GetSchedulerPlacementEnabled(), "%s: reported not serving placement", step.name)
+		}
+		assert.Equal(t, step.leader, hosts[0].GetLeader(), step.name)
+		assert.False(t, hosts[1].GetLeader(), step.name)
+		require.NotNil(t, place.leader, step.name)
+		assert.Equal(t, step.leader, *place.leader, step.name)
+	}
+
+	assert.Equal(t, 1, hoff.advertisedCalls, "only the settled leader broadcast sets advertised")
 }

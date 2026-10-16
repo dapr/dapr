@@ -114,5 +114,6 @@ func WaitForAllCompleted(t *testing.T, ctx context.Context, client *client.TaskH
 	}
 	wg.Wait()
 
+	require.NoError(t, ctx.Err(), "suite context expired while waiting for completions")
 	assert.Empty(t, failed, "%d of %d instances did not complete", len(failed), len(ids))
 }

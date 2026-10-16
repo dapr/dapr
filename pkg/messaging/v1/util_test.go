@@ -141,6 +141,25 @@ func TestInternalMetadataToHTTPHeaderStripsConnectionNominatedMixedCase(t *testi
 	assert.Equal(t, []string{"x-custom-header"}, savedHeaderKeyNames)
 }
 
+func TestInternalMetadataToHTTPHeaderKeepsConnectionNominatedDaprHeaders(t *testing.T) {
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
+		"Connection":               {Values: []string{"dapr-reentrancy-id, X-Foo", "DAPR-ACTOR-ACTIVATION-ID"}},
+		"Dapr-Reentrancy-Id":       {Values: []string{"r1"}},
+		"Dapr-Actor-Activation-Id": {Values: []string{"a1"}},
+		"X-Foo":                    {Values: []string{"should-be-stripped"}},
+	}
+
+	saved := map[string]string{}
+	InternalMetadataToHTTPHeader(t.Context(), fakeMetadata, func(k, v string) {
+		saved[k] = v
+	})
+
+	assert.Equal(t, map[string]string{
+		"dapr-reentrancy-id":       "r1",
+		"dapr-actor-activation-id": "a1",
+	}, saved)
+}
+
 func TestIsJSONContentType(t *testing.T) {
 	contentTypeTests := []struct {
 		in  string
