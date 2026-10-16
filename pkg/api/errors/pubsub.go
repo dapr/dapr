@@ -229,7 +229,7 @@ func PubSubOutbox(appID string, err error) error {
 		message,
 		errorcodes.PubsubPublishOutbox.Code,
 		string(errorcodes.CategoryPubsub),
-	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
+	).WithErrorInfo(errorcodes.PubsubPublishOutbox.GrpcCode, map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()
 }
