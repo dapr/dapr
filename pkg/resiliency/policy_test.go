@@ -439,6 +439,7 @@ func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
 				}
 				deadline, _ := ctx.Deadline()
 				time.Sleep(test.wait(time.Until(deadline)))
+				//nolint:gosec
 				return struct{}{}, NewCodeError(int32(test.code), status.Error(test.code, "attempt failed"))
 			}
 
