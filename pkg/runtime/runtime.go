@@ -1137,16 +1137,79 @@ func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 // bind with "address already in use" (see issue #6023). The listener is then
 // handed to the internal gRPC server in startGRPCInternalServer.
 func (a *DaprRuntime) reserveInternalGRPCServerPort(ctx context.Context) error {
-	addr := a.runtimeConfig.internalGRPCListenAddress + ":" + strconv.Itoa(a.runtimeConfig.internalGRPCPort)
-	ln, err := listen.TCP(ctx, addr)
-	if err != nil {
-		return err
+	var ln net.Listener
+	if held := a.runtimeConfig.internalGRPCListener; held != nil {
+		var err error
+		if ln, err = held(); err != nil {
+			log.Warnf("Could not use the internal gRPC port held by the process, binding it instead: %v", err)
+			ln = nil
+		}
+	}
+	if ln == nil {
+		var err error
+		ln, err = listen.TCP(ctx, a.runtimeConfig.internalGRPCListenAddress+":"+strconv.Itoa(a.runtimeConfig.internalGRPCPort))
+		if err != nil {
+			return err
+		}
 	}
 	a.grpcInternalServerListener = ln
 	// If the configured port was 0 (dynamic), record the port the OS assigned
 	// so that name resolution and actors advertise the real port.
 	a.runtimeConfig.internalGRPCPort = ln.Addr().(*net.TCPAddr).Port
 	return nil
+}
+
+// ReserveInternalGRPCPort binds the internal gRPC port for the life of the
+// process. daprd calls it before making any outbound connection and hands the
+// result to every runtime it starts. Otherwise, on a SIGHUP restart, the port
+// is free from when the old runtime closes its server until the new one binds
+// it, and the new runtime's own connections (sentry, operator, scheduler) can
+// be given it as their ephemeral source port.
+func ReserveInternalGRPCPort(ctx context.Context, listenAddress, port, appID string) (*InternalGRPCListener, int, error) {
+	p, err := resolveInternalGRPCPort(port, appID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ln, err := listen.TCP(ctx, listenAddress+":"+strconv.Itoa(p))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer ln.Close()
+
+	f, err := ln.(*net.TCPListener).File()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return &InternalGRPCListener{file: f}, ln.Addr().(*net.TCPAddr).Port, nil
+}
+
+// InternalGRPCListener holds the internal gRPC listening socket. Each Listener
+// call returns a duplicate, so closing it leaves the port bound until Close.
+type InternalGRPCListener struct {
+	lock sync.Mutex
+	file *os.File
+}
+
+func (l *InternalGRPCListener) Listener() (net.Listener, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.file == nil {
+		return nil, net.ErrClosed
+	}
+	return net.FileListener(l.file)
+}
+
+func (l *InternalGRPCListener) Close() error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.file == nil {
+		return nil
+	}
+	err := l.file.Close()
+	l.file = nil
+	return err
 }
 
 // closeUnstartedInternalGRPCListener releases the reserved internal gRPC

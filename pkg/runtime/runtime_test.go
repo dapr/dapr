@@ -83,6 +83,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/ports"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -1039,6 +1040,89 @@ func TestStartGRPCInternalServerBindsWithoutReservation(t *testing.T) {
 	// The port is held by the running server.
 	_, err = net.Listen("tcp", fmt.Sprintf("%s:%d", DefaultChannelAddress, port))
 	require.Error(t, err)
+}
+
+// TestInternalGRPCPortHeldAcrossRuntimes verifies that runtimes started in
+// turn serve the port held by the process, and that it stays bound between
+// them.
+func TestInternalGRPCPortHeldAcrossRuntimes(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	addr := net.JoinHostPort(DefaultChannelAddress, strconv.Itoa(port))
+
+	requireBound := func(t *testing.T) {
+		t.Helper()
+		ln, lerr := net.Listen("tcp", addr)
+		if lerr == nil {
+			require.NoError(t, ln.Close())
+		}
+		require.Error(t, lerr, "port %d must stay bound", port)
+	}
+
+	held, got, err := ReserveInternalGRPCPort(t.Context(), DefaultChannelAddress, strconv.Itoa(port), "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, held.Close()) })
+	assert.Equal(t, port, got)
+
+	newRuntime := func(t *testing.T) *DaprRuntime {
+		t.Helper()
+		rt, rerr := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, rerr)
+		rt.runtimeConfig.internalGRPCListenAddress = DefaultChannelAddress
+		rt.runtimeConfig.internalGRPCPort = port
+		rt.runtimeConfig.internalGRPCListener = held.Listener
+		return rt
+	}
+
+	for range 2 {
+		rt := newRuntime(t)
+		rt.runtimeConfig.internalGRPCPort = 0
+		require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+		assert.Equal(t, port, rt.runtimeConfig.internalGRPCPort)
+		require.NoError(t, rt.startGRPCInternalServer(t.Context(), nil))
+
+		conn, derr := net.Dial("tcp", addr)
+		require.NoError(t, derr)
+		require.NoError(t, conn.Close())
+
+		require.NoError(t, rt.grpcInternalServer.Close())
+		requireBound(t)
+	}
+
+	// Once the process has released the port, a runtime binds it itself.
+	require.NoError(t, held.Close())
+	_, err = held.Listener()
+	require.ErrorIs(t, err, net.ErrClosed)
+
+	rt := newRuntime(t)
+	require.NoError(t, rt.reserveInternalGRPCServerPort(t.Context()))
+	requireBound(t)
+	require.NoError(t, rt.closeUnstartedInternalGRPCListener())
+	ln, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	require.NoError(t, ln.Close())
+
+	t.Run("empty port picks the stable port", func(t *testing.T) {
+		want, serr := ports.GetStablePort(internalGRPCStablePortStart, "internal-grpc-held-port")
+		require.NoError(t, serr)
+
+		stable, sgot, serr := ReserveInternalGRPCPort(t.Context(), DefaultChannelAddress, "", "internal-grpc-held-port")
+		require.NoError(t, serr)
+		t.Cleanup(func() { require.NoError(t, stable.Close()) })
+		assert.Equal(t, want, sgot)
+	})
+
+	t.Run("port in use is an error", func(t *testing.T) {
+		taken, terr := net.Listen("tcp", DefaultChannelAddress+":0")
+		require.NoError(t, terr)
+		t.Cleanup(func() { require.NoError(t, taken.Close()) })
+
+		ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		defer cancel()
+		none, _, terr := ReserveInternalGRPCPort(ctx, DefaultChannelAddress, strconv.Itoa(taken.Addr().(*net.TCPAddr).Port), "")
+		require.Error(t, terr)
+		assert.Nil(t, none)
+	})
 }
 
 func TestGracefulShutdown(t *testing.T) {
