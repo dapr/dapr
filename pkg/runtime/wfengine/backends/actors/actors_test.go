@@ -14,11 +14,15 @@ limitations under the License.
 package actors
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestUniqueEventTimestamp(t *testing.T) {
@@ -56,4 +60,15 @@ func TestUniqueEventTimestamp(t *testing.T) {
 			seen[v] = struct{}{}
 		}
 	})
+}
+
+func TestIsCancelled(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isCancelled(context.Canceled))
+	assert.True(t, isCancelled(fmt.Errorf("wrapped: %w", context.Canceled)))
+	assert.True(t, isCancelled(status.Error(codes.Canceled, "context canceled")))
+	assert.False(t, isCancelled(nil))
+	assert.False(t, isCancelled(context.DeadlineExceeded))
+	assert.False(t, isCancelled(status.Error(codes.Unavailable, "x")))
 }
