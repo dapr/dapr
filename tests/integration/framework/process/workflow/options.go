@@ -50,6 +50,7 @@ type options struct {
 	clustered       *bool
 	fastPath        *bool
 	signing         *bool
+	heldOperations  bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -184,6 +185,14 @@ func WithClusteredDeployment(enabled bool) Option {
 func WithFastPath(enabled bool) Option {
 	return func(o *options) {
 		o.fastPath = &enabled
+	}
+}
+
+// WithHeldOperations enables the WorkflowsHeldOperations feature flag on
+// every daprd in the workflow.
+func WithHeldOperations() Option {
+	return func(o *options) {
+		o.heldOperations = true
 	}
 }
 

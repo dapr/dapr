@@ -24,6 +24,12 @@ const ErrorTypeHistoryTampered = "DAPR_WORKFLOW_HISTORY_TAMPERED"
 // instance could never progress; clients can match on it.
 const ErrorTypeUnstartableState = "DAPR_WORKFLOW_UNSTARTABLE_STATE"
 
+// ErrorTypeHeldStartExpired is the FailureDetails.ErrorType set on workflows
+// failed because their start was held for longer than the hold timeout while
+// no workflow worker was connected (WorkflowsHeldOperations); clients can
+// match on it.
+const ErrorTypeHeldStartExpired = "DAPR_WORKFLOW_HELD_START_EXPIRED"
+
 // VerificationError is returned by LoadWorkflowState when the persisted
 // workflow state has been tampered with: signature chain verification has
 // failed, signing material is missing, metadata bounds are exceeded, or

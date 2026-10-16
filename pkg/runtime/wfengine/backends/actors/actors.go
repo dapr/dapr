@@ -103,6 +103,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// WorkflowsHeldOperations holds operations aimed at this app's workflow
+	// actor type while no daprd hosts it; see held.go.
+	WorkflowsHeldOperations bool
+
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
@@ -142,6 +146,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	workflowsHeldOperations         bool
 	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
@@ -260,6 +265,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		workflowsHeldOperations:         opts.WorkflowsHeldOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
@@ -521,13 +527,26 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
+	if abe.noHost(ctx, actorType, workflowInstanceID) {
+		return abe.holdStart(ctx, workflowInstanceID, req, start)
+	}
+
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
+	var held bool
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
+
+		// The host went away after the check above. A missing host is
+		// FailedPrecondition, which this loop would retry until the caller's
+		// deadline: hold the start instead.
+		if abe.isNoHost(actorType, eerr) {
+			held = true
+			return nil
+		}
 
 		// Aborted: a completed child refuses reuse of its ID until its
 		// parent acknowledges the completion.
@@ -544,6 +563,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 
 		return backoff.Permanent(eerr)
 	}, backoff.WithContext(common.NewJitterBackoff(common.RetryBackoffBase, common.RetryBackoffCap), ctx))
+	if held {
+		return abe.holdStart(ctx, workflowInstanceID, req, start)
+	}
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -730,13 +752,21 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
+	start := time.Now()
+
+	if abe.noHost(ctx, actorType, string(id)) {
+		return abe.holdEvent(ctx, id, e, start)
+	}
+
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
-	start := time.Now()
 	_, err = router.Call(ctx, req)
+	if abe.isNoHost(actorType, err) {
+		return abe.holdEvent(ctx, id, e, start)
+	}
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
