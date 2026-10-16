@@ -110,6 +110,21 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 					"activity||bar",
 					"this-is-my-activity",
 				}, names)
+
+				// Calls into the actor state store are traced under a span of
+				// the same trace.
+				ids := make(map[string]bool, len(spans))
+				for _, span := range spans {
+					ids[string(span.GetSpanId())] = true
+				}
+				var storeSpans int
+				for _, span := range spans {
+					if isComponentSpan(span) {
+						storeSpans++
+						assert.True(c, ids[string(span.GetParentSpanId())], "store span %q has no parent in the trace", span.GetName())
+					}
+				}
+				assert.Positive(c, storeSpans, "no state store spans in the workflow trace")
 			}
 		}
 
