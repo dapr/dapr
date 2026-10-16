@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -33,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/queue"
@@ -117,8 +119,11 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newApp := f.initApp(actorID)
-		a, _ = f.table.LoadOrStore(actorID, newApp)
+		var loaded bool
+		a, loaded = f.table.LoadOrStore(actorID, f.initApp(actorID))
+		if !loaded {
+			f.idlerQueue.Enqueue(a.(*app))
+		}
 	}
 
 	aa := a.(*app)
@@ -128,9 +133,10 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 
 func (f *factory) initApp(actorID string) *app {
 	app := &app{
-		actorID: actorID,
-		factory: f,
-		clock:   f.clock,
+		actorID:      actorID,
+		activationMD: &internalv1pb.ListStringValue{Values: []string{uuid.New().String()}},
+		factory:      f,
+		clock:        f.clock,
 		lock: lock.New(lock.Options{
 			ActorType:   f.actorType,
 			ConfigStore: f.reentrancy,
@@ -138,8 +144,6 @@ func (f *factory) initApp(actorID string) *app {
 	}
 
 	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
-
-	f.idlerQueue.Enqueue(app)
 
 	return app
 }
