@@ -20,4 +20,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/otel"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/serviceinvocation"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/state"
 )
