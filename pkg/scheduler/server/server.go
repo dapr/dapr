@@ -43,6 +43,12 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server")
 
+// ErrListen is returned by Run when the server cannot bind its port. The
+// default port lies inside the default ephemeral port range, so one of the
+// process's own outbound connections can hold it; a new process gets new
+// sockets.
+var ErrListen = errors.New("could not listen")
+
 // Controller is a long-lived k8s controller that must only be created
 // once per process because controller-runtime registers controller names globally in the metrics registry.
 type (
@@ -295,7 +301,7 @@ func (s *Server) runServer(ctx context.Context) error {
 	defer s.hzAPIServer.NotReady()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+		return fmt.Errorf("%w on port %d: %w", ErrListen, s.port, err)
 	}
 
 	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
