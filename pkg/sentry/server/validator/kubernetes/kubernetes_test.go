@@ -29,23 +29,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/images"
 )
-
-type countingReader struct {
-	client.Reader
-	getCalls int
-}
-
-func (c *countingReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	c.getCalls++
-	return c.Reader.Get(ctx, key, obj, opts...)
-}
 
 func TestValidate(t *testing.T) {
 	newToken := func(t *testing.T, ns, name string) string {
@@ -1394,20 +1383,21 @@ func TestValidate(t *testing.T) {
 				kobjs = append(kobjs, test.pod)
 			}
 
-			kubeCl := kubefake.NewSimpleClientset(kobjs...)
+			kubeObjs := append([]runtime.Object(nil), kobjs...)
+			if test.uncachedPod != nil {
+				kubeObjs = append(kubeObjs, test.uncachedPod)
+			}
+			kubeCl := kubefake.NewSimpleClientset(kubeObjs...)
 			kubeCl.PrependReactor("create", "tokenreviews", test.reactor(t))
+			uncachedGets := 0
+			kubeCl.PrependReactor("get", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				uncachedGets++
+				return false, nil, nil
+			})
 			scheme := runtime.NewScheme()
 			require.NoError(t, configapi.AddToScheme(scheme))
 			require.NoError(t, corev1.AddToScheme(scheme))
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
-
-			var uncachedObjs []runtime.Object
-			if test.uncachedPod != nil {
-				uncachedObjs = append(uncachedObjs, test.uncachedPod)
-			}
-			uncachedClient := &countingReader{
-				Reader: clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(uncachedObjs...).Build(),
-			}
 
 			if test.config != nil {
 				require.NoError(t, client.Create(t.Context(), test.config))
@@ -1416,7 +1406,7 @@ func TestValidate(t *testing.T) {
 			k := &kubernetes{
 				auth:           kubeCl.AuthenticationV1(),
 				client:         client,
-				uncachedClient: uncachedClient,
+				pods:           kubeCl.CoreV1(),
 				controlPlaneNS: "dapr-test",
 				controlPlaneTD: sentryID.TrustDomain(),
 				sentryAudience: test.sentryAudience,
@@ -1427,40 +1417,9 @@ func TestValidate(t *testing.T) {
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
 			assert.Equal(t, test.expImages, res.ContainerImages)
-			assert.Equal(t, test.expUncachedGets, uncachedClient.getCalls)
+			assert.Equal(t, test.expUncachedGets, uncachedGets)
 		})
 	}
-}
-
-func Test_transformPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:          "mypod",
-			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "test"}},
-		},
-		Spec: corev1.PodSpec{
-			ServiceAccountName: "myserviceaccount",
-			Containers:         []corev1.Container{{Name: "app", Image: "myapp:v1"}},
-		},
-		Status: corev1.PodStatus{
-			ContainerStatuses: []corev1.ContainerStatus{{Name: "app", ImageID: "myapp@sha256:abc"}},
-		},
-	}
-
-	gotObj, err := transformPod(pod)
-	require.NoError(t, err)
-	got, ok := gotObj.(*corev1.Pod)
-	require.True(t, ok)
-	require.NotSame(t, pod, got)
-	assert.Empty(t, got.ManagedFields)
-	assert.Equal(t, pod.Spec, got.Spec)
-	assert.Equal(t, pod.Status, got.Status)
-	assert.NotEmpty(t, pod.ManagedFields)
-
-	nonPod := &configapi.Configuration{}
-	gotObj, err = transformPod(nonPod)
-	require.NoError(t, err)
-	require.Same(t, nonPod, gotObj)
 }
 
 func Test_containerImages(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 )
@@ -49,14 +50,20 @@ type KubeAPIOptions struct {
 func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
-	const sidecarInjectedLabel = "dapr.io/sidecar-injected"
+	// The default fixture models an injected workload: labelled, and served
+	// from the cache. ExcludePodFromList models an unlabelled Pod that the
+	// selector-filtered cache never sees.
+	var podLabels map[string]string
+	if !opts.ExcludePodFromList {
+		podLabels = map[string]string{injectorconsts.SidecarInjectedLabel: "true"}
+	}
 
 	pod := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: opts.Namespace, Name: "mypod",
 			Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
-			Labels:      map[string]string{sidecarInjectedLabel: "true"},
+			Labels:      podLabels,
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: opts.ServiceAccount,
@@ -68,10 +75,9 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			InitContainerStatuses: opts.PodInitContainerStatuses,
 		},
 	}
-	pods := []corev1.Pod{pod}
-	if opts.ExcludePodFromList {
-		pod.Labels = nil
-		pods = nil
+	var pods []corev1.Pod
+	if !opts.ExcludePodFromList {
+		pods = append(pods, pod)
 	}
 
 	kubeOpts := []prockube.Option{
@@ -97,20 +103,9 @@ func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data:       map[string]string{"ca.crt": string(opts.Bundle.X509.TrustAnchors)},
 		}),
-		prockube.WithPath("/api/v1/pods", func(w http.ResponseWriter, r *http.Request) {
-			// The fake informer handles WATCH requests before this callback.
-			// Controller-runtime applies the same selector to LIST and WATCH.
-			assert.Equal(t, sidecarInjectedLabel, r.URL.Query().Get("labelSelector"),
-				"sentry must only list Dapr-injected pods")
-
-			resp, err := json.Marshal(&corev1.PodList{
-				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-				Items:    pods,
-			})
-			assert.NoError(t, err)
-			w.Header().Add("Content-Type", "application/json")
-			_, err = w.Write(resp)
-			assert.NoError(t, err)
+		prockube.WithClusterPodListSelector(t, injectorconsts.SidecarInjectedLabel, &corev1.PodList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+			Items:    pods,
 		}),
 		prockube.WithPath("/apis/authentication.k8s.io/v1/tokenreviews", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)

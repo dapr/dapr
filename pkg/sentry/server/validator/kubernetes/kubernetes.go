@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	cl "k8s.io/client-go/kubernetes"
 	clauthv1 "k8s.io/client-go/kubernetes/typed/authentication/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -72,7 +73,7 @@ type Options struct {
 type kubernetes struct {
 	auth           clauthv1.AuthenticationV1Interface
 	client         client.Reader
-	uncachedClient client.Reader
+	pods           corev1client.CoreV1Interface
 	ready          func(context.Context) bool
 	sentryAudience string
 	controlPlaneNS string
@@ -107,14 +108,10 @@ func New(opts Options) (validator.Validator, error) {
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.Pod{}: {
 				Label:     podSelector,
-				Transform: transformPod,
+				Transform: cache.TransformStripManagedFields(),
 			},
 		},
 	})
-	if err != nil {
-		return nil, err
-	}
-	uncachedClient, err := client.New(opts.RestConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
@@ -122,24 +119,13 @@ func New(opts Options) (validator.Validator, error) {
 	return &kubernetes{
 		auth:           kubeClient.AuthenticationV1(),
 		client:         cache,
-		uncachedClient: uncachedClient,
+		pods:           kubeClient.CoreV1(),
 		ready:          cache.WaitForCacheSync,
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
 		controlPlaneTD: opts.SentryID.TrustDomain(),
 		htarget:        opts.Healthz.AddTarget("sentry-kubernetes-validator"),
 	}, nil
-}
-
-func transformPod(obj any) (any, error) {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return obj, nil
-	}
-
-	pod = pod.DeepCopy()
-	pod.ManagedFields = nil
-	return pod, nil
 }
 
 func (k *kubernetes) Start(ctx context.Context) error {
@@ -210,7 +196,11 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	if apierrors.IsNotFound(err) {
 		// Control-plane Pods, manually injected sidecars, and Pods admitted by
 		// an older injector may not carry the label required by the cache.
-		err = k.uncachedClient.Get(ctx, key, &pod)
+		log.Debugf("Pod %s not in cache, reading it from the API server", key)
+		var p *corev1.Pod
+		if p, err = k.pods.Pods(saNamespace).Get(ctx, claims.Pod.Name, metav1.GetOptions{}); err == nil {
+			pod = *p
+		}
 	}
 	if err != nil {
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
