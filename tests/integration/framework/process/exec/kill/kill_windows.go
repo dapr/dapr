@@ -26,6 +26,9 @@ import (
 	"github.com/dapr/kit/signals"
 )
 
+// HUPLogLine is what daprd logs when it receives a reload signal.
+const HUPLogLine = "Received reload signal via named pipe; restarting"
+
 func interrupt(_ *testing.T, cmd *exec.Cmd) {
 	kill(nil, cmd)
 }
