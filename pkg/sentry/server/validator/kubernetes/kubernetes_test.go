@@ -59,11 +59,13 @@ func TestValidate(t *testing.T) {
 		config  *configapi.Configuration
 
 		sentryAudience string
+		uncachedPod    *corev1.Pod
 
-		expTD     spiffeid.TrustDomain
-		expAud    []string
-		expErr    bool
-		expImages []images.ContainerImage
+		expTD           spiffeid.TrustDomain
+		expAud          []string
+		expErr          bool
+		expImages       []images.ContainerImage
+		expUncachedGets int
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -108,8 +110,9 @@ func TestValidate(t *testing.T) {
 					},
 				},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 
 		"if config in different namespace, expect error": {
@@ -155,8 +158,9 @@ func TestValidate(t *testing.T) {
 					},
 				},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 
 		"is missing app-id and app-id is the same as the pod name, expect no error": {
@@ -1050,8 +1054,9 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			expErr:          true,
+			expTD:           spiffeid.TrustDomain{},
+			expUncachedGets: 1,
 		},
 		"if app ID is 64 characters long don't error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1267,6 +1272,60 @@ func TestValidate(t *testing.T) {
 			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
 			expAud: []string{"custom-audience-1", "custom-audience-2"},
 		},
+		"pod cache miss falls back to the uncached client": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+			},
+			uncachedPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "my-ns",
+					Annotations: map[string]string{
+						"dapr.io/app-id": "my-app-id",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expUncachedGets: 1,
+			expTD:           spiffeid.RequireTrustDomainFromString("public"),
+		},
+		"pod missing from cache and API returns an error": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+			},
+			expUncachedGets: 1,
+			expErr:          true,
+		},
 		"valid request returns the pod's container images": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
@@ -1324,8 +1383,17 @@ func TestValidate(t *testing.T) {
 				kobjs = append(kobjs, test.pod)
 			}
 
-			kubeCl := kubefake.NewSimpleClientset(kobjs...)
+			kubeObjs := append([]runtime.Object(nil), kobjs...)
+			if test.uncachedPod != nil {
+				kubeObjs = append(kubeObjs, test.uncachedPod)
+			}
+			kubeCl := kubefake.NewSimpleClientset(kubeObjs...)
 			kubeCl.PrependReactor("create", "tokenreviews", test.reactor(t))
+			uncachedGets := 0
+			kubeCl.PrependReactor("get", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				uncachedGets++
+				return false, nil, nil
+			})
 			scheme := runtime.NewScheme()
 			require.NoError(t, configapi.AddToScheme(scheme))
 			require.NoError(t, corev1.AddToScheme(scheme))
@@ -1338,6 +1406,7 @@ func TestValidate(t *testing.T) {
 			k := &kubernetes{
 				auth:           kubeCl.AuthenticationV1(),
 				client:         client,
+				pods:           kubeCl.CoreV1(),
 				controlPlaneNS: "dapr-test",
 				controlPlaneTD: sentryID.TrustDomain(),
 				sentryAudience: test.sentryAudience,
@@ -1348,6 +1417,7 @@ func TestValidate(t *testing.T) {
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
 			assert.Equal(t, test.expImages, res.ContainerImages)
+			assert.Equal(t, test.expUncachedGets, uncachedGets)
 		})
 	}
 }
