@@ -716,3 +716,32 @@ func Test_duplicateOnStaleCompletedCacheIsNotAcked(t *testing.T) {
 	require.Error(t, err, "a duplicate judged on a stale completed cache must not be acked")
 	assert.Nil(t, h.orch.state, "the stale cache must be dropped so the retry reloads")
 }
+
+// A redelivered result of activity A, acked as a duplicate after the workflow
+// was terminated while activity B ran, must not release the reuse guard B's
+// dispatch set: B's result is still in flight (createIfCompleted).
+func Test_duplicateCompletionOnCompletedWorkflowKeepsTheAwait(t *testing.T) {
+	const instanceID = "test-completed-duplicate-await"
+
+	for _, fastPath := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fastPath=%v", fastPath), func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, fastPath)
+			h.primeRunning(t, instanceID, 7)
+			h.orch.state.AddToHistory(taskCompletedEvent(7))
+			h.orch.state.AddToHistory(taskScheduledEvent(8))
+			h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+			}
+			h.orch.activityResultAwaited.Store(true)
+			h.lock.Lock()
+			h.saved = true
+			h.lock.Unlock()
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+			assert.True(t, h.orch.activityResultAwaited.Load(), "a duplicate of A must not release the guard B holds")
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8), completionSender{}))
+			assert.False(t, h.orch.activityResultAwaited.Load(), "B's own result settles the await")
+		})
+	}
+}

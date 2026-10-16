@@ -245,8 +245,9 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		// it or dropped it, so a completed instance's ID becomes reusable.
 		// Not for a forged one: the task's real result is still in flight,
 		// and releasing the guard here would let the forger recreate the
-		// instance under it.
-		if !a.unauthorized && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
+		// instance under it. Nor for a duplicate: its first delivery already
+		// released the guard, which a later activity may hold by now.
+		if !a.unauthorized && a.reason != reasonDuplicateOfCompleted && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
 			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)
