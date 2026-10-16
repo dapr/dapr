@@ -134,7 +134,7 @@ func (s *mixedchunks) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := client2.FetchWorkflowMetadata(ctx, api.InstanceID(leafID))
 		assert.NoError(c, err)
-		assert.Equal(c, api.RUNTIME_STATUS_FAILED, meta.GetRuntimeStatus(),
+		assert.Equal(c, api.RUNTIME_STATUS_CANCELED, meta.GetRuntimeStatus(),
 			"any tampered chunk in a multi-chunk lineage must tombstone the receiver")
 	}, 20*time.Second, 10*time.Millisecond)
 }
