@@ -86,6 +86,16 @@ const (
 	// limits gate per job delivery, which local drives bypass. Preview
 	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
+
+	// WorkflowsHeldOperations holds a workflow start, raise event,
+	// terminate, suspend or resume aimed at this app while no daprd of the
+	// app has a workflow worker connected, instead of blocking or failing
+	// it. The operation is kept as a scheduler reminder on the workflow
+	// actor and replayed once a worker connects, so errors such as a
+	// duplicate instance ID surface when it replays rather than to the
+	// caller. Operations aimed at another app are not held. Preview
+	// feature; disabled by default.
+	WorkflowsHeldOperations Feature = "WorkflowsHeldOperations"
 )
 
 // end feature flags section

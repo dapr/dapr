@@ -551,3 +551,7 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+// TEMPORARY: durabletask-go with WithSkipWaitForStateChange
+// (dapr/durabletask-go#143). Replace with a pin bump once it merges.
+replace github.com/dapr/durabletask-go => github.com/famarting/durabletask-go v0.0.0-20261016145901-69d0e9935dc1
