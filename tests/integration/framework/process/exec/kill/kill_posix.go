@@ -24,6 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// HUPLogLine is what daprd logs when it receives a reload signal.
+const HUPLogLine = "Received signal 'hangup'; restarting"
+
 func interrupt(t *testing.T, cmd *exec.Cmd) {
 	require.NoError(t, cmd.Process.Signal(os.Interrupt))
 }

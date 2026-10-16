@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -132,7 +133,7 @@ func (r *resiliency) Run(t *testing.T, ctx context.Context) {
 		// itself: the old one still answers health checks, and a test that
 		// ends on it has its teardown interrupt the new one mid-start.
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.True(ct, r.logOut.Contains("Received signal 'hangup'; restarting"))
+			assert.True(ct, r.logOut.Contains(kill.HUPLogLine))
 			assert.True(ct, r.logOut.Contains("dapr initialized. Status: Running."))
 		}, 15*time.Second, 10*time.Millisecond)
 		r.daprd.WaitUntilRunning(t, ctx)

@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	grpcsentry "github.com/dapr/dapr/tests/integration/framework/process/grpc/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -102,5 +103,5 @@ func (i *interrupt) Run(t *testing.T, ctx context.Context) {
 
 	// Cleanup interrupts daprd and waits for its output to be read.
 	i.daprd.Cleanup(t)
-	assert.True(t, i.logOut.Contains("Received signal 'hangup'; restarting"))
+	assert.True(t, i.logOut.Contains(kill.HUPLogLine))
 }
