@@ -16,9 +16,11 @@ package ports
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -45,24 +47,46 @@ const freedGrace = 30 * time.Second
 
 // portsBase returns the starting port for reservation probing. A test binary
 // re-executed inside an unshare user namespace (where our mapped euid is 0)
-// probes from a high base to avoid colliding with the parent process's
-// reservations on the lower port range.
+// probes the top fifth of the range to avoid colliding with the parent
+// process's reservations on the lower port range.
 func portsBase() int {
 	if os.Geteuid() == 0 {
-		return 40000
+		return portsCeil - portsCeil/5
 	}
 	return 1024
 }
 
 const blockSize = 500
 
-// portsCeil is the exclusive upper bound for reservation probing. It is kept
-// strictly below the OS ephemeral port range (macOS default 49152-65535) so
-// that held-open reserved listeners never squat on ports the kernel needs to
-// assign for outbound dials. Exhausting the outbound ephemeral pool surfaces
-// as EADDRNOTAVAIL ("can't assign requested address") and was the dominant
-// failure mode on the 3-core macos-14 CI runner.
-const portsCeil = 49000
+// portsCeil is the exclusive upper bound for reservation probing: the first
+// port of the OS ephemeral range, capped at maxPortsCeil. Probing only below
+// that range keeps held-open reserved listeners off ports the kernel assigns
+// for outbound dials (exhausting that pool surfaces as EADDRNOTAVAIL, "can't
+// assign requested address"), and stops the kernel from handing a port that
+// Free just released to an outbound dial as its source port before the
+// process that reserved it binds it ("bind: address already in use"). The
+// macOS CI job lowers the range to start at 16384, and Linux defaults to
+// 32768.
+var portsCeil = ephemeralCeil(ephemeralFloor())
+
+const maxPortsCeil = 49000
+
+func ephemeralCeil(floor int, err error) int {
+	if err != nil || floor < 8192 {
+		fmt.Fprintf(os.Stderr, "ports: cannot use OS ephemeral port floor %d (err: %v), reserving below %d\n", floor, err, maxPortsCeil)
+		return maxPortsCeil
+	}
+	return min(floor, maxPortsCeil)
+}
+
+// parsePortRange returns the first port of a Linux ip_local_port_range value.
+func parsePortRange(b []byte) (int, error) {
+	f := strings.Fields(string(b))
+	if len(f) != 2 {
+		return 0, fmt.Errorf("unexpected port range %q", b)
+	}
+	return strconv.Atoi(f[0])
+}
 
 // Ports reserves network ports, and then frees them when the test is ready to
 // run so a  process can bind to them at runtime.
