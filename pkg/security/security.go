@@ -295,7 +295,18 @@ func (p *provider) Run(ctx context.Context) error {
 	}
 
 	return concurrency.NewRunnerManager(
-		p.sec.spiffe.Run,
+		func(ctx context.Context) error {
+			// A shutdown that interrupts the identity fetch, for example a
+			// signal while a SIGHUP restart starts, is not a failure: the
+			// cancelled gRPC call does not wrap context.Canceled.
+			if err := p.sec.spiffe.Run(ctx); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return err
+			}
+			return nil
+		},
 		p.sec.trustAnchors.Run,
 		func(ctx context.Context) error {
 			if err := p.sec.spiffe.Ready(ctx); err != nil {
