@@ -52,6 +52,7 @@ type Store struct {
 	multiWriteBehind *holdSpec
 	bulkGetHold      *holdSpec
 	getHold          *holdSpec
+	initHold         *holdSpec
 
 	multiCancelled atomic.Int32
 
@@ -264,6 +265,22 @@ func (s *Store) ArmGetHold(sub string) (arrived <-chan struct{}, release func())
 	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
 }
 
+// ArmInitHold arms a one-shot hold on daprd's Init of this store. Init blocks
+// until release is called; if its context is done first, Init returns the
+// context's error.
+func (s *Store) ArmInitHold() (arrived <-chan struct{}, release func()) {
+	spec := &holdSpec{
+		arrived:   make(chan struct{}),
+		releaseCh: make(chan struct{}),
+	}
+	s.mu.Lock()
+	s.initHold = spec
+	s.mu.Unlock()
+
+	var once sync.Once
+	return spec.arrived, func() { once.Do(func() { close(spec.releaseCh) }) }
+}
+
 // ArmGetFailures arms the proxy to fail the next n Gets whose key contains
 // keySubstring with a transient error. n=0 disarms. notify, when non-nil, is
 // closed on the first injected failure.
@@ -284,6 +301,30 @@ func (s *Store) ArmGetEmpty(keySubstring string, n int, notify chan struct{}) {
 	s.getEmptyRemaining = n
 	s.getEmptyNotifyCh = notify
 	s.mu.Unlock()
+}
+
+// Init implements state.Store. The framework calls Init once during its own
+// setup with empty metadata (see statestore.go); only daprd's Init, which the
+// gRPC adapter (component.go) always passes with a component name, is held.
+func (s *Store) Init(ctx context.Context, meta state.Metadata) error {
+	var hold *holdSpec
+	s.mu.Lock()
+	if meta.Name != "" && s.initHold != nil {
+		hold = s.initHold
+		s.initHold = nil
+	}
+	s.mu.Unlock()
+
+	if hold != nil {
+		close(hold.arrived)
+		select {
+		case <-hold.releaseCh:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return s.Wrapped.Init(ctx, meta)
 }
 
 // Get implements state.Store, honouring armed Get failures, empty answers

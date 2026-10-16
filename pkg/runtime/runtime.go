@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -1137,16 +1138,142 @@ func (a *DaprRuntime) startHTTPServer(ctx context.Context) error {
 // bind with "address already in use" (see issue #6023). The listener is then
 // handed to the internal gRPC server in startGRPCInternalServer.
 func (a *DaprRuntime) reserveInternalGRPCServerPort(ctx context.Context) error {
-	addr := a.runtimeConfig.internalGRPCListenAddress + ":" + strconv.Itoa(a.runtimeConfig.internalGRPCPort)
-	ln, err := listen.TCP(ctx, addr)
-	if err != nil {
-		return err
+	var ln net.Listener
+	if held := a.runtimeConfig.internalGRPCListener; held != nil {
+		var err error
+		if ln, err = held(); err != nil {
+			log.Warnf("Could not use the internal gRPC port held by the process, binding it instead: %v", err)
+			ln = nil
+		}
+	}
+	if ln == nil {
+		var err error
+		ln, err = listen.TCP(ctx, a.runtimeConfig.internalGRPCListenAddress+":"+strconv.Itoa(a.runtimeConfig.internalGRPCPort))
+		if err != nil {
+			return err
+		}
 	}
 	a.grpcInternalServerListener = ln
 	// If the configured port was 0 (dynamic), record the port the OS assigned
 	// so that name resolution and actors advertise the real port.
 	a.runtimeConfig.internalGRPCPort = ln.Addr().(*net.TCPAddr).Port
 	return nil
+}
+
+// ReserveInternalGRPCPort binds the internal gRPC port for the life of the
+// process. daprd calls it before making any outbound connection and hands the
+// result to every runtime it starts. Otherwise, on a SIGHUP restart, the port
+// is free from when the old runtime closes its server until the new one binds
+// it, and the new runtime's own connections (sentry, operator, scheduler) can
+// be given it as their ephemeral source port.
+func ReserveInternalGRPCPort(ctx context.Context, listenAddress, port, appID string) (*InternalGRPCListener, int, error) {
+	p, err := resolveInternalGRPCPort(port, appID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ln, err := listen.TCP(ctx, listenAddress+":"+strconv.Itoa(p))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	tln := ln.(*net.TCPListener)
+	return &InternalGRPCListener{ln: tln}, tln.Addr().(*net.TCPAddr).Port, nil
+}
+
+// InternalGRPCListener holds the internal gRPC listening socket. Runtimes
+// serve the socket itself, one at a time, rather than a duplicate: Windows
+// cannot make a listener from a duplicate more than once.
+type InternalGRPCListener struct {
+	lock   sync.Mutex
+	ln     *net.TCPListener
+	inUse  bool
+	closed bool
+}
+
+// Listener returns the held socket for a runtime whose life is ctx. Closing
+// it stops the runtime's Accept and leaves the port bound, so connections made
+// before the next runtime starts wait in the backlog. A runtime that closes it
+// while ctx is still live is stopping for good (the shutdown API), so the port
+// is released then.
+func (l *InternalGRPCListener) Listener(ctx context.Context) (net.Listener, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.closed {
+		return nil, net.ErrClosed
+	}
+	if l.inUse {
+		return nil, errors.New("internal gRPC listener is in use by another runtime")
+	}
+	if err := l.ln.SetDeadline(time.Time{}); err != nil {
+		return nil, err
+	}
+	l.inUse = true
+	return &runtimeListener{TCPListener: l.ln, held: l, ctx: ctx}, nil
+}
+
+// Close releases the port, or, while a runtime serves it, marks it to be
+// released when that runtime closes its listener.
+func (l *InternalGRPCListener) Close() error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	l.closed = true
+	if l.inUse {
+		return nil
+	}
+	return l.closeLocked()
+}
+
+func (l *InternalGRPCListener) release(final bool) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	l.inUse = false
+	if final {
+		l.closed = true
+	}
+	if l.closed {
+		return l.closeLocked()
+	}
+	// Unblock the runtime's Accept without closing the socket.
+	return l.ln.SetDeadline(time.Unix(1, 0))
+}
+
+func (l *InternalGRPCListener) closeLocked() error {
+	if l.ln == nil {
+		return nil
+	}
+	err := l.ln.Close()
+	l.ln = nil
+	return err
+}
+
+// runtimeListener is one runtime's use of the held socket.
+type runtimeListener struct {
+	*net.TCPListener
+	held   *InternalGRPCListener
+	ctx    context.Context
+	once   sync.Once
+	closed atomic.Bool
+}
+
+func (r *runtimeListener) Accept() (net.Conn, error) {
+	if r.closed.Load() {
+		return nil, net.ErrClosed
+	}
+	conn, err := r.TCPListener.Accept()
+	if err != nil && r.closed.Load() {
+		return nil, net.ErrClosed
+	}
+	return conn, err
+}
+
+func (r *runtimeListener) Close() error {
+	var err error
+	r.once.Do(func() {
+		r.closed.Store(true)
+		err = r.held.release(r.ctx.Err() == nil)
+	})
+	return err
 }
 
 // closeUnstartedInternalGRPCListener releases the reserved internal gRPC
