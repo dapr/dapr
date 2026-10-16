@@ -34,7 +34,16 @@ const (
 	tracerName          = "dapr-diagnostics"
 )
 
-var tracer trace.Tracer = otel.Tracer(tracerName)
+// tracer returns the tracer of the tracer provider installed now.
+//
+// It is resolved when a span starts, not once at package init. A SIGHUP hot
+// reload restarts the runtime in-process, which shuts its tracer provider down
+// and installs a new one. A tracer resolved at init stays bound to the first
+// provider the global delegate was set to, so after the first restart every
+// span would be started on a provider that no longer exports anything.
+func tracer() trace.Tracer {
+	return otel.Tracer(tracerName)
+}
 
 // SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
@@ -171,7 +180,7 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	//nolint:spancheck
-	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := tracer().Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
 
 	//nolint:spancheck
 	return ctx, span
