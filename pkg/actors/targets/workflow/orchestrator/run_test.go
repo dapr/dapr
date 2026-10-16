@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1470,6 +1471,7 @@ func Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache(t *testing.T) {
 		name            string
 		fresh           bool
 		noCachedETag    bool
+		staleHistory    bool
 		storeETag       string
 		storeGeneration uint64
 		metaErr         bool
@@ -1479,6 +1481,7 @@ func Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache(t *testing.T) {
 		{name: "current cache", storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 0},
 		{name: "stale etag", storeETag: "meta-v2", storeGeneration: 1, wantBulkGets: 1},
 		{name: "same etag, other generation", storeETag: "meta-v1", storeGeneration: 2, wantBulkGets: 1},
+		{name: "same etag and generation, other history length", staleHistory: true, storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 1},
 		{name: "cache without an etag", noCachedETag: true, storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 1},
 		{name: "fresh load is not reloaded", fresh: true, storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 1},
 		{name: "metadata read fails", storeETag: "meta-v1", storeGeneration: 1, metaErr: true, wantBulkGets: 0, wantErr: true},
@@ -1551,7 +1554,11 @@ func Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache(t *testing.T) {
 					WorkflowActorType: "dapr.internal.default.testapp.workflow",
 					ActivityActorType: "dapr.internal.default.testapp.activity",
 				})
-				for _, e := range history {
+				cachedHistory := history
+				if tc.staleHistory {
+					cachedHistory = history[:1]
+				}
+				for _, e := range cachedHistory {
 					state.AddToHistory(e)
 				}
 				if !tc.noCachedETag {
@@ -1571,6 +1578,218 @@ func Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache(t *testing.T) {
 				assert.Equal(t, todo.RunCompletedTrue, completed)
 			}
 			assert.Equal(t, tc.wantBulkGets, bulkGets, "history reads")
+		})
+	}
+}
+
+// etagStore serves a workflow's rows like fakeStoreServingState, with an ETag
+// on the metadata row, and counts the history reloads.
+func etagStore(t *testing.T, etag string, generation uint64, history, inbox []*backend.HistoryEvent, bulkGets *atomic.Int32) *statefake.Fake {
+	t.Helper()
+
+	meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		Generation:    generation,
+		InboxLength:   uint64(len(inbox)),
+		HistoryLength: uint64(len(history)),
+	})
+	require.NoError(t, err)
+	rows := make(map[string][]byte, len(history)+len(inbox))
+	for i, e := range inbox {
+		data, merr := proto.Marshal(e)
+		require.NoError(t, merr)
+		rows[fmt.Sprintf("inbox-%06d", i)] = data
+	}
+	for i, e := range history {
+		data, merr := proto.Marshal(e)
+		require.NoError(t, merr)
+		rows[fmt.Sprintf("history-%06d", i)] = data
+	}
+
+	return statefake.New().
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			if req.Key == wfenginestate.MetadataKey {
+				return &actorapi.StateResponse{Data: meta, ETag: &etag}, nil
+			}
+			return &actorapi.StateResponse{}, nil
+		}).
+		WithGetBulkFn(func(_ context.Context, req *actorapi.GetBulkStateRequest, _ bool) (actorapi.BulkStateResponse, error) {
+			bulkGets.Add(1)
+			res := make(actorapi.BulkStateResponse, len(req.Keys))
+			for _, k := range req.Keys {
+				res[k] = actorapi.BulkStateEntry{Data: rows[k]}
+			}
+			return res, nil
+		})
+}
+
+// cachedWithETag returns a cached state holding history, as last saved under
+// etag.
+func cachedWithETag(history []*backend.HistoryEvent, etag string) *wfenginestate.State {
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+	})
+	for _, e := range history {
+		state.AddToHistory(e)
+	}
+	state.SetMetadataETag(&etag)
+	return state
+}
+
+// Test_runWorkflow_emptyInboxDrivesAPendingDurableEvent verifies that a cache
+// whose ETag, generation and history length match the store's metadata row
+// is still reloaded when the row records a pending inbox event, which the
+// turn then processes instead of acking the wake-up away.
+func Test_runWorkflow_emptyInboxDrivesAPendingDurableEvent(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-pending-durable-event"
+	history := terminalHistory(instanceID)[:2]
+	inbox := []*backend.HistoryEvent{{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "go"}},
+	}}
+
+	var bulkGets atomic.Int32
+	var driven []*backend.HistoryEvent
+	fact, err := New(t.Context(), Options{
+		AppID:             "testapp",
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+		Scheduler: func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+			driven = wi.NewEvents
+			wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
+			return nil
+		},
+		Actors: fake.New().WithState(func(context.Context) (actorstate.Interface, error) {
+			return etagStore(t, "meta-v1", 1, history, inbox, &bulkGets), nil
+		}),
+	})
+	require.NoError(t, err)
+
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	o.state = cachedWithETag(history, "meta-v1")
+	o.primeCachedState(o.state, nil)
+
+	completed, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-pending"})
+	require.Error(t, err, "the abandoned turn keeps the reminder")
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	assert.Equal(t, int32(1), bulkGets.Load(), "the cache must be reloaded")
+	require.Len(t, driven, 1, "the durable event must be driven, not acked away")
+	assert.Equal(t, "go", driven[0].GetEventRaised().GetName())
+}
+
+// Test_runWorkflow_emptyInboxReloadsATerminalCache verifies that a terminal
+// cache is reloaded on an empty-inbox wake-up even when the store's metadata
+// row matches it. Settling a terminal instance reads what the row does not
+// cover: here the instance was purged and recreated, so its generation
+// restarted at 1, and it completed again with as many events under an ETag
+// the store reused. Retention must be armed from the stored completion, not
+// the cached one, which would purge the new execution early.
+func Test_runWorkflow_emptyInboxReloadsATerminalCache(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-recreated-after-purge"
+	cachedHistory := terminalHistory(instanceID)
+	storedHistory := terminalHistory(instanceID)
+	cachedAt := time.Now().Add(-time.Hour).UTC()
+	storedAt := time.Now().UTC()
+	cachedHistory[2].Timestamp = timestamppb.New(cachedAt)
+	storedHistory[2].Timestamp = timestamppb.New(storedAt)
+
+	var (
+		bulkGets atomic.Int32
+		mu       sync.Mutex
+		dues     = map[string]string{}
+	)
+	retention := time.Hour
+	fact, err := New(t.Context(), Options{
+		AppID:              "testapp",
+		WorkflowActorType:  "workflow",
+		ActivityActorType:  "activity",
+		RetentionActorType: "retentioner",
+		ActorTypeBuilder:   common.NewActorTypeBuilder("default"),
+		RetentionPolicy:    &config.WorkflowStateRetentionPolicy{AnyTerminal: &retention},
+		Actors: fake.New().
+			WithReminders(func(context.Context) (actorreminders.Interface, error) {
+				return remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+					mu.Lock()
+					defer mu.Unlock()
+					dues[req.Name] = req.DueTime
+					return nil
+				}), nil
+			}).
+			WithState(func(context.Context) (actorstate.Interface, error) {
+				return etagStore(t, "meta-v1", 1, storedHistory, nil, &bulkGets), nil
+			}),
+	})
+	require.NoError(t, err)
+
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	o.state = cachedWithETag(cachedHistory, "meta-v1")
+	o.primeCachedState(o.state, nil)
+	require.True(t, runtimestate.IsCompleted(o.rstate), "precondition: the cache is terminal")
+
+	completed, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-late"})
+	require.NoError(t, err)
+	assert.Equal(t, todo.RunCompletedTrue, completed)
+	assert.Equal(t, int32(1), bulkGets.Load(), "the terminal cache must be reloaded")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, storedAt.Add(retention).Format(time.RFC3339Nano), dues[retentionReminderName],
+		"retention must run from the stored completion")
+}
+
+// Test_confirmCachedState_checksMoreThanTheETag verifies that a drop is
+// acked off the cache only when the store's metadata row describes it: the
+// post-save refresh can record a peer's ETag, and a store can restart a
+// row's version when it is recreated, so a matching ETag alone does not show
+// the cache current.
+func Test_confirmCachedState_checksMoreThanTheETag(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-confirm"
+	history := terminalHistory(instanceID)[:2]
+
+	for _, tc := range []struct {
+		name       string
+		etag       string
+		generation uint64
+		history    []*backend.HistoryEvent
+		wantStale  bool
+	}{
+		{name: "current", etag: "meta-v1", generation: 1, history: history},
+		{name: "other etag", etag: "meta-v2", generation: 1, history: history, wantStale: true},
+		{name: "same etag, other generation", etag: "meta-v1", generation: 2, history: history, wantStale: true},
+		{name: "same etag, other history length", etag: "meta-v1", generation: 1, history: terminalHistory(instanceID), wantStale: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var bulkGets atomic.Int32
+			o := &orchestrator{
+				factory: &factory{
+					actorType:  "workflow",
+					actorState: etagStore(t, tc.etag, tc.generation, tc.history, nil, &bulkGets),
+				},
+				actorID: instanceID,
+			}
+			state := cachedWithETag(history, "meta-v1")
+			o.state = state
+
+			err := o.confirmCachedState(t.Context(), state)
+			if !tc.wantStale {
+				require.NoError(t, err)
+				assert.NotNil(t, o.state, "a current cache is kept")
+				return
+			}
+			require.Error(t, err)
+			assert.True(t, wferrors.IsRecoverable(err), "the sender retries against a fresh load")
+			assert.Nil(t, o.state, "a stale cache is dropped")
 		})
 	}
 }

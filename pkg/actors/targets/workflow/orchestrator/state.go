@@ -233,7 +233,7 @@ func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginest
 		o.invalidateCachedState()
 		return api.ErrInstanceNotFound
 	}
-	if cur, have := res.ETag, state.MetadataETag(); cur != nil && have != nil && *cur != *have {
+	if _, ok := rowDescribesCache(res, state); !ok {
 		o.invalidateCachedState()
 		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
 	}
@@ -514,13 +514,10 @@ func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *pro
 
 // cachedInboxCurrent reports whether the store agrees with the cached state
 // that nothing waits in the inbox: its metadata row (one read, not the whole
-// history) carries the cached ETag, generation and history length and an
-// empty inbox. The ETag alone is not enough: the post-save refresh can record
-// a peer's newer ETag, and some stores restart a row's version when the row
-// is recreated. A cache without an ETag cannot be confirmed.
+// history) describes the cached state and holds an empty inbox. A cache or a
+// row without an ETag cannot be confirmed.
 func (o *orchestrator) cachedInboxCurrent(ctx context.Context, state *wfenginestate.State) (bool, error) {
-	have := state.MetadataETag()
-	if have == nil {
+	if state.MetadataETag() == nil {
 		return false, nil
 	}
 	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
@@ -531,14 +528,26 @@ func (o *orchestrator) cachedInboxCurrent(ctx context.Context, state *wfenginest
 	if err != nil {
 		return false, err
 	}
-	if res == nil || len(res.Data) == 0 || res.ETag == nil || *res.ETag != *have {
+	if res == nil || len(res.Data) == 0 || res.ETag == nil {
 		return false, nil
+	}
+	meta, ok := rowDescribesCache(res, state)
+	return ok && meta.GetInboxLength() == 0, nil
+}
+
+// rowDescribesCache reports whether a metadata row read from the store
+// describes the cached state: the same generation and history length, and the
+// same ETag when both carry one. The ETag alone is not enough: the post-save
+// refresh can record a peer's newer ETag, and some stores restart a row's
+// version when the row is recreated. An unreadable row does not.
+func rowDescribesCache(res *actorsapi.StateResponse, state *wfenginestate.State) (*backend.BackendWorkflowStateMetadata, bool) {
+	if cur, have := res.ETag, state.MetadataETag(); cur != nil && have != nil && *cur != *have {
+		return nil, false
 	}
 	var meta backend.BackendWorkflowStateMetadata
 	if err := proto.Unmarshal(res.Data, &meta); err != nil {
-		return false, nil //nolint:nilerr // an unreadable row is not a current one; the reload reports it
+		return nil, false
 	}
-	return meta.GetInboxLength() == 0 &&
-		meta.GetGeneration() == state.Generation &&
-		meta.GetHistoryLength() == uint64(len(state.History)), nil
+	return &meta, meta.GetGeneration() == state.Generation &&
+		meta.GetHistoryLength() == uint64(len(state.History))
 }

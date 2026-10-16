@@ -599,9 +599,13 @@ func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.
 		// The reload reads every history row, and a fan-out leaves about one
 		// already-drained wake-up per activity, so it runs only when the
 		// cache cannot be shown current: a state this turn loaded is, and so
-		// is a cached one the store's metadata row agrees with.
+		// is a cached running one the store's metadata row agrees with. A
+		// terminal cache always reloads: settling it reads what the row does
+		// not cover (the parent-notify row a peer may have set, and the
+		// completion time of an instance recreated after a purge restarted
+		// its generation).
 		current := fresh
-		if !current {
+		if !current && !runtimestate.IsCompleted(o.rstate) {
 			var cerr error
 			if current, cerr = o.cachedInboxCurrent(ctx, state); cerr != nil {
 				return state, true, todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state on empty-inbox path: %w", cerr))
