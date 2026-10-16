@@ -16,11 +16,15 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/scheduler/server"
 )
 
 type fakeServer struct {
@@ -42,6 +46,32 @@ func Test_runServerLoop(t *testing.T) {
 			return nil, fatal
 		})
 		require.ErrorIs(t, err, fatal)
+	})
+
+	t.Run("a port that cannot be bound is fatal", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		var runs atomic.Int32
+		done := make(chan error, 1)
+		go func() {
+			done <- runServerLoop(ctx, func() (serverRunner, error) {
+				return &fakeServer{run: func(context.Context) error {
+					runs.Add(1)
+					return fmt.Errorf("%w on port 50006: listen tcp 0.0.0.0:50006: bind: address already in use", server.ErrListen)
+				}}, nil
+			})
+		}()
+
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, server.ErrListen)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("bind failure retried in the same process (%d runs)", runs.Load())
+		}
+		assert.Equal(t, int32(1), runs.Load(), "a bind failure must not be retried in the same process")
 	})
 
 	t.Run("runtime failures are retried until the server recovers", func(t *testing.T) {
