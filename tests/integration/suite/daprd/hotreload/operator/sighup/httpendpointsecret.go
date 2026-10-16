@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
@@ -129,6 +130,6 @@ func (h *httpendpointsecret) Run(t *testing.T, ctx context.Context) {
 	assert.False(t, h.logOut.Contains("triggering SIGHUP reload"),
 		"an unchanged endpoint with a secret reference must not restart daprd")
 	assert.Never(t, func() bool {
-		return h.logOut.Contains("Received signal 'hangup'")
+		return h.logOut.Contains(kill.HUPLogLine)
 	}, time.Second, time.Millisecond*50)
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -108,7 +109,7 @@ func (h *httpendpointstale) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, h.logOut.Contains("Received signal 'hangup'; restarting"),
+		assert.True(c, h.logOut.Contains(kill.HUPLogLine),
 			"an endpoint that differs from the loaded one must restart daprd")
 	}, time.Second*10, time.Millisecond*10)
 }
