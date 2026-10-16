@@ -65,6 +65,23 @@ type Store struct {
 	getEmptyKeySubstring string
 	getEmptyRemaining    int
 	getEmptyNotifyCh     chan struct{}
+
+	bulkGetCounters []bulkGetCounter
+}
+
+type bulkGetCounter struct {
+	sub string
+	n   *atomic.Int32
+}
+
+// CountBulkGets counts every later BulkGet that touches a key containing sub
+// and returns a func reading the count.
+func (s *Store) CountBulkGets(sub string) func() int {
+	c := bulkGetCounter{sub: sub, n: new(atomic.Int32)}
+	s.mu.Lock()
+	s.bulkGetCounters = append(s.bulkGetCounters, c)
+	s.mu.Unlock()
+	return func() int { return int(c.n.Load()) }
 }
 
 // holdSpec is a one-shot arm-able hold on a store operation matching a key
@@ -427,6 +444,14 @@ func (s *Store) Multi(ctx context.Context, req *state.TransactionalStateRequest)
 // block the read between a caller's metadata Get and its bulk entry read.
 func (s *Store) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
 	s.mu.Lock()
+	for _, c := range s.bulkGetCounters {
+		for _, r := range req {
+			if strings.Contains(r.Key, c.sub) {
+				c.n.Add(1)
+				break
+			}
+		}
+	}
 	var hold *holdSpec
 	if s.bulkGetHold != nil {
 		for _, r := range req {

@@ -1456,3 +1456,121 @@ func Test_runWorkflow_unstartableCacheButDurableStartableRetries(t *testing.T) {
 	require.Len(t, o.state.Inbox, 1)
 	assert.NotNil(t, o.state.Inbox[0].GetExecutionStarted())
 }
+
+// Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache verifies that a wake-up
+// finding the inbox empty reloads the history only when the cache cannot be
+// shown current against the store's metadata row: a fan-out leaves about one
+// drained wake-up per activity, and each full reload holds the actor lock.
+func Test_runWorkflow_emptyInboxReloadsOnlyAStaleCache(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-drained-wakeup"
+
+	for _, tc := range []struct {
+		name            string
+		fresh           bool
+		noCachedETag    bool
+		storeETag       string
+		storeGeneration uint64
+		metaErr         bool
+		wantBulkGets    int
+		wantErr         bool
+	}{
+		{name: "current cache", storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 0},
+		{name: "stale etag", storeETag: "meta-v2", storeGeneration: 1, wantBulkGets: 1},
+		{name: "same etag, other generation", storeETag: "meta-v1", storeGeneration: 2, wantBulkGets: 1},
+		{name: "cache without an etag", noCachedETag: true, storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 1},
+		{name: "fresh load is not reloaded", fresh: true, storeETag: "meta-v1", storeGeneration: 1, wantBulkGets: 1},
+		{name: "metadata read fails", storeETag: "meta-v1", storeGeneration: 1, metaErr: true, wantBulkGets: 0, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			history := []*backend.HistoryEvent{
+				{
+					EventId: -1, Timestamp: timestamppb.Now(),
+					EventType: &protos.HistoryEvent_WorkflowStarted{WorkflowStarted: &protos.WorkflowStartedEvent{}},
+				},
+				{
+					EventId: -1, Timestamp: timestamppb.Now(),
+					EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+						Name:             "TestWorkflow",
+						WorkflowInstance: &protos.WorkflowInstance{InstanceId: instanceID},
+					}},
+				},
+			}
+
+			metaRow, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+				Generation:    tc.storeGeneration,
+				HistoryLength: uint64(len(history)),
+			})
+			require.NoError(t, err)
+			rows := make(map[string][]byte, len(history))
+			for i, e := range history {
+				data, merr := proto.Marshal(e)
+				require.NoError(t, merr)
+				rows[fmt.Sprintf("history-%06d", i)] = data
+			}
+
+			var bulkGets int
+			storeETag := tc.storeETag
+			actorState := statefake.New().
+				WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+					if req.Key == wfenginestate.MetadataKey {
+						if tc.metaErr {
+							return nil, errors.New("store unavailable")
+						}
+						return &actorapi.StateResponse{Data: metaRow, ETag: &storeETag}, nil
+					}
+					return &actorapi.StateResponse{}, nil
+				}).
+				WithGetBulkFn(func(_ context.Context, req *actorapi.GetBulkStateRequest, _ bool) (actorapi.BulkStateResponse, error) {
+					bulkGets++
+					res := make(actorapi.BulkStateResponse, len(req.Keys))
+					for _, k := range req.Keys {
+						res[k] = actorapi.BulkStateEntry{Data: rows[k]}
+					}
+					return res, nil
+				})
+
+			o := &orchestrator{
+				factory: &factory{
+					appID:              "testapp",
+					actorType:          "dapr.internal.default.testapp.workflow",
+					activityActorType:  "dapr.internal.default.testapp.activity",
+					retentionActorType: "dapr.internal.default.testapp.retentioner",
+					reminders:          remindersfake.New(),
+					actorState:         actorState,
+					actorTypeBuilder:   common.NewActorTypeBuilder("default"),
+				},
+				actorID: instanceID,
+			}
+			if !tc.fresh {
+				state := wfenginestate.NewState(wfenginestate.Options{
+					AppID:             "testapp",
+					WorkflowActorType: "dapr.internal.default.testapp.workflow",
+					ActivityActorType: "dapr.internal.default.testapp.activity",
+				})
+				for _, e := range history {
+					state.AddToHistory(e)
+				}
+				if !tc.noCachedETag {
+					cachedETag := "meta-v1"
+					state.SetMetadataETag(&cachedETag)
+				}
+				o.state = state
+				o.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+			}
+
+			completed, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-drained"})
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Equal(t, todo.RunCompletedFalse, completed, "a failed check must keep the reminder")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, todo.RunCompletedTrue, completed)
+			}
+			assert.Equal(t, tc.wantBulkGets, bulkGets, "history reads")
+		})
+	}
+}

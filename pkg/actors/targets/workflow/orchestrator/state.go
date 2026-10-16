@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -509,4 +510,35 @@ func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *pro
 		}
 	}
 	return &protos.ExecutionStartedEvent{}
+}
+
+// cachedInboxCurrent reports whether the store agrees with the cached state
+// that nothing waits in the inbox: its metadata row (one read, not the whole
+// history) carries the cached ETag, generation and history length and an
+// empty inbox. The ETag alone is not enough: the post-save refresh can record
+// a peer's newer ETag, and some stores restart a row's version when the row
+// is recreated. A cache without an ETag cannot be confirmed.
+func (o *orchestrator) cachedInboxCurrent(ctx context.Context, state *wfenginestate.State) (bool, error) {
+	have := state.MetadataETag()
+	if have == nil {
+		return false, nil
+	}
+	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if err != nil {
+		return false, err
+	}
+	if res == nil || len(res.Data) == 0 || res.ETag == nil || *res.ETag != *have {
+		return false, nil
+	}
+	var meta backend.BackendWorkflowStateMetadata
+	if err := proto.Unmarshal(res.Data, &meta); err != nil {
+		return false, nil //nolint:nilerr // an unreadable row is not a current one; the reload reports it
+	}
+	return meta.GetInboxLength() == 0 &&
+		meta.GetGeneration() == state.Generation &&
+		meta.GetHistoryLength() == uint64(len(state.History)), nil
 }
