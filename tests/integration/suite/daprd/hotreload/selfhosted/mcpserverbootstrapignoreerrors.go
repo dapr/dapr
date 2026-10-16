@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,7 +65,7 @@ func (m *mcpserverbootstrapignoreerrors) Setup(t *testing.T) []framework.Option 
 
 	m.resDir = t.TempDir()
 
-	require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "a.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "a.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -73,8 +74,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://127.0.0.1:1/mcp
-`), 0o600))
+      url: %s/mcp
+`, prochttp.NotFoundURL(t)), 0o600))
 
 	m.logline = logline.New(t, logline.WithCaptureAll())
 
