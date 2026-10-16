@@ -134,6 +134,7 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
+			Processor: opts.Processor,
 			Healthz:   opts.Healthz,
 		}),
 		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
@@ -192,6 +193,7 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
+			Processor: opts.Processor,
 			Healthz:   opts.Healthz,
 		}),
 		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
