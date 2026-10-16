@@ -120,6 +120,18 @@ func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
 	return handleClusterListResource(t, "/api/v1/pods", pods)
 }
 
+func WithClusterPodListSelector(t *testing.T, selector string, pods *corev1.PodList) Option {
+	return func(o *options) {
+		handle := handleObj(t, pods)
+		o.handlers["/api/v1/pods"] = func(w http.ResponseWriter, r *http.Request) {
+			// The fake informer handles WATCH requests before this callback.
+			// Controller-runtime applies the same selector to LIST and WATCH.
+			assert.Equal(t, selector, r.URL.Query().Get("labelSelector"))
+			handle(w, r)
+		}
+	}
+}
+
 func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option {
 	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
 }
@@ -154,6 +166,10 @@ func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Opt
 
 func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
+}
+
+func WithPodGet(t *testing.T, pod *corev1.Pod) Option {
+	return handleGetResource(t, "/api/v1", "pods", pod.Namespace, pod.Name, pod)
 }
 
 func WithStatefulSetGet(t *testing.T, statefulset *appsv1.StatefulSet) Option {
