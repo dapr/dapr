@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -1175,40 +1176,103 @@ func ReserveInternalGRPCPort(ctx context.Context, listenAddress, port, appID str
 	if err != nil {
 		return nil, 0, err
 	}
-	defer ln.Close()
 
-	f, err := ln.(*net.TCPListener).File()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return &InternalGRPCListener{file: f}, ln.Addr().(*net.TCPAddr).Port, nil
+	tln := ln.(*net.TCPListener)
+	return &InternalGRPCListener{ln: tln}, tln.Addr().(*net.TCPAddr).Port, nil
 }
 
-// InternalGRPCListener holds the internal gRPC listening socket. Each Listener
-// call returns a duplicate, so closing it leaves the port bound until Close.
+// InternalGRPCListener holds the internal gRPC listening socket. Runtimes
+// serve the socket itself, one at a time, rather than a duplicate: Windows
+// cannot make a listener from a duplicate more than once.
 type InternalGRPCListener struct {
-	lock sync.Mutex
-	file *os.File
+	lock   sync.Mutex
+	ln     *net.TCPListener
+	inUse  bool
+	closed bool
 }
 
-func (l *InternalGRPCListener) Listener() (net.Listener, error) {
+// Listener returns the held socket for a runtime whose life is ctx. Closing
+// it stops the runtime's Accept and leaves the port bound, so connections made
+// before the next runtime starts wait in the backlog. A runtime that closes it
+// while ctx is still live is stopping for good (the shutdown API), so the port
+// is released then.
+func (l *InternalGRPCListener) Listener(ctx context.Context) (net.Listener, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	if l.file == nil {
+	if l.closed {
 		return nil, net.ErrClosed
 	}
-	return net.FileListener(l.file)
+	if l.inUse {
+		return nil, errors.New("internal gRPC listener is in use by another runtime")
+	}
+	if err := l.ln.SetDeadline(time.Time{}); err != nil {
+		return nil, err
+	}
+	l.inUse = true
+	return &runtimeListener{TCPListener: l.ln, held: l, ctx: ctx}, nil
 }
 
+// Close releases the port, or, while a runtime serves it, marks it to be
+// released when that runtime closes its listener.
 func (l *InternalGRPCListener) Close() error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	if l.file == nil {
+	l.closed = true
+	if l.inUse {
 		return nil
 	}
-	err := l.file.Close()
-	l.file = nil
+	return l.closeLocked()
+}
+
+func (l *InternalGRPCListener) release(final bool) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	l.inUse = false
+	if final {
+		l.closed = true
+	}
+	if l.closed {
+		return l.closeLocked()
+	}
+	// Unblock the runtime's Accept without closing the socket.
+	return l.ln.SetDeadline(time.Unix(1, 0))
+}
+
+func (l *InternalGRPCListener) closeLocked() error {
+	if l.ln == nil {
+		return nil
+	}
+	err := l.ln.Close()
+	l.ln = nil
+	return err
+}
+
+// runtimeListener is one runtime's use of the held socket.
+type runtimeListener struct {
+	*net.TCPListener
+	held   *InternalGRPCListener
+	ctx    context.Context
+	once   sync.Once
+	closed atomic.Bool
+}
+
+func (r *runtimeListener) Accept() (net.Conn, error) {
+	if r.closed.Load() {
+		return nil, net.ErrClosed
+	}
+	conn, err := r.TCPListener.Accept()
+	if err != nil && r.closed.Load() {
+		return nil, net.ErrClosed
+	}
+	return conn, err
+}
+
+func (r *runtimeListener) Close() error {
+	var err error
+	r.once.Do(func() {
+		r.closed.Store(true)
+		err = r.held.release(r.ctx.Err() == nil)
+	})
 	return err
 }
 

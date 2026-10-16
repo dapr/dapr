@@ -286,8 +286,6 @@ func (s *Store) ArmGetEmpty(keySubstring string, n int, notify chan struct{}) {
 	s.mu.Unlock()
 }
 
-// Get implements state.Store, honouring armed Get failures, empty answers
-// and holds.
 // Init implements state.Store. The framework calls Init once during its own
 // setup with empty metadata (see statestore.go); only daprd's Init, which the
 // gRPC adapter (component.go) always passes with a component name, is held.
@@ -312,6 +310,8 @@ func (s *Store) Init(ctx context.Context, meta state.Metadata) error {
 	return s.Wrapped.Init(ctx, meta)
 }
 
+// Get implements state.Store, honouring armed Get failures, empty answers
+// and holds.
 func (s *Store) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	s.mu.Lock()
 	if s.getEmptyKeySubstring != "" && s.getEmptyRemaining > 0 && strings.Contains(req.Key, s.getEmptyKeySubstring) {
