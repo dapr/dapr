@@ -74,6 +74,7 @@ type options struct {
 	controlPlaneTrustDomain    *string
 	appBindingOptionsTimeout   *time.Duration
 	schedulerAddresses         []string
+	schedulerJobStreams        *uint
 	disableInitEndpoints       []string
 	maxBodySize                *string
 	allowedOrigins             *string
@@ -272,6 +273,14 @@ func WithPlacementAddresses(addresses ...string) Option {
 func WithSchedulerAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
+	}
+}
+
+// WithSchedulerJobStreams sets how many job streams daprd opens to each
+// scheduler (the --scheduler-job-streams flag).
+func WithSchedulerJobStreams(n uint) Option {
+	return func(o *options) {
+		o.schedulerJobStreams = &n
 	}
 }
 
