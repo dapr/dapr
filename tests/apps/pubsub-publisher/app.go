@@ -94,6 +94,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedCloudEventIDs     []string `json:"cloudevent-ids"`
 	ReceivedByTopicJob        []string `json:"pubsub-job-topic"`
 	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
 	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
@@ -114,6 +115,7 @@ func mergeReceivedMessages(acc, next *receivedMessagesResponse) {
 	acc.ReceivedByTopicA = mergeSlices(acc.ReceivedByTopicA, next.ReceivedByTopicA)
 	acc.ReceivedByTopicB = mergeSlices(acc.ReceivedByTopicB, next.ReceivedByTopicB)
 	acc.ReceivedByTopicC = mergeSlices(acc.ReceivedByTopicC, next.ReceivedByTopicC)
+	acc.ReceivedCloudEventIDs = mergeSlices(acc.ReceivedCloudEventIDs, next.ReceivedCloudEventIDs)
 	acc.ReceivedByTopicJob = mergeSlices(acc.ReceivedByTopicJob, next.ReceivedByTopicJob)
 	acc.ReceivedByTopicRaw = mergeSlices(acc.ReceivedByTopicRaw, next.ReceivedByTopicRaw)
 	acc.ReceivedByTopicDead = mergeSlices(acc.ReceivedByTopicDead, next.ReceivedByTopicDead)
