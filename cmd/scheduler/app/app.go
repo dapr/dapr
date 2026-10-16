@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -198,7 +199,10 @@ const (
 // HA fleet, whose members would otherwise all crash-restart together.
 // Healthz reports not-ready between incarnations, so orchestration still
 // observes the outage. Errors from getServer are configuration failures and
-// remain fatal.
+// remain fatal, as is a port the server cannot bind: the holder can outlive
+// every incarnation (one of this process's own long-lived connections, for
+// one), and retrying in-process then keeps the replica unready until its
+// liveness probe restarts it.
 func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) error {
 	retryBackoff := backoff.NewJitter(serverRetryBackoffBase, serverRetryBackoffCap)
 	for {
@@ -208,14 +212,17 @@ func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) 
 			return ctx.Err()
 		}
 
-		server, err := getServer()
+		srv, err := getServer()
 		if err != nil {
 			return err
 		}
 
-		err = server.Run(ctx)
+		err = srv.Run(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if errors.Is(err, server.ErrListen) {
+			return err
 		}
 		if err == nil {
 			// A nil return with a live context is a server-requested restart:
