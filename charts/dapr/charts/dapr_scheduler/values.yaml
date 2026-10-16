@@ -40,7 +40,7 @@ cluster:
 
 etcdSpaceQuota: 9.2E
 etcdCompactionMode: revision
-etcdCompactionRetention: "1000000"
+etcdCompactionRetention: "10000"
 etcdSnapshotCount: 100000
 etcdMaxSnapshots: 10
 etcdMaxWals: 10
