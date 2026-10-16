@@ -27,6 +27,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
@@ -47,6 +48,7 @@ type scopes struct {
 }
 
 func (s *scopes) Setup(t *testing.T) []framework.Option {
+	url := prochttp.NotFoundURL(t) + "/mcp"
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	// daprd1 ("myapp") should load global-mcp and scoped-mcp.
@@ -84,20 +86,20 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "global-mcp", Namespace: "default"},
 					Spec: mcpapi.MCPServerSpec{
-						// example.com is unreachable; ignoreErrors keeps daprd up.
+						// The URL answers 404; ignoreErrors keeps daprd up.
 						IgnoreErrors: true,
 						Endpoint: mcpapi.MCPEndpoint{
-							StreamableHTTP: &mcpapi.MCPStreamableHTTP{URL: "http://example.com/mcp"},
+							StreamableHTTP: &mcpapi.MCPStreamableHTTP{URL: url},
 						},
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "scoped-mcp", Namespace: "default"},
 					Spec: mcpapi.MCPServerSpec{
-						// scoped.example.com is unreachable; ignoreErrors keeps daprd up.
+						// The URL answers 404; ignoreErrors keeps daprd up.
 						IgnoreErrors: true,
 						Endpoint: mcpapi.MCPEndpoint{
-							StreamableHTTP: &mcpapi.MCPStreamableHTTP{URL: "http://scoped.example.com/mcp"},
+							StreamableHTTP: &mcpapi.MCPStreamableHTTP{URL: url},
 						},
 					},
 					Scoped: commonapi.Scoped{Scopes: []string{"myapp"}},
