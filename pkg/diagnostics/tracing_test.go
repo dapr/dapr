@@ -29,6 +29,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -385,7 +386,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 
 		ctx := t.Context()
 		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-		_, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
+		_, span := tracer().Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
 
 		id, state := TraceIDAndStateFromSpan(span)
 		assert.NotEmpty(t, id)
@@ -406,4 +407,41 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 		assert.Empty(t, id)
 		assert.Empty(t, state)
 	})
+}
+
+// A SIGHUP hot reload restarts the runtime in-process: the runtime shuts its
+// tracer provider down and installs a new one. Spans started after that must
+// reach the new provider, not the one that was shut down.
+func TestSpansReachTheTracerProviderInstalledLast(t *testing.T) {
+	previous := otel.GetTracerProvider()
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+
+	traceSpec := &config.TracingSpec{SamplingRate: "1"}
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	before := tracetest.NewSpanRecorder()
+	beforeProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(before))
+	otel.SetTracerProvider(beforeProvider)
+
+	_, span := StartInternalCallbackSpan(t.Context(), "before reload", parent, traceSpec)
+	span.End()
+	require.Len(t, before.Ended(), 1)
+
+	// What a SIGHUP restart does to the tracer provider.
+	require.NoError(t, beforeProvider.Shutdown(t.Context()))
+	after := tracetest.NewSpanRecorder()
+	afterProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(after))
+	t.Cleanup(func() { _ = afterProvider.Shutdown(context.Background()) })
+	otel.SetTracerProvider(afterProvider)
+
+	_, span = StartInternalCallbackSpan(t.Context(), "after reload", parent, traceSpec)
+	span.End()
+
+	ended := after.Ended()
+	require.Len(t, ended, 1, "the span must reach the tracer provider installed by the restart")
+	assert.Equal(t, "after reload", ended[0].Name())
 }
