@@ -66,6 +66,34 @@ var (
 		"scheduler/concurrency_throttled_total",
 		"Total number of triggers that were throttled by global concurrency limits.",
 		stats.UnitDimensionless)
+	concurrencyLimitGauge = stats.Int64(
+		"scheduler/concurrency_limit",
+		"Current effective concurrency limit of a gate on this scheduler instance, 0 when unlimited.",
+		stats.UnitDimensionless)
+	concurrencyOverloadTotal = stats.Int64(
+		"scheduler/concurrency_overload_total",
+		"Total number of times an adaptive concurrency limit was created or cut because of overload.",
+		stats.UnitDimensionless)
+	concurrencyDispatchedTotal = stats.Int64(
+		"scheduler/concurrency_dispatched_total",
+		"Total number of triggers dispatched through a concurrency gate, or for a workflow or activity name.",
+		stats.UnitDimensionless)
+	concurrencyWaitLatency = stats.Float64(
+		"scheduler/concurrency_wait_latency",
+		"Time a trigger subject to concurrency limits waited in the scheduler for a slot before it was dispatched, by actor type and by actor type and name.",
+		stats.UnitMilliseconds)
+	concurrencyLatencyRatio = stats.Float64(
+		"scheduler/concurrency_latency_ratio",
+		"Latency ratio an adaptive concurrency limit is decided on: current round trip time over uncongested round trip time, the lower median across workflow or activity names (actor types) or across apps (namespace). 0 when too few triggers completed to measure.",
+		stats.UnitDimensionless)
+	concurrencyUncongestedLatency = stats.Float64(
+		"scheduler/concurrency_uncongested_latency",
+		"Round trip time an adaptive concurrency limit expects a trigger to take when nothing is queued. 0 when not yet known.",
+		stats.UnitMilliseconds)
+	concurrencyNicenessGauge = stats.Int64(
+		"scheduler/concurrency_niceness",
+		"Configured niceness of an app, or of a workflow or activity name, from -20 to 19.",
+		stats.UnitDimensionless)
 	jobsDeletedTotal = stats.Int64(
 		"scheduler/jobs_deleted_total",
 		"The total number of deleted jobs.",
@@ -319,6 +347,64 @@ func RecordConcurrencyThrottled(key string) {
 	)
 }
 
+// RecordConcurrencyLimit records the effective limit of a concurrency gate on
+// this scheduler instance.
+func RecordConcurrencyLimit(key string, limit int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyLimitGauge.Name(), tagConcurrencyKey, key),
+		concurrencyLimitGauge.M(limit),
+	)
+}
+
+// RecordConcurrencyOverload records that an adaptive concurrency limit was
+// created or cut because of overload.
+func RecordConcurrencyOverload(key string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyOverloadTotal.Name(), tagConcurrencyKey, key),
+		concurrencyOverloadTotal.M(1),
+	)
+}
+
+// RecordConcurrencyDispatched records that a trigger was dispatched for a
+// concurrency key.
+func RecordConcurrencyDispatched(key string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyDispatchedTotal.Name(), tagConcurrencyKey, key),
+		concurrencyDispatchedTotal.M(1),
+	)
+}
+
+// RecordConcurrencyWait records how long a trigger waited for a concurrency
+// slot before it was dispatched.
+func RecordConcurrencyWait(key string, wait time.Duration) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyWaitLatency.Name(), tagConcurrencyKey, key),
+		concurrencyWaitLatency.M(float64(wait)/float64(time.Millisecond)),
+	)
+}
+
+// RecordConcurrencyEstimate records the signal an adaptive concurrency limit
+// is decided on: the latency ratio and the uncongested round trip time.
+func RecordConcurrencyEstimate(key string, ratio float64, uncongested time.Duration) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyLatencyRatio.Name(), tagConcurrencyKey, key),
+		concurrencyLatencyRatio.M(ratio),
+	)
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyUncongestedLatency.Name(), tagConcurrencyKey, key),
+		concurrencyUncongestedLatency.M(float64(uncongested)/float64(time.Millisecond)),
+	)
+}
+
+// RecordConcurrencyNiceness records the configured niceness of an app or of a
+// workflow or activity name.
+func RecordConcurrencyNiceness(key string, niceness int32) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(concurrencyNicenessGauge.Name(), tagConcurrencyKey, key),
+		concurrencyNicenessGauge.M(int64(niceness)),
+	)
+}
+
 var (
 	tagDeletedJob     = utils.WithTags(jobsDeletedTotal.Name(), tagType, "job")
 	tagDeletedActor   = utils.WithTags(jobsDeletedTotal.Name(), tagType, "actor")
@@ -401,6 +487,13 @@ func InitMetrics() error {
 		utils.NewMeasureView(concurrencyInflightGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyPendingGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
+		utils.NewMeasureView(concurrencyLimitGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyOverloadTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
+		utils.NewMeasureView(concurrencyDispatchedTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
+		utils.NewMeasureView(concurrencyWaitLatency, []tag.Key{tagConcurrencyKey}, view.Distribution(0, 1, 5, 25, 100, 500, 1000, 5000, 30000, 120000)),
+		utils.NewMeasureView(concurrencyLatencyRatio, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyUncongestedLatency, []tag.Key{tagConcurrencyKey}, view.LastValue()),
+		utils.NewMeasureView(concurrencyNicenessGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),

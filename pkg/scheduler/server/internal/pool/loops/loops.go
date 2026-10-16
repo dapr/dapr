@@ -15,6 +15,7 @@ package loops
 
 import (
 	"context"
+	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -82,9 +83,15 @@ type ConnCloseNamespace struct {
 	Namespace string
 }
 
+// ConcurrencyRelease returns the gate slots held by a trigger once it has
+// been resolved, carrying what the adaptive limits learn from it.
 type ConcurrencyRelease struct {
 	*connbase
-	GateKeys []string
+	GateKeys  []string
+	ActorType string
+	Name      string
+	Sent      time.Time
+	Result    api.TriggerResponseResult
 }
 
 // SchedulerInfoUpdate propagates the current scheduler cluster size and this
