@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/grpc"
@@ -30,6 +31,13 @@ import (
 var (
 	discoveryLog        = logger.NewLogger("pluggable-components-discovery")
 	onServiceDiscovered map[string]func(name string, dialer GRPCConnectionDialer)
+
+	// discoveryRetryInterval is how often the socket folder is re-checked while waiting for component sockets to appear.
+	discoveryRetryInterval = 500 * time.Millisecond
+	// discoveryTimeout bounds how long discovery waits for component sockets to appear before giving up.
+	// Only applies when the socket folder exists (i.e. pluggable components are configured); a missing
+	// folder still returns immediately.
+	discoveryTimeout = 30 * time.Second
 )
 
 func init() {
@@ -74,6 +82,27 @@ type grpcConnectionCloser interface {
 	Close() error
 }
 
+// waitForComponentSockets blocks until at least one non-directory entry shows up
+// under dir, or discoveryTimeout elapses. The injector appends pluggable component
+// containers after daprd in spec.containers and the kubelet does not wait for them,
+// so their sockets may not exist yet when discovery runs its first read. Without
+// this wait, slow components (e.g. Python-based ones needing a few hundred ms to
+// listen) are missed for the lifetime of the process.
+func waitForComponentSockets(dir string) {
+	deadline := time.Now().Add(discoveryTimeout)
+	for time.Now().Before(deadline) {
+		entries, err := os.ReadDir(dir)
+		if err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					return
+				}
+			}
+		}
+		time.Sleep(discoveryRetryInterval)
+	}
+}
+
 // serviceDiscovery returns all available discovered pluggable components services.
 // uses gRPC reflection package to list implemented services.
 func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, func(), error), dialOpts ...grpc.DialOption) ([]service, error) {
@@ -84,6 +113,11 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 	if os.IsNotExist(err) { // not exists is the same as empty.
 		return services, nil
 	}
+
+	// The socket folder exists, so pluggable components are configured, but their
+	// containers may still be starting. Wait for their sockets instead of doing a
+	// single read that misses them.
+	waitForComponentSockets(componentsSocketPath)
 
 	log.Debugf("loading pluggable components under path %s", componentsSocketPath)
 	if err != nil {
