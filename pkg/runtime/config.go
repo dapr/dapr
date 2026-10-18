@@ -450,7 +450,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %w", err)
 	}
 
-	intc.internalGRPCPort, err = resolveInternalGRPCPort(c.DaprInternalGRPCPort, intc.id)
+	intc.internalGRPCPort, err = resolveInternalGRPCPort(c.DaprInternalGRPCPort, intc.id,
+		c.DaprAPIGRPCPort, c.DaprHTTPPort, c.ProfilePort, c.DaprPublicPort, c.Metrics.Port, c.ApplicationPort)
 	if err != nil {
 		return nil, err
 	}
@@ -599,10 +600,21 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 // resolveInternalGRPCPort returns the configured internal gRPC port. An empty
 // or "0" port gets a "stable random" port, the same each time the same app
-// starts if it is free, otherwise a random one.
-func resolveInternalGRPCPort(port, appID string) (int, error) {
+// starts if it is free, otherwise a random one. That pick never lands on
+// serverPorts, the ports of the servers daprd binds after this one and of the
+// app: the internal listener is reserved first, so a clash would make that
+// server (or the app) fail to start.
+func resolveInternalGRPCPort(port, appID string, serverPorts ...string) (int, error) {
 	if port == "" || port == "0" {
-		p, err := ports.GetStablePort(internalGRPCStablePortStart, appID)
+		// Unset or invalid server ports are skipped: their own parsing reports them.
+		var exclude []int
+		for _, sp := range serverPorts {
+			if n, err := strconv.Atoi(sp); err == nil {
+				exclude = append(exclude, n)
+			}
+		}
+
+		p, err := ports.GetStablePort(internalGRPCStablePortStart, appID, exclude...)
 		if err != nil {
 			return 0, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}

@@ -46,6 +46,7 @@ type options struct {
 	grpcPort                   int
 	httpPort                   int
 	internalGRPCPort           int
+	omitInternalGRPCPort       bool
 	publicPort                 int
 	metricsPort                int
 	profilePort                int
@@ -152,6 +153,14 @@ func WithHTTPPort(port int) Option {
 func WithInternalGRPCPort(port int) Option {
 	return func(o *options) {
 		o.internalGRPCPort = port
+	}
+}
+
+// WithoutInternalGRPCPort leaves --dapr-internal-grpc-port unset so daprd
+// picks the port itself. InternalGRPCPort then no longer reports the real port.
+func WithoutInternalGRPCPort() Option {
+	return func(o *options) {
+		o.omitInternalGRPCPort = true
 	}
 }
 
