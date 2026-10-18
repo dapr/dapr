@@ -110,8 +110,17 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		defer func() { <-l.lock }()
 
 		flight.depth--
-		if flight.depth == 0 {
-			if v := l.inflights.RemoveFront(); v != nil {
+		// Only the front of the queue holds the actor's turn. A request which
+		// is released while still queued (e.g. cancelled by its caller) must
+		// not pop the front, as that would start the next request while the
+		// current turn is still in progress. It is instead left in the queue
+		// with a depth of 0, and skipped once it reaches the front.
+		if flight.depth == 0 && l.inflights.Front() == flight {
+			v := l.inflights.RemoveFront()
+			for v != nil && v.depth == 0 {
+				v = l.inflights.RemoveFront()
+			}
+			if v != nil {
 				close(v.startCh)
 			}
 		}
