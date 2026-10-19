@@ -123,12 +123,17 @@ func coded[T any](res T, err error) (T, error) {
 	return res, err
 }
 
-// settledOnRetry treats done on a retried create or delete as success: an
-// earlier attempt most likely completed the operation before its response was
-// lost. done is ALREADY_EXISTS for a create and NOT_FOUND for a delete. On the
-// first attempt it is a genuine outcome, which retrying cannot change.
-func settledOnRetry(ctx context.Context, done codes.Code, err error) error {
-	if grpcstatus.Code(err) != done {
+// deletedOnRetry treats NOT_FOUND on a retried index or collection delete as
+// success: an earlier attempt most likely deleted it before its response was
+// lost, and either way it is gone. On the first attempt it is a genuine
+// outcome, which retrying cannot change.
+//
+// Creates have no counterpart. ALREADY_EXISTS on a retry does not show that
+// this request created and configured the resource: it may belong to another
+// caller, or to an earlier attempt that is still running after a policy
+// timeout and whose rollback will remove it.
+func deletedOnRetry(ctx context.Context, err error) error {
+	if grpcstatus.Code(err) != codes.NotFound {
 		return err
 	}
 	if resiliency.GetAttempt(ctx) > 1 {

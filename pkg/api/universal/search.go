@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -40,7 +39,7 @@ func (a *Universal) CreateIndexAlpha1(ctx context.Context, req *runtimev1pb.Crea
 		Metadata: req.GetMetadata(),
 	}
 	err = runSearchPolicy(ctx, a, storeName, "create_index", func(ctx context.Context) error {
-		return settledOnRetry(ctx, codes.AlreadyExists, comp.CreateIndex(ctx, compReq))
+		return comp.CreateIndex(ctx, compReq)
 	})
 	if err != nil {
 		return nil, err
@@ -117,7 +116,7 @@ func (a *Universal) DeleteIndexAlpha1(ctx context.Context, req *runtimev1pb.Dele
 		Metadata: req.GetMetadata(),
 	}
 	err = runSearchPolicy(ctx, a, storeName, "delete_index", func(ctx context.Context) error {
-		return settledOnRetry(ctx, codes.NotFound, comp.DeleteIndex(ctx, compReq))
+		return deletedOnRetry(ctx, comp.DeleteIndex(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err

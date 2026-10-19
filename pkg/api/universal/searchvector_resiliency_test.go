@@ -378,67 +378,65 @@ func (c *createSearch) DeleteIndex(context.Context, *compsearch.DeleteIndexReque
 	return c.create(c.calls.Add(1))
 }
 
-func TestCreatedOnRetry(t *testing.T) {
+func TestRetriedCreateAndDelete(t *testing.T) {
 	t.Parallel()
 
-	newAPI := func(create func(attempt int32) error) *Universal {
+	newAPI := func(policies v1alpha1.PolicyNames, create func(attempt int32) error) (*Universal, *createSearch) {
 		res := &v1alpha1.Resiliency{
 			Spec: v1alpha1.ResiliencySpec{
 				Policies: v1alpha1.Policies{
+					Timeouts: map[string]string{"fast": "50ms"},
 					Retries: map[string]v1alpha1.Retry{
 						"twice": {MaxRetries: new(2), Policy: "constant", Duration: "10ms"},
 					},
 				},
 				Targets: v1alpha1.Targets{
-					Components: map[string]v1alpha1.ComponentPolicyNames{
-						testSearchStore: {Outbound: v1alpha1.PolicyNames{Retry: "twice"}},
-					},
+					Components: map[string]v1alpha1.ComponentPolicyNames{testSearchStore: {Outbound: policies}},
 				},
 			},
 		}
+		comp := &createSearch{create: create}
 		store := compstore.New()
-		store.AddSearch(testSearchStore, &createSearch{create: create})
-		return &Universal{logger: testLogger, resiliency: resiliency.FromConfigurations(testLogger, res), compStore: store}
+		store.AddSearch(testSearchStore, comp)
+		return &Universal{logger: testLogger, resiliency: resiliency.FromConfigurations(testLogger, res), compStore: store}, comp
 	}
+	retry := v1alpha1.PolicyNames{Retry: "twice"}
 	req := &runtimev1pb.CreateIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex}
 
-	t.Run("ALREADY_EXISTS on a retry is success", func(t *testing.T) {
+	t.Run("ALREADY_EXISTS on a retry is not taken as a successful create", func(t *testing.T) {
 		t.Parallel()
 
-		api := newAPI(func(attempt int32) error {
+		// The first attempt outlives the policy timeout and is still running,
+		// as a create whose rollback is pending would be, when the retries
+		// find the index it created.
+		release := make(chan struct{})
+		t.Cleanup(func() { close(release) })
+		api, comp := newAPI(v1alpha1.PolicyNames{Timeout: "fast", Retry: "twice"}, func(attempt int32) error {
 			if attempt == 1 {
-				return grpcstatus.Error(codes.Unavailable, "response lost")
+				<-release
+				return nil
 			}
 			return grpcstatus.Error(codes.AlreadyExists, "exists")
 		})
 		_, err := api.CreateIndexAlpha1(t.Context(), req)
-		require.NoError(t, err)
+		assert.Equal(t, codes.AlreadyExists, grpcstatus.Code(err))
+		assert.Equal(t, "exists", grpcstatus.Convert(err).Message())
+		assert.Equal(t, int32(3), comp.calls.Load())
 	})
 
-	t.Run("NOT_FOUND on a retried delete is success", func(t *testing.T) {
+	t.Run("ALREADY_EXISTS is retried by the policy", func(t *testing.T) {
 		t.Parallel()
 
-		api := newAPI(func(attempt int32) error {
-			if attempt == 1 {
-				return grpcstatus.Error(codes.Unavailable, "response lost")
+		// A pending rollback may yet remove the conflicting index.
+		api, comp := newAPI(retry, func(attempt int32) error {
+			if attempt < 3 {
+				return grpcstatus.Error(codes.AlreadyExists, "exists")
 			}
-			return grpcstatus.Error(codes.NotFound, "no such index")
+			return nil
 		})
-		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		_, err := api.CreateIndexAlpha1(t.Context(), req)
 		require.NoError(t, err)
-	})
-
-	t.Run("NOT_FOUND on the first delete attempt is an error", func(t *testing.T) {
-		t.Parallel()
-
-		var calls atomic.Int32
-		api := newAPI(func(int32) error {
-			calls.Add(1)
-			return grpcstatus.Error(codes.NotFound, "no such index")
-		})
-		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
-		assert.Equal(t, codes.NotFound, grpcstatus.Code(err))
-		assert.Equal(t, int32(1), calls.Load(), "a missing index is not retried")
+		assert.Equal(t, int32(3), comp.calls.Load())
 	})
 
 	t.Run("without a retry policy ALREADY_EXISTS is returned unchanged", func(t *testing.T) {
@@ -455,17 +453,27 @@ func TestCreatedOnRetry(t *testing.T) {
 		assert.NotErrorAs(t, err, new(*backoff.PermanentError))
 	})
 
-	t.Run("ALREADY_EXISTS on the first attempt is an error", func(t *testing.T) {
+	t.Run("NOT_FOUND on a retried delete is success", func(t *testing.T) {
 		t.Parallel()
 
-		var calls atomic.Int32
-		api := newAPI(func(int32) error {
-			calls.Add(1)
-			return grpcstatus.Error(codes.AlreadyExists, "exists")
+		api, _ := newAPI(retry, func(attempt int32) error {
+			if attempt == 1 {
+				return grpcstatus.Error(codes.Unavailable, "response lost")
+			}
+			return grpcstatus.Error(codes.NotFound, "no such index")
 		})
-		_, err := api.CreateIndexAlpha1(t.Context(), req)
-		assert.Equal(t, codes.AlreadyExists, grpcstatus.Code(err))
-		assert.Equal(t, "exists", grpcstatus.Convert(err).Message())
-		assert.Equal(t, int32(1), calls.Load(), "a genuine conflict is not retried")
+		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		require.NoError(t, err)
+	})
+
+	t.Run("NOT_FOUND on the first delete attempt is an error", func(t *testing.T) {
+		t.Parallel()
+
+		api, comp := newAPI(retry, func(int32) error {
+			return grpcstatus.Error(codes.NotFound, "no such index")
+		})
+		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.NotFound, grpcstatus.Code(err))
+		assert.Equal(t, int32(1), comp.calls.Load(), "a missing index is not retried")
 	})
 }

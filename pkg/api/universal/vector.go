@@ -50,7 +50,7 @@ func (a *Universal) CreateCollectionAlpha1(ctx context.Context, req *runtimev1pb
 		Metric:     compvector.DistanceMetric(req.GetMetric()),
 	}
 	err = runVectorPolicy(ctx, a, storeName, "create_collection", func(ctx context.Context) error {
-		return settledOnRetry(ctx, codes.AlreadyExists, comp.CreateCollection(ctx, compReq))
+		return comp.CreateCollection(ctx, compReq)
 	})
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (a *Universal) DeleteCollectionAlpha1(ctx context.Context, req *runtimev1pb
 		Metadata:   req.GetMetadata(),
 	}
 	err = runVectorPolicy(ctx, a, storeName, "delete_collection", func(ctx context.Context) error {
-		return settledOnRetry(ctx, codes.NotFound, comp.DeleteCollection(ctx, compReq))
+		return deletedOnRetry(ctx, comp.DeleteCollection(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err
