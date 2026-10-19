@@ -20,6 +20,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"k8s.io/utils/clock"
 
@@ -44,6 +45,7 @@ type Interface interface {
 	ActorExists(actorType, actorKey string) bool
 	RegisterActorTypes(opts RegisterActorTypeOptions)
 	UnRegisterActorTypes(actorTypes ...string) error
+	ReplaceActorTypes(opts RegisterActorTypeOptions, remove ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan HostedTypes, HostedTypes)
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
@@ -101,6 +103,10 @@ type table struct {
 
 	// standby holds the registered types which are hosted as standby.
 	standby sync.Map
+
+	// drains holds, per type, the factory ReplaceActorTypes replaced while it
+	// is being halted.
+	drains sync.Map
 
 	entityConfigs map[string]api.EntityConfig
 
@@ -278,7 +284,46 @@ func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (tar
 		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
 
+	if d, ok := t.drains.Load(actorType); ok {
+		if err := d.(*drain).wait(ctx, actorID); err != nil {
+			return nil, err
+		}
+	}
+
 	return factory.(targets.Factory).GetOrCreate(actorID), nil
+}
+
+// drainPollInterval is how often a GetOrCreate waiting on a drain checks
+// whether the replaced factory still holds its actor.
+const drainPollInterval = 10 * time.Millisecond
+
+// drain is a factory ReplaceActorTypes replaced, while it is being halted.
+type drain struct {
+	factory targets.Factory
+	done    chan struct{}
+}
+
+// wait returns once the drained factory no longer holds actorID, or is
+// halted.
+func (d *drain) wait(ctx context.Context, actorID string) error {
+	if !d.factory.Exists(actorID) {
+		return nil
+	}
+
+	ticker := time.NewTicker(drainPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-d.done:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if !d.factory.Exists(actorID) {
+				return nil
+			}
+		}
+	}
 }
 
 func (t *table) waitCreates(actorType string) {
@@ -348,6 +393,87 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	wg.Wait()
 
 	t.typeUpdates.Broadcast(t.hostedTypes())
+
+	return errors.Join(errs.Slice()...)
+}
+
+// ReplaceActorTypes registers opts' factories over the factories registered
+// for their types and unregisters the remove types, reporting the change to
+// placement once, so a type moving between active and standby stays hosted
+// throughout. It then halts the replaced and removed factories, waiting out
+// their turns in flight. Until a replaced factory has halted an actor, a
+// GetOrCreate of that actor waits, so the actor's old and new instances never
+// run at once. Callers serialize it with the other registrations.
+func (t *table) ReplaceActorTypes(opts RegisterActorTypeOptions, remove ...string) error {
+	types := make(map[string]struct{}, len(opts.Factories)+len(remove))
+	for _, opt := range opts.Factories {
+		types[opt.Type] = struct{}{}
+	}
+	for _, actorType := range remove {
+		types[actorType] = struct{}{}
+	}
+	t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
+		_, ok := types[actorType]
+		return ok
+	})
+
+	if opts := opts.HostOptions; opts != nil {
+		t.entityConfigs = opts.EntityConfigs
+	}
+
+	var drains []*drain
+	for _, opt := range opts.Factories {
+		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
+		l, _ := t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
+
+		// Swap under the create lock: a create in progress finishes on the
+		// replaced factory, whose halt below reaches its actor, and every
+		// later one sees the new factory together with the drain.
+		l.(*sync.RWMutex).Lock()
+		if opts.Standby {
+			t.standby.Store(opt.Type, struct{}{})
+		} else {
+			t.standby.Delete(opt.Type)
+		}
+		if prev, ok := t.factories.Swap(opt.Type, opt.Factory); ok {
+			d := &drain{factory: prev.(targets.Factory), done: make(chan struct{})}
+			t.drains.Store(opt.Type, d)
+			drains = append(drains, d)
+		}
+		l.(*sync.RWMutex).Unlock()
+	}
+
+	var removed []targets.Factory
+	for _, actorType := range remove {
+		t.reentrancyStore.Delete(actorType)
+		fact, ok := t.factories.LoadAndDelete(actorType)
+		t.standby.Delete(actorType)
+		if ok {
+			t.waitCreates(actorType)
+			removed = append(removed, fact.(targets.Factory))
+		}
+	}
+
+	t.typeUpdates.Broadcast(t.hostedTypes())
+
+	errs := slice.New[error]()
+	var wg sync.WaitGroup
+	for _, d := range drains {
+		wg.Go(func() {
+			errs.Append(d.factory.HaltAll(context.Background()))
+			close(d.done)
+		})
+	}
+	for _, fact := range removed {
+		wg.Go(func() {
+			errs.Append(fact.HaltAll(context.Background()))
+		})
+	}
+	wg.Wait()
+
+	for _, opt := range opts.Factories {
+		t.drains.Delete(opt.Type)
+	}
 
 	return errors.Join(errs.Slice()...)
 }

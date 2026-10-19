@@ -30,6 +30,7 @@ type Fake struct {
 	actorExistsFn            func(string, string) bool
 	registerActorTypesFn     func(table.RegisterActorTypeOptions)
 	unRegisterActorTypesFn   func(...string) error
+	replaceActorTypesFn      func(table.RegisterActorTypeOptions, ...string) error
 	subscribeToTypeUpdatesFn func(context.Context) (<-chan table.HostedTypes, table.HostedTypes)
 	haltAllFn                func(context.Context) error
 	haltNonHostedFn          func(context.Context, func(*api.LookupActorRequest) bool) error
@@ -48,6 +49,7 @@ func New() *Fake {
 		actorExistsFn:          func(string, string) bool { return false },
 		registerActorTypesFn:   func(table.RegisterActorTypeOptions) {},
 		unRegisterActorTypesFn: func(...string) error { return nil },
+		replaceActorTypesFn:    func(table.RegisterActorTypeOptions, ...string) error { return nil },
 		subscribeToTypeUpdatesFn: func(context.Context) (<-chan table.HostedTypes, table.HostedTypes) {
 			return nil, table.HostedTypes{}
 		},
@@ -86,6 +88,11 @@ func (f *Fake) WithUnRegisterActorTypes(fn func(...string) error) *Fake {
 	return f
 }
 
+func (f *Fake) WithReplaceActorTypes(fn func(table.RegisterActorTypeOptions, ...string) error) *Fake {
+	f.replaceActorTypesFn = fn
+	return f
+}
+
 func (f *Fake) WithSubscribeToTypeUpdates(fn func(context.Context) (<-chan table.HostedTypes, table.HostedTypes)) *Fake {
 	f.subscribeToTypeUpdatesFn = fn
 	return f
@@ -121,6 +128,10 @@ func (f *Fake) ActorExists(actorType, actorKey string) bool {
 func (f *Fake) RegisterActorTypes(opts table.RegisterActorTypeOptions) { f.registerActorTypesFn(opts) }
 func (f *Fake) UnRegisterActorTypes(actorTypes ...string) error {
 	return f.unRegisterActorTypesFn(actorTypes...)
+}
+
+func (f *Fake) ReplaceActorTypes(opts table.RegisterActorTypeOptions, remove ...string) error {
+	return f.replaceActorTypesFn(opts, remove...)
 }
 
 func (f *Fake) SubscribeToTypeUpdates(ctx context.Context) (<-chan table.HostedTypes, table.HostedTypes) {

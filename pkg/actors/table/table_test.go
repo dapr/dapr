@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/fake"
 )
 
@@ -303,5 +304,122 @@ func Test_StandbyTypes(t *testing.T) {
 		assert.Empty(t, tble.StandbyTypes())
 		tble.ResumeHosting()
 		assert.Equal(t, []string{"wf"}, tble.StandbyTypes())
+	})
+}
+
+func Test_ReplaceActorTypes(t *testing.T) {
+	newTable := func() table.Interface {
+		return table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+	}
+
+	t.Run("flips the types to standby in one broadcast, halting the replaced factories", func(t *testing.T) {
+		tble := newTable()
+		var activeHalted, executorHalted atomic.Bool
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "wf", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+					activeHalted.Store(true)
+					return nil
+				})},
+				{Type: "executor", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+					executorHalted.Store(true)
+					return nil
+				})},
+			},
+		})
+
+		ch, _ := tble.SubscribeToTypeUpdates(t.Context())
+		var updates []table.HostedTypes
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				select {
+				case got := <-ch:
+					// Every report hosts the workflow actor type.
+					assert.True(t, tble.IsActorTypeHosted("wf"))
+					updates = append(updates, got)
+				case <-time.After(time.Millisecond * 200):
+					return
+				}
+			}
+		}()
+
+		standby := fake.New("wf")
+		require.NoError(t, tble.ReplaceActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory().WithGetOrCreate(
+				func(string) targets.Interface { return standby },
+			)}},
+			Standby: true,
+		}, "executor"))
+		<-done
+
+		assert.Equal(t, []table.HostedTypes{{Standby: []string{"wf"}}}, updates)
+		assert.True(t, activeHalted.Load())
+		assert.True(t, executorHalted.Load())
+		assert.False(t, tble.IsActorTypeHosted("executor"))
+
+		got, err := tble.GetOrCreate(t.Context(), "wf", "id")
+		require.NoError(t, err)
+		assert.Same(t, standby, got)
+	})
+
+	t.Run("a create of an actor the replaced factory holds waits for its halt", func(t *testing.T) {
+		tble := newTable()
+		var held atomic.Bool
+		held.Store(true)
+		release := make(chan struct{})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory().
+				WithExists(func(id string) bool { return id == "busy" && held.Load() }).
+				WithHaltAll(func(context.Context) error {
+					// A turn in flight on "busy" holds the halt.
+					<-release
+					held.Store(false)
+					return nil
+				}),
+			}},
+		})
+
+		replaced := make(chan error, 1)
+		go func() {
+			replaced <- tble.ReplaceActorTypes(table.RegisterActorTypeOptions{
+				Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory()}},
+				Standby:   true,
+			})
+		}()
+		require.Eventually(t, func() bool {
+			return len(tble.StandbyTypes()) == 1
+		}, time.Second*5, time.Millisecond*10)
+
+		// An actor the replaced factory does not hold is created at once.
+		_, err := tble.GetOrCreate(t.Context(), "wf", "idle")
+		require.NoError(t, err)
+
+		created := make(chan error, 1)
+		go func() {
+			_, err := tble.GetOrCreate(t.Context(), "wf", "busy")
+			created <- err
+		}()
+		select {
+		case err := <-created:
+			require.Fail(t, "created the actor while the replaced factory held it", "err: %v", err)
+		case <-time.After(time.Millisecond * 200):
+		}
+
+		// A waiting create honors its context.
+		ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*50)
+		defer cancel()
+		_, err = tble.GetOrCreate(ctx, "wf", "busy")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+
+		close(release)
+		require.NoError(t, <-replaced)
+		select {
+		case err := <-created:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "create still waiting after the halt")
+		}
 	})
 }

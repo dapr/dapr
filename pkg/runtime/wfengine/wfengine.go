@@ -395,24 +395,47 @@ func (wfe *engine) registerActors(ctx context.Context) error {
 	return nil
 }
 
-// unregisterActors unregisters the workflow actor types, then registers the
-// workflow actor type as a standby host when WorkflowsStandbyHosts is on.
+// unregisterActors unregisters the workflow actor types, or replaces them
+// with the standby host in place when WorkflowsStandbyHosts is on.
 // actorsRegistered is reset unconditionally (see onWorkItemDisconnection).
 // Must be called with actorRegLock held.
 func (wfe *engine) unregisterActors(ctx context.Context) error {
+	if wfe.standbyAllowed() {
+		// Unregistering first would leave the workflow actor types with no
+		// host until the standby registration, and a call in between with
+		// no address. The active actors are halted after the swap; a call
+		// to one of them waits for its halt.
+		log.Debug("Replacing workflow actors with a standby host")
+		standbyCtx, cancel := context.WithCancel(wfe.runCtx)
+		replaced, err := wfe.backend.ReplaceWithStandbyActors(standbyCtx)
+		if replaced {
+			wfe.actorsRegistered = false
+			wfe.standbyCancel = cancel
+			wfe.standbyRegistered = true
+			return err
+		}
+		cancel()
+		log.Warnf("Failed to replace workflow actors with a standby host: %s", err)
+	}
+
 	err := wfe.backend.UnRegisterActors(ctx)
 	wfe.actorsRegistered = false
 	wfe.registerStandby()
 	return err
 }
 
+// standbyAllowed reports whether WorkflowsStandbyHosts is on and Run's
+// context is live: never before Run nor after its context is done, so
+// shutdown does not re-register. Must be called with actorRegLock held.
+func (wfe *engine) standbyAllowed() bool {
+	return wfe.standbyHosts && wfe.runCtx != nil && wfe.runCtx.Err() == nil
+}
+
 // registerStandby registers the workflow actor type as a standby host if
-// WorkflowsStandbyHosts is on and the types are not registered otherwise. A
-// no-op before Run and after Run's context is done, so shutdown does not
-// re-register. Must be called with actorRegLock held.
+// standbyAllowed and the types are not registered otherwise. Must be called
+// with actorRegLock held.
 func (wfe *engine) registerStandby() {
-	if !wfe.standbyHosts || wfe.actorsRegistered || wfe.standbyRegistered ||
-		wfe.runCtx == nil || wfe.runCtx.Err() != nil {
+	if !wfe.standbyAllowed() || wfe.actorsRegistered || wfe.standbyRegistered {
 		return
 	}
 

@@ -15,7 +15,9 @@ package wfengine
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +26,8 @@ import (
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/table"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
 
 // standbyTable records the registrations the engine makes.
@@ -35,6 +39,9 @@ type standbyTable struct {
 	// one the last standby registration was made with.
 	tableCtx   context.Context
 	standbyCtx context.Context
+
+	// failTables fails that many next actors.Table calls.
+	failTables atomic.Int32
 }
 
 func (s *standbyTable) lastStandbyCtx() context.Context {
@@ -75,8 +82,23 @@ func newStandbyTestEngine(t *testing.T, standbyHosts bool) (*engine, *standbyTab
 		WithUnRegisterActorTypes(func(...string) error {
 			st.record("unregister")
 			return nil
+		}).
+		WithReplaceActorTypes(func(opts table.RegisterActorTypeOptions, remove ...string) error {
+			st.lock.Lock()
+			st.standbyCtx = st.tableCtx
+			st.lock.Unlock()
+			if opts.Standby {
+				st.record("replace-with-standby")
+			} else {
+				st.record("replace")
+			}
+			return nil
 		})
 	fa := actorsfake.New().WithTable(func(ctx context.Context) (table.Interface, error) {
+		if st.failTables.Add(-1) >= 0 {
+			return nil, errors.New("table unavailable")
+		}
+		st.failTables.Store(0)
 		st.lock.Lock()
 		st.tableCtx = ctx
 		st.lock.Unlock()
@@ -115,9 +137,11 @@ func TestEngine_StandbyTransitions(t *testing.T) {
 		require.NoError(t, wfe.onWorkItemDisconnection(t.Context()))
 		assert.Empty(t, st.take())
 
-		// The last worker leaving unregisters, then registers standby.
+		// The last worker leaving replaces the active host with the standby
+		// one in place, never unregistering: the workflow actor type stays
+		// hosted for the calls arriving meanwhile.
 		require.NoError(t, wfe.onWorkItemDisconnection(t.Context()))
-		assert.Equal(t, []string{"unregister", "register-standby"}, st.take())
+		assert.Equal(t, []string{"replace-with-standby"}, st.take())
 		assert.True(t, wfe.standbyRegistered)
 		assert.False(t, wfe.actorsRegistered)
 	})
@@ -141,6 +165,32 @@ func TestEngine_StandbyTransitions(t *testing.T) {
 		require.NotSame(t, first, second)
 		require.NoError(t, second.Err())
 		assert.NotNil(t, wfe.standbyCancel)
+	})
+
+	t.Run("the last MCP server unregistering replaces the active host with the standby one", func(t *testing.T) {
+		wfe, st := newStandbyTestEngine(t, true)
+		server := mcpServerSpec("srv", startMCPTestServer(t))
+		require.NoError(t, wfe.RegisterMCPServer(t.Context(), server, compstore.New(), securityfake.New()))
+		assert.Equal(t, []string{"register-standby", "register"}, st.take())
+
+		wfe.UnregisterMCPServer(server.Name)
+		assert.Equal(t, []string{"replace-with-standby"}, st.take())
+		assert.True(t, wfe.standbyRegistered)
+		assert.False(t, wfe.actorsRegistered)
+	})
+
+	t.Run("a failed replacement falls back to unregistering", func(t *testing.T) {
+		wfe, st := newStandbyTestEngine(t, true)
+		require.NoError(t, wfe.onWorkItemConnection(t.Context()))
+		st.take()
+
+		// The replacement's table lookup fails before touching the table:
+		// the types are unregistered and standby registered as before.
+		st.failTables.Store(1)
+		require.NoError(t, wfe.onWorkItemDisconnection(t.Context()))
+		assert.Equal(t, []string{"unregister", "register-standby"}, st.take())
+		assert.True(t, wfe.standbyRegistered)
+		assert.False(t, wfe.actorsRegistered)
 	})
 
 	t.Run("feature disabled never registers standby", func(t *testing.T) {

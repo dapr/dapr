@@ -44,9 +44,43 @@ import (
 // types as a standby host.
 // ctx bounds the factory's background work, as for RegisterActors.
 func (abe *Actors) RegisterStandbyActors(ctx context.Context) error {
-	atable, err := abe.actors.Table(ctx)
+	atable, opts, err := abe.standbyRegistration(ctx)
 	if err != nil {
 		return err
+	}
+
+	atable.RegisterActorTypes(opts)
+	return nil
+}
+
+// ReplaceWithStandbyActors registers the standby actor types over the active
+// ones in place, unregistering the executor actor type, which has no standby
+// counterpart. Placement sees the host's workflow actor types flip from
+// active to standby in one report, so they stay hosted throughout. The active
+// actors are then halted, waiting out their turns in flight; a call to one of
+// them meanwhile waits for its halt before it gets the standby actor, which
+// loads the state afresh. replaced reports whether the standby registration
+// replaced the active one: if not, the active one is untouched. ctx bounds
+// the standby factory's background work, as for RegisterStandbyActors.
+func (abe *Actors) ReplaceWithStandbyActors(ctx context.Context) (replaced bool, err error) {
+	atable, opts, err := abe.standbyRegistration(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	var remove []string
+	if abe.enableClusteredDeployment {
+		remove = append(remove, abe.executorActorType)
+	}
+	return true, atable.ReplaceActorTypes(opts, remove...)
+}
+
+// standbyRegistration builds the standby factories and records the workflow
+// actor one for HaltStandbyActors.
+func (abe *Actors) standbyRegistration(ctx context.Context) (table.Interface, table.RegisterActorTypeOptions, error) {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil {
+		return nil, table.RegisterActorTypeOptions{}, err
 	}
 
 	oopts := abe.orchestratorOptions()
@@ -55,20 +89,18 @@ func (abe *Actors) RegisterStandbyActors(ctx context.Context) error {
 
 	factory, err := orchestrator.New(ctx, oopts)
 	if err != nil {
-		return err
+		return nil, table.RegisterActorTypeOptions{}, err
 	}
+	abe.standbyFactory = factory
 
-	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+	return atable, table.RegisterActorTypeOptions{
 		Factories: []table.ActorTypeFactory{
 			{Type: abe.workflowActorType, Factory: factory},
 			{Type: abe.activityActorType, Factory: refusingFactory{actorType: abe.activityActorType}},
 			{Type: abe.retentionerActorType, Factory: refusingFactory{actorType: abe.retentionerActorType}},
 		},
 		Standby: true,
-	})
-	abe.standbyFactory = factory
-
-	return nil
+	}, nil
 }
 
 // HaltStandbyActors halts the standby workflow actors once RegisterActors has
