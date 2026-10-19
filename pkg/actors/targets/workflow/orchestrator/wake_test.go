@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -41,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/config"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -113,10 +116,11 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			// The metadata row exists once something was saved, as the
-			// post-save etag refresh expects.
+			// post-save etag refresh expects, and describes the cache: the
+			// store is in step with it.
 			if h.saved && req.Key == wfenginestate.MetadataKey {
 				etag := "etag"
-				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
+				return &actorapi.StateResponse{Data: h.metadataRow(), ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
 		}).
@@ -179,6 +183,19 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 	h.orch = fact.GetOrCreate(instanceID).(*orchestrator)
 
 	return h
+}
+
+func (h *wakeHarness) metadataRow() []byte {
+	s := h.orch.state
+	if s == nil {
+		return []byte{1}
+	}
+	row, _ := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+		InboxLength:   uint64(len(s.Inbox)),
+		HistoryLength: uint64(len(s.History)),
+		Generation:    s.Generation,
+	})
+	return row
 }
 
 // primeRunning primes the orchestrator with a running workflow that has an
@@ -659,4 +676,86 @@ func Test_startBackstopDueTime(t *testing.T) {
 
 		assert.True(t, dueOf(t, h).Before(before.Add(time.Second)))
 	})
+}
+
+func Test_duplicateCompletionOnCompletedWorkflowDoesNotRearm(t *testing.T) {
+	const instanceID = "test-completed-duplicate"
+
+	for _, fastPath := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fastPath=%v", fastPath), func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, fastPath)
+			h.primeRunning(t, instanceID, 7)
+			h.orch.state.AddToHistory(taskCompletedEvent(7))
+			h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+			}
+			// The cached state was saved, so the store serves its metadata row
+			// for the ack's cache confirm.
+			h.lock.Lock()
+			h.saved = true
+			h.lock.Unlock()
+
+			// The fast path admits through its fold entry, as live traffic does.
+			if fastPath {
+				data, err := proto.Marshal(taskCompletedEvent(7))
+				require.NoError(t, err)
+				_, err = h.orch.invokeAddEventFold(t.Context(), internalsv1pb.NewInternalInvokeRequest(todo.AddWorkflowEventMethod).WithData(data))
+				require.NoError(t, err)
+			} else {
+				require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+			}
+			assert.Empty(t, h.snapshotOps(), "a duplicate result for a completed workflow must not arm a wake-up")
+		})
+	}
+}
+
+func Test_duplicateOnStaleCompletedCacheIsNotAcked(t *testing.T) {
+	const instanceID = "test-stale-completed-duplicate"
+
+	h := newWakeHarness(t, instanceID, false)
+	h.primeRunning(t, instanceID, 7)
+	h.orch.state.AddToHistory(taskCompletedEvent(7))
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+		WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+	}
+	// The store has moved on (a peer recreated the instance): its metadata
+	// row carries another etag than the cache.
+	stale := "before-recreate"
+	h.orch.state.SetMetadataETag(&stale)
+	h.lock.Lock()
+	h.saved = true
+	h.lock.Unlock()
+
+	err := h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{})
+	require.Error(t, err, "a duplicate judged on a stale completed cache must not be acked")
+	assert.Nil(t, h.orch.state, "the stale cache must be dropped so the retry reloads")
+}
+
+// A redelivered result of activity A, acked as a duplicate after the workflow
+// was terminated while activity B ran, must not release the reuse guard B's
+// dispatch set: B's result is still in flight (createIfCompleted).
+func Test_duplicateCompletionOnCompletedWorkflowKeepsTheAwait(t *testing.T) {
+	const instanceID = "test-completed-duplicate-await"
+
+	for _, fastPath := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fastPath=%v", fastPath), func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, fastPath)
+			h.primeRunning(t, instanceID, 7)
+			h.orch.state.AddToHistory(taskCompletedEvent(7))
+			h.orch.state.AddToHistory(taskScheduledEvent(8))
+			h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{
+				WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+			}
+			h.orch.activityResultAwaited.Store(true)
+			h.lock.Lock()
+			h.saved = true
+			h.lock.Unlock()
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+			assert.True(t, h.orch.activityResultAwaited.Load(), "a duplicate of A must not release the guard B holds")
+
+			require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(8), completionSender{}))
+			assert.False(t, h.orch.activityResultAwaited.Load(), "B's own result settles the await")
+		})
+	}
 }

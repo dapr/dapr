@@ -24,11 +24,14 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cl "k8s.io/client-go/kubernetes"
 	clauthv1 "k8s.io/client-go/kubernetes/typed/authentication/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,6 +73,7 @@ type Options struct {
 type kubernetes struct {
 	auth           clauthv1.AuthenticationV1Interface
 	client         client.Reader
+	pods           corev1client.CoreV1Interface
 	ready          func(context.Context) bool
 	sentryAudience string
 	controlPlaneNS string
@@ -95,7 +99,19 @@ func New(opts Options) (validator.Validator, error) {
 	opts.RestConfig.RateLimiter = nil
 	opts.RestConfig.QPS = math.MaxFloat32
 	opts.RestConfig.Burst = math.MaxInt
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	podSelector, err := labels.Parse(injectorConsts.SidecarInjectedLabel)
+	if err != nil {
+		return nil, err
+	}
+	cache, err := cache.New(opts.RestConfig, cache.Options{
+		Scheme: scheme,
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {
+				Label:     podSelector,
+				Transform: cache.TransformStripManagedFields(),
+			},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +119,7 @@ func New(opts Options) (validator.Validator, error) {
 	return &kubernetes{
 		auth:           kubeClient.AuthenticationV1(),
 		client:         cache,
+		pods:           kubeClient.CoreV1(),
 		ready:          cache.WaitForCacheSync,
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
@@ -116,7 +133,7 @@ func (k *kubernetes) Start(ctx context.Context) error {
 
 	cache := k.client.(cache.Cache)
 	for _, obj := range []client.Object{
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"}},
+		&corev1.Pod{},
 		&configv1alpha1.Configuration{},
 	} {
 		if _, err := cache.GetInformer(ctx, obj); err != nil {
@@ -173,8 +190,18 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, errMissingPodClaim
 	}
 
+	key := types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
+	err = k.client.Get(ctx, key, &pod)
+	if apierrors.IsNotFound(err) {
+		// Control-plane Pods, manually injected sidecars, and Pods admitted by
+		// an older injector may not carry the label required by the cache.
+		log.Debugf("Pod %s not in cache, reading it from the API server", key)
+		var p *corev1.Pod
+		if p, err = k.pods.Pods(saNamespace).Get(ctx, claims.Pod.Name, metav1.GetOptions{}); err == nil {
+			pod = *p
+		}
+	}
 	if err != nil {
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
 		return validator.ValidateResult{}, errors.New("failed to get pod of identity")
