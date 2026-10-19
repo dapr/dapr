@@ -179,6 +179,7 @@ func (w *WatchHosts) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sche
 
 	stream, err := cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 	if err != nil {
+		closeCon()
 		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
 	}
 
