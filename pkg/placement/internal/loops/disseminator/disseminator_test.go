@@ -14,6 +14,8 @@ limitations under the License.
 package disseminator
 
 import (
+	"fmt"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -584,4 +586,124 @@ func TestStoreCollectOrphans_NoOrphans(t *testing.T) {
 	}, &orphans)
 
 	assert.Empty(t, orphans)
+}
+
+// TestStandbyRounds counts the dissemination rounds which daprds of an app
+// cause with and without WorkflowsStandbyHosts. Without it, a daprd with no
+// worker hosts no actor type and gets a one-shot table push; with it, the
+// daprd is a standby host and each connect or leave is a namespace-wide round,
+// even while another daprd serves the type actively and its table does not
+// change.
+func TestStandbyRounds(t *testing.T) {
+	// rounds returns how many rounds fn started, completing each at once.
+	rounds := func(d *disseminator, fn func()) uint64 {
+		before := d.currentVersion
+		fn()
+		d.currentOperation = v1pb.HostOperation_REPORT
+		return d.currentVersion - before
+	}
+
+	connect := func(d *disseminator, idx uint64, h *v1pb.Host) uint64 {
+		addFakeStream(d, idx, nil)
+		return rounds(d, func() { d.doReport(idx, h) })
+	}
+	leave := func(d *disseminator, idx uint64) uint64 {
+		return rounds(d, func() {
+			d.handleCloseStream(t.Context(), &loops.ConnCloseStream{StreamIDx: idx, Namespace: "default"})
+		})
+	}
+	standby := func(id string) *v1pb.Host {
+		return &v1pb.Host{Name: id, Id: "app", Namespace: "default", StandbyEntities: []string{"wf"}}
+	}
+
+	t.Run("without the flag a worker-less daprd causes no round", func(t *testing.T) {
+		d := newTestDisseminator(t)
+		addFakeStream(d, 0, []string{"actorA"})
+		assert.Equal(t, uint64(0), connect(d, 1, host("b")))
+		assert.Equal(t, uint64(0), leave(d, 1))
+	})
+
+	t.Run("a standby daprd causes a round while no daprd is active", func(t *testing.T) {
+		d := newTestDisseminator(t)
+		addFakeStream(d, 0, []string{"actorA"})
+		assert.Equal(t, uint64(1), connect(d, 1, standby("b")))
+		assert.Equal(t, uint64(1), connect(d, 2, standby("c")))
+		assert.Equal(t, uint64(1), leave(d, 1))
+	})
+
+	t.Run("a standby daprd causes a round while a daprd is active", func(t *testing.T) {
+		d := newTestDisseminator(t)
+		addFakeStream(d, 0, []string{"wf"})
+		assert.Equal(t, uint64(1), connect(d, 1, standby("b")))
+		assert.Equal(t, uint64(1), leave(d, 1))
+	})
+
+	t.Run("a worker connecting and leaving is a round either way", func(t *testing.T) {
+		d := newTestDisseminator(t)
+		addFakeStream(d, 0, []string{"actorA"})
+		assert.Equal(t, uint64(0), connect(d, 1, host("b")))
+		assert.Equal(t, uint64(1), rounds(d, func() { d.doReport(1, host("b", "wf")) }))
+		assert.Equal(t, uint64(1), rounds(d, func() { d.doReport(1, host("b")) }))
+
+		assert.Equal(t, uint64(1), connect(d, 2, standby("c")))
+		assert.Equal(t, uint64(1), rounds(d, func() { d.doReport(2, host("c", "wf")) }))
+		assert.Equal(t, uint64(1), rounds(d, func() { d.doReport(2, standby("c")) }))
+	})
+}
+
+// BenchmarkUpdateFanOut measures the UPDATE phase of a round, which builds and
+// sends the tables to every stream. n daprds host actors and m more are
+// connected without a worker, in apps of ten replicas: without
+// WorkflowsStandbyHosts the m daprds are streams only, with it they are
+// standby hosts of apps which never connect a worker, so their types stay in
+// the tables.
+func BenchmarkUpdateFanOut(b *testing.B) {
+	types := func(app string) []string {
+		return []string{
+			"dapr.internal.ns." + app + ".workflow",
+			"dapr.internal.ns." + app + ".activity",
+			"dapr.internal.ns." + app + ".retentioner",
+		}
+	}
+
+	for _, flag := range []bool{false, true} {
+		for _, n := range []int{10, 100} {
+			for _, m := range []int{0, 100, 1000} {
+				b.Run(fmt.Sprintf("standby=%t/active=%d/workerless=%d", flag, n, m), func(b *testing.B) {
+					d := &disseminator{
+						streams: make(map[uint64]*streamConn, n+m),
+						store:   store.New(store.Options{ReplicationFactor: 100}),
+					}
+					for i := range n + m {
+						//nolint:gosec
+						idx := uint64(i)
+						d.streams[idx] = &streamConn{loop: fake.New[loops.EventStream]()}
+						if i < n {
+							app := "active-" + strconv.Itoa(i/10)
+							d.store.Set(idx, &v1pb.Host{
+								Name: app + "-" + strconv.Itoa(i), Id: app, Namespace: "ns",
+								Entities: append(types(app), "actor-"+app),
+							})
+						} else if flag {
+							app := "standby-" + strconv.Itoa((i-n)/10)
+							d.store.Set(idx, &v1pb.Host{
+								Name: app + "-" + strconv.Itoa(i), Id: app, Namespace: "ns",
+								StandbyEntities: types(app),
+							})
+						}
+						d.streams[idx].currentState = v1pb.HostOperation_LOCK
+					}
+
+					for b.Loop() {
+						// Every stream but the first has locked; its LOCK
+						// moves the round to UPDATE.
+						d.currentOperation = v1pb.HostOperation_LOCK
+						d.streams[0].currentState = v1pb.HostOperation_REPORT
+						d.streamsInTargetState = n + m - 1
+						d.handleReportedLock(0)
+					}
+				})
+			}
+		}
+	}
 }

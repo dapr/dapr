@@ -97,7 +97,10 @@ const (
 	// workflow turn: it does not advertise the type to the scheduler, so the
 	// reminders it arms fire once a worker connects. Needs a placement
 	// server which knows standby hosts; with an older one, behaves as if
-	// disabled. Preview feature; disabled by default.
+	// disabled. Every daprd with the flag and an actor runtime joins
+	// placement while it has no worker, so set it in the Configuration of
+	// the apps which run workflows rather than of every app. Preview
+	// feature; disabled by default.
 	WorkflowsStandbyHosts Feature = "WorkflowsStandbyHosts"
 )
 

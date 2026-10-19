@@ -120,10 +120,13 @@ func (d *disseminator) handleReportedLock(streamIDx uint64) {
 		d.currentOperation = v1pb.HostOperation_UPDATE
 		d.streamsInTargetState = 0
 
+		// The tables are built once and shared by every stream, which only
+		// sends them: building them per stream costs streams x hosts.
+		tables := d.store.PlacementTables(d.currentVersion)
 		for _, s := range d.streams {
 			s.loop.Enqueue(&loops.DisseminateUpdate{
 				Version: d.currentVersion,
-				Tables:  d.store.PlacementTables(d.currentVersion),
+				Tables:  tables,
 			})
 		}
 	}

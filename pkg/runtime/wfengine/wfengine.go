@@ -546,6 +546,16 @@ func (wfe *engine) Run(ctx context.Context) error {
 		// The actor runtime is ready (Router returned above), so the
 		// registration does not block worker connections behind
 		// actorRegLock.
+		//
+		// Standby starts here, on every daprd of the app with an actor
+		// runtime, and not lazily on the first workflow API call: calls
+		// from other apps reach this app's workflows through placement
+		// alone, so its daprds never see a local call, and a lazy
+		// registration would race the very call it is for. The cost of a
+		// standby host is its three types in the placement tables and a
+		// placement round for each connect and leave, so the flag belongs
+		// in the Configuration of apps which run workflows, not of every
+		// app.
 		wfe.actorRegLock.Lock()
 		wfe.runCtx = ctx
 		wfe.registerStandby()

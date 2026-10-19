@@ -14,6 +14,8 @@ limitations under the License.
 package store
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -180,6 +182,15 @@ func TestStandby(t *testing.T) {
 		assert.ElementsMatch(t, []string{"a:1", "b:1"}, tableHosts(s.Tables([]string{"wf"}), "wf"))
 	})
 
+	t.Run("a standby host changing address moves only a standby table", func(t *testing.T) {
+		t.Parallel()
+		s := New()
+		s.Set(1, standbyHost("a:1", "app", "wf", "other"))
+		s.Set(2, host("b:1", "app", "wf"))
+		assert.Equal(t, []string{"other"}, s.Set(1, standbyHost("c:1", "app", "wf", "other")))
+		assert.Equal(t, []string{"c:1"}, tableHosts(s.Tables([]string{"other"}), "other"))
+	})
+
 	t.Run("deleting the last standby host removes the type", func(t *testing.T) {
 		t.Parallel()
 		s := New()
@@ -187,5 +198,101 @@ func TestStandby(t *testing.T) {
 		assert.Equal(t, []string{"wf"}, s.Delete(1))
 		assert.Empty(t, s.Types())
 		assert.Empty(t, tableHosts(s.Tables([]string{"wf"}), "wf"))
+	})
+}
+
+// benchTypes returns the workflow actor types of an app, plus extra.
+func benchTypes(app string, extra ...string) []string {
+	return append([]string{
+		"dapr.internal.ns." + app + ".workflow",
+		"dapr.internal.ns." + app + ".activity",
+		"dapr.internal.ns." + app + ".retentioner",
+	}, extra...)
+}
+
+// benchStore returns a store with n active hosts and m standby hosts, both in
+// apps of ten replicas. An active host serves its app's workflow types and an
+// actor type; a standby host is a daprd with the WorkflowsStandbyHosts flag
+// whose app never connects a worker, the worst case, as its types are never
+// served actively and so stay in the tables.
+func benchStore(n, m int) *Store {
+	s := New()
+	for i := range n {
+		app := "active-" + strconv.Itoa(i/10)
+		//nolint:gosec
+		s.Set(uint64(i), host("active-"+strconv.Itoa(i)+":1", app, benchTypes(app, "actor-"+app)...))
+	}
+	for j := range m {
+		app := "standby-" + strconv.Itoa(j/10)
+		//nolint:gosec
+		s.Set(uint64(n+j), standbyHost("standby-"+strconv.Itoa(j)+":1", app, benchTypes(app)...))
+	}
+	return s
+}
+
+func benchSizes(b *testing.B, fn func(b *testing.B, n, m int)) {
+	for _, n := range []int{10, 100} {
+		for _, m := range []int{0, 100, 1000} {
+			b.Run(fmt.Sprintf("active=%d/standby=%d", n, m), func(b *testing.B) {
+				fn(b, n, m)
+			})
+		}
+	}
+}
+
+// BenchmarkSetDelete measures a daprd connecting and leaving, which computes
+// the types whose table changed for each.
+func BenchmarkSetDelete(b *testing.B) {
+	run := func(name string, newHost func(n, m int) *schedulerv1pb.ActorHost) {
+		b.Run(name, func(b *testing.B) {
+			benchSizes(b, func(b *testing.B, n, m int) {
+				s := benchStore(n, m)
+				//nolint:gosec
+				idx := uint64(n + m)
+				for b.Loop() {
+					s.Set(idx, newHost(n, m))
+					s.Delete(idx)
+				}
+			})
+		})
+	}
+
+	run("active", func(int, int) *schedulerv1pb.ActorHost {
+		return host("new:1", "new", benchTypes("new")...)
+	})
+	// A standby daprd of an app with no active host moves its tables.
+	run("standby-new-app", func(int, int) *schedulerv1pb.ActorHost {
+		return standbyHost("new:1", "new", benchTypes("new")...)
+	})
+	// A standby daprd of an app whose other standby daprds are placed.
+	run("standby-standby-app", func(int, int) *schedulerv1pb.ActorHost {
+		return standbyHost("new:1", "standby-0", benchTypes("standby-0")...)
+	})
+	// A standby daprd of an app with an active host leaves its tables.
+	run("standby-active-app", func(int, int) *schedulerv1pb.ActorHost {
+		return standbyHost("new:1", "active-0", benchTypes("active-0")...)
+	})
+}
+
+// BenchmarkTables measures building the tables of one app's types, as a
+// round's UPDATE does.
+func BenchmarkTables(b *testing.B) {
+	benchSizes(b, func(b *testing.B, n, m int) {
+		s := benchStore(n, m)
+		types := benchTypes("active-0")
+		for b.Loop() {
+			s.Tables(types)
+		}
+	})
+}
+
+// BenchmarkSnapshot measures building every table, as the snapshot pushed to
+// each newly connected stream does.
+func BenchmarkSnapshot(b *testing.B) {
+	benchSizes(b, func(b *testing.B, n, m int) {
+		s := benchStore(n, m)
+		for b.Loop() {
+			s.Tables(s.Types())
+		}
 	})
 }

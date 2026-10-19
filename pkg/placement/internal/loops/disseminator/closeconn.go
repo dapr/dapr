@@ -106,10 +106,13 @@ func (d *disseminator) advancePhase(ctx context.Context) {
 	case v1pb.HostOperation_LOCK:
 		d.currentOperation = v1pb.HostOperation_UPDATE
 		d.streamsInTargetState = 0
+		// The tables are built once and shared by every stream, which only
+		// sends them: building them per stream costs streams x hosts.
+		tables := d.store.PlacementTables(d.currentVersion)
 		for _, s := range d.streams {
 			s.loop.Enqueue(&loops.DisseminateUpdate{
 				Version: d.currentVersion,
-				Tables:  d.store.PlacementTables(d.currentVersion),
+				Tables:  tables,
 			})
 		}
 
@@ -180,16 +183,20 @@ func (d *disseminator) processWaitingDisseminate(ctx context.Context, forceRound
 	if !storeChanged {
 		// All waiting connections had no actors. Send one-shot table pushes
 		// only to the newly added streams so they can route actor invocations.
+		var tables *v1pb.PlacementTables
 		for _, idx := range newStreamIDxs {
 			s, ok := d.streams[idx]
 			if !ok || d.store.Has(idx) {
 				continue
 			}
+			if tables == nil {
+				tables = d.store.PlacementTables(d.currentVersion)
+			}
 			version := d.currentVersion
 			s.receivingTable = &version
 			s.loop.Enqueue(&loops.DisseminateTable{
 				Version: d.currentVersion,
-				Tables:  d.store.PlacementTables(d.currentVersion),
+				Tables:  tables,
 			})
 		}
 		return

@@ -14,7 +14,9 @@ limitations under the License.
 package store
 
 import (
+	"fmt"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,5 +66,82 @@ func TestPlacementTablesStandby(t *testing.T) {
 		assert.True(t, s.Set(1, &v1pb.Host{Name: "a", Id: "app"}))
 		assert.False(t, s.Has(1))
 		assert.Empty(t, s.PlacementTables(1).GetEntries())
+	})
+}
+
+// benchTypes returns the workflow actor types of an app, plus extra.
+func benchTypes(app string, extra ...string) []string {
+	return append([]string{
+		"dapr.internal.ns." + app + ".workflow",
+		"dapr.internal.ns." + app + ".activity",
+		"dapr.internal.ns." + app + ".retentioner",
+	}, extra...)
+}
+
+// benchStore returns a store with n active hosts and m standby hosts, both in
+// apps of ten replicas. An active host serves its app's workflow types and an
+// actor type; a standby host is a daprd with the WorkflowsStandbyHosts flag
+// whose app never connects a worker, the worst case, as its types are never
+// served actively and so stay in the tables.
+func benchStore(n, m int) *Store {
+	s := New(Options{ReplicationFactor: 100})
+	for i := range n {
+		app := "active-" + strconv.Itoa(i/10)
+		s.Set(uint64(i), &v1pb.Host{
+			Name: app + "-" + strconv.Itoa(i), Id: app, Namespace: "ns",
+			Entities: benchTypes(app, "actor-"+app),
+		})
+	}
+	for j := range m {
+		app := "standby-" + strconv.Itoa(j/10)
+		s.Set(uint64(n+j), &v1pb.Host{
+			Name: app + "-" + strconv.Itoa(j), Id: app, Namespace: "ns",
+			StandbyEntities: benchTypes(app),
+		})
+	}
+	return s
+}
+
+func benchSizes(b *testing.B, fn func(b *testing.B, n, m int)) {
+	for _, n := range []int{10, 100} {
+		for _, m := range []int{0, 100, 1000} {
+			b.Run(fmt.Sprintf("active=%d/standby=%d", n, m), func(b *testing.B) {
+				fn(b, n, m)
+			})
+		}
+	}
+}
+
+// BenchmarkPlacementTables measures building the tables, which the
+// disseminator does for every UPDATE it sends.
+func BenchmarkPlacementTables(b *testing.B) {
+	benchSizes(b, func(b *testing.B, n, m int) {
+		s := benchStore(n, m)
+		for b.Loop() {
+			s.PlacementTables(1)
+		}
+	})
+}
+
+// BenchmarkSet measures a daprd connecting and leaving: its host report is
+// stored, then replaced by an empty report.
+func BenchmarkSet(b *testing.B) {
+	b.Run("standby", func(b *testing.B) {
+		benchSizes(b, func(b *testing.B, n, m int) {
+			s := benchStore(n, m)
+			for b.Loop() {
+				s.Set(uint64(n+m), &v1pb.Host{Name: "new", Id: "new", Namespace: "ns", StandbyEntities: benchTypes("new")})
+				s.Set(uint64(n+m), &v1pb.Host{Name: "new", Id: "new", Namespace: "ns"})
+			}
+		})
+	})
+	b.Run("active", func(b *testing.B) {
+		benchSizes(b, func(b *testing.B, n, m int) {
+			s := benchStore(n, m)
+			for b.Loop() {
+				s.Set(uint64(n+m), &v1pb.Host{Name: "new", Id: "new", Namespace: "ns", Entities: benchTypes("new")})
+				s.Set(uint64(n+m), &v1pb.Host{Name: "new", Id: "new", Namespace: "ns"})
+			}
+		})
 	})
 }

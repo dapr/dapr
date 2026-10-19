@@ -21,19 +21,23 @@ import (
 	"slices"
 	"sort"
 
-	"google.golang.org/protobuf/proto"
-
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 type Store struct {
 	// hosts are indexed on streamIDx.
 	hosts map[uint64]*schedulerv1pb.ActorHost
+
+	// active counts the hosts serving each actor type as active, so a
+	// standby change learns whether it moves the type's table without
+	// scanning every host.
+	active map[string]int
 }
 
 func New() *Store {
 	return &Store{
-		hosts: make(map[uint64]*schedulerv1pb.ActorHost),
+		hosts:  make(map[uint64]*schedulerv1pb.ActorHost),
+		active: make(map[string]int),
 	}
 }
 
@@ -64,15 +68,17 @@ func (s *Store) Set(streamIDx uint64, host *schedulerv1pb.ActorHost) []string {
 		standby = symmetricDiff(existing.GetStandbyActorTypes(), host.GetStandbyActorTypes())
 	}
 
-	before := s.standbyTables(standby)
-
+	if ok {
+		s.count(existing.GetActorTypes(), -1)
+	}
 	if !hostsActors(host) {
 		delete(s.hosts, streamIDx)
 	} else {
 		s.hosts[streamIDx] = host
+		s.count(host.GetActorTypes(), 1)
 	}
 
-	return union(changed, s.tablesChanged(before, standby))
+	return union(changed, s.placedStandby(standby))
 }
 
 // Delete removes a stream's host, returning the actor types whose placement
@@ -83,34 +89,33 @@ func (s *Store) Delete(streamIDx uint64) []string {
 		return nil
 	}
 
-	before := s.standbyTables(existing.GetStandbyActorTypes())
+	s.count(existing.GetActorTypes(), -1)
 	delete(s.hosts, streamIDx)
-	return union(existing.GetActorTypes(), s.tablesChanged(before, existing.GetStandbyActorTypes()))
+	return union(existing.GetActorTypes(), s.placedStandby(existing.GetStandbyActorTypes()))
 }
 
-// standbyTables returns the tables of the given standby types, or nil
-// without scanning the hosts when there are none.
-func (s *Store) standbyTables(types []string) *schedulerv1pb.PlacementTables {
-	if len(types) == 0 {
-		return nil
-	}
-	return s.Tables(types)
-}
-
-// tablesChanged returns the types whose table now differs from before.
-func (s *Store) tablesChanged(before *schedulerv1pb.PlacementTables, types []string) []string {
-	if len(types) == 0 {
-		return nil
-	}
-
-	after := s.Tables(types)
-	var changed []string
+// placedStandby returns the given types which no host serves as active, so
+// whose table holds the standby hosts. A change to a host's standby types
+// moves a type's table only then: a change to its active types for the type
+// is reported as changed already.
+func (s *Store) placedStandby(types []string) []string {
+	var placed []string
 	for _, t := range types {
-		if !proto.Equal(before.GetEntries()[t], after.GetEntries()[t]) {
-			changed = append(changed, t)
+		if s.active[t] == 0 {
+			placed = append(placed, t)
 		}
 	}
-	return changed
+	return placed
+}
+
+// count adds delta to the active host count of each type.
+func (s *Store) count(types []string, delta int) {
+	for _, t := range types {
+		s.active[t] += delta
+		if s.active[t] == 0 {
+			delete(s.active, t)
+		}
+	}
 }
 
 // hostsActors returns whether the host reports any actor type, active or
@@ -209,6 +214,7 @@ func (s *Store) CollectOrphans(isActive func(uint64) bool, orphans *[]uint64) {
 // DeleteAll removes every host.
 func (s *Store) DeleteAll() {
 	clear(s.hosts)
+	clear(s.active)
 }
 
 // union returns the sorted union of two sorted string slices, deduplicated.
