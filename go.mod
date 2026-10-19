@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70
+	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261019155808-7c79b54ca80e
 	github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c
 	github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc
 	github.com/diagridio/go-etcd-cron v0.12.10
@@ -552,5 +552,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/components-contrib => github.com/mikeee/dapr_components-contrib v0.0.0-20261014185301-76c6e2fe4cc5
