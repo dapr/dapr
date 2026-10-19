@@ -97,6 +97,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		// connects, so it does not wait for a state change.
 		if o.standby {
 			common.SetStandby(res)
+			o.standbyServed(ctx, method, parsedAddEvent)
 		}
 
 		return res, nil

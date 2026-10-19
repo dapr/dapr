@@ -15,15 +15,29 @@ package orchestrator
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/clock"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend"
+)
+
+const (
+	// standbyWaitingWarnAfter is how long a standby host goes with no worker
+	// connected before it warns about the operations it served, which wait
+	// for one. The warnings then come at doubling intervals since the
+	// standby registration, capped at standbyWaitingWarnMaxInterval.
+	standbyWaitingWarnAfter       = 5 * time.Minute
+	standbyWaitingWarnMaxInterval = time.Hour
 )
 
 // errStandbyTurn refuses a reminder on a standby host (Options.Standby): it
@@ -61,4 +75,91 @@ func (o *orchestrator) armStandbyJanitor(ctx context.Context, state *wfenginesta
 		},
 		ConcurrencyKey: &wfName,
 	})
+}
+
+// standbyOperation returns the diagnostics operation of a workflow actor
+// method served on a standby host. ev is the parsed AddWorkflowEvent event.
+func standbyOperation(method string, ev *backend.HistoryEvent) string {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		return diag.CreateWorkflow
+	case todo.PurgeWorkflowStateMethod, todo.RecursivePurgeWorkflowStateMethod:
+		return diag.PurgeWorkflow
+	case todo.RerunWorkflowInstance:
+		return diag.RerunWorkflow
+	case todo.ForkWorkflowHistory:
+		return diag.ForkWorkflow
+	}
+
+	switch {
+	case ev.GetEventRaised() != nil:
+		return diag.RaiseEvent
+	case ev.GetExecutionTerminated() != nil:
+		return diag.TerminateWorkflow
+	case ev.GetExecutionSuspended() != nil:
+		return diag.SuspendWorkflow
+	case ev.GetExecutionResumed() != nil:
+		return diag.ResumeWorkflow
+	default:
+		return diag.AddEvent
+	}
+}
+
+// standbyServed records a workflow actor method served on a standby host.
+func (f *factory) standbyServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
+	operation := standbyOperation(method, ev)
+	diag.DefaultWorkflowMonitoring.WorkflowStandbyOperation(ctx, operation)
+	f.standbyWaiting.served(operation)
+}
+
+// standbyWaiting warns on a standby host when the operations it served keep
+// waiting for a workflow worker to connect to the app: a start, event, rerun
+// or fork does not advance until one does. Its run stops with the standby
+// registration, which ends once a worker connects to this daprd.
+type standbyWaiting struct {
+	appID   string
+	clock   clock.Clock
+	waiting atomic.Int64
+	// warn logs the warning; a field so unit tests can capture it.
+	warn func(appID string, waiting int64, since time.Duration)
+}
+
+func newStandbyWaiting(appID string) *standbyWaiting {
+	return &standbyWaiting{
+		appID: appID,
+		clock: clock.RealClock{},
+		warn: func(appID string, waiting int64, since time.Duration) {
+			log.Warnf("%d workflow operations served on this standby host are waiting for a workflow worker to connect to app '%s'; no worker has connected for %s",
+				waiting, appID, since)
+		},
+	}
+}
+
+// served counts operation as waiting for a worker, unless it is a purge,
+// which a standby host completes.
+func (w *standbyWaiting) served(operation string) {
+	if operation != diag.PurgeWorkflow {
+		w.waiting.Add(1)
+	}
+}
+
+// run warns at standbyWaitingWarnAfter and at doubling intervals after it,
+// while any served operation is waiting, until ctx is done.
+func (w *standbyWaiting) run(ctx context.Context) {
+	start := w.clock.Now()
+	next := standbyWaitingWarnAfter
+	for {
+		t := w.clock.NewTimer(start.Add(next).Sub(w.clock.Now()))
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C():
+		}
+
+		if n := w.waiting.Load(); n > 0 {
+			w.warn(w.appID, n, next)
+		}
+		next += min(next, standbyWaitingWarnMaxInterval)
+	}
 }

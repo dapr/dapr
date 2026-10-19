@@ -115,8 +115,11 @@ type factory struct {
 	deactivateCh  chan *orchestrator
 	deactivateCtx context.Context
 
-	// standby is set on a standby host: see Options.Standby.
-	standby bool
+	// standby is set on a standby host: see Options.Standby. standbyWaiting
+	// counts the operations it served, which wait for a worker; nil unless
+	// standby.
+	standby        bool
+	standbyWaiting *standbyWaiting
 
 	// fastPath and the wake* fields drive the detached local wake goroutines
 	// (see wake.go). wakeCtx is factory-owned rather than scoped to the
@@ -242,6 +245,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	f.bgWG.Go(func() {
 		f.reapIdle(ctx)
 	})
+
+	if opts.Standby {
+		f.standbyWaiting = newStandbyWaiting(opts.AppID)
+		f.bgWG.Go(func() {
+			f.standbyWaiting.run(ctx)
+		})
+	}
 
 	return f, nil
 }
