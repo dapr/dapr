@@ -219,12 +219,15 @@ func (o *orchestrator) failExpiredHeldStart(ctx context.Context, startEvent *bac
 	if err != nil {
 		return err
 	}
-	// Recorded once the replay is past its retryable load, so a retried fire
-	// is not counted again.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusHeldExpired, 0)
 	if state != nil {
+		if completedAt, ok := heldStartFailedAt(state, startEvent); ok {
+			// An earlier fire saved this failure but did not arm its
+			// retention: arm it now rather than leave the instance unpurged.
+			return o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, completedAt)
+		}
 		// The instance ID was taken while this start was held: there is no
 		// instance to record the failure on.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusHeldExpired, 0)
 		log.Warnf("Workflow actor '%s': dropping start held for longer than %s while no workflow worker was connected", o.actorID, common.HeldOperationTimeout())
 		return nil
 	}
@@ -251,8 +254,26 @@ func (o *orchestrator) failExpiredHeldStart(ctx context.Context, startEvent *bac
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
+	// Recorded once the failure is saved, so a retried fire is not counted
+	// again.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusHeldExpired, 0)
 	// The views were never primed for this state: reload on the next call.
 	o.invalidateCachedState()
 
 	return o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, now)
+}
+
+// heldStartFailedAt reports whether state is the failure failExpiredHeldStart
+// recorded for startEvent, and when it was recorded.
+func heldStartFailedAt(state *wfenginestate.State, startEvent *backend.HistoryEvent) (time.Time, bool) {
+	if len(state.History) != 2 {
+		return time.Time{}, false
+	}
+	started, completed := state.History[0], state.History[1]
+	if started.GetExecutionStarted().GetWorkflowInstance().GetExecutionId().GetValue() !=
+		startEvent.GetExecutionStarted().GetWorkflowInstance().GetExecutionId().GetValue() ||
+		completed.GetExecutionCompleted().GetFailureDetails().GetErrorType() != staterrors.ErrorTypeHeldStartExpired {
+		return time.Time{}, false
+	}
+	return completed.GetTimestamp().AsTime(), true
 }

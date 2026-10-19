@@ -748,14 +748,13 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	start := time.Now()
-	ctx = abe.failFastIfHoldable(ctx, actorType)
-
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
+	ctx = abe.failFastIfHoldable(ctx, actorType)
+	start := time.Now()
 	_, err = router.Call(ctx, req)
 	if abe.isNoHost(ctx, err) {
 		return abe.holdEvent(ctx, id, e, start)
