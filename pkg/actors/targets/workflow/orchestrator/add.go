@@ -95,8 +95,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 		// it or dropped it, so a completed instance's ID becomes reusable.
 		// Not for a forged one (unauthorized): the task's real result is
 		// still in flight, and releasing the guard here would let the forger
-		// recreate the instance under it.
-		if !unauthorized && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
+		// recreate the instance under it. Nor for a duplicate: its first
+		// delivery already released the guard, which a later activity may
+		// hold by now.
+		if !unauthorized && reason != reasonDuplicateOfCompleted && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
 			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, reason)
@@ -152,8 +154,16 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
 	// firing twice during pod migration) would pin the workflow in a replay/spin
-	// loop.
+	// loop. A duplicate re-asserts the wake-up so an inbox row whose wake-up
+	// failed to arm is not stranded, but a completed workflow never processes
+	// its inbox again: it acks the duplicate instead (after confirming the
+	// cache), since re-arming would turn every late redelivery, thousands after
+	// a fan-out whose activities re-ran, into a reminder create, a fire and a
+	// turn.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
+		if runtimestate.IsCompleted(o.rstate) {
+			return ackDropped(reasonDuplicateOfCompleted, false)
+		}
 		log.Debugf("Workflow actor '%s': dropping duplicate completion event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
 	}
@@ -168,6 +178,9 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// (Actors.uniqueEventTimestamp), so they fall through to be appended
 	// normally even when raced onto the same wall-clock nanosecond.
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
+		if runtimestate.IsCompleted(o.rstate) {
+			return ackDropped(reasonDuplicateOfCompleted, false)
+		}
 		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-asserting wake-up reminder so the inbox row is not stranded", o.actorID)
 		return o.assertNewEventReminder(ctx, e, state)
 	}
@@ -232,6 +245,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 
 	return nil
 }
+
+// reasonDuplicateOfCompleted acks a redelivered event a completed workflow
+// already recorded.
+const reasonDuplicateOfCompleted = "it duplicates an event of the completed workflow"
 
 // verifyAndAbsorbAttestation verifies any attestation on the incoming event
 // against the signed history and Sentry trust anchors, absorbs the signer

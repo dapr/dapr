@@ -323,3 +323,141 @@ type staticTestSVIDSource struct {
 func (s staticTestSVIDSource) GetX509SVID() (*x509svid.SVID, error) {
 	return s.svid, nil
 }
+
+// completedDuplicateHarness primes an orchestrator whose cached workflow has
+// scheduled tasks 7 and 8, recorded the result of 7 and then completed with
+// status. The store serves a metadata row with storeETag for the ack's cache
+// confirm. Every wake-up reminder create is captured.
+type completedDuplicateHarness struct {
+	orch    *orchestrator
+	mu      sync.Mutex
+	creates []*actorapi.CreateReminderRequest
+}
+
+func newCompletedDuplicateHarness(t *testing.T, instanceID string, status protos.OrchestrationStatus, storeETag string) *completedDuplicateHarness {
+	t.Helper()
+
+	h := new(completedDuplicateHarness)
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name:             "TestWorkflow",
+					Input:            wrapperspb.String(`null`),
+					WorkflowInstance: &protos.WorkflowInstance{InstanceId: instanceID},
+				},
+			},
+		},
+		testAddTaskScheduled(7),
+		testAddTaskCompleted(7),
+		testAddTaskScheduled(8),
+	}
+
+	wfState := state.NewState(state.Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+	})
+	for _, e := range history {
+		wfState.AddToHistory(e)
+	}
+
+	fakeRems := remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.creates = append(h.creates, req)
+		return nil
+	})
+	fakeState := statefake.New().WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+		return &actorapi.StateResponse{Data: []byte("metadata"), ETag: &storeETag}, nil
+	})
+	actors := fake.New().WithReminders(func(context.Context) (reminders.Interface, error) {
+		return fakeRems, nil
+	}).WithState(func(context.Context) (actorstate.Interface, error) {
+		return fakeState, nil
+	})
+
+	fact, err := New(t.Context(), Options{
+		AppID:             "testapp",
+		Namespace:         "default",
+		WorkflowActorType: "dapr.internal.default.testapp.workflow",
+		ActivityActorType: "dapr.internal.default.testapp.activity",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+		Actors:            actors,
+	})
+	require.NoError(t, err)
+
+	h.orch = fact.GetOrCreate(instanceID).(*orchestrator)
+	h.orch.state = wfState
+	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, history[0].GetExecutionStarted())
+	h.orch.rstate.CompletedEvent = &protos.ExecutionCompletedEvent{WorkflowStatus: status}
+
+	return h
+}
+
+func (h *completedDuplicateHarness) snapshotCreates() []*actorapi.CreateReminderRequest {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]*actorapi.CreateReminderRequest(nil), h.creates...)
+}
+
+func testAddTaskScheduled(id int32) *backend.HistoryEvent {
+	return &protos.HistoryEvent{
+		EventId:   id,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskScheduled{
+			TaskScheduled: &protos.TaskScheduledEvent{Name: "act"},
+		},
+	}
+}
+
+func testAddTaskCompleted(scheduled int32) *backend.HistoryEvent {
+	return &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{
+				TaskScheduledId: scheduled,
+				Result:          wrapperspb.String(`"done"`),
+			},
+		},
+	}
+}
+
+func Test_duplicateCompletionOnCompletedWorkflowDoesNotRearm(t *testing.T) {
+	h := newCompletedDuplicateHarness(t, "test-completed-duplicate", protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, "etag")
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), testAddTaskCompleted(7), completionSender{}))
+	assert.Empty(t, h.snapshotCreates(), "a duplicate result for a completed workflow must not arm a wake-up")
+}
+
+func Test_duplicateOnStaleCompletedCacheIsNotAcked(t *testing.T) {
+	h := newCompletedDuplicateHarness(t, "test-stale-completed-duplicate", protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, "after-recreate")
+	// The store has moved on (a peer recreated the instance): its metadata
+	// row carries another etag than the cache.
+	stale := "before-recreate"
+	h.orch.state.SetMetadataETag(&stale)
+
+	err := h.orch.addWorkflowEvent(t.Context(), testAddTaskCompleted(7), completionSender{})
+	require.Error(t, err, "a duplicate judged on a stale completed cache must not be acked")
+	assert.Nil(t, h.orch.state, "the stale cache must be dropped so the retry reloads")
+}
+
+// A redelivered result of activity A, acked as a duplicate after the workflow
+// was terminated while activity B ran, must not release the reuse guard B's
+// dispatch set: B's result is still in flight (createIfCompleted).
+func Test_duplicateCompletionOnCompletedWorkflowKeepsTheAwait(t *testing.T) {
+	h := newCompletedDuplicateHarness(t, "test-completed-duplicate-await", protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED, "etag")
+	h.orch.activityResultAwaited.Store(true)
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), testAddTaskCompleted(7), completionSender{}))
+	assert.True(t, h.orch.activityResultAwaited.Load(), "a duplicate of A must not release the guard B holds")
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), testAddTaskCompleted(8), completionSender{}))
+	assert.False(t, h.orch.activityResultAwaited.Load(), "B's own result settles the await")
+}
