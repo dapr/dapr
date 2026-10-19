@@ -177,14 +177,6 @@ func respondWithError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	// A plain gRPC status, as returned by search and vector components, keeps
-	// its canonical code and any google.rpc details instead of collapsing to
-	// a generic 500.
-	if st, ok := status.FromError(err); ok {
-		respondWithData(w, invokev1.HTTPStatusFromCode(st.Code()), statusErrorResponse(st))
-		return
-	}
-
 	// Respond with a generic error
 	msg := NewErrorResponse(errorcodes.CommonGeneric, err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
@@ -196,6 +188,26 @@ func setResponseMetadataHeaders(w http.ResponseWriter, md map[string]string) {
 	for k, v := range md {
 		h.Set(metadataPrefix+k, v)
 	}
+}
+
+// respondWithComponentStatusError responds with a plain gRPC status error, as
+// returned by search and vector components, keeping its canonical code and
+// any google.rpc details. It reports false, without responding, for Dapr API
+// errors and for errors that carry no gRPC status, which respondWithError
+// handles.
+func respondWithComponentStatusError(w http.ResponseWriter, err error) bool {
+	if _, ok := err.(messages.APIError); ok {
+		return false
+	}
+	if _, ok := kitErrors.FromError(err); ok {
+		return false
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	respondWithData(w, invokev1.HTTPStatusFromCode(st.Code()), statusErrorResponse(st))
+	return true
 }
 
 // statusErrorResponse renders a gRPC status in the Dapr error envelope. The

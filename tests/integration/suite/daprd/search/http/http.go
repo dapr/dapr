@@ -86,7 +86,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.ListIndexesResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodGet, baseURL+"/indexes", nil, &resp)
+			status, _ := do(c, ctx, httpClient, nethttp.MethodGet, baseURL+"/indexes", nil, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.Contains(c, resp.GetIndexes(), index)
 		}, 10*time.Second, 100*time.Millisecond)
@@ -101,7 +101,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.ListIndexesResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodGet, baseURL+"/indexes", nil, &resp)
+			status, _ := do(c, ctx, httpClient, nethttp.MethodGet, baseURL+"/indexes", nil, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.NotContains(c, resp.GetIndexes(), index)
 		}, 10*time.Second, 100*time.Millisecond)
@@ -127,7 +127,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.SearchResponseAlpha1
-			searchStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
+			searchStatus, _ := do(c, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
 			assert.Equal(c, nethttp.StatusOK, searchStatus)
 			assert.ElementsMatch(c, []string{"doc-1", "doc-3"}, hitIDs(resp.GetHits()))
 		}, 10*time.Second, 100*time.Millisecond)
@@ -160,7 +160,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.SearchResponseAlpha1
-			searchStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
+			searchStatus, _ := do(c, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/query", searchRequest("alpha"), &resp)
 			assert.Equal(c, nethttp.StatusOK, searchStatus)
 			assert.Empty(c, resp.GetHits())
 		}, 10*time.Second, 100*time.Millisecond)
@@ -193,7 +193,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.GetDocumentsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/documents/get", &runtimev1pb.GetDocumentsRequestAlpha1{
+			status, _ := do(c, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index)+"/documents/get", &runtimev1pb.GetDocumentsRequestAlpha1{
 				Ids: []string{"doc-1", "doc-2"},
 			}, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
@@ -247,9 +247,11 @@ func createIndex(t *testing.T, ctx context.Context, httpClient *nethttp.Client, 
 
 func searchRequest(text string) *runtimev1pb.SearchRequestAlpha1 {
 	return &runtimev1pb.SearchRequestAlpha1{
-		Query:          &runtimev1pb.SearchRequestAlpha1_Text{Text: text},
-		TopK:           new(uint32(10)),
-		IncludeContent: new(true),
+		Query: &runtimev1pb.SearchQuery{
+			Kind:           &runtimev1pb.SearchQuery_Text{Text: text},
+			TopK:           new(uint32(10)),
+			IncludeContent: new(true),
+		},
 	}
 }
 
@@ -293,8 +295,10 @@ func indexName(suffix string) string {
 	return fmt.Sprintf("it-search-http-%s-%d", suffix, time.Now().UnixNano())
 }
 
-func do(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, url string, in proto.Message, out proto.Message) (int, []byte) {
-	t.Helper()
+func do(t require.TestingT, ctx context.Context, httpClient *nethttp.Client, method, url string, in proto.Message, out proto.Message) (int, []byte) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	var body []byte
 	if in != nil {
 		var err error
@@ -304,8 +308,10 @@ func do(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, u
 	return doRaw(t, ctx, httpClient, method, url, body, out)
 }
 
-func doRaw(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, url string, body []byte, out proto.Message) (int, []byte) {
-	t.Helper()
+func doRaw(t require.TestingT, ctx context.Context, httpClient *nethttp.Client, method, url string, body []byte, out proto.Message) (int, []byte) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)

@@ -15,12 +15,15 @@ package universal
 
 import (
 	"context"
+	"time"
 
+	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	compsearch "github.com/dapr/components-contrib/search"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -36,8 +39,8 @@ func (a *Universal) CreateIndexAlpha1(ctx context.Context, req *runtimev1pb.Crea
 		Index:    req.GetIndex(),
 		Metadata: req.GetMetadata(),
 	}
-	err = runSearchPolicy(ctx, a, storeName, func(ctx context.Context) error {
-		return comp.CreateIndex(ctx, compReq)
+	err = runSearchPolicy(ctx, a, storeName, "create_index", func(ctx context.Context) error {
+		return settledOnRetry(ctx, codes.AlreadyExists, comp.CreateIndex(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err
@@ -59,9 +62,11 @@ func (a *Universal) GetIndexAlpha1(ctx context.Context, req *runtimev1pb.GetInde
 	policyRunner := resiliency.NewRunner[*compsearch.GetIndexResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.GetIndexResponse, error) {
-		return comp.GetIndex(ctx, compReq)
+		return coded(comp.GetIndex(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "get_index", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -86,9 +91,11 @@ func (a *Universal) ListIndexesAlpha1(ctx context.Context, req *runtimev1pb.List
 	policyRunner := resiliency.NewRunner[*compsearch.ListIndexesResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.ListIndexesResponse, error) {
-		return comp.ListIndexes(ctx, compReq)
+		return coded(comp.ListIndexes(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "list_indexes", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -109,8 +116,8 @@ func (a *Universal) DeleteIndexAlpha1(ctx context.Context, req *runtimev1pb.Dele
 		Index:    req.GetIndex(),
 		Metadata: req.GetMetadata(),
 	}
-	err = runSearchPolicy(ctx, a, storeName, func(ctx context.Context) error {
-		return comp.DeleteIndex(ctx, compReq)
+	err = runSearchPolicy(ctx, a, storeName, "delete_index", func(ctx context.Context) error {
+		return settledOnRetry(ctx, codes.NotFound, comp.DeleteIndex(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err
@@ -171,10 +178,12 @@ func (a *Universal) IndexDocumentsAlpha1(ctx context.Context, req *runtimev1pb.I
 		Options:   options,
 	}
 	policyRunner := resiliency.NewRunner[*compsearch.IndexDocumentsResponse](ctx, policyDef)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.IndexDocumentsResponse, error) {
-		res, err := comp.IndexDocuments(ctx, compReq)
-		return res, waitExpiryNotRetried(options, err)
+		res, writeErr := coded(comp.IndexDocuments(ctx, compReq))
+		return res, waitExpiryNotRetried(options, writeErr)
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "index_documents", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -206,9 +215,11 @@ func (a *Universal) GetDocumentsAlpha1(ctx context.Context, req *runtimev1pb.Get
 	policyRunner := resiliency.NewRunner[*compsearch.GetDocumentsResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.GetDocumentsResponse, error) {
-		return comp.GetDocuments(ctx, compReq)
+		return coded(comp.GetDocuments(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "get_documents", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -242,10 +253,12 @@ func (a *Universal) DeleteDocumentsAlpha1(ctx context.Context, req *runtimev1pb.
 		Options:  options,
 	}
 	policyRunner := resiliency.NewRunner[*compsearch.DeleteDocumentsResponse](ctx, policyDef)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.DeleteDocumentsResponse, error) {
-		res, err := comp.DeleteDocuments(ctx, compReq)
-		return res, waitExpiryNotRetried(options, err)
+		res, writeErr := coded(comp.DeleteDocuments(ctx, compReq))
+		return res, waitExpiryNotRetried(options, writeErr)
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "delete_documents", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -262,26 +275,31 @@ func (a *Universal) SearchAlpha1(ctx context.Context, req *runtimev1pb.SearchReq
 		return nil, err
 	}
 
+	// An omitted query matches every document; the getters of a nil query
+	// yield exactly that.
+	query := req.GetQuery()
 	compReq := &compsearch.SearchRequest{
 		Index:             req.GetIndex(),
-		Text:              req.GetText(),
-		Native:            protoStructToMap(req.GetNative()),
-		Filter:            protoStructToMap(req.GetFilter()),
-		TopK:              req.GetTopK(),
-		ContinuationToken: req.GetContinuationToken(),
-		ReturnFields:      req.GetReturnFields(),
-		IncludeContent:    req.GetIncludeContent(),
-		SearchFields:      req.GetSearchFields(),
-		Sort:              protoSortClausesToComponent(req.GetSort()),
-		HighlightFields:   req.GetHighlightFields(),
+		Text:              query.GetText(),
+		Native:            protoStructToMap(query.GetNative()),
+		Filter:            protoStructToMap(query.GetFilter()),
+		TopK:              query.GetTopK(),
+		ContinuationToken: query.GetContinuationToken(),
+		ReturnFields:      query.GetReturnFields(),
+		IncludeContent:    query.GetIncludeContent(),
+		SearchFields:      query.GetSearchFields(),
+		Sort:              protoSortClausesToComponent(query.GetSort()),
+		HighlightFields:   query.GetHighlightFields(),
 		Metadata:          req.GetMetadata(),
 	}
 	policyRunner := resiliency.NewRunner[*compsearch.SearchResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compsearch.SearchResponse, error) {
-		return comp.Search(ctx, compReq)
+		return coded(comp.Search(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, "search", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -313,12 +331,14 @@ func (a *Universal) SearchAlpha1(ctx context.Context, req *runtimev1pb.SearchReq
 
 // runSearchPolicy runs fn under the search component's resiliency policy and
 // normalizes the component error.
-func runSearchPolicy(ctx context.Context, a *Universal, storeName string, fn func(ctx context.Context) error) error {
+func runSearchPolicy(ctx context.Context, a *Universal, storeName, operation string, fn func(ctx context.Context) error) error {
+	start := time.Now()
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Search),
 	)
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, fn(ctx)
+		return coded(struct{}{}, fn(ctx))
 	})
+	diag.DefaultComponentMonitoring.SearchInvoked(ctx, storeName, operation, err == nil, diag.ElapsedSince(start))
 	return componentError(err)
 }

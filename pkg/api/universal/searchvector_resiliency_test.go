@@ -188,7 +188,10 @@ func TestWritesWithResiliency(t *testing.T) {
 			t.Run("a wait the policy timeout cannot accommodate is rejected before the component", func(t *testing.T) {
 				t.Parallel()
 
-				for _, wait := range []time.Duration{writePolicyTimeout, 2 * writePolicyTimeout} {
+				// Too close to the timeout leaves no room for the provider to
+				// report an expired wait before the policy times the attempt out.
+				nearTimeout := writePolicyTimeout - waitTimeoutHeadroom(writePolicyTimeout)/2
+				for _, wait := range []time.Duration{nearTimeout, writePolicyTimeout, 2 * writePolicyTimeout} {
 					calls, invalidRequest, err := do(t, waitForCompletion(wait), validate)
 					assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(err))
 					assert.Equal(t, invalidRequest, statusReason(t, err))
@@ -201,7 +204,8 @@ func TestWritesWithResiliency(t *testing.T) {
 				t.Parallel()
 
 				var deadline atomic.Bool
-				calls, _, err := do(t, waitForCompletion(writePolicyTimeout/2), func(ctx context.Context, opts compsearch.IndexingOptions) error {
+				longest := writePolicyTimeout - waitTimeoutHeadroom(writePolicyTimeout)
+				calls, _, err := do(t, waitForCompletion(longest), func(ctx context.Context, opts compsearch.IndexingOptions) error {
 					_, ok := ctx.Deadline()
 					deadline.Store(ok)
 					return validate(ctx, opts)
@@ -257,4 +261,211 @@ func TestWritesWithResiliency(t *testing.T) {
 			})
 		})
 	}
+}
+
+// readSearch is a search component whose reads are scripted.
+type readSearch struct {
+	fakeSearch
+	calls atomic.Int32
+	read  func(ctx context.Context) error
+}
+
+func (r *readSearch) GetIndex(ctx context.Context, _ *compsearch.GetIndexRequest) (*compsearch.GetIndexResponse, error) {
+	r.calls.Add(1)
+	if err := r.read(ctx); err != nil {
+		return nil, err
+	}
+	return &compsearch.GetIndexResponse{}, nil
+}
+
+func newReadAPI(t *testing.T, policies v1alpha1.PolicyNames, spec v1alpha1.Policies, read func(ctx context.Context) error) (*Universal, *readSearch) {
+	t.Helper()
+	res := &v1alpha1.Resiliency{
+		Spec: v1alpha1.ResiliencySpec{
+			Policies: spec,
+			Targets: v1alpha1.Targets{
+				Components: map[string]v1alpha1.ComponentPolicyNames{testSearchStore: {Outbound: policies}},
+			},
+		},
+	}
+	comp := &readSearch{read: read}
+	store := compstore.New()
+	store.AddSearch(testSearchStore, comp)
+	return &Universal{logger: testLogger, resiliency: resiliency.FromConfigurations(testLogger, res), compStore: store}, comp
+}
+
+func TestRetryMatchesComponentStatusCodes(t *testing.T) {
+	t.Parallel()
+
+	// Only UNAVAILABLE is retried.
+	spec := v1alpha1.Policies{
+		Retries: map[string]v1alpha1.Retry{
+			"unavailable": {
+				MaxRetries: new(2), Policy: "constant", Duration: "10ms",
+				Matching: &v1alpha1.RetryMatching{GRPCStatusCodes: "14"},
+			},
+		},
+	}
+	policies := v1alpha1.PolicyNames{Retry: "unavailable"}
+
+	t.Run("an excluded code is attempted once", func(t *testing.T) {
+		t.Parallel()
+
+		api, comp := newReadAPI(t, policies, spec, func(context.Context) error {
+			return grpcstatus.Error(codes.InvalidArgument, "bad filter")
+		})
+		_, err := api.GetIndexAlpha1(t.Context(), &runtimev1pb.GetIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(err))
+		assert.Equal(t, "bad filter", grpcstatus.Convert(err).Message())
+		assert.Equal(t, int32(1), comp.calls.Load())
+	})
+
+	t.Run("a matched code is retried", func(t *testing.T) {
+		t.Parallel()
+
+		api, comp := newReadAPI(t, policies, spec, func(context.Context) error {
+			return grpcstatus.Error(codes.Unavailable, "down")
+		})
+		_, err := api.GetIndexAlpha1(t.Context(), &runtimev1pb.GetIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.Unavailable, grpcstatus.Code(err))
+		assert.Equal(t, "down", grpcstatus.Convert(err).Message())
+		assert.Equal(t, int32(3), comp.calls.Load())
+	})
+}
+
+func TestPolicyContextErrors(t *testing.T) {
+	t.Parallel()
+
+	spec := v1alpha1.Policies{Timeouts: map[string]string{"fast": "50ms"}}
+	policies := v1alpha1.PolicyNames{Timeout: "fast"}
+	block := func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	t.Run("a policy timeout is DEADLINE_EXCEEDED", func(t *testing.T) {
+		t.Parallel()
+
+		api, _ := newReadAPI(t, policies, spec, block)
+		_, err := api.GetIndexAlpha1(t.Context(), &runtimev1pb.GetIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.DeadlineExceeded, grpcstatus.Code(err))
+	})
+
+	t.Run("a cancelled caller is CANCELED", func(t *testing.T) {
+		t.Parallel()
+
+		api, _ := newReadAPI(t, policies, spec, block)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := api.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.Canceled, grpcstatus.Code(err))
+	})
+}
+
+// createSearch is a search component whose index creation and deletion are
+// scripted.
+type createSearch struct {
+	fakeSearch
+	calls  atomic.Int32
+	create func(attempt int32) error
+}
+
+func (c *createSearch) CreateIndex(context.Context, *compsearch.CreateIndexRequest) error {
+	return c.create(c.calls.Add(1))
+}
+
+func (c *createSearch) DeleteIndex(context.Context, *compsearch.DeleteIndexRequest) error {
+	return c.create(c.calls.Add(1))
+}
+
+func TestCreatedOnRetry(t *testing.T) {
+	t.Parallel()
+
+	newAPI := func(create func(attempt int32) error) *Universal {
+		res := &v1alpha1.Resiliency{
+			Spec: v1alpha1.ResiliencySpec{
+				Policies: v1alpha1.Policies{
+					Retries: map[string]v1alpha1.Retry{
+						"twice": {MaxRetries: new(2), Policy: "constant", Duration: "10ms"},
+					},
+				},
+				Targets: v1alpha1.Targets{
+					Components: map[string]v1alpha1.ComponentPolicyNames{
+						testSearchStore: {Outbound: v1alpha1.PolicyNames{Retry: "twice"}},
+					},
+				},
+			},
+		}
+		store := compstore.New()
+		store.AddSearch(testSearchStore, &createSearch{create: create})
+		return &Universal{logger: testLogger, resiliency: resiliency.FromConfigurations(testLogger, res), compStore: store}
+	}
+	req := &runtimev1pb.CreateIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex}
+
+	t.Run("ALREADY_EXISTS on a retry is success", func(t *testing.T) {
+		t.Parallel()
+
+		api := newAPI(func(attempt int32) error {
+			if attempt == 1 {
+				return grpcstatus.Error(codes.Unavailable, "response lost")
+			}
+			return grpcstatus.Error(codes.AlreadyExists, "exists")
+		})
+		_, err := api.CreateIndexAlpha1(t.Context(), req)
+		require.NoError(t, err)
+	})
+
+	t.Run("NOT_FOUND on a retried delete is success", func(t *testing.T) {
+		t.Parallel()
+
+		api := newAPI(func(attempt int32) error {
+			if attempt == 1 {
+				return grpcstatus.Error(codes.Unavailable, "response lost")
+			}
+			return grpcstatus.Error(codes.NotFound, "no such index")
+		})
+		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		require.NoError(t, err)
+	})
+
+	t.Run("NOT_FOUND on the first delete attempt is an error", func(t *testing.T) {
+		t.Parallel()
+
+		var calls atomic.Int32
+		api := newAPI(func(int32) error {
+			calls.Add(1)
+			return grpcstatus.Error(codes.NotFound, "no such index")
+		})
+		_, err := api.DeleteIndexAlpha1(t.Context(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: testSearchStore, Index: testIndex})
+		assert.Equal(t, codes.NotFound, grpcstatus.Code(err))
+		assert.Equal(t, int32(1), calls.Load(), "a missing index is not retried")
+	})
+
+	t.Run("without a retry policy ALREADY_EXISTS is returned unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		store := compstore.New()
+		store.AddSearch(testSearchStore, &createSearch{create: func(int32) error {
+			return grpcstatus.Error(codes.AlreadyExists, "exists")
+		}})
+		api := &Universal{logger: testLogger, resiliency: resiliency.New(testLogger), compStore: store}
+		_, err := api.CreateIndexAlpha1(t.Context(), req)
+		assert.Equal(t, codes.AlreadyExists, grpcstatus.Code(err))
+		assert.Equal(t, "exists", grpcstatus.Convert(err).Message())
+		assert.NotErrorAs(t, err, new(*backoff.PermanentError))
+	})
+
+	t.Run("ALREADY_EXISTS on the first attempt is an error", func(t *testing.T) {
+		t.Parallel()
+
+		var calls atomic.Int32
+		api := newAPI(func(int32) error {
+			calls.Add(1)
+			return grpcstatus.Error(codes.AlreadyExists, "exists")
+		})
+		_, err := api.CreateIndexAlpha1(t.Context(), req)
+		assert.Equal(t, codes.AlreadyExists, grpcstatus.Code(err))
+		assert.Equal(t, "exists", grpcstatus.Convert(err).Message())
+		assert.Equal(t, int32(1), calls.Load(), "a genuine conflict is not retried")
+	})
 }

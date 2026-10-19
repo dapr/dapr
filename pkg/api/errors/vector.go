@@ -68,10 +68,11 @@ func (v *VectorStoreError) NotConfigured() error {
 }
 
 // InvalidRequest reports request validation the runtime performs before
-// invoking the provider: keyed-upsert IDs that are empty or duplicated, an
-// IndexingOptionsAlpha1 combination the proposal forbids, a vector query that
-// does not set exactly one of vector / by_id, and a collection created
-// without dimensions.
+// invoking the provider: keyed-upsert IDs that are empty or duplicated,
+// IndexingOptionsAlpha1 that are invalid or whose wait the store's resiliency
+// timeout cannot accommodate, a vector query that is missing, does not set
+// exactly one of vector / by_id or has an empty vector, and a collection
+// created without dimensions.
 func (v *VectorStoreError) InvalidRequest(field string, msg string) error {
 	return v.build(
 		kiterrors.NewBuilder(
@@ -83,46 +84,6 @@ func (v *VectorStoreError) InvalidRequest(field string, msg string) error {
 		).WithFieldViolation(field, msg),
 		errorcodes.VectorInvalidRequest.GrpcCode,
 		nil,
-	)
-}
-
-// MissingField is InvalidRequest for a required field left unset.
-func (v *VectorStoreError) MissingField(field string) error {
-	msg := "missing required field " + field
-	return v.InvalidRequest(field, msg)
-}
-
-// CollectionNotFound is reserved for a missing collection the runtime can
-// attribute itself. A NOT_FOUND raised by the provider is passed through
-// instead, so that the component's own message and details survive.
-func (v *VectorStoreError) CollectionNotFound(collection string) error {
-	return v.build(
-		kiterrors.NewBuilder(
-			codes.NotFound,
-			http.StatusNotFound,
-			fmt.Sprintf("vector collection %s is not found in store %s", collection, v.name),
-			errorcodes.VectorCollectionNotFound.Code,
-			string(errorcodes.VectorCollectionNotFound.Category),
-		),
-		errorcodes.VectorCollectionNotFound.GrpcCode,
-		map[string]string{"collection": collection},
-	)
-}
-
-// OperationFailed reports a runtime-side failure while carrying out an
-// operation. It must not be used to wrap a component error: doing so would
-// discard the canonical code and ErrorInfo the caller relies on.
-func (v *VectorStoreError) OperationFailed(operation string, err error) error {
-	return v.build(
-		kiterrors.NewBuilder(
-			codes.Internal,
-			http.StatusInternalServerError,
-			fmt.Sprintf("vector store %s %s failed: %s", v.name, operation, err),
-			errorcodes.VectorOperationFailed.Code,
-			string(errorcodes.VectorOperationFailed.Category),
-		),
-		errorcodes.VectorOperationFailed.GrpcCode,
-		map[string]string{"operation": operation, "error": err.Error()},
 	)
 }
 

@@ -58,15 +58,15 @@ func (s *Registry) Create(name, version, logName string) (search.Search, error) 
 func (s *Registry) getSearch(name, version, logName string) (func() search.Search, bool) {
 	name = strings.ToLower(name)
 	version = strings.ToLower(version)
-	stateStoreFn, ok := s.searches[name+"/"+version]
+	searchFn, ok := s.searches[name+"/"+version]
 
 	if ok {
-		return s.wrapFn(stateStoreFn, logName), true
+		return s.wrapFn(searchFn, logName), true
 	}
 	if components.IsInitialVersion(version) {
-		stateStoreFn, ok = s.searches[name]
+		searchFn, ok = s.searches[name]
 		if ok {
-			return s.wrapFn(stateStoreFn, logName), true
+			return s.wrapFn(searchFn, logName), true
 		}
 	}
 

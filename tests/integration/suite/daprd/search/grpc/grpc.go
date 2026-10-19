@@ -376,6 +376,16 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 				Options:   waitOptions(time.Millisecond, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
 			})
 			assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
+
+			// The provider work is not cancelled. Let it drain so that later
+			// waits are not queued behind it.
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: storeName, Index: index})
+				if !assert.NoError(c, err) {
+					return
+				}
+				assert.Equal(c, uint64(len(bulk)), got.GetDocumentCount())
+			}, 30*time.Second, 100*time.Millisecond)
 		})
 	})
 
@@ -392,11 +402,12 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 
-		// A request with neither text nor native matches every document. One
+		// A query with neither text nor native matches every document. One
 		// hit per page walks the whole index.
 		page := func(token *string) *runtimev1pb.SearchRequestAlpha1 {
 			return &runtimev1pb.SearchRequestAlpha1{
-				StoreName: storeName, Index: index, TopK: new(uint32(1)), ContinuationToken: token,
+				StoreName: storeName, Index: index,
+				Query: &runtimev1pb.SearchQuery{TopK: new(uint32(1)), ContinuationToken: token},
 			}
 		}
 
@@ -430,7 +441,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		// A token is bound to the query that produced it.
 		other := page(&first)
-		other.Query = &runtimev1pb.SearchRequestAlpha1_Text{Text: "alpha"}
+		other.Query.Kind = &runtimev1pb.SearchQuery_Text{Text: "alpha"}
 		_, err = client.SearchAlpha1(ctx, other)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
@@ -467,11 +478,13 @@ func waitOptions(wait time.Duration, action runtimev1pb.IndexingWaitTimeoutActio
 
 func searchRequest(index string, text string) *runtimev1pb.SearchRequestAlpha1 {
 	return &runtimev1pb.SearchRequestAlpha1{
-		StoreName:      storeName,
-		Index:          index,
-		Query:          &runtimev1pb.SearchRequestAlpha1_Text{Text: text},
-		TopK:           new(uint32(10)),
-		IncludeContent: new(true),
+		StoreName: storeName,
+		Index:     index,
+		Query: &runtimev1pb.SearchQuery{
+			Kind:           &runtimev1pb.SearchQuery_Text{Text: text},
+			TopK:           new(uint32(10)),
+			IncludeContent: new(true),
+		},
 	}
 }
 

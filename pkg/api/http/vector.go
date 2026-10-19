@@ -20,13 +20,21 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 var endpointGroupVectorV1Alpha1 = &endpoints.EndpointGroup{
 	Name:                 endpoints.EndpointGroupVector,
 	Version:              endpoints.EndpointGroupVersion1alpha1,
-	AppendSpanAttributes: nil,
+	AppendSpanAttributes: appendVectorSpanAttributes,
+}
+
+func appendVectorSpanAttributes(r *http.Request, m map[string]string) {
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.VectorBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.VectorBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, storeNameParam)
 }
 
 func (a *api) constructVectorEndpoints() []endpoints.Endpoint {
@@ -73,7 +81,7 @@ func (a *api) constructVectorEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodPost},
-			Route:   "vector/{storeName}/collections/{collection}/upsert",
+			Route:   "vector/{storeName}/collections/{collection}/vectors",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupVectorV1Alpha1,
 			Handler: a.onUpsertVectorsAlpha1(),
@@ -85,7 +93,7 @@ func (a *api) constructVectorEndpoints() []endpoints.Endpoint {
 			// POST because this is a batch read whose repeated IDs and
 			// retrieval options are supplied in the request body.
 			Methods: []string{http.MethodPost},
-			Route:   "vector/{storeName}/collections/{collection}/get",
+			Route:   "vector/{storeName}/collections/{collection}/vectors/get",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupVectorV1Alpha1,
 			Handler: a.onGetVectorsAlpha1(),
@@ -132,7 +140,8 @@ func (a *api) onCreateCollectionAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.CreateCollectionAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.CreateCollectionRequestAlpha1, *emptypb.Empty]{
-			InModifier: setVectorCollectionPathParams[*runtimev1pb.CreateCollectionRequestAlpha1],
+			InModifier:            setVectorCollectionPathParams[*runtimev1pb.CreateCollectionRequestAlpha1],
+			ComponentStatusErrors: true,
 		},
 	)
 }
@@ -141,8 +150,10 @@ func (a *api) onGetCollectionAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetCollectionAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetCollectionRequestAlpha1, *runtimev1pb.GetCollectionResponseAlpha1]{
-			InModifier:    setVectorCollectionPathParams[*runtimev1pb.GetCollectionRequestAlpha1],
-			SkipInputBody: true,
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.GetCollectionRequestAlpha1],
+			SkipInputBody:                true,
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -153,9 +164,12 @@ func (a *api) onListCollectionsAlpha1() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.ListCollectionsRequestAlpha1, *runtimev1pb.ListCollectionsResponseAlpha1]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ListCollectionsRequestAlpha1) (*runtimev1pb.ListCollectionsRequestAlpha1, error) {
 				in.StoreName = chi.URLParam(r, storeNameParam)
+				in.Metadata = getMetadataFromRequest(r)
 				return in, nil
 			},
-			SkipInputBody: true,
+			SkipInputBody:                true,
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -164,8 +178,9 @@ func (a *api) onDeleteCollectionAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteCollectionAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteCollectionRequestAlpha1, *emptypb.Empty]{
-			InModifier:    setVectorCollectionPathParams[*runtimev1pb.DeleteCollectionRequestAlpha1],
-			SkipInputBody: true,
+			InModifier:            setVectorCollectionPathParams[*runtimev1pb.DeleteCollectionRequestAlpha1],
+			SkipInputBody:         true,
+			ComponentStatusErrors: true,
 		},
 	)
 }
@@ -174,7 +189,9 @@ func (a *api) onUpsertVectorsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.UpsertVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.UpsertVectorsRequestAlpha1, *runtimev1pb.UpsertVectorsResponseAlpha1]{
-			InModifier: setVectorCollectionPathParams[*runtimev1pb.UpsertVectorsRequestAlpha1],
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.UpsertVectorsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -183,7 +200,9 @@ func (a *api) onGetVectorsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetVectorsRequestAlpha1, *runtimev1pb.GetVectorsResponseAlpha1]{
-			InModifier: setVectorCollectionPathParams[*runtimev1pb.GetVectorsRequestAlpha1],
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.GetVectorsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -192,7 +211,9 @@ func (a *api) onDeleteVectorsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteVectorsRequestAlpha1, *runtimev1pb.DeleteVectorsResponseAlpha1]{
-			InModifier: setVectorCollectionPathParams[*runtimev1pb.DeleteVectorsRequestAlpha1],
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.DeleteVectorsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -201,7 +222,9 @@ func (a *api) onQueryVectorsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.QueryVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.QueryVectorsRequestAlpha1, *runtimev1pb.QueryVectorsResponseAlpha1]{
-			InModifier: setVectorCollectionPathParams[*runtimev1pb.QueryVectorsRequestAlpha1],
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.QueryVectorsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -210,14 +233,9 @@ func (a *api) onBatchQueryVectorsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.BatchQueryVectorsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.BatchQueryVectorsRequestAlpha1, *runtimev1pb.BatchQueryVectorsResponseAlpha1]{
-			InModifier: func(r *http.Request, in *runtimev1pb.BatchQueryVectorsRequestAlpha1) (*runtimev1pb.BatchQueryVectorsRequestAlpha1, error) {
-				// Queries inherit the store and collection of the batch. One
-				// that names its own is left untouched so that the runtime
-				// rejects a mismatch rather than this handler masking it.
-				in.StoreName = chi.URLParam(r, storeNameParam)
-				in.Collection = chi.URLParam(r, collectionParam)
-				return in, nil
-			},
+			InModifier:                   setVectorCollectionPathParams[*runtimev1pb.BatchQueryVectorsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -232,9 +250,11 @@ func setVectorCollectionPathParams[T any](r *http.Request, in T) (T, error) {
 	case *runtimev1pb.GetCollectionRequestAlpha1:
 		req.StoreName = storeName
 		req.Collection = collection
+		req.Metadata = getMetadataFromRequest(r)
 	case *runtimev1pb.DeleteCollectionRequestAlpha1:
 		req.StoreName = storeName
 		req.Collection = collection
+		req.Metadata = getMetadataFromRequest(r)
 	case *runtimev1pb.UpsertVectorsRequestAlpha1:
 		req.StoreName = storeName
 		req.Collection = collection
@@ -245,6 +265,9 @@ func setVectorCollectionPathParams[T any](r *http.Request, in T) (T, error) {
 		req.StoreName = storeName
 		req.Collection = collection
 	case *runtimev1pb.QueryVectorsRequestAlpha1:
+		req.StoreName = storeName
+		req.Collection = collection
+	case *runtimev1pb.BatchQueryVectorsRequestAlpha1:
 		req.StoreName = storeName
 		req.Collection = collection
 	}

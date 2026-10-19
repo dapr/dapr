@@ -84,6 +84,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	t.Run("collection-lifecycle", func(t *testing.T) {
 		collection := "grpc_lifecycle"
 		createCollection(t, ctx, client, collection, nil)
+		t.Cleanup(func() { dropCollection(client, collection) })
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.ListCollectionsAlpha1(ctx, &runtimev1pb.ListCollectionsRequestAlpha1{StoreName: storeName})
@@ -195,7 +196,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		filter, err := structpb.NewStruct(map[string]any{"rank": map[string]any{"$gt": 1}})
 		require.NoError(t, err)
 		req := queryRequest(collection, []float32{1, 0, 0, 0}, 3)
-		req.Filter = filter
+		req.Query.Filter = filter
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.QueryVectorsAlpha1(ctx, req)
@@ -217,9 +218,9 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.BatchQueryVectorsAlpha1(ctx, &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 				StoreName:  storeName,
 				Collection: collection,
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					queryRequest(collection, []float32{1, 0, 0, 0}, 2),
-					queryRequest(collection, []float32{0, 1, 0, 0}, 2),
+				Queries: []*runtimev1pb.VectorQuery{
+					vectorQuery([]float32{1, 0, 0, 0}, 2),
+					vectorQuery([]float32{0, 1, 0, 0}, 2),
 				},
 			})
 			if !assert.NoError(c, err) {
@@ -251,10 +252,10 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.BatchQueryVectorsAlpha1(ctx, &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 				StoreName:  storeName,
 				Collection: collection,
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					queryRequest(collection, []float32{1, 0, 0, 0}, 1),
-					{StoreName: storeName, Collection: collection, TopK: new(uint32(1))},
-					queryRequest(collection, []float32{0, 1, 0, 0}, 1),
+				Queries: []*runtimev1pb.VectorQuery{
+					vectorQuery([]float32{1, 0, 0, 0}, 1),
+					{TopK: new(uint32(1))},
+					vectorQuery([]float32{0, 1, 0, 0}, 1),
 				},
 			})
 			// An invalid query settles in its own slot and never fails the RPC.
@@ -275,47 +276,6 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			assert.Nil(c, resp.GetResults()[2].GetError())
 			if assert.NotEmpty(c, resp.GetResults()[2].GetResponse().GetMatches()) {
 				assert.Equal(c, "vec-3", resp.GetResults()[2].GetResponse().GetMatches()[0].GetRecord().GetId())
-			}
-		}, 10*time.Second, 100*time.Millisecond)
-	})
-
-	t.Run("batch-query-collection-mismatch", func(t *testing.T) {
-		collection := "grpc_batch_mismatch"
-		createCollection(t, ctx, client, collection, nil)
-		t.Cleanup(func() { dropCollection(client, collection) })
-		upsertVectors(t, ctx, client, collection)
-
-		// A query runs against the batch collection, which it inherits when it
-		// leaves its own unset. Naming another collection or store is rejected
-		// in the query's own slot rather than silently overridden.
-		inherits := queryRequest("", []float32{1, 0, 0, 0}, 1)
-		inherits.StoreName = ""
-		otherStore := queryRequest(collection, []float32{1, 0, 0, 0}, 1)
-		otherStore.StoreName = "another-store"
-
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := client.BatchQueryVectorsAlpha1(ctx, &runtimev1pb.BatchQueryVectorsRequestAlpha1{
-				StoreName:  storeName,
-				Collection: collection,
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					queryRequest("grpc_upsert", []float32{1, 0, 0, 0}, 1),
-					inherits,
-					otherStore,
-				},
-			})
-			if !assert.NoError(c, err) {
-				return
-			}
-			if !assert.Len(c, resp.GetResults(), 3) {
-				return
-			}
-			for _, i := range []int{0, 2} {
-				assert.Nil(c, resp.GetResults()[i].GetResponse())
-				assert.Equal(c, int32(codes.InvalidArgument), resp.GetResults()[i].GetError().GetCode())
-			}
-			assert.Nil(c, resp.GetResults()[1].GetError())
-			if assert.NotEmpty(c, resp.GetResults()[1].GetResponse().GetMatches()) {
-				assert.Equal(c, "vec-1", resp.GetResults()[1].GetResponse().GetMatches()[0].GetRecord().GetId())
 			}
 		}, 10*time.Second, 100*time.Millisecond)
 	})
@@ -382,7 +342,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		_, err = client.BatchQueryVectorsAlpha1(ctx, &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  storeName,
 			Collection: collection,
-			Queries:    []*runtimev1pb.QueryVectorsRequestAlpha1{queryRequest(collection, []float32{1, 0, 0, 0}, 1)},
+			Queries:    []*runtimev1pb.VectorQuery{vectorQuery([]float32{1, 0, 0, 0}, 1)},
 		})
 		assert.Equal(t, codes.NotFound, status.Code(err))
 	})
@@ -397,16 +357,17 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		short := make([]float32, dimensions-1)
 		short[0] = 1
 
-		// Meilisearch checks dimensions when it processes the write and fails
-		// it as a whole, so the mismatch is only reported to a write that
-		// waits for completion.
-		_, err := client.UpsertVectorsAlpha1(ctx, &runtimev1pb.UpsertVectorsRequestAlpha1{
+		// The record is rejected on its own; the write as a whole succeeds.
+		resp, err := client.UpsertVectorsAlpha1(ctx, &runtimev1pb.UpsertVectorsRequestAlpha1{
 			StoreName:  storeName,
 			Collection: collection,
 			Records:    []*runtimev1pb.VectorRecord{newRecord(t, "vec-short", short, map[string]any{"rank": 1})},
 			Options:    waitOptions(10*time.Second, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
 		})
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.NoError(t, err)
+		require.Len(t, resp.GetFailedItems(), 1)
+		assert.Equal(t, "vec-short", resp.GetFailedItems()[0].GetId())
+		assert.Equal(t, int32(codes.InvalidArgument), resp.GetFailedItems()[0].GetError().GetCode())
 
 		_, err = client.QueryVectorsAlpha1(ctx, queryRequest(collection, short, 1))
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -448,6 +409,11 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	t.Run("error-query-missing-query", func(t *testing.T) {
 		// Exactly one of vector or by_id must be set.
 		_, err := client.QueryVectorsAlpha1(ctx, &runtimev1pb.QueryVectorsRequestAlpha1{StoreName: storeName, Collection: "unused"})
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		// A query vector without values is rejected before the provider.
+		_, err = client.QueryVectorsAlpha1(ctx, queryRequest("unused", nil, 1))
 		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
@@ -506,9 +472,15 @@ func waitOptions(wait time.Duration, action runtimev1pb.IndexingWaitTimeoutActio
 
 func queryRequest(collection string, values []float32, topK uint32) *runtimev1pb.QueryVectorsRequestAlpha1 {
 	return &runtimev1pb.QueryVectorsRequestAlpha1{
-		StoreName:      storeName,
-		Collection:     collection,
-		Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: values}},
+		StoreName:  storeName,
+		Collection: collection,
+		Query:      vectorQuery(values, topK),
+	}
+}
+
+func vectorQuery(values []float32, topK uint32) *runtimev1pb.VectorQuery {
+	return &runtimev1pb.VectorQuery{
+		Kind:           &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: values}},
 		TopK:           new(topK),
 		Metric:         runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE,
 		IncludeValues:  new(true),

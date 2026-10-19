@@ -125,7 +125,8 @@ message IndexingOptionsAlpha1 {
   // INDEXING_MODE_WAIT_FOR_COMPLETION and must be shorter than the remaining
   // RPC context deadline when one is set.
   // When the store has a resiliency timeout policy, wait_timeout must also be
-  // shorter than that timeout.
+  // shorter than that timeout by at least a tenth of it, and by no less than
+  // 100ms.
   optional google.protobuf.Duration wait_timeout = 2;
   // Required with INDEXING_MODE_WAIT_FOR_COMPLETION.
   IndexingWaitTimeoutAction on_wait_timeout = 3;
@@ -220,33 +221,37 @@ message DeleteDocumentsResponseAlpha1 {
   IndexAck ack = 1;
 }
 
+// SearchQuery selects and shapes the hits of a search.
+message SearchQuery {
+  // At most one of text or native is set. A query that sets neither matches
+  // every document in the index, subject to filter.
+  oneof kind {
+    string text = 1;
+    google.protobuf.Struct native = 2;
+  }
+
+  optional google.protobuf.Struct filter = 3;
+  // Maximum number of hits to return in this page. When omitted or 0, the
+  // component's documented default page size applies.
+  optional uint32 top_k = 4;
+  // Opaque token returned by the previous SearchResponseAlpha1. Omitted for
+  // the first page.
+  optional string continuation_token = 5;
+  repeated string return_fields = 6;
+  // Whether SearchDocument.content is returned with each hit. Defaults to
+  // false.
+  optional bool include_content = 7;
+  repeated string search_fields = 8;
+  repeated SortClause sort = 9;
+  repeated string highlight_fields = 10;
+}
+
 message SearchRequestAlpha1 {
   string store_name = 1;
   string index = 2;
-
-  // At most one of text or native is set. A request that sets neither
-  // matches every document in the index, subject to filter.
-  oneof query {
-    string text = 3;
-    google.protobuf.Struct native = 4;
-  }
-
-  optional google.protobuf.Struct filter = 5;
-  // Maximum number of hits to return in this page. When omitted or 0, the
-  // component's documented default page size applies.
-  optional uint32 top_k = 6;
-  // Opaque token returned by the previous SearchResponseAlpha1. Omitted for
-  // the first page.
-  optional string continuation_token = 7;
-  repeated string return_fields = 8;
-  // Whether SearchDocument.content is returned with each hit. Defaults to
-  // false.
-  optional bool include_content = 9;
-  repeated string search_fields = 10;
-  repeated SortClause sort = 11;
-  repeated string highlight_fields = 12;
-
-  map<string, string> metadata = 13;
+  // Omitted matches every document in the index.
+  optional SearchQuery query = 3;
+  map<string, string> metadata = 4;
 }
 
 enum TotalHitsRelation {

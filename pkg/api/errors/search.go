@@ -33,8 +33,7 @@ import (
 // the Search API contract requires the component's canonical google.rpc.Code
 // and any google.rpc.ErrorInfo details (for example the
 // SEARCH_CONTINUATION_EXPIRED and INDEXING_OUTCOME_UNKNOWN reasons) to reach
-// the caller intact. OperationFailed must therefore never be used to blanket
-// wrap a component error as INTERNAL.
+// the caller intact.
 type SearchStoreError struct {
 	name             string
 	skipResourceInfo bool
@@ -79,9 +78,9 @@ func (s *SearchStoreError) NotConfigured() error {
 }
 
 // InvalidRequest reports request validation the runtime performs before
-// invoking the provider: missing search request fields, keyed-upsert IDs that
-// are empty or duplicated, and IndexingOptionsAlpha1 combinations the proposal
-// forbids.
+// invoking the provider: keyed-upsert IDs that are empty or duplicated, and
+// IndexingOptionsAlpha1 that are invalid or whose wait the store's resiliency
+// timeout cannot accommodate.
 func (s *SearchStoreError) InvalidRequest(field string, msg string) error {
 	return s.build(
 		kiterrors.NewBuilder(
@@ -93,46 +92,6 @@ func (s *SearchStoreError) InvalidRequest(field string, msg string) error {
 		).WithFieldViolation(field, msg),
 		errorcodes.SearchInvalidRequest.GrpcCode,
 		nil,
-	)
-}
-
-// MissingField is InvalidRequest for a required field left unset.
-func (s *SearchStoreError) MissingField(field string) error {
-	msg := "missing required field " + field
-	return s.InvalidRequest(field, msg)
-}
-
-// IndexNotFound is reserved for a missing index the runtime can attribute
-// itself. A NOT_FOUND raised by the provider is passed through instead, so
-// that the component's own message and details survive.
-func (s *SearchStoreError) IndexNotFound(index string) error {
-	return s.build(
-		kiterrors.NewBuilder(
-			codes.NotFound,
-			http.StatusNotFound,
-			fmt.Sprintf("search index %s is not found in store %s", index, s.name),
-			errorcodes.SearchIndexNotFound.Code,
-			string(errorcodes.SearchIndexNotFound.Category),
-		),
-		errorcodes.SearchIndexNotFound.GrpcCode,
-		map[string]string{"index": index},
-	)
-}
-
-// OperationFailed reports a runtime-side failure while carrying out an
-// operation. It must not be used to wrap a component error: doing so would
-// discard the canonical code and ErrorInfo the caller relies on.
-func (s *SearchStoreError) OperationFailed(operation string, err error) error {
-	return s.build(
-		kiterrors.NewBuilder(
-			codes.Internal,
-			http.StatusInternalServerError,
-			fmt.Sprintf("search store %s %s failed: %s", s.name, operation, err),
-			errorcodes.SearchOperationFailed.Code,
-			string(errorcodes.SearchOperationFailed.Category),
-		),
-		errorcodes.SearchOperationFailed.GrpcCode,
-		map[string]string{"operation": operation, "error": err.Error()},
 	)
 }
 

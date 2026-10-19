@@ -83,10 +83,13 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	t.Run("collection-lifecycle", func(t *testing.T) {
 		collection := "http_lifecycle"
 		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		t.Cleanup(func() {
+			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
+		})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.ListCollectionsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodGet, baseURL, nil, &resp)
+			status, _ := do(c, ctx, httpClient, nethttp.MethodGet, baseURL, nil, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.Contains(c, resp.GetCollections(), collection)
 		}, 10*time.Second, 100*time.Millisecond)
@@ -95,6 +98,8 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		status, body := do(t, ctx, httpClient, nethttp.MethodGet, baseURL+"/"+collection, nil, &got)
 		require.Equal(t, nethttp.StatusOK, status, string(body))
 		assert.Equal(t, collection, got.GetCollection())
+		// Zero values are emitted rather than omitted.
+		assert.Contains(t, string(body), `"recordCount"`)
 		// The typed collection settings are reported back as created.
 		assert.Equal(t, uint32(dimensions), got.GetDimensions())
 		assert.Equal(t, runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE, got.GetMetric())
@@ -103,7 +108,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, nethttp.StatusOK, status, string(body))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.ListCollectionsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodGet, baseURL, nil, &resp)
+			status, _ := do(c, ctx, httpClient, nethttp.MethodGet, baseURL, nil, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.NotContains(c, resp.GetCollections(), collection)
 		}, 10*time.Second, 100*time.Millisecond)
@@ -120,14 +125,14 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.GetVectorsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/get",
+			status, _ := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/vectors/get",
 				&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1", "vec-2"}, IncludeValues: new(true)}, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.Len(c, resp.GetRecords(), 2)
 		}, 10*time.Second, 100*time.Millisecond)
 
 		var getResp runtimev1pb.GetVectorsResponseAlpha1
-		status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/get",
+		status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/vectors/get",
 			&runtimev1pb.GetVectorsRequestAlpha1{Ids: []string{"vec-1"}, IncludeValues: new(true)}, &getResp)
 		require.Equal(t, nethttp.StatusOK, status, string(body))
 		require.Len(t, getResp.GetRecords(), 1)
@@ -145,7 +150,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.QueryVectorsResponseAlpha1
-			queryStatus, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 2), &resp)
+			queryStatus, _ := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 2), &resp)
 			assert.Equal(c, nethttp.StatusOK, queryStatus)
 			if !assert.NotEmpty(c, resp.GetMatches()) {
 				return
@@ -170,7 +175,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.QueryVectorsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 3), &resp)
+			status, _ := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", queryRequest([]float32{1, 0, 0, 0}, 3), &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
 			assert.Empty(c, resp.GetMatches())
 		}, 10*time.Second, 100*time.Millisecond)
@@ -190,11 +195,11 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		filter, err := structpb.NewStruct(map[string]any{"rank": map[string]any{"$gt": 1}})
 		require.NoError(t, err)
 		req := queryRequest([]float32{1, 0, 0, 0}, 3)
-		req.Filter = filter
+		req.Query.Filter = filter
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.QueryVectorsResponseAlpha1
-			status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", req, &resp)
+			status, body := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/query", req, &resp)
 			if !assert.Equal(c, nethttp.StatusOK, status, string(body)) {
 				return
 			}
@@ -213,10 +218,10 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var resp runtimev1pb.BatchQueryVectorsResponseAlpha1
-			status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					queryRequest([]float32{1, 0, 0, 0}, 2),
-					queryRequest([]float32{0, 1, 0, 0}, 2),
+			status, _ := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
+				Queries: []*runtimev1pb.VectorQuery{
+					vectorQuery([]float32{1, 0, 0, 0}, 2),
+					vectorQuery([]float32{0, 1, 0, 0}, 2),
 				},
 			}, &resp)
 			assert.Equal(c, nethttp.StatusOK, status)
@@ -246,11 +251,11 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			// The middle query sets neither vector nor by_id.
 			var resp runtimev1pb.BatchQueryVectorsResponseAlpha1
-			status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					queryRequest([]float32{1, 0, 0, 0}, 1),
+			status, body := do(c, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
+				Queries: []*runtimev1pb.VectorQuery{
+					vectorQuery([]float32{1, 0, 0, 0}, 1),
 					{TopK: new(uint32(1))},
-					queryRequest([]float32{0, 1, 0, 0}, 1),
+					vectorQuery([]float32{0, 1, 0, 0}, 1),
 				},
 			}, &resp)
 			// An invalid query settles in its own slot and never fails the
@@ -272,43 +277,6 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 			assert.Nil(c, resp.GetResults()[2].GetError())
 			if assert.NotEmpty(c, resp.GetResults()[2].GetResponse().GetMatches()) {
 				assert.Equal(c, "vec-3", resp.GetResults()[2].GetResponse().GetMatches()[0].GetRecord().GetId())
-			}
-		}, 10*time.Second, 100*time.Millisecond)
-	})
-
-	t.Run("batch-query-collection-mismatch", func(t *testing.T) {
-		collection := "http_batch_mismatch"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
-		t.Cleanup(func() {
-			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
-		})
-		upsertVectors(t, ctx, httpClient, baseURL, collection)
-
-		// The collection in the path applies to every query. A query whose body
-		// names another one is rejected in its own slot rather than silently
-		// answered from the path collection.
-		other := queryRequest([]float32{1, 0, 0, 0}, 1)
-		other.Collection = "http_upsert"
-
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			var resp runtimev1pb.BatchQueryVectorsResponseAlpha1
-			status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/batch-query", &runtimev1pb.BatchQueryVectorsRequestAlpha1{
-				Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-					other,
-					queryRequest([]float32{1, 0, 0, 0}, 1),
-				},
-			}, &resp)
-			if !assert.Equal(c, nethttp.StatusOK, status, string(body)) {
-				return
-			}
-			if !assert.Len(c, resp.GetResults(), 2) {
-				return
-			}
-			assert.Nil(c, resp.GetResults()[0].GetResponse())
-			assert.Equal(c, int32(codes.InvalidArgument), resp.GetResults()[0].GetError().GetCode())
-			assert.Nil(c, resp.GetResults()[1].GetError())
-			if assert.NotEmpty(c, resp.GetResults()[1].GetResponse().GetMatches()) {
-				assert.Equal(c, "vec-1", resp.GetResults()[1].GetResponse().GetMatches()[0].GetRecord().GetId())
 			}
 		}, 10*time.Second, 100*time.Millisecond)
 	})
@@ -351,7 +319,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("error-empty-record-id", func(t *testing.T) {
-		status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/unused/upsert", &runtimev1pb.UpsertVectorsRequestAlpha1{
+		status, _ := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/unused/vectors", &runtimev1pb.UpsertVectorsRequestAlpha1{
 			Records: []*runtimev1pb.VectorRecord{{Values: []float32{1, 0, 0, 0}}},
 		}, nil)
 		assert.Equal(t, nethttp.StatusBadRequest, status)
@@ -373,7 +341,7 @@ func createCollection(t *testing.T, ctx context.Context, httpClient *nethttp.Cli
 func upsertVectors(t *testing.T, ctx context.Context, httpClient *nethttp.Client, baseURL, collection string) {
 	t.Helper()
 	var resp runtimev1pb.UpsertVectorsResponseAlpha1
-	status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/upsert", &runtimev1pb.UpsertVectorsRequestAlpha1{
+	status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection+"/vectors", &runtimev1pb.UpsertVectorsRequestAlpha1{
 		Records: testRecords(t),
 		Options: &runtimev1pb.IndexingOptionsAlpha1{
 			Mode: runtimev1pb.IndexingMode_INDEXING_MODE_RETURN_ON_ACCEPTANCE,
@@ -385,8 +353,12 @@ func upsertVectors(t *testing.T, ctx context.Context, httpClient *nethttp.Client
 }
 
 func queryRequest(values []float32, topK uint32) *runtimev1pb.QueryVectorsRequestAlpha1 {
-	return &runtimev1pb.QueryVectorsRequestAlpha1{
-		Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: values}},
+	return &runtimev1pb.QueryVectorsRequestAlpha1{Query: vectorQuery(values, topK)}
+}
+
+func vectorQuery(values []float32, topK uint32) *runtimev1pb.VectorQuery {
+	return &runtimev1pb.VectorQuery{
+		Kind:           &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: values}},
 		TopK:           new(topK),
 		Metric:         runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE,
 		IncludeValues:  new(true),
@@ -423,8 +395,10 @@ func matchIDs(matches []*runtimev1pb.VectorMatch) []string {
 	return ids
 }
 
-func do(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, url string, in proto.Message, out proto.Message) (int, []byte) {
-	t.Helper()
+func do(t require.TestingT, ctx context.Context, httpClient *nethttp.Client, method, url string, in proto.Message, out proto.Message) (int, []byte) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	var body []byte
 	if in != nil {
 		var err error
@@ -434,8 +408,10 @@ func do(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, u
 	return doRaw(t, ctx, httpClient, method, url, body, out)
 }
 
-func doRaw(t *testing.T, ctx context.Context, httpClient *nethttp.Client, method, url string, body []byte, out proto.Message) (int, []byte) {
-	t.Helper()
+func doRaw(t require.TestingT, ctx context.Context, httpClient *nethttp.Client, method, url string, body []byte, out proto.Message) (int, []byte) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)

@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
@@ -299,6 +300,18 @@ func TestComponentError(t *testing.T) {
 	// A permanent error is unwrapped.
 	deadline := grpcstatus.Error(codes.DeadlineExceeded, "late")
 	assert.Equal(t, deadline, componentError(backoff.Permanent(deadline)))
+
+	// So is a retry code, in either nesting.
+	coded := resiliency.NewCodeError(int32(codes.DeadlineExceeded), deadline)
+	assert.Equal(t, deadline, componentError(coded))
+	assert.Equal(t, deadline, componentError(backoff.Permanent(coded)))
+	assert.Equal(t, deadline, componentError(resiliency.NewCodeError(int32(codes.DeadlineExceeded), backoff.Permanent(deadline))))
+
+	// Plain errors from the resiliency runner keep their meaning.
+	assert.Equal(t, codes.DeadlineExceeded, grpcstatus.Code(componentError(context.DeadlineExceeded)))
+	assert.Equal(t, codes.Canceled, grpcstatus.Code(componentError(context.Canceled)))
+	assert.Equal(t, codes.Unavailable, grpcstatus.Code(componentError(breaker.ErrOpenState)))
+	assert.Equal(t, codes.Unavailable, grpcstatus.Code(componentError(breaker.ErrTooManyRequests)))
 }
 
 func TestWaitExpiryNotRetried(t *testing.T) {
@@ -443,6 +456,8 @@ func TestComponentIndexAckToProto(t *testing.T) {
 	assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_COMPLETED, componentIndexAckToProto(compsearch.IndexAckCompleted))
 	// A successful write never reports UNSPECIFIED to the caller.
 	assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_COMPLETED, componentIndexAckToProto(compsearch.IndexAckUnspecified))
+	// An unknown acknowledgement does not overstate completion.
+	assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_QUEUED, componentIndexAckToProto(compsearch.IndexAck(99)))
 }
 
 func TestComponentFailedItemsToProto(t *testing.T) {

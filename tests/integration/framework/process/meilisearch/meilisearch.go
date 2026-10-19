@@ -20,8 +20,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 var _ process.Interface = (*Meilisearch)(nil)
@@ -44,6 +45,7 @@ const imageTag = "v1.43"
 type Meilisearch struct {
 	name        string
 	apiKey      string
+	ports       *ports.Ports
 	port        int
 	containerID string
 }
@@ -57,13 +59,13 @@ func New(t *testing.T, fopts ...Option) *Meilisearch {
 	}
 
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker is not available")
+		skipWithoutDocker(t, "docker is not installed")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker is not available")
+		skipWithoutDocker(t, "docker is not available: "+err.Error())
 	}
 
 	opts := options{apiKey: "integration-test"}
@@ -71,21 +73,34 @@ func New(t *testing.T, fopts ...Option) *Meilisearch {
 		fopt(&opts)
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
-	require.NoError(t, ln.Close())
+	fp := ports.Reserve(t, 1)
 
 	return &Meilisearch{
 		name:   fmt.Sprintf("dapr-meilisearch-%s-%s", sanitizeName(t.Name()), randomSuffix(t)),
 		apiKey: opts.apiKey,
-		port:   port,
+		ports:  fp,
+		port:   fp.Port(t),
 	}
+}
+
+// requireDockerEnv, when "true", fails rather than skips a test that needs
+// Docker, so CI cannot pass without running it.
+const requireDockerEnv = "DAPR_INTEGRATION_REQUIRE_DOCKER"
+
+func skipWithoutDocker(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv(requireDockerEnv) == "true" {
+		require.FailNow(t, reason, "%s is set", requireDockerEnv)
+	}
+	t.Skip(reason)
 }
 
 // Run runs the Meilisearch process.
 func (m *Meilisearch) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
+
+	// Docker binds the host port, so release the reservation just before.
+	m.ports.Free(t)
 
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, //nolint:gosec // arguments are constructed internally from test-generated values, not external input
@@ -103,7 +118,16 @@ func (m *Meilisearch) Run(t *testing.T, ctx context.Context) {
 	m.containerID = strings.TrimSpace(string(out))
 	require.NotEmpty(t, m.containerID)
 
+	// The framework registers Cleanup only once Run returns, so a failed
+	// health check must stop the container itself.
+	healthy := false
+	defer func() {
+		if !healthy {
+			m.Cleanup(t)
+		}
+	}()
 	m.waitForHealth(t, ctx)
+	healthy = true
 }
 
 // Cleanup cleans up the Meilisearch process.
@@ -114,9 +138,12 @@ func (m *Meilisearch) Cleanup(t *testing.T) {
 		return
 	}
 
-	if err := exec.Command("docker", "stop", "-t", "1", m.containerID).Run(); err != nil { //nolint:gosec // container ID is generated internally, not external input
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "docker", "stop", "-t", "1", m.containerID).Run(); err != nil { //nolint:gosec // container ID is generated internally, not external input
 		t.Logf("failed to stop Meilisearch container %s: %v", m.containerID, err)
 	}
+	m.containerID = ""
 }
 
 // Address returns the Meilisearch HTTP address.

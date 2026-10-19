@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -25,11 +26,13 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	kitErrors "github.com/dapr/kit/errors"
 )
 
-func TestRespondWithErrorStatus(t *testing.T) {
+func TestRespondWithComponentStatusError(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a component status keeps its canonical code and details", func(t *testing.T) {
@@ -40,7 +43,7 @@ func TestRespondWithErrorStatus(t *testing.T) {
 		require.NoError(t, err)
 
 		rec := httptest.NewRecorder()
-		respondWithError(rec, st.Err())
+		require.True(t, respondWithComponentStatusError(rec, st.Err()))
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		var body struct {
@@ -64,21 +67,55 @@ func TestRespondWithErrorStatus(t *testing.T) {
 			codes.NotFound:         http.StatusNotFound,
 			codes.InvalidArgument:  http.StatusBadRequest,
 			codes.DeadlineExceeded: http.StatusGatewayTimeout,
+			codes.Unavailable:      http.StatusServiceUnavailable,
 			codes.Unimplemented:    http.StatusNotImplemented,
 			codes.Aborted:          http.StatusConflict,
 		} {
 			rec := httptest.NewRecorder()
-			respondWithError(rec, status.Error(code, "x"))
+			require.True(t, respondWithComponentStatusError(rec, status.Error(code, "x")))
 			assert.Equal(t, want, rec.Code, code.String())
 		}
 	})
 
-	t.Run("a plain error is still generic", func(t *testing.T) {
+	t.Run("Dapr errors and plain errors are left to respondWithError", func(t *testing.T) {
+		t.Parallel()
+
+		kitErr := kitErrors.NewBuilder(codes.NotFound, http.StatusNotFound, "no store", "ERR_TEST", "test").
+			WithErrorInfo("ERR_TEST", nil).
+			Build()
+		for _, err := range []error{kitErr, errors.New("boom")} {
+			rec := httptest.NewRecorder()
+			assert.False(t, respondWithComponentStatusError(rec, err))
+			assert.Zero(t, rec.Body.Len())
+		}
+	})
+
+	t.Run("respondWithError keeps a plain status generic", func(t *testing.T) {
 		t.Parallel()
 
 		rec := httptest.NewRecorder()
-		respondWithError(rec, errors.New("boom"))
+		respondWithError(rec, status.Error(codes.NotFound, "x"))
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), errorcodes.CommonGeneric.Code)
 	})
+}
+
+func TestUniversalHTTPHandlerComponentStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	handler := func(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+		return nil, status.Error(codes.NotFound, "no such index")
+	}
+
+	for enabled, want := range map[bool]int{
+		true:  http.StatusNotFound,
+		false: http.StatusInternalServerError,
+	} {
+		h := UniversalHTTPHandler(handler, UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
+			ComponentStatusErrors: enabled,
+		})
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodPost, "/", nil))
+		assert.Equal(t, want, rec.Code, "ComponentStatusErrors=%t", enabled)
+	}
 }

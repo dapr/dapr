@@ -25,7 +25,6 @@ import (
 	compsearch "github.com/dapr/components-contrib/search"
 	compvector "github.com/dapr/components-contrib/vector"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -127,6 +126,16 @@ func TestVectorUpsertVectorsAlpha1(t *testing.T) {
 			assert.Nil(t, fake.upsertReq)
 		}
 	})
+
+	t.Run("an empty upsert completes without the provider", func(t *testing.T) {
+		fake := &fakeVector{}
+		resp, err := newVectorAPI(fake).UpsertVectorsAlpha1(t.Context(), &runtimev1pb.UpsertVectorsRequestAlpha1{
+			StoreName: testVectorStore, Collection: testCollection,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_COMPLETED, resp.GetAck())
+		assert.Nil(t, fake.upsertReq)
+	})
 }
 
 func TestVectorGetVectorsAlpha1(t *testing.T) {
@@ -179,12 +188,14 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 			Metric:  compvector.DistanceMetricCosine,
 		}}
 		resp, err := newVectorAPI(fake).QueryVectorsAlpha1(t.Context(), &runtimev1pb.QueryVectorsRequestAlpha1{
-			StoreName:      testVectorStore,
-			Collection:     testCollection,
-			Query:          &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Id: "ignored", Values: []float32{0.1, 0.2}}},
-			Filter:         filter,
-			TopK:           new(uint32(5)),
-			ScoreThreshold: new(0.6),
+			StoreName:  testVectorStore,
+			Collection: testCollection,
+			Query: &runtimev1pb.VectorQuery{
+				Kind:           &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Id: "ignored", Values: []float32{0.1, 0.2}}},
+				Filter:         filter,
+				TopK:           new(uint32(5)),
+				ScoreThreshold: new(0.6),
+			},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetMatches(), 1)
@@ -203,7 +214,7 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 		fake := &fakeVector{queryResp: &compvector.QueryResponse{Metric: compvector.DistanceMetricEuclidean}}
 		_, err := newVectorAPI(fake).QueryVectorsAlpha1(t.Context(), &runtimev1pb.QueryVectorsRequestAlpha1{
 			StoreName: testVectorStore, Collection: testCollection,
-			Query: &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "a"},
+			Query: &runtimev1pb.VectorQuery{Kind: &runtimev1pb.VectorQuery_ById{ById: "a"}},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "a", fake.queryReq.ByID)
@@ -213,9 +224,21 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 	t.Run("exactly one query form is required", func(t *testing.T) {
 		fake := &fakeVector{}
 		_, err := newVectorAPI(fake).QueryVectorsAlpha1(t.Context(), &runtimev1pb.QueryVectorsRequestAlpha1{
-			StoreName: testVectorStore, Collection: testCollection,
+			StoreName: testVectorStore, Collection: testCollection, Query: &runtimev1pb.VectorQuery{},
 		})
 		assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(err))
+		assert.Equal(t, []string{"query"}, fieldViolations(t, err))
+		assert.Nil(t, fake.queryReq)
+	})
+
+	t.Run("a query vector without values is rejected", func(t *testing.T) {
+		fake := &fakeVector{}
+		_, err := newVectorAPI(fake).QueryVectorsAlpha1(t.Context(), &runtimev1pb.QueryVectorsRequestAlpha1{
+			StoreName: testVectorStore, Collection: testCollection,
+			Query: &runtimev1pb.VectorQuery{Kind: &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{}}},
+		})
+		assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(err))
+		assert.Equal(t, []string{"query.vector.values"}, fieldViolations(t, err))
 		assert.Nil(t, fake.queryReq)
 	})
 
@@ -224,8 +247,10 @@ func TestVectorQueryVectorsAlpha1(t *testing.T) {
 		_, err := newVectorAPI(fake).QueryVectorsAlpha1(t.Context(), &runtimev1pb.QueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Query:      &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}},
-			Metric:     runtimev1pb.DistanceMetric_DISTANCE_METRIC_EUCLIDEAN,
+			Query: &runtimev1pb.VectorQuery{
+				Kind:   &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}},
+				Metric: runtimev1pb.DistanceMetric_DISTANCE_METRIC_EUCLIDEAN,
+			},
 		})
 		assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(err))
 	})
@@ -240,16 +265,16 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		resp, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}, TopK: new(uint32(5))},
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.2}}}, TopK: new(uint32(5))},
+			Queries: []*runtimev1pb.VectorQuery{
+				{Kind: &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}, TopK: new(uint32(5))},
+				{Kind: &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.2}}}, TopK: new(uint32(5))},
 			},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetResults(), 2)
 		assert.Equal(t, "a", resp.GetResults()[0].GetResponse().GetMatches()[0].GetRecord().GetId())
 		assert.Equal(t, "b", resp.GetResults()[1].GetResponse().GetMatches()[0].GetRecord().GetId())
-		// Every query inherits the batch's collection.
+		// Every query runs against the batch collection.
 		for _, query := range fake.batchQueryReq.Queries {
 			assert.Equal(t, testCollection, query.Collection)
 		}
@@ -262,54 +287,44 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		resp, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
+			Queries: []*runtimev1pb.VectorQuery{
 				{}, // neither vector nor by_id
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}},
+				{Kind: &runtimev1pb.VectorQuery_Vector{Vector: &runtimev1pb.VectorRecord{Values: []float32{0.1}}}},
 			},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetResults(), 2)
 		assert.Equal(t, int32(codes.InvalidArgument), resp.GetResults()[0].GetError().GetCode())
+		// The violation names the query's position in the batch.
+		assert.Equal(t, []string{"queries[0]"}, fieldViolations(t, grpcstatus.FromProto(resp.GetResults()[0].GetError()).Err()))
 		assert.Nil(t, resp.GetResults()[0].GetResponse())
 		assert.NotNil(t, resp.GetResults()[1].GetResponse())
 		// Only the valid query reached the component, and its slot was preserved.
 		require.Len(t, fake.batchQueryReq.Queries, 1)
 	})
 
-	t.Run("a query naming another store or collection fails only its own slot", func(t *testing.T) {
+	t.Run("every query runs with the batch collection and metadata", func(t *testing.T) {
 		fake := &fakeVector{batchQueryResp: &compvector.BatchQueryResponse{Results: []compvector.BatchQueryResult{
 			{Response: &compvector.QueryResponse{Metric: compvector.DistanceMetricCosine}},
 			{Response: &compvector.QueryResponse{Metric: compvector.DistanceMetricCosine}},
 		}}}
-		query := &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "a"}
-		resp, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
+		metadata := map[string]string{"k": "v"}
+		_, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: query, Collection: "other"},
-				{Query: query}, // inherits both
-				{Query: query, StoreName: "other"},
-				{Query: query, StoreName: testVectorStore, Collection: testCollection},
+			Queries: []*runtimev1pb.VectorQuery{
+				{Kind: &runtimev1pb.VectorQuery_ById{ById: "a"}},
+				{Kind: &runtimev1pb.VectorQuery_ById{ById: "b"}},
 			},
+			Metadata: metadata,
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetResults(), 4)
-
-		for i, field := range map[int]string{0: "queries.collection", 2: "queries.store_name"} {
-			rejected := grpcstatus.FromProto(resp.GetResults()[i].GetError()).Err()
-			assert.Equal(t, codes.InvalidArgument, grpcstatus.Code(rejected))
-			assert.Equal(t, errorcodes.VectorInvalidRequest.GrpcCode, statusReason(t, rejected))
-			assert.Equal(t, []string{field}, fieldViolations(t, rejected))
-		}
-		assert.NotNil(t, resp.GetResults()[1].GetResponse())
-		assert.NotNil(t, resp.GetResults()[3].GetResponse())
-
-		// Every query that reached the component runs against the batch
-		// collection.
 		require.Len(t, fake.batchQueryReq.Queries, 2)
 		assert.Equal(t, testCollection, fake.batchQueryReq.Collection)
+		assert.Equal(t, metadata, fake.batchQueryReq.Metadata)
 		for _, q := range fake.batchQueryReq.Queries {
 			assert.Equal(t, testCollection, q.Collection)
+			assert.Equal(t, metadata, q.Metadata)
 		}
 	})
 
@@ -320,8 +335,8 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		resp, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "missing"}},
+			Queries: []*runtimev1pb.VectorQuery{
+				{Kind: &runtimev1pb.VectorQuery_ById{ById: "missing"}},
 			},
 		})
 		require.NoError(t, err)
@@ -334,8 +349,8 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		_, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "a"}},
+			Queries: []*runtimev1pb.VectorQuery{
+				{Kind: &runtimev1pb.VectorQuery_ById{ById: "a"}},
 			},
 		})
 		assert.Equal(t, codes.NotFound, grpcstatus.Code(err))
@@ -346,8 +361,8 @@ func TestVectorBatchQueryVectorsAlpha1(t *testing.T) {
 		_, err := newVectorAPI(fake).BatchQueryVectorsAlpha1(t.Context(), &runtimev1pb.BatchQueryVectorsRequestAlpha1{
 			StoreName:  testVectorStore,
 			Collection: testCollection,
-			Queries: []*runtimev1pb.QueryVectorsRequestAlpha1{
-				{Query: &runtimev1pb.QueryVectorsRequestAlpha1_ById{ById: "a"}},
+			Queries: []*runtimev1pb.VectorQuery{
+				{Kind: &runtimev1pb.VectorQuery_ById{ById: "a"}},
 			},
 		})
 		assert.Equal(t, codes.Internal, grpcstatus.Code(err))

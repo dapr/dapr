@@ -253,8 +253,10 @@ func TestSearchAlpha1(t *testing.T) {
 		resp, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{
 			StoreName: testSearchStore,
 			Index:     testIndex,
-			Query:     &runtimev1pb.SearchRequestAlpha1_Text{Text: "prejudice"},
-			TopK:      new(uint32(10)),
+			Query: &runtimev1pb.SearchQuery{
+				Kind: &runtimev1pb.SearchQuery_Text{Text: "prejudice"},
+				TopK: new(uint32(10)),
+			},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetHits(), 1)
@@ -273,7 +275,7 @@ func TestSearchAlpha1(t *testing.T) {
 		require.NoError(t, err)
 		fake := &fakeSearch{searchResp: &compsearch.SearchResponse{}}
 		resp, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{
-			StoreName: testSearchStore, Index: testIndex, Filter: filter,
+			StoreName: testSearchStore, Index: testIndex, Query: &runtimev1pb.SearchQuery{Filter: filter},
 		})
 		require.NoError(t, err)
 		require.NotNil(t, fake.searchReq)
@@ -295,7 +297,7 @@ func TestSearchAlpha1(t *testing.T) {
 	t.Run("an expired continuation token keeps its canonical code", func(t *testing.T) {
 		fake := &fakeSearch{searchErr: compsearch.ContinuationExpiredError("cursor gone")}
 		_, err := newSearchAPI(fake).SearchAlpha1(t.Context(), &runtimev1pb.SearchRequestAlpha1{
-			StoreName: testSearchStore, Index: testIndex, ContinuationToken: new("tok"),
+			StoreName: testSearchStore, Index: testIndex, Query: &runtimev1pb.SearchQuery{ContinuationToken: new("tok")},
 		})
 		assert.Equal(t, codes.FailedPrecondition, grpcstatus.Code(err))
 	})

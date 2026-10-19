@@ -14,6 +14,8 @@ limitations under the License.
 package processor
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/search"
+	"github.com/dapr/components-contrib/vector"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
@@ -125,34 +129,69 @@ func TestCloseInlineSearchAndVector(t *testing.T) {
 					name = "after shutdown"
 				}
 				t.Run(name, func(t *testing.T) {
-					proc, _ := newTestProc()
-					proc.running.Store(shutdown)
-					proc.closed.Store(shutdown)
+					proc, reg := newTestProc()
+					closed := new(atomic.Bool)
+					reg.Searches().RegisterComponent(func(logger.Logger) search.Search {
+						return &inlineSearch{closed: closed}
+					}, "fake")
+					reg.Vectors().RegisterComponent(func(logger.Logger) vector.Vector {
+						return &inlineVector{closed: closed}
+					}, "fake")
 
-					manager := &closeTrackingManager{inlineManager: proc.inlineManagers[category]}
-					proc.inlineManagers[category] = manager
 					comp := componentsapi.Component{
-						ObjectMeta: metav1.ObjectMeta{Name: "meilisearch"},
+						ObjectMeta: metav1.ObjectMeta{Name: "store"},
 						Spec: componentsapi.ComponentSpec{
-							Type:    string(category) + ".meilisearch",
+							Type:    string(category) + ".fake",
 							Version: "v1",
 						},
 					}
+					require.NoError(t, proc.Init(t.Context(), comp))
+					assert.True(t, storeHas(proc, category, "store"))
 
+					proc.running.Store(shutdown)
+					proc.closed.Store(shutdown)
 					require.NoError(t, proc.Close(t.Context(), comp))
-					require.True(t, manager.closed)
+					assert.True(t, closed.Load(), "the component is closed")
+					assert.False(t, storeHas(proc, category, "store"), "the component is removed from the store")
 				})
 			}
 		})
 	}
 }
 
-type closeTrackingManager struct {
-	inlineManager
-	closed bool
+func storeHas(proc *Processor, category components.Category, name string) bool {
+	if category == components.CategorySearch {
+		_, ok := proc.compStore.GetSearch(name)
+		return ok
+	}
+	_, ok := proc.compStore.GetVector(name)
+	return ok
 }
 
-func (m *closeTrackingManager) Close(comp componentsapi.Component) error {
-	m.closed = true
-	return m.inlineManager.Close(comp)
+// searchComponent names the embedded interface, whose own name would shadow
+// its Search method.
+type searchComponent = search.Search
+
+type inlineSearch struct {
+	searchComponent
+	closed *atomic.Bool
+}
+
+func (*inlineSearch) Init(context.Context, search.Metadata) error { return nil }
+
+func (s *inlineSearch) Close() error {
+	s.closed.Store(true)
+	return nil
+}
+
+type inlineVector struct {
+	vector.Vector
+	closed *atomic.Bool
+}
+
+func (*inlineVector) Init(context.Context, vector.Metadata) error { return nil }
+
+func (v *inlineVector) Close() error {
+	v.closed.Store(true)
+	return nil
 }

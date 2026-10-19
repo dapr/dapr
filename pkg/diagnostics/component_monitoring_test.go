@@ -248,6 +248,40 @@ func TestSecrets(t *testing.T) {
 	})
 }
 
+func TestSearchAndVector(t *testing.T) {
+	for name, invoke := range map[string]func(c *componentMetrics, elapsed float64){
+		"search": func(c *componentMetrics, elapsed float64) {
+			c.SearchInvoked(t.Context(), componentName, "search", false, elapsed)
+		},
+		"vector": func(c *componentMetrics, elapsed float64) {
+			c.VectorInvoked(t.Context(), componentName, "query", false, elapsed)
+		},
+	} {
+		t.Run("record "+name+" count", func(t *testing.T) {
+			c, meter := componentsMetrics()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			invoke(c, 0)
+			viewData, _ := meter.RetrieveData("component/" + name + "/count")
+			v := meter.Find("component/" + name + "/count")
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("record "+name+" latency", func(t *testing.T) {
+			c, meter := componentsMetrics()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			invoke(c, 1)
+			viewData, _ := meter.RetrieveData("component/" + name + "/latencies")
+			v := meter.Find("component/" + name + "/latencies")
+			allTagsPresent(t, v, viewData[0].Tags)
+			assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+		})
+	}
+}
+
 func TestConversation(t *testing.T) {
 	t.Run("record conversation count", func(t *testing.T) {
 		c, meter := componentsMetrics()

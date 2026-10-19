@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
@@ -108,20 +109,74 @@ func vectorInvalidRequest(storeName string, err error) error {
 	return componentError(err)
 }
 
+// coded passes a component result through, wrapping a gRPC status error so
+// that the store's retry policy can match its code. componentError undoes the
+// wrapping.
+func coded[T any](res T, err error) (T, error) {
+	if err == nil {
+		return res, nil
+	}
+	if st, ok := grpcstatus.FromError(err); ok {
+		//nolint:gosec // canonical gRPC codes are 0-16
+		return res, resiliency.NewCodeError(int32(st.Code()), err)
+	}
+	return res, err
+}
+
+// settledOnRetry treats done on a retried create or delete as success: an
+// earlier attempt most likely completed the operation before its response was
+// lost. done is ALREADY_EXISTS for a create and NOT_FOUND for a delete. On the
+// first attempt it is a genuine outcome, which retrying cannot change.
+func settledOnRetry(ctx context.Context, done codes.Code, err error) error {
+	if grpcstatus.Code(err) != done {
+		return err
+	}
+	if resiliency.GetAttempt(ctx) > 1 {
+		return nil
+	}
+	return backoff.Permanent(err)
+}
+
+// waitTimeoutHeadroom is how much shorter than the store's resiliency timeout
+// a wait must be. The provider reports an expired wait slightly after
+// wait_timeout, and an attempt that ends within the runner's clock tolerance
+// of its deadline is treated as a policy timeout and retried, which would
+// resubmit the write.
+func waitTimeoutHeadroom(timeout time.Duration) time.Duration {
+	return max(timeout/10, 100*time.Millisecond)
+}
+
 // componentError normalizes a component error. Components are expected to
-// return gRPC status errors carrying a canonical code; anything else is
-// reported as INTERNAL so callers always see a canonical code.
+// return gRPC status errors carrying a canonical code. A resiliency timeout,
+// cancellation or open circuit breaker surfaces from the policy runner as a
+// plain error and is mapped to its canonical code; anything else is reported
+// as INTERNAL so callers always see a canonical code.
 func componentError(err error) error {
 	if err == nil {
 		return nil
 	}
-	// Without a retry policy the runner returns a permanent error as is.
-	var permanent *backoff.PermanentError
-	if errors.As(err, &permanent) {
-		err = permanent.Unwrap()
+	// Without a retry policy the runner returns a permanent error as is, and
+	// the status error may still carry its retry code.
+	for unwrapping := true; unwrapping; {
+		var permanent *backoff.PermanentError
+		var codeErr resiliency.CodeError
+		switch {
+		case errors.As(err, &permanent):
+			err = permanent.Unwrap()
+		case errors.As(err, &codeErr):
+			err = codeErr.Unwrap()
+		default:
+			unwrapping = false
+		}
 	}
 	if _, ok := grpcstatus.FromError(err); ok {
 		return err
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return grpcstatus.FromContextError(err).Err()
+	case resiliency.IsCircuitBreakerError(err):
+		return grpcstatus.Error(codes.Unavailable, err.Error())
 	}
 	return grpcstatus.Error(codes.Internal, err.Error())
 }
@@ -166,9 +221,11 @@ func protoIndexingOptionsToComponent(ctx context.Context, opts *runtimev1pb.Inde
 	// here: left to the component, the rejection would lose its building block
 	// error code and be retried by the policy.
 	if policy != nil && out.Mode == compsearch.IndexingModeWaitForCompletion {
-		if timeout := policy.Timeout(); timeout > 0 && out.WaitTimeout >= timeout {
-			return out, newFieldError("options.wait_timeout",
-				"wait_timeout (%s) must be shorter than the resiliency timeout (%s) configured for the store", out.WaitTimeout, timeout)
+		if timeout := policy.Timeout(); timeout > 0 {
+			if headroom := waitTimeoutHeadroom(timeout); out.WaitTimeout > timeout-headroom {
+				return out, newFieldError("options.wait_timeout",
+					"wait_timeout (%s) must be at least %s shorter than the resiliency timeout (%s) configured for the store", out.WaitTimeout, headroom, timeout)
+			}
 		}
 	}
 	return out, nil
@@ -198,7 +255,8 @@ func componentIndexAckToProto(ack compsearch.IndexAck) runtimev1pb.IndexAck {
 		// component that leaves this unset completed the write.
 		return runtimev1pb.IndexAck_INDEX_ACK_COMPLETED
 	default:
-		return runtimev1pb.IndexAck_INDEX_ACK_COMPLETED
+		// An unknown acknowledgement promises only that the write was accepted.
+		return runtimev1pb.IndexAck_INDEX_ACK_QUEUED
 	}
 }
 

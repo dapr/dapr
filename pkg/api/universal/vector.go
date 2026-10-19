@@ -15,6 +15,10 @@ package universal
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -24,6 +28,7 @@ import (
 	compsearch "github.com/dapr/components-contrib/search"
 	compvector "github.com/dapr/components-contrib/vector"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -44,8 +49,8 @@ func (a *Universal) CreateCollectionAlpha1(ctx context.Context, req *runtimev1pb
 		Dimensions: req.GetDimensions(),
 		Metric:     compvector.DistanceMetric(req.GetMetric()),
 	}
-	err = runVectorPolicy(ctx, a, storeName, func(ctx context.Context) error {
-		return comp.CreateCollection(ctx, compReq)
+	err = runVectorPolicy(ctx, a, storeName, "create_collection", func(ctx context.Context) error {
+		return settledOnRetry(ctx, codes.AlreadyExists, comp.CreateCollection(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err
@@ -67,9 +72,11 @@ func (a *Universal) GetCollectionAlpha1(ctx context.Context, req *runtimev1pb.Ge
 	policyRunner := resiliency.NewRunner[*compvector.GetCollectionResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.GetCollectionResponse, error) {
-		return comp.GetCollection(ctx, compReq)
+		return coded(comp.GetCollection(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "get_collection", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -96,9 +103,11 @@ func (a *Universal) ListCollectionsAlpha1(ctx context.Context, req *runtimev1pb.
 	policyRunner := resiliency.NewRunner[*compvector.ListCollectionsResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.ListCollectionsResponse, error) {
-		return comp.ListCollections(ctx, compReq)
+		return coded(comp.ListCollections(ctx, compReq))
 	})
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "list_collections", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -119,8 +128,8 @@ func (a *Universal) DeleteCollectionAlpha1(ctx context.Context, req *runtimev1pb
 		Collection: req.GetCollection(),
 		Metadata:   req.GetMetadata(),
 	}
-	err = runVectorPolicy(ctx, a, storeName, func(ctx context.Context) error {
-		return comp.DeleteCollection(ctx, compReq)
+	err = runVectorPolicy(ctx, a, storeName, "delete_collection", func(ctx context.Context) error {
+		return settledOnRetry(ctx, codes.NotFound, comp.DeleteCollection(ctx, compReq))
 	})
 	if err != nil {
 		return nil, err
@@ -152,6 +161,10 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 	if err != nil {
 		return nil, vectorInvalidRequest(storeName, err)
 	}
+	if len(records) == 0 {
+		// Nothing to write; the (empty) write is complete.
+		return &runtimev1pb.UpsertVectorsResponseAlpha1{Ack: runtimev1pb.IndexAck_INDEX_ACK_COMPLETED}, nil
+	}
 
 	compReq := &compvector.UpsertRequest{
 		Collection: req.GetCollection(),
@@ -160,10 +173,12 @@ func (a *Universal) UpsertVectorsAlpha1(ctx context.Context, req *runtimev1pb.Up
 		Options:    options,
 	}
 	policyRunner := resiliency.NewRunner[*compvector.UpsertResponse](ctx, policyDef)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.UpsertResponse, error) {
-		res, err := comp.Upsert(ctx, compReq)
-		return res, waitExpiryNotRetried(options, err)
+		res, writeErr := coded(comp.Upsert(ctx, compReq))
+		return res, waitExpiryNotRetried(options, writeErr)
 	})
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "upsert", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -192,18 +207,19 @@ func (a *Universal) GetVectorsAlpha1(ctx context.Context, req *runtimev1pb.GetVe
 	policyRunner := resiliency.NewRunner[*compvector.GetResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.GetResponse, error) {
-		return comp.Get(ctx, compReq)
+		return coded(comp.Get(ctx, compReq))
 	})
+	elapsed := diag.ElapsedSince(start)
+	var records []*runtimev1pb.VectorRecord
+	if err == nil && resp != nil {
+		// A record the runtime cannot represent is a component failure.
+		records, err = componentVectorRecordsToProto(resp.Records)
+	}
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "get", err == nil, elapsed)
 	if err != nil {
 		return nil, componentError(err)
-	}
-	if resp == nil {
-		return &runtimev1pb.GetVectorsResponseAlpha1{}, nil
-	}
-	records, err := componentVectorRecordsToProto(resp.Records)
-	if err != nil {
-		return nil, err
 	}
 	return &runtimev1pb.GetVectorsResponseAlpha1{Records: records}, nil
 }
@@ -230,10 +246,12 @@ func (a *Universal) DeleteVectorsAlpha1(ctx context.Context, req *runtimev1pb.De
 		Options:    options,
 	}
 	policyRunner := resiliency.NewRunner[*compvector.DeleteResponse](ctx, policyDef)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.DeleteResponse, error) {
-		res, err := comp.Delete(ctx, compReq)
-		return res, waitExpiryNotRetried(options, err)
+		res, writeErr := coded(comp.Delete(ctx, compReq))
+		return res, waitExpiryNotRetried(options, writeErr)
 	})
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "delete", err == nil, diag.ElapsedSince(start))
 	if err != nil {
 		return nil, componentError(err)
 	}
@@ -250,20 +268,27 @@ func (a *Universal) QueryVectorsAlpha1(ctx context.Context, req *runtimev1pb.Que
 		return nil, err
 	}
 
-	compReq, err := protoQueryVectorsRequestToComponent(req)
+	compReq, err := protoVectorQueryToComponent(req.GetQuery(), req.GetCollection(), req.GetMetadata())
 	if err != nil {
 		return nil, vectorInvalidRequest(storeName, err)
 	}
 	policyRunner := resiliency.NewRunner[*compvector.QueryResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 	)
+	start := time.Now()
 	resp, err := policyRunner(func(ctx context.Context) (*compvector.QueryResponse, error) {
-		return comp.Query(ctx, compReq)
+		return coded(comp.Query(ctx, compReq))
 	})
+	elapsed := diag.ElapsedSince(start)
+	var out *runtimev1pb.QueryVectorsResponseAlpha1
+	if err == nil {
+		out, err = componentQueryVectorsResponseToProto(resp)
+	}
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "query", err == nil, elapsed)
 	if err != nil {
 		return nil, componentError(err)
 	}
-	return componentQueryVectorsResponseToProto(resp)
+	return out, nil
 }
 
 // BatchQueryVectorsAlpha1 evaluates each query independently. A query that
@@ -282,11 +307,11 @@ func (a *Universal) BatchQueryVectorsAlpha1(ctx context.Context, req *runtimev1p
 	queries := make([]compvector.QueryRequest, 0, len(req.GetQueries()))
 	positions := make([]int, 0, len(req.GetQueries()))
 	for i, query := range req.GetQueries() {
-		compQuery, err := protoBatchQueryToComponent(req, query)
+		compQuery, err := protoVectorQueryToComponent(query, req.GetCollection(), req.GetMetadata())
 		if err != nil {
 			results[i] = &runtimev1pb.BatchQueryResultAlpha1{
 				Result: &runtimev1pb.BatchQueryResultAlpha1_Error{
-					Error: grpcstatus.Convert(vectorInvalidRequest(storeName, err)).Proto(),
+					Error: grpcstatus.Convert(vectorInvalidRequest(storeName, inBatch(i, err))).Proto(),
 				},
 			}
 			continue
@@ -304,14 +329,17 @@ func (a *Universal) BatchQueryVectorsAlpha1(ctx context.Context, req *runtimev1p
 		policyRunner := resiliency.NewRunner[*compvector.BatchQueryResponse](ctx,
 			a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 		)
+		start := time.Now()
 		resp, err := policyRunner(func(ctx context.Context) (*compvector.BatchQueryResponse, error) {
-			return comp.BatchQuery(ctx, compReq)
+			return coded(comp.BatchQuery(ctx, compReq))
 		})
+		elapsed := diag.ElapsedSince(start)
+		if err == nil && (resp == nil || len(resp.Results) != len(queries)) {
+			err = grpcstatus.Errorf(codes.Internal, "vector store %s returned %d batch results for %d queries", storeName, batchResultCount(resp), len(queries))
+		}
+		diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, "batch_query", err == nil, elapsed)
 		if err != nil {
 			return nil, componentError(err)
-		}
-		if resp == nil || len(resp.Results) != len(queries) {
-			return nil, grpcstatus.Errorf(codes.Internal, "vector store %s returned %d batch results for %d queries", storeName, batchResultCount(resp), len(queries))
 		}
 		for j := range resp.Results {
 			results[positions[j]] = componentBatchQueryResultToProto(&resp.Results[j])
@@ -328,13 +356,15 @@ func batchResultCount(resp *compvector.BatchQueryResponse) int {
 	return len(resp.Results)
 }
 
-func runVectorPolicy(ctx context.Context, a *Universal, storeName string, fn func(ctx context.Context) error) error {
+func runVectorPolicy(ctx context.Context, a *Universal, storeName, operation string, fn func(ctx context.Context) error) error {
+	start := time.Now()
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Vector),
 	)
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, fn(ctx)
+		return coded(struct{}{}, fn(ctx))
 	})
+	diag.DefaultComponentMonitoring.VectorInvoked(ctx, storeName, operation, err == nil, diag.ElapsedSince(start))
 	return componentError(err)
 }
 
@@ -379,46 +409,45 @@ func componentVectorRecordsToProto(records []compvector.Record) ([]*runtimev1pb.
 	return out, nil
 }
 
-func protoQueryVectorsRequestToComponent(req *runtimev1pb.QueryVectorsRequestAlpha1) (*compvector.QueryRequest, error) {
-	out := &compvector.QueryRequest{
-		Collection:     req.GetCollection(),
-		ByID:           req.GetById(),
-		TopK:           req.GetTopK(),
-		Filter:         protoStructToMap(req.GetFilter()),
-		IncludeValues:  req.GetIncludeValues(),
-		IncludePayload: req.GetIncludePayload(),
-		Metric:         compvector.DistanceMetric(req.GetMetric()),
-		ScoreThreshold: req.ScoreThreshold,
-		Metadata:       req.GetMetadata(),
+// inBatch attributes the field error of a query to its position in a batch.
+func inBatch(i int, err error) error {
+	var fe *fieldError
+	if !errors.As(err, &fe) {
+		return err
 	}
-	if vec := req.GetVector(); vec != nil {
+	return &fieldError{
+		field: fmt.Sprintf("queries[%d]%s", i, strings.TrimPrefix(fe.field, "query")),
+		msg:   fe.msg,
+	}
+}
+
+// protoVectorQueryToComponent converts a query that runs against collection
+// with the request's metadata.
+func protoVectorQueryToComponent(query *runtimev1pb.VectorQuery, collection string, metadata map[string]string) (*compvector.QueryRequest, error) {
+	if query == nil {
+		return nil, newFieldError("query", "missing required field query")
+	}
+	out := &compvector.QueryRequest{
+		Collection:     collection,
+		ByID:           query.GetById(),
+		TopK:           query.GetTopK(),
+		Filter:         protoStructToMap(query.GetFilter()),
+		IncludeValues:  query.GetIncludeValues(),
+		IncludePayload: query.GetIncludePayload(),
+		Metric:         compvector.DistanceMetric(query.GetMetric()),
+		ScoreThreshold: query.ScoreThreshold,
+		Metadata:       metadata,
+	}
+	if vec := query.GetVector(); vec != nil {
+		if len(vec.GetValues()) == 0 {
+			return nil, newFieldError("query.vector.values", "query vector values must not be empty")
+		}
 		// Only the query values are meaningful.
 		out.Vector = &compvector.Record{Values: vec.GetValues()}
 	}
 	if (out.Vector == nil) == (out.ByID == "") {
 		return nil, newFieldError("query", "exactly one of vector or by_id must be set")
 	}
-	return out, nil
-}
-
-// protoBatchQueryToComponent converts one query of a batch. The query runs
-// against the store and collection of the batch, which it inherits when it
-// leaves its own unset. Naming a different one is rejected rather than
-// ignored, so a query never silently returns matches from a collection other
-// than the one it asked for.
-func protoBatchQueryToComponent(batch *runtimev1pb.BatchQueryVectorsRequestAlpha1, query *runtimev1pb.QueryVectorsRequestAlpha1) (*compvector.QueryRequest, error) {
-	if name := query.GetStoreName(); name != "" && name != batch.GetStoreName() {
-		return nil, newFieldError("queries.store_name", "query store_name %q differs from the batch store_name %q", name, batch.GetStoreName())
-	}
-	if collection := query.GetCollection(); collection != "" && collection != batch.GetCollection() {
-		return nil, newFieldError("queries.collection", "query collection %q differs from the batch collection %q", collection, batch.GetCollection())
-	}
-
-	out, err := protoQueryVectorsRequestToComponent(query)
-	if err != nil {
-		return nil, err
-	}
-	out.Collection = batch.GetCollection()
 	return out, nil
 }
 

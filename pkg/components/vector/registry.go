@@ -58,15 +58,15 @@ func (s *Registry) Create(name, version, logName string) (vector.Vector, error) 
 func (s *Registry) getVector(name, version, logName string) (func() vector.Vector, bool) {
 	name = strings.ToLower(name)
 	version = strings.ToLower(version)
-	stateStoreFn, ok := s.vectors[name+"/"+version]
+	vectorFn, ok := s.vectors[name+"/"+version]
 
 	if ok {
-		return s.wrapFn(stateStoreFn, logName), true
+		return s.wrapFn(vectorFn, logName), true
 	}
 	if components.IsInitialVersion(version) {
-		stateStoreFn, ok = s.vectors[name]
+		vectorFn, ok = s.vectors[name]
 		if ok {
-			return s.wrapFn(stateStoreFn, logName), true
+			return s.wrapFn(vectorFn, logName), true
 		}
 	}
 

@@ -103,7 +103,7 @@ message VectorRecord {
   // filterable.
   optional bytes payload = 3;
   // Structured, filterable attributes addressed by the filter DSL.
-  optional google.protobuf.Struct metadata = 6;
+  optional google.protobuf.Struct metadata = 4;
 }
 
 message VectorMatch {
@@ -157,35 +157,42 @@ message GetVectorsResponseAlpha1 {
   repeated VectorRecord records = 1;
 }
 
-message QueryVectorsRequestAlpha1 {
-  string store_name = 1;
-  string collection = 2;
-
-  oneof query {
-    // Only values is read; the remaining VectorRecord fields are ignored.
-    VectorRecord vector = 3;
-    string by_id = 4;
+// VectorQuery selects and shapes the matches of one query.
+message VectorQuery {
+  // Exactly one of vector or by_id is set.
+  oneof kind {
+    // Only values is read and must not be empty; the remaining VectorRecord
+    // fields are ignored.
+    VectorRecord vector = 1;
+    string by_id = 2;
   }
 
   // Maximum number of matches to return. When omitted or 0, the component's
   // documented default applies.
-  optional uint32 top_k = 5;
-  optional google.protobuf.Struct filter = 6;
+  optional uint32 top_k = 3;
+  optional google.protobuf.Struct filter = 4;
   // Whether VectorRecord.values is returned with each match. Defaults to
   // false.
-  optional bool include_values = 7;
+  optional bool include_values = 5;
   // Whether VectorRecord.payload is returned with each match. Defaults to
   // false.
-  optional bool include_payload = 8;
+  optional bool include_payload = 6;
   // Determines how score and score_threshold are interpreted. UNSPECIFIED
   // uses the metric configured for the collection. A metric the component
   // cannot evaluate for this collection returns INVALID_ARGUMENT.
-  DistanceMetric metric = 9;
+  DistanceMetric metric = 7;
   // Inclusive cutoff. A match is retained when its score is greater than or
   // equal to this value for COSINE and DOT_PRODUCT, or less than or equal to
   // this value for EUCLIDEAN. The value is not normalized.
-  optional double score_threshold = 13;
-  map<string, string> metadata = 14;
+  optional double score_threshold = 8;
+}
+
+message QueryVectorsRequestAlpha1 {
+  string store_name = 1;
+  string collection = 2;
+  // Required.
+  VectorQuery query = 3;
+  map<string, string> metadata = 4;
 }
 
 message QueryVectorsResponseAlpha1 {
@@ -198,11 +205,9 @@ message QueryVectorsResponseAlpha1 {
 message BatchQueryVectorsRequestAlpha1 {
   string store_name = 1;
   string collection = 2;
-  // Every query runs against the store_name and collection of this request,
-  // which a query inherits when it leaves its own unset. A query that sets
-  // either to a different value yields an INVALID_ARGUMENT error result in
-  // its slot.
-  repeated QueryVectorsRequestAlpha1 queries = 3;
+  // Every query runs against the store_name and collection of this request.
+  repeated VectorQuery queries = 3;
+  // Applies to every query.
   map<string, string> metadata = 4;
 }
 

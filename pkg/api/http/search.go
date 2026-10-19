@@ -20,13 +20,21 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 var endpointGroupSearchV1Alpha1 = &endpoints.EndpointGroup{
 	Name:                 endpoints.EndpointGroupSearch,
 	Version:              endpoints.EndpointGroupVersion1alpha1,
-	AppendSpanAttributes: nil,
+	AppendSpanAttributes: appendSearchSpanAttributes,
+}
+
+func appendSearchSpanAttributes(r *http.Request, m map[string]string) {
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.SearchBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SearchBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, storeNameParam)
 }
 
 func (a *api) constructSearchEndpoints() []endpoints.Endpoint {
@@ -122,7 +130,8 @@ func (a *api) onCreateIndexAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.CreateIndexAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.CreateIndexRequestAlpha1, *emptypb.Empty]{
-			InModifier: setSearchIndexPathParams[*runtimev1pb.CreateIndexRequestAlpha1],
+			InModifier:            setSearchIndexPathParams[*runtimev1pb.CreateIndexRequestAlpha1],
+			ComponentStatusErrors: true,
 		},
 	)
 }
@@ -131,8 +140,10 @@ func (a *api) onGetIndexAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetIndexAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetIndexRequestAlpha1, *runtimev1pb.GetIndexResponseAlpha1]{
-			InModifier:    setSearchIndexPathParams[*runtimev1pb.GetIndexRequestAlpha1],
-			SkipInputBody: true,
+			InModifier:                   setSearchIndexPathParams[*runtimev1pb.GetIndexRequestAlpha1],
+			SkipInputBody:                true,
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -143,9 +154,12 @@ func (a *api) onListIndexesAlpha1() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.ListIndexesRequestAlpha1, *runtimev1pb.ListIndexesResponseAlpha1]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ListIndexesRequestAlpha1) (*runtimev1pb.ListIndexesRequestAlpha1, error) {
 				in.StoreName = chi.URLParam(r, storeNameParam)
+				in.Metadata = getMetadataFromRequest(r)
 				return in, nil
 			},
-			SkipInputBody: true,
+			SkipInputBody:                true,
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -154,8 +168,9 @@ func (a *api) onDeleteIndexAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteIndexAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteIndexRequestAlpha1, *emptypb.Empty]{
-			InModifier:    setSearchIndexPathParams[*runtimev1pb.DeleteIndexRequestAlpha1],
-			SkipInputBody: true,
+			InModifier:            setSearchIndexPathParams[*runtimev1pb.DeleteIndexRequestAlpha1],
+			SkipInputBody:         true,
+			ComponentStatusErrors: true,
 		},
 	)
 }
@@ -164,7 +179,9 @@ func (a *api) onIndexDocumentsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.IndexDocumentsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.IndexDocumentsRequestAlpha1, *runtimev1pb.IndexDocumentsResponseAlpha1]{
-			InModifier: setSearchIndexPathParams[*runtimev1pb.IndexDocumentsRequestAlpha1],
+			InModifier:                   setSearchIndexPathParams[*runtimev1pb.IndexDocumentsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -173,7 +190,9 @@ func (a *api) onGetDocumentsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetDocumentsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetDocumentsRequestAlpha1, *runtimev1pb.GetDocumentsResponseAlpha1]{
-			InModifier: setSearchIndexPathParams[*runtimev1pb.GetDocumentsRequestAlpha1],
+			InModifier:                   setSearchIndexPathParams[*runtimev1pb.GetDocumentsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -182,7 +201,9 @@ func (a *api) onDeleteDocumentsAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteDocumentsAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteDocumentsRequestAlpha1, *runtimev1pb.DeleteDocumentsResponseAlpha1]{
-			InModifier: setSearchIndexPathParams[*runtimev1pb.DeleteDocumentsRequestAlpha1],
+			InModifier:                   setSearchIndexPathParams[*runtimev1pb.DeleteDocumentsRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -191,7 +212,9 @@ func (a *api) onSearchAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.SearchAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.SearchRequestAlpha1, *runtimev1pb.SearchResponseAlpha1]{
-			InModifier: setSearchIndexPathParams[*runtimev1pb.SearchRequestAlpha1],
+			InModifier:                   setSearchIndexPathParams[*runtimev1pb.SearchRequestAlpha1],
+			ProtoResponseEmitUnpopulated: true,
+			ComponentStatusErrors:        true,
 		},
 	)
 }
@@ -206,9 +229,11 @@ func setSearchIndexPathParams[T any](r *http.Request, in T) (T, error) {
 	case *runtimev1pb.GetIndexRequestAlpha1:
 		req.StoreName = storeName
 		req.Index = index
+		req.Metadata = getMetadataFromRequest(r)
 	case *runtimev1pb.DeleteIndexRequestAlpha1:
 		req.StoreName = storeName
 		req.Index = index
+		req.Metadata = getMetadataFromRequest(r)
 	case *runtimev1pb.IndexDocumentsRequestAlpha1:
 		req.StoreName = storeName
 		req.Index = index
