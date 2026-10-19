@@ -81,6 +81,19 @@ type Proxy struct {
 	failures atomic.Int32
 
 	partitioned atomic.Bool
+
+	// stripStandby is set by WithoutStandbyActorTypes.
+	stripStandby bool
+}
+
+// WithoutStandbyActorTypes makes the proxy clear ActorHost.standby_actor_types
+// on every report daprd sends, simulating a scheduler placement leader which
+// predates standby hosts: such a leader does not know the field, so it never
+// places a standby host.
+func WithoutStandbyActorTypes() Option {
+	return func(p *Proxy) {
+		p.stripStandby = true
+	}
 }
 
 // armConfig captures the per-method failure injection state.
@@ -384,6 +397,9 @@ func (p *Proxy) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypes
 			if rerr != nil {
 				errCh <- rerr
 				return
+			}
+			if report := msg.GetReport(); report != nil && p.stripStandby {
+				report.StandbyActorTypes = nil
 			}
 			if serr := upstream.Send(msg); serr != nil {
 				errCh <- serr

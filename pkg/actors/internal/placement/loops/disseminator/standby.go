@@ -14,7 +14,9 @@ limitations under the License.
 package disseminator
 
 import (
+	"os"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +28,23 @@ import (
 // which supports standby hosts always places them: on the type's active hosts
 // if there are any, else on its standby hosts, this one included.
 const standbyGrace = time.Minute
+
+// testStandbyGrace is a test-only override of the grace period placement is
+// given to place the standby actor types, so a test can see the warning of a
+// placement server without standby hosts quickly. Not a supported production
+// knob.
+var testStandbyGrace = sync.OnceValue(func() time.Duration {
+	v := os.Getenv("DAPR_ACTORS_TEST_STANDBY_GRACE")
+	if v == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Warnf("Ignoring invalid DAPR_ACTORS_TEST_STANDBY_GRACE %q", v)
+		return 0
+	}
+	return d
+})
 
 // standbyGens issues the generation of each standby check. Process wide, as
 // disseminators and their loops are pooled, so a stale check can never match
@@ -54,7 +73,11 @@ func (d *disseminator) watchStandby(types []string) {
 	gen := standbyGens.Add(1)
 	d.standbyGen = gen
 	loop := d.loop
-	d.standbyTimer = time.AfterFunc(max(standbyGrace, 2*d.timeout), func() {
+	grace := max(standbyGrace, 2*d.timeout)
+	if g := testStandbyGrace(); g > 0 {
+		grace = g
+	}
+	d.standbyTimer = time.AfterFunc(grace, func() {
 		loop.Enqueue(&loops.StandbyCheck{Gen: gen})
 	})
 }
