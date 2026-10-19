@@ -50,10 +50,10 @@ type crossreuse struct {
 }
 
 func (c *crossreuse) Setup(t *testing.T) []framework.Option {
-	// Shrink the notification's delivery bound so the test does not wait the
-	// production 30s, and keep the janitor period below it as in production,
-	// so under WorkflowsFastPath the janitor fires queue behind both locks
-	// while they are crossed.
+	// Shrink the notification's delivery bound below its 5s default to keep
+	// the run short, and keep the janitor period below that bound, so under
+	// WorkflowsFastPath the janitor fires queue behind both locks while they
+	// are crossed.
 	env := func() daprd.Option {
 		return daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_TEST_PARENT_NOTIFY_TIMEOUT", "2s",
