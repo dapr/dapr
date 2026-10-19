@@ -14,8 +14,11 @@ limitations under the License.
 package watchhosts
 
 import (
+	"net"
+	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,6 +31,45 @@ import (
 	"github.com/dapr/dapr/pkg/security/fake"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
+
+// TestConnSchedulerHostsNoLeak asserts a failed WatchHosts call closes the
+// connection, as Run retries every second.
+// Not parallel, so other tests' goroutines do not skew the count.
+func TestConnSchedulerHostsNoLeak(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	require.NoError(t, lis.Close())
+
+	w := New(Options{
+		Addresses: []string{addr},
+		Healthz:   healthz.New(),
+		Security:  fake.New(),
+		Clients:   clients.New(clients.Options{Security: fake.New()}),
+		HostLoop:  loopfake.New[loops.EventHost](),
+	})
+
+	connect := func() {
+		stream, closeCon, err := w.connSchedulerHosts(t.Context())
+		require.Error(t, err)
+		assert.Nil(t, stream)
+		assert.Nil(t, closeCon)
+	}
+
+	// Warm up gRPC's lazily started global goroutines.
+	connect()
+	baseline := runtime.NumGoroutine()
+
+	for range 20 {
+		connect()
+	}
+
+	// Poll by hand: EventuallyWithT starts its own goroutine, skewing the count.
+	for start := time.Now(); runtime.NumGoroutine() > baseline && time.Since(start) < time.Second*5; {
+		time.Sleep(time.Millisecond * 10)
+	}
+	assert.LessOrEqual(t, runtime.NumGoroutine(), baseline)
+}
 
 // TestHandleHostsReloadDedup asserts client connections are only reloaded
 // when the address list changes: reloading on identical broadcasts cycles
