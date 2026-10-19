@@ -64,7 +64,7 @@ func (s *Store) Set(streamIDx uint64, host *schedulerv1pb.ActorHost) []string {
 		standby = symmetricDiff(existing.GetStandbyActorTypes(), host.GetStandbyActorTypes())
 	}
 
-	before := s.Tables(standby)
+	before := s.standbyTables(standby)
 
 	if !hostsActors(host) {
 		delete(s.hosts, streamIDx)
@@ -83,9 +83,18 @@ func (s *Store) Delete(streamIDx uint64) []string {
 		return nil
 	}
 
-	before := s.Tables(existing.GetStandbyActorTypes())
+	before := s.standbyTables(existing.GetStandbyActorTypes())
 	delete(s.hosts, streamIDx)
 	return union(existing.GetActorTypes(), s.tablesChanged(before, existing.GetStandbyActorTypes()))
+}
+
+// standbyTables returns the tables of the given standby types, or nil
+// without scanning the hosts when there are none.
+func (s *Store) standbyTables(types []string) *schedulerv1pb.PlacementTables {
+	if len(types) == 0 {
+		return nil
+	}
+	return s.Tables(types)
 }
 
 // tablesChanged returns the types whose table now differs from before.

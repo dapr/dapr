@@ -159,9 +159,22 @@ func (t *table) types(standby bool) []string {
 	return keys
 }
 
-// hostedTypes returns the active and standby types to advertise.
+// hostedTypes returns the active and standby types to advertise, from a
+// single pass over the factories so a type is never in both or neither.
 func (t *table) hostedTypes() HostedTypes {
-	return HostedTypes{Active: t.Types(), Standby: t.StandbyTypes()}
+	var ht HostedTypes
+	if t.suspended.Load() {
+		return ht
+	}
+	t.factories.Range(func(key, _ any) bool {
+		if _, ok := t.standby.Load(key); ok {
+			ht.Standby = append(ht.Standby, key.(string))
+		} else {
+			ht.Active = append(ht.Active, key.(string))
+		}
+		return true
+	})
+	return ht
 }
 
 func (t *table) Len() map[string]int {

@@ -466,7 +466,8 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		return "", err
 	}
 
-	_, err = engine.Call(ctx, areq)
+	res, err := engine.Call(ctx, areq)
+	markStandby(ctx, res)
 	if err != nil {
 		return "", err
 	}

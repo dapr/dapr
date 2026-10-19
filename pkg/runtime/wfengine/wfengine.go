@@ -121,11 +121,15 @@ type engine struct {
 	// actor types are not registered (no worker connected), the workflow
 	// actor type is registered as a standby host instead (see
 	// backends/actors/standby.go). standbyRegistered and actorsRegistered
-	// are never both set. runCtx is Run's context, which bounds the standby
-	// factory; nil until Run. All three are guarded by actorRegLock.
+	// are never both set. runCtx is Run's context; nil until Run. Each
+	// standby registration runs its factory on a child of runCtx, which
+	// standbyCancel cancels once the standby types are unregistered, so the
+	// factory's background goroutines do not outlive it. All four are
+	// guarded by actorRegLock.
 	standbyHosts      bool
 	standbyRegistered bool
 	runCtx            context.Context
+	standbyCancel     context.CancelFunc
 
 	// closedDisconnectContexts counts DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT
 	// injections.
@@ -371,6 +375,9 @@ func (wfe *engine) registerActors(ctx context.Context) error {
 		if err := wfe.backend.UnRegisterActors(context.WithoutCancel(ctx)); err != nil {
 			log.Warnf("Failed to unregister standby workflow actors: %s", err)
 		}
+		// Stop the standby factory's background goroutines.
+		wfe.standbyCancel()
+		wfe.standbyCancel = nil
 		wfe.standbyRegistered = false
 	}
 
@@ -406,10 +413,13 @@ func (wfe *engine) registerStandby() {
 	}
 
 	log.Debug("Registering workflow actors as a standby host")
-	if err := wfe.backend.RegisterStandbyActors(wfe.runCtx); err != nil {
+	ctx, cancel := context.WithCancel(wfe.runCtx)
+	if err := wfe.backend.RegisterStandbyActors(ctx); err != nil {
+		cancel()
 		log.Warnf("Failed to register workflow actors as a standby host: %s", err)
 		return
 	}
+	wfe.standbyCancel = cancel
 	wfe.standbyRegistered = true
 }
 
@@ -506,14 +516,13 @@ func (wfe *engine) Run(ctx context.Context) error {
 	}
 
 	if wfe.standbyHosts {
-		// Wait for the actor runtime outside actorRegLock, so worker
-		// connections are not held up behind it.
-		if _, err := wfe.actors.Table(ctx); err == nil {
-			wfe.actorRegLock.Lock()
-			wfe.runCtx = ctx
-			wfe.registerStandby()
-			wfe.actorRegLock.Unlock()
-		}
+		// The actor runtime is ready (Router returned above), so the
+		// registration does not block worker connections behind
+		// actorRegLock.
+		wfe.actorRegLock.Lock()
+		wfe.runCtx = ctx
+		wfe.registerStandby()
+		wfe.actorRegLock.Unlock()
 	}
 
 	log.Info("Workflow engine started")

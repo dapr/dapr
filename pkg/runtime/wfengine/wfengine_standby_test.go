@@ -30,6 +30,17 @@ import (
 type standbyTable struct {
 	lock   sync.Mutex
 	events []string
+
+	// tableCtx is the ctx of the last actors.Table call, and standbyCtx the
+	// one the last standby registration was made with.
+	tableCtx   context.Context
+	standbyCtx context.Context
+}
+
+func (s *standbyTable) lastStandbyCtx() context.Context {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.standbyCtx
 }
 
 func (s *standbyTable) record(e string) {
@@ -53,6 +64,9 @@ func newStandbyTestEngine(t *testing.T, standbyHosts bool) (*engine, *standbyTab
 	tbl := tablefake.New().
 		WithRegisterActorTypes(func(opts table.RegisterActorTypeOptions) {
 			if opts.Standby {
+				st.lock.Lock()
+				st.standbyCtx = st.tableCtx
+				st.lock.Unlock()
 				st.record("register-standby")
 			} else {
 				st.record("register")
@@ -62,7 +76,10 @@ func newStandbyTestEngine(t *testing.T, standbyHosts bool) (*engine, *standbyTab
 			st.record("unregister")
 			return nil
 		})
-	fa := actorsfake.New().WithTable(func(context.Context) (table.Interface, error) {
+	fa := actorsfake.New().WithTable(func(ctx context.Context) (table.Interface, error) {
+		st.lock.Lock()
+		st.tableCtx = ctx
+		st.lock.Unlock()
 		return tbl, nil
 	})
 
@@ -102,6 +119,27 @@ func TestEngine_StandbyTransitions(t *testing.T) {
 		assert.Equal(t, []string{"unregister", "register-standby"}, st.take())
 		assert.True(t, wfe.standbyRegistered)
 		assert.False(t, wfe.actorsRegistered)
+	})
+
+	t.Run("each standby registration's context ends once it is unregistered", func(t *testing.T) {
+		wfe, st := newStandbyTestEngine(t, true)
+		first := st.lastStandbyCtx()
+		require.NotNil(t, first)
+		require.NoError(t, first.Err())
+
+		// The standby factory's background goroutines stop with the worker
+		// connecting, not with Run's context.
+		require.NoError(t, wfe.onWorkItemConnection(t.Context()))
+		require.ErrorIs(t, first.Err(), context.Canceled)
+		require.NoError(t, wfe.runCtx.Err())
+		assert.Nil(t, wfe.standbyCancel)
+
+		// The next standby registration gets a fresh context.
+		require.NoError(t, wfe.onWorkItemDisconnection(t.Context()))
+		second := st.lastStandbyCtx()
+		require.NotSame(t, first, second)
+		require.NoError(t, second.Err())
+		assert.NotNil(t, wfe.standbyCancel)
 	})
 
 	t.Run("feature disabled never registers standby", func(t *testing.T) {

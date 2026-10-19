@@ -61,8 +61,8 @@ func (abe *Actors) RegisterStandbyActors(ctx context.Context) error {
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: []table.ActorTypeFactory{
 			{Type: abe.workflowActorType, Factory: factory},
-			{Type: abe.activityActorType, Factory: refusingFactory{}},
-			{Type: abe.retentionerActorType, Factory: refusingFactory{}},
+			{Type: abe.activityActorType, Factory: refusingFactory{actorType: abe.activityActorType}},
+			{Type: abe.retentionerActorType, Factory: refusingFactory{actorType: abe.retentionerActorType}},
 		},
 		Standby: true,
 	})
@@ -73,10 +73,12 @@ func (abe *Actors) RegisterStandbyActors(ctx context.Context) error {
 // refusingFactory is the factory of a standby actor type whose actors cannot
 // serve anything without a worker. Its actors hold no state, so it tracks
 // none.
-type refusingFactory struct{}
+type refusingFactory struct {
+	actorType string
+}
 
-func (refusingFactory) GetOrCreate(actorID string) targets.Interface {
-	return refusingActor{id: actorID}
+func (f refusingFactory) GetOrCreate(actorID string) targets.Interface {
+	return refusingActor{actorType: f.actorType, id: actorID}
 }
 func (refusingFactory) Exists(string) bool            { return false }
 func (refusingFactory) HaltAll(context.Context) error { return nil }
@@ -88,15 +90,16 @@ func (refusingFactory) HaltNonHosted(context.Context, func(*actorsapi.LookupActo
 // refusingActor fails every call with FailedPrecondition, the code a caller
 // gets when no host has the actor type: callers retry as they would then.
 type refusingActor struct {
-	id string
+	actorType string
+	id        string
 }
 
 func (a refusingActor) refuse() error {
-	return status.Errorf(codes.FailedPrecondition, "actor '%s' is on a standby host with no workflow worker connected", a.id)
+	return status.Errorf(codes.FailedPrecondition, "actor '%s' is on a standby host with no workflow worker connected", a.Key())
 }
 
-func (a refusingActor) Key() string  { return a.id }
-func (a refusingActor) Type() string { return "" }
+func (a refusingActor) Key() string  { return a.actorType + actorsapi.DaprSeparator + a.id }
+func (a refusingActor) Type() string { return a.actorType }
 func (a refusingActor) ID() string   { return a.id }
 
 func (a refusingActor) InvokeMethod(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -123,7 +126,7 @@ type standbyMarkerKey struct{}
 // operation made with it was served by a standby host.
 // WatchWorkflowRuntimeStatus returns at once under a marked ctx: the instance
 // does not change until a worker connects, so the durabletask executor's wait
-// after a start, terminate, suspend or resume would block the caller until
+// after a start, rerun, terminate, suspend or resume would block the caller until
 // its deadline.
 func WithStandbyMarker(ctx context.Context) context.Context {
 	return context.WithValue(ctx, standbyMarkerKey{}, new(atomic.Bool))

@@ -23,9 +23,9 @@ import (
 )
 
 // registerStandbyAware wraps the durabletask executor's registration so that a
-// start, terminate, suspend or resume served by a standby host returns once it
-// is accepted (the WorkflowsStandbyHosts preview). The executor waits for the
-// instance to start or change state after each of them, which on a standby
+// start, rerun, terminate, suspend or resume served by a standby host returns
+// once it is accepted (the WorkflowsStandbyHosts preview). The executor waits
+// for the instance to start or change state after each of them, which on a standby
 // host happens only once a worker connects; the backend skips that wait only
 // for an operation a standby host served, so every other call still waits.
 func registerStandbyAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
@@ -53,6 +53,10 @@ type standbyAwareServer struct {
 
 func (s standbyAwareServer) StartInstance(ctx context.Context, req *protos.CreateInstanceRequest) (*protos.CreateInstanceResponse, error) {
 	return s.TaskHubSidecarServiceServer.StartInstance(backendactors.WithStandbyMarker(ctx), req)
+}
+
+func (s standbyAwareServer) RerunWorkflowFromEvent(ctx context.Context, req *protos.RerunWorkflowFromEventRequest) (*protos.RerunWorkflowFromEventResponse, error) {
+	return s.TaskHubSidecarServiceServer.RerunWorkflowFromEvent(backendactors.WithStandbyMarker(ctx), req)
 }
 
 func (s standbyAwareServer) TerminateInstance(ctx context.Context, req *protos.TerminateRequest) (*protos.TerminateResponse, error) {
