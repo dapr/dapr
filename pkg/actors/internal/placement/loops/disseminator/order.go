@@ -34,6 +34,7 @@ func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 	d.streamLoop.Enqueue(&loops.StreamSend{
 		Report: report.Report,
 	})
+	d.watchStandby(report.Report.StandbyActorTypes)
 }
 
 func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder) error {

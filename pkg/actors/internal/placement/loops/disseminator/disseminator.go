@@ -57,6 +57,10 @@ type Options struct {
 	Namespace string
 	ID        string
 
+	// StandbyWarned is set once the warning that placement does not support
+	// standby hosts is logged, so it is logged once per process.
+	StandbyWarned *atomic.Bool
+
 	// SchedulerPlacement speaks the v2 protocol: seq-keyed rounds
 	// scoped to actor types with partial table merges.
 	SchedulerPlacement bool
@@ -100,6 +104,14 @@ type disseminator struct {
 
 	// v2Completed are the seqs of rounds completed on this stream.
 	v2Completed map[uint64]struct{}
+
+	// standbyTypes are the sorted standby actor types of the latest report
+	// sent on this stream. standbyGen identifies that report's pending
+	// standbyTimer check.
+	standbyTypes  []string
+	standbyGen    uint64
+	standbyTimer  *time.Timer
+	standbyWarned *atomic.Bool
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -119,6 +131,10 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.v2Completed = make(map[uint64]struct{})
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
+	diss.standbyTypes = nil
+	diss.standbyGen = 0
+	diss.standbyTimer = nil
+	diss.standbyWarned = opts.StandbyWarned
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
 	diss.inflight = opts.Inflight
@@ -160,6 +176,8 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		return d.handleOrder(ctx, e)
 	case *loops.DisseminationTimeout:
 		d.handleTimeout(ctx, e)
+	case *loops.StandbyCheck:
+		d.handleStandbyCheck(e)
 	case *loops.Shutdown:
 		d.handleShutdown(e)
 	default:
@@ -175,6 +193,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	d.streamLoop.Close(shutdown)
 	d.inflight.Close(shutdown.Error)
 	d.timeoutQ.Close()
+	d.stopStandbyCheck()
 
 	stream.LoopFactory.CacheLoop(d.streamLoop)
 	loopCache.Put(d)

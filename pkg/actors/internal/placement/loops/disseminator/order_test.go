@@ -60,6 +60,7 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		currentVersion:   0,
 		timeout:          time.Second * 30,
 		ready:            new(atomic.Bool),
+		standbyWarned:    new(atomic.Bool),
 	}
 
 	diss.loop = dissLoop

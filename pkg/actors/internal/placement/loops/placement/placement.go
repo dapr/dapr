@@ -133,6 +133,10 @@ type placement struct {
 	// halted when the previous stream closed.
 	alt *Fallback
 
+	// standbyWarned is set once a stream warned that placement does not
+	// support standby hosts.
+	standbyWarned atomic.Bool
+
 	dissTimeout time.Duration
 	startupWait time.Duration
 
@@ -379,6 +383,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		DisseminationTimeout: p.dissTimeout,
 		Ready:                p.ready,
 		SchedulerPlacement:   p.schedulerPlacement,
+		StandbyWarned:        &p.standbyWarned,
 	})
 
 	p.wg.Go(func() {

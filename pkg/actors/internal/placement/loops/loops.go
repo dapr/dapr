@@ -216,6 +216,13 @@ type DisseminationTimeout struct {
 	Version uint64
 }
 
+// StandbyCheck fires a grace period after a report of standby actor types,
+// to check whether placement placed them.
+type StandbyCheck struct {
+	*dissbase
+	Gen uint64
+}
+
 type SetDrainOngoingCallTimeout struct {
 	*placebase
 	Drain   *bool
