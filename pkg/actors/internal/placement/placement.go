@@ -18,8 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -285,6 +287,9 @@ func (p *placement) Run(ctx context.Context) error {
 			for {
 				select {
 				case atypes := <-ch:
+					if !delayTypesReportForTest(ctx) {
+						continue
+					}
 					p.loop.Enqueue(&loops.UpdateTypes{
 						ActorTypes: atypes,
 					})
@@ -296,6 +301,39 @@ func (p *placement) Run(ctx context.Context) error {
 			}
 		},
 	).Run(ctx)
+}
+
+// testDelayTypesReport is a test-only fault injection: each change of this
+// host's actor types is reported to placement only after this delay, while
+// the host serves the new types at once. It holds the placement tables of
+// every host stale for the change, this host's included, while rounds for
+// other changes still complete. Not a supported production knob.
+var testDelayTypesReport = sync.OnceValue(func() time.Duration {
+	v := os.Getenv("DAPR_ACTORS_TEST_DELAY_TYPES_REPORT")
+	if v == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		log.Warnf("Ignoring invalid DAPR_ACTORS_TEST_DELAY_TYPES_REPORT %q", v)
+		return 0
+	}
+	return d
+})
+
+// delayTypesReportForTest waits out DAPR_ACTORS_TEST_DELAY_TYPES_REPORT. It
+// returns false if ctx is done first.
+func delayTypesReportForTest(ctx context.Context) bool {
+	d := testDelayTypesReport()
+	if d == 0 {
+		return true
+	}
+	select {
+	case <-time.After(d):
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (p *placement) Lock(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error) {
