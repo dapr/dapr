@@ -521,10 +521,10 @@ github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70 h1
 github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70/go.mod h1:Ymr5rroMpBSXLqUTxtC71C5dI3Js+0dqaqaA+SFbr1c=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c h1:9MBEhvJ8DZ7tvYDyxugPin/t4EJxrn4c3UaUVl/xogA=
-github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
-github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc h1:h2sqtltE2b2va5dSTH0KDu4XBNBNPpj223btE55aZmw=
-github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
+github.com/dapr/durabletask-go v0.15.1 h1:yKQCfT49PEpWoJkUpGR0Y+lrqujbRYjJhzsmpYlpEIg=
+github.com/dapr/durabletask-go v0.15.1/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
+github.com/dapr/kit v0.19.0 h1:xRZXEHMcBhQp1roZ3RW56Vaa1LlXGaPLHJv0CTbgXN4=
+github.com/dapr/kit v0.19.0/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

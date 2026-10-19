@@ -193,6 +193,9 @@ spec:
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
+	if opts.schedulerJobStreams != nil {
+		args = append(args, "--scheduler-job-streams="+strconv.FormatUint(uint64(*opts.schedulerJobStreams), 10))
+	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
