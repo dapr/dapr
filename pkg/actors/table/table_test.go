@@ -182,7 +182,7 @@ func Test_SuspendHosting(t *testing.T) {
 		tble := newRegistered(t, nil)
 
 		ch, types := tble.SubscribeToTypeUpdates(t.Context())
-		assert.Equal(t, []string{"test1"}, types)
+		assert.Equal(t, table.HostedTypes{Active: []string{"test1"}}, types)
 
 		require.NoError(t, tble.SuspendHosting(t.Context()))
 		select {
@@ -195,7 +195,7 @@ func Test_SuspendHosting(t *testing.T) {
 		tble.ResumeHosting()
 		select {
 		case got := <-ch:
-			assert.Equal(t, []string{"test1"}, got)
+			assert.Equal(t, table.HostedTypes{Active: []string{"test1"}}, got)
 		case <-time.After(time.Second * 5):
 			assert.Fail(t, "timed out waiting for resume broadcast")
 		}
@@ -225,10 +225,83 @@ func Test_SuspendHosting(t *testing.T) {
 		tble.ResumeHosting()
 		select {
 		case got := <-ch:
-			assert.Equal(t, []string{"test1"}, got)
+			assert.Equal(t, table.HostedTypes{Active: []string{"test1"}}, got)
 		case <-time.After(time.Second * 5):
 			assert.Fail(t, "timed out waiting for resume broadcast")
 		}
 		assert.Equal(t, []string{"test1"}, tble.Types())
+	})
+}
+
+func Test_StandbyTypes(t *testing.T) {
+	newTable := func() table.Interface {
+		return table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+	}
+
+	recv := func(t *testing.T, ch <-chan table.HostedTypes) table.HostedTypes {
+		t.Helper()
+		select {
+		case got := <-ch:
+			return got
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "timed out waiting for type broadcast")
+			return table.HostedTypes{}
+		}
+	}
+
+	t.Run("standby types are hosted but advertised apart", func(t *testing.T) {
+		tble := newTable()
+		ch, types := tble.SubscribeToTypeUpdates(t.Context())
+		assert.Empty(t, types)
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "active", Factory: fake.NewFactory()}},
+		})
+		assert.Equal(t, table.HostedTypes{Active: []string{"active"}}, recv(t, ch))
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "standby", Factory: fake.NewFactory()}},
+			Standby:   true,
+		})
+		assert.Equal(t, table.HostedTypes{Active: []string{"active"}, Standby: []string{"standby"}}, recv(t, ch))
+
+		assert.Equal(t, []string{"active"}, tble.Types())
+		assert.Equal(t, []string{"standby"}, tble.StandbyTypes())
+		assert.True(t, tble.IsActorTypeHosted("standby"))
+		_, err := tble.GetOrCreate(t.Context(), "standby", "id")
+		require.NoError(t, err)
+	})
+
+	t.Run("unregistering a standby type removes it", func(t *testing.T) {
+		tble := newTable()
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory()}},
+			Standby:   true,
+		})
+		ch, types := tble.SubscribeToTypeUpdates(t.Context())
+		assert.Equal(t, table.HostedTypes{Standby: []string{"wf"}}, types)
+
+		require.NoError(t, tble.UnRegisterActorTypes("wf"))
+		assert.Empty(t, recv(t, ch))
+		assert.False(t, tble.IsActorTypeHosted("wf"))
+
+		// Registering the type again as active does not keep it standby.
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory()}},
+		})
+		assert.Equal(t, table.HostedTypes{Active: []string{"wf"}}, recv(t, ch))
+		assert.Empty(t, tble.StandbyTypes())
+	})
+
+	t.Run("suspended hosting advertises no standby types", func(t *testing.T) {
+		tble := newTable()
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "wf", Factory: fake.NewFactory()}},
+			Standby:   true,
+		})
+		require.NoError(t, tble.SuspendHosting(t.Context()))
+		assert.Empty(t, tble.StandbyTypes())
+		tble.ResumeHosting()
+		assert.Equal(t, []string{"wf"}, tble.StandbyTypes())
 	})
 }

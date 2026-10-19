@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/table"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/utils"
@@ -84,12 +85,17 @@ type Report struct {
 	AppID      string
 	Namespace  string
 	ActorTypes []string
+
+	// StandbyActorTypes are served by this host only while no host serves
+	// them as active ActorTypes.
+	StandbyActorTypes []string
 }
 
 // Clone returns a deep copy of the report.
 func (r *Report) Clone() *Report {
 	cp := *r
 	cp.ActorTypes = append([]string(nil), r.ActorTypes...)
+	cp.StandbyActorTypes = append([]string(nil), r.StandbyActorTypes...)
 	return &cp
 }
 
@@ -127,7 +133,7 @@ type EventLookup interface{ isEventLookup() }
 
 type PlacementReconnect struct {
 	*placebase
-	ActorTypes *[]string
+	ActorTypes *table.HostedTypes
 	// TransientPrior is true when this reconnect was triggered by a close
 	// that was itself a transient "not a leader" rejection (i.e. routine
 	// placement leadership churn). Consumers use it to demote per-cycle
@@ -139,7 +145,7 @@ type PlacementReconnect struct {
 
 type UpdateTypes struct {
 	*placebase
-	ActorTypes []string
+	ActorTypes table.HostedTypes
 }
 
 type ReportHost struct {

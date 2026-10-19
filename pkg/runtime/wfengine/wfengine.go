@@ -85,6 +85,7 @@ type Options struct {
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
+	WorkflowsStandbyHosts           bool
 	WorkflowHistorySigning          bool
 
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
@@ -115,6 +116,16 @@ type engine struct {
 	// or unregister while another path believes actors are still live.
 	actorRegLock     sync.Mutex
 	actorsRegistered bool
+
+	// standbyHosts is the WorkflowsStandbyHosts preview: while the workflow
+	// actor types are not registered (no worker connected), the workflow
+	// actor type is registered as a standby host instead (see
+	// backends/actors/standby.go). standbyRegistered and actorsRegistered
+	// are never both set. runCtx is Run's context, which bounds the standby
+	// factory; nil until Run. All three are guarded by actorRegLock.
+	standbyHosts      bool
+	standbyRegistered bool
+	runCtx            context.Context
 
 	// closedDisconnectContexts counts DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT
 	// injections.
@@ -189,6 +200,7 @@ func New(opts Options) (Interface, error) {
 	}
 
 	wfe := &engine{
+		standbyHosts:     opts.WorkflowsStandbyHosts,
 		appID:            opts.AppID,
 		namespace:        opts.Namespace,
 		actors:           opts.Actors,
@@ -209,9 +221,7 @@ func New(opts Options) (Interface, error) {
 			// UnRegisterActors' HaltAll waits on the actor turn locks those
 			// completions hold, and with no executor nothing can deliver them.
 			wfe.syncExecutorAvailable()
-			err := abackend.UnRegisterActors(context.Background())
-			wfe.actorsRegistered = false
-			if err != nil {
+			if err := wfe.unregisterActors(context.Background()); err != nil {
 				log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
 			}
 		}
@@ -224,6 +234,9 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
 	)
+	if opts.WorkflowsStandbyHosts {
+		registerGrpcServerFn = registerStandbyAware(registerGrpcServerFn)
+	}
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
@@ -276,12 +289,11 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors for internal workflows")
-		if err := wfe.backend.RegisterActors(ctx); err != nil {
+		if err := wfe.registerActors(ctx); err != nil {
 			wfe.mcpRegistrationCount.Add(-1)
 			wfe.syncExecutorAvailable()
 			return err
 		}
-		wfe.actorsRegistered = true
 	}
 	return nil
 }
@@ -294,13 +306,12 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors")
-		if err := wfe.backend.RegisterActors(ctx); err != nil {
+		if err := wfe.registerActors(ctx); err != nil {
 			// No compensating decrement: the executor invokes the paired
 			// disconnect callback also when this callback errors, and a
 			// second decrement would drift the count negative for good.
 			return err
 		}
-		wfe.actorsRegistered = true
 	}
 
 	return nil
@@ -340,14 +351,66 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 		// with ctx made non-cancellable above and a ready runtime winning
 		// in actors.waitForReady, that is only ErrActorRuntimeClosed at
 		// shutdown.
-		err := wfe.backend.UnRegisterActors(ctx)
-		wfe.actorsRegistered = false
-		if err != nil {
+		if err := wfe.unregisterActors(ctx); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// registerActors registers the workflow actor types, replacing the standby
+// registration if there is one. Must be called with actorRegLock held.
+func (wfe *engine) registerActors(ctx context.Context) error {
+	if wfe.standbyRegistered {
+		// Halt the standby actors before the active ones replace them: their
+		// state is in the state store, so the next call loads it afresh. Not
+		// cancellable for the reason given in onWorkItemDisconnection: the
+		// standby types must be gone before standbyRegistered is reset.
+		log.Debug("Unregistering standby workflow actors")
+		if err := wfe.backend.UnRegisterActors(context.WithoutCancel(ctx)); err != nil {
+			log.Warnf("Failed to unregister standby workflow actors: %s", err)
+		}
+		wfe.standbyRegistered = false
+	}
+
+	if err := wfe.backend.RegisterActors(ctx); err != nil {
+		// Do not stay unplaced: a failed registration leaves the standby
+		// host the app had before.
+		wfe.registerStandby()
+		return err
+	}
+	wfe.actorsRegistered = true
+	return nil
+}
+
+// unregisterActors unregisters the workflow actor types, then registers the
+// workflow actor type as a standby host when WorkflowsStandbyHosts is on.
+// actorsRegistered is reset unconditionally (see onWorkItemDisconnection).
+// Must be called with actorRegLock held.
+func (wfe *engine) unregisterActors(ctx context.Context) error {
+	err := wfe.backend.UnRegisterActors(ctx)
+	wfe.actorsRegistered = false
+	wfe.registerStandby()
+	return err
+}
+
+// registerStandby registers the workflow actor type as a standby host if
+// WorkflowsStandbyHosts is on and the types are not registered otherwise. A
+// no-op before Run and after Run's context is done, so shutdown does not
+// re-register. Must be called with actorRegLock held.
+func (wfe *engine) registerStandby() {
+	if !wfe.standbyHosts || wfe.actorsRegistered || wfe.standbyRegistered ||
+		wfe.runCtx == nil || wfe.runCtx.Err() != nil {
+		return
+	}
+
+	log.Debug("Registering workflow actors as a standby host")
+	if err := wfe.backend.RegisterStandbyActors(wfe.runCtx); err != nil {
+		log.Warnf("Failed to register workflow actors as a standby host: %s", err)
+		return
+	}
+	wfe.standbyRegistered = true
 }
 
 // testCloseDisconnectContext is a test-only fault injection: the first N
@@ -416,9 +479,7 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 		// Sweep parked completions before HaltAll; see the disconnect callback.
 		wfe.syncExecutorAvailable()
 		log.Debug("Unregistering workflow actors")
-		err := wfe.backend.UnRegisterActors(context.Background())
-		wfe.actorsRegistered = false
-		if err != nil {
+		if err := wfe.unregisterActors(context.Background()); err != nil {
 			log.Warnf("Failed to unregister workflow actors: %s", err)
 		}
 	}
@@ -442,6 +503,17 @@ func (wfe *engine) Run(ctx context.Context) error {
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
+	}
+
+	if wfe.standbyHosts {
+		// Wait for the actor runtime outside actorRegLock, so worker
+		// connections are not held up behind it.
+		if _, err := wfe.actors.Table(ctx); err == nil {
+			wfe.actorRegLock.Lock()
+			wfe.runCtx = ctx
+			wfe.registerStandby()
+			wfe.actorRegLock.Unlock()
+		}
 	}
 
 	log.Info("Workflow engine started")

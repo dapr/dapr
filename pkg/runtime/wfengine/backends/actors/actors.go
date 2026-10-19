@@ -265,14 +265,9 @@ func New(opts Options) (*Actors, error) {
 	}, nil
 }
 
-func (abe *Actors) RegisterActors(ctx context.Context) error {
-	atable, err := abe.actors.Table(ctx)
-	if err != nil {
-		return err
-	}
-
-	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
-	oopts := orchestrator.Options{
+// orchestratorOptions returns the options of the workflow actor factory.
+func (abe *Actors) orchestratorOptions() orchestrator.Options {
+	return orchestrator.Options{
 		AppID:                  abe.appID,
 		Namespace:              abe.namespace,
 		WorkflowActorType:      abe.workflowActorType,
@@ -297,8 +292,18 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 			}
 		},
 		EventSink:        abe.eventSink,
-		ActorTypeBuilder: actorTypeBuilder,
+		ActorTypeBuilder: common.NewActorTypeBuilder(abe.namespace),
 	}
+}
+
+func (abe *Actors) RegisterActors(ctx context.Context) error {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil {
+		return err
+	}
+
+	oopts := abe.orchestratorOptions()
+	actorTypeBuilder := oopts.ActorTypeBuilder
 
 	aopts := activity.Options{
 		Detached:          abe.detachedRunner(),
@@ -527,7 +532,8 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, ireq)
+		res, eerr := router.Call(ctx, ireq)
+		markStandby(ctx, res)
 
 		// Aborted: a completed child refuses reuse of its ID until its
 		// parent acknowledges the completion.
@@ -736,7 +742,8 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	}
 
 	start := time.Now()
-	_, err = router.Call(ctx, req)
+	res, err := router.Call(ctx, req)
+	markStandby(ctx, res)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -811,6 +818,12 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+
+	// The operation this watch follows was served by a standby host: the
+	// instance does not change until a worker connects.
+	if servedByStandby(ctx) {
+		return nil
+	}
 
 	// A router targeting another app watches that app's workflow actor. This
 	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app

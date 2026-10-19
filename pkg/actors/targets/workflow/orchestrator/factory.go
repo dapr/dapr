@@ -78,6 +78,13 @@ type Options struct {
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
 
+	// Standby builds the factory of a standby host (the WorkflowsStandbyHosts
+	// preview): a daprd with no workflow worker connected, which placement
+	// routes the workflow actor type to only while no daprd with a worker
+	// hosts it. A standby actor serves every operation that does not run a
+	// turn, and refuses the reminders that would. FastPath must be off.
+	Standby bool
+
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
@@ -107,6 +114,9 @@ type factory struct {
 
 	deactivateCh  chan *orchestrator
 	deactivateCtx context.Context
+
+	// standby is set on a standby host: see Options.Standby.
+	standby bool
 
 	// fastPath and the wake* fields drive the detached local wake goroutines
 	// (see wake.go). wakeCtx is factory-owned rather than scoped to the
@@ -202,7 +212,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
-		fastPath:               opts.FastPath,
+		fastPath:               opts.FastPath && !opts.Standby,
+		standby:                opts.Standby,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,

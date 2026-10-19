@@ -187,7 +187,7 @@ func (d *disseminator) addStream(ctx context.Context, add *loops.ConnAdd) uint64
 	stream := &streamConn{
 		loop:         streamLoop,
 		currentState: v1pb.HostOperation_REPORT,
-		hasActors:    len(add.InitialHost.GetEntities()) > 0,
+		hasActors:    store.HostsActors(add.InitialHost),
 	}
 
 	monitoring.RecordRuntimesCount(d.connCount.Add(1), add.InitialHost.GetNamespace())

@@ -15,6 +15,7 @@ package authorizer
 
 import (
 	"context"
+	"slices"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -51,6 +52,6 @@ func (a *Authorizer) Host(ctx context.Context, msg *schedulerv1pb.ActorHost) err
 	return hostauthz.Authorize(ctx, a.sec, hostauthz.Report{
 		AppID:      msg.GetAppId(),
 		Namespace:  msg.GetNamespace(),
-		ActorTypes: msg.GetActorTypes(),
+		ActorTypes: append(slices.Clone(msg.GetActorTypes()), msg.GetStandbyActorTypes()...),
 	})
 }

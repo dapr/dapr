@@ -49,6 +49,7 @@ type options struct {
 	signingDisabled []int
 	clustered       *bool
 	fastPath        *bool
+	standbyHosts    bool
 	signing         *bool
 
 	orchestrators     []orchestratorConfig
@@ -184,6 +185,14 @@ func WithClusteredDeployment(enabled bool) Option {
 func WithFastPath(enabled bool) Option {
 	return func(o *options) {
 		o.fastPath = &enabled
+	}
+}
+
+// WithStandbyHosts enables the WorkflowsStandbyHosts feature flag on every
+// daprd in the workflow.
+func WithStandbyHosts() Option {
+	return func(o *options) {
+		o.standbyHosts = true
 	}
 }
 

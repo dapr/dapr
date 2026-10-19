@@ -195,7 +195,8 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 }
 
 func (p *placement) handleUpdateTypes(up *loops.UpdateTypes) {
-	p.report.ActorTypes = up.ActorTypes
+	p.report.ActorTypes = up.ActorTypes.Active
+	p.report.StandbyActorTypes = up.ActorTypes.Standby
 
 	// No stream yet. The types go out with the initial report on connect.
 	if p.dissLoop == nil {
@@ -388,13 +389,14 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	})
 
 	if recon.ActorTypes != nil {
-		p.report.ActorTypes = *recon.ActorTypes
+		p.report.ActorTypes = recon.ActorTypes.Active
+		p.report.StandbyActorTypes = recon.ActorTypes.Standby
 	}
 
 	if recon.TransientPrior {
-		log.Debugf("Reporting initial host to placement service with initial types %v", p.report.ActorTypes)
+		log.Debugf("Reporting initial host to placement service with initial types %v (standby %v)", p.report.ActorTypes, p.report.StandbyActorTypes)
 	} else {
-		log.Infof("Reporting initial host to placement service with initial types %v", p.report.ActorTypes)
+		log.Infof("Reporting initial host to placement service with initial types %v (standby %v)", p.report.ActorTypes, p.report.StandbyActorTypes)
 	}
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Report: p.report.Clone(),

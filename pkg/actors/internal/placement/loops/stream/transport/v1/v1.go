@@ -86,12 +86,13 @@ func (v *v1) Recv() (*loops.Order, error) {
 
 func (v *v1) SendReport(report *loops.Report) error {
 	return v.channel.Send(&v1pb.Host{
-		Name:      report.Address,
-		Id:        report.AppID,
-		Namespace: report.Namespace,
-		Entities:  report.ActorTypes,
-		ApiLevel:  apiLevel,
-		Operation: v1pb.HostOperation_REPORT,
+		Name:            report.Address,
+		Id:              report.AppID,
+		Namespace:       report.Namespace,
+		Entities:        report.ActorTypes,
+		StandbyEntities: report.StandbyActorTypes,
+		ApiLevel:        apiLevel,
+		Operation:       v1pb.HostOperation_REPORT,
 	})
 }
 

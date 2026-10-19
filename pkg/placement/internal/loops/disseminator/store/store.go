@@ -48,20 +48,45 @@ func (s *Store) PlacementTables(version uint64) *v1pb.PlacementTables {
 		Version:           strconv.FormatUint(version, 10),
 	}
 
+	add := func(entity string, host *v1pb.Host) {
+		if e := t.GetEntries(); e[entity] == nil {
+			e[entity] = &v1pb.PlacementTable{
+				LoadMap: make(map[string]*v1pb.Host),
+			}
+		}
+
+		//nolint:protogetter
+		t.Entries[entity].LoadMap[host.Name] = host
+	}
+
 	for _, host := range s.hosts {
 		for _, entity := range host.GetEntities() {
-			if e := t.GetEntries(); e[entity] == nil {
-				e[entity] = &v1pb.PlacementTable{
-					LoadMap: make(map[string]*v1pb.Host),
-				}
-			}
+			add(entity, host)
+		}
+	}
 
-			//nolint:protogetter
-			t.Entries[entity].LoadMap[host.Name] = host
+	// A standby host is placed for an actor type only while no host reports
+	// the type as active, so the type's table is either all active or all
+	// standby hosts. Actors move to the active hosts as soon as one exists.
+	active := make(map[string]struct{}, len(t.GetEntries()))
+	for entity := range t.GetEntries() {
+		active[entity] = struct{}{}
+	}
+	for _, host := range s.hosts {
+		for _, entity := range host.GetStandbyEntities() {
+			if _, ok := active[entity]; !ok {
+				add(entity, host)
+			}
 		}
 	}
 
 	return t
+}
+
+// HostsActors returns whether the host reports any actor type, active or
+// standby.
+func HostsActors(host *v1pb.Host) bool {
+	return len(host.GetEntities()) > 0 || len(host.GetStandbyEntities()) > 0
 }
 
 func (s *Store) StatePlacementTable(version uint64) *v1pb.StatePlacementTable {
@@ -90,7 +115,7 @@ func (s *Store) Set(streamIDx uint64, host *v1pb.Host) bool {
 	// If the host has no entities, it should not be stored in the placement
 	// table. If it previously had entities (i.e. it exists in the store), delete
 	// it to reflect the removal.
-	if len(host.GetEntities()) == 0 {
+	if !HostsActors(host) {
 		delete(s.hosts, streamIDx)
 	} else {
 		s.hosts[streamIDx] = host
@@ -102,14 +127,17 @@ func (s *Store) Set(streamIDx uint64, host *v1pb.Host) bool {
 func (s *Store) HostChanged(streamIDx uint64, host *v1pb.Host) bool {
 	//nolint:protogetter
 	sort.Strings(host.Entities)
+	//nolint:protogetter
+	sort.Strings(host.StandbyEntities)
 	existing, ok := s.hosts[streamIDx]
 	if !ok {
 		// A new host with no entities has nothing to contribute to the
 		// placement table, so it is not a change.
-		return len(host.GetEntities()) > 0
+		return HostsActors(host)
 	}
 
 	return !slices.Equal(existing.GetEntities(), host.GetEntities()) ||
+		!slices.Equal(existing.GetStandbyEntities(), host.GetStandbyEntities()) ||
 		host.GetId() != existing.GetId() ||
 		host.GetNamespace() != existing.GetNamespace()
 }

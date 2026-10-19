@@ -14,6 +14,8 @@ limitations under the License.
 package authorizer
 
 import (
+	"slices"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -52,6 +54,6 @@ func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1p
 	return hostauthz.Authorize(stream.Context(), a.sec, hostauthz.Report{
 		AppID:      msg.GetId(),
 		Namespace:  msg.GetNamespace(),
-		ActorTypes: msg.GetEntities(),
+		ActorTypes: append(slices.Clone(msg.GetEntities()), msg.GetStandbyEntities()...),
 	})
 }

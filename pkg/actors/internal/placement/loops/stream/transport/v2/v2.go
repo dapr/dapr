@@ -74,6 +74,9 @@ func (v *v2) SendReport(report *loops.Report) error {
 				AppId:      report.AppID,
 				Namespace:  report.Namespace,
 				ActorTypes: report.ActorTypes,
+				// Unknown to a leader without standby hosts, which so never
+				// places this host for these types.
+				StandbyActorTypes: report.StandbyActorTypes,
 			},
 		},
 	})

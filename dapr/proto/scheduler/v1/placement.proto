@@ -53,6 +53,12 @@ message ActorHost {
   // actor_types are the actor types hosted by the sidecar. May be empty for a
   // sidecar which performs actor lookups without hosting any types.
   repeated string actor_types = 4;
+
+  // standby_actor_types are actor types the sidecar can serve but only as a
+  // standby: the placement leader routes a type to its standby hosts only
+  // while no host reports it in actor_types. A leader which does not know
+  // this field ignores it, so a standby host is never placed.
+  repeated string standby_actor_types = 5;
 }
 
 // PlacementOrderAck acknowledges a placement order phase for the round

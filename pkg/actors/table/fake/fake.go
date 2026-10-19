@@ -24,12 +24,13 @@ import (
 type Fake struct {
 	closeFn                  func() error
 	typesFn                  func() []string
+	standbyTypesFn           func() []string
 	isActorTypeHostedFn      func(string) bool
 	getOrCreateFn            func(context.Context, string, string) (targets.Interface, error)
 	actorExistsFn            func(string, string) bool
 	registerActorTypesFn     func(table.RegisterActorTypeOptions)
 	unRegisterActorTypesFn   func(...string) error
-	subscribeToTypeUpdatesFn func(context.Context) (<-chan []string, []string)
+	subscribeToTypeUpdatesFn func(context.Context) (<-chan table.HostedTypes, table.HostedTypes)
 	haltAllFn                func(context.Context) error
 	haltNonHostedFn          func(context.Context, func(*api.LookupActorRequest) bool) error
 	lenFn                    func() map[string]int
@@ -39,24 +40,32 @@ type Fake struct {
 
 func New() *Fake {
 	return &Fake{
-		closeFn:                  func() error { return nil },
-		typesFn:                  func() []string { return nil },
-		isActorTypeHostedFn:      func(string) bool { return false },
-		getOrCreateFn:            func(context.Context, string, string) (targets.Interface, error) { return nil, nil },
-		actorExistsFn:            func(string, string) bool { return false },
-		registerActorTypesFn:     func(table.RegisterActorTypeOptions) {},
-		unRegisterActorTypesFn:   func(...string) error { return nil },
-		subscribeToTypeUpdatesFn: func(context.Context) (<-chan []string, []string) { return nil, nil },
-		haltAllFn:                func(context.Context) error { return nil },
-		haltNonHostedFn:          func(context.Context, func(*api.LookupActorRequest) bool) error { return nil },
-		lenFn:                    func() map[string]int { return nil },
-		suspendHostingFn:         func(context.Context) error { return nil },
-		resumeHostingFn:          func() {},
+		closeFn:                func() error { return nil },
+		typesFn:                func() []string { return nil },
+		standbyTypesFn:         func() []string { return nil },
+		isActorTypeHostedFn:    func(string) bool { return false },
+		getOrCreateFn:          func(context.Context, string, string) (targets.Interface, error) { return nil, nil },
+		actorExistsFn:          func(string, string) bool { return false },
+		registerActorTypesFn:   func(table.RegisterActorTypeOptions) {},
+		unRegisterActorTypesFn: func(...string) error { return nil },
+		subscribeToTypeUpdatesFn: func(context.Context) (<-chan table.HostedTypes, table.HostedTypes) {
+			return nil, table.HostedTypes{}
+		},
+		haltAllFn:        func(context.Context) error { return nil },
+		haltNonHostedFn:  func(context.Context, func(*api.LookupActorRequest) bool) error { return nil },
+		lenFn:            func() map[string]int { return nil },
+		suspendHostingFn: func(context.Context) error { return nil },
+		resumeHostingFn:  func() {},
 	}
 }
 
 func (f *Fake) WithClose(fn func() error) *Fake    { f.closeFn = fn; return f }
 func (f *Fake) WithTypes(fn func() []string) *Fake { f.typesFn = fn; return f }
+func (f *Fake) WithStandbyTypes(fn func() []string) *Fake {
+	f.standbyTypesFn = fn
+	return f
+}
+
 func (f *Fake) WithIsActorTypeHosted(fn func(string) bool) *Fake {
 	f.isActorTypeHostedFn = fn
 	return f
@@ -77,7 +86,7 @@ func (f *Fake) WithUnRegisterActorTypes(fn func(...string) error) *Fake {
 	return f
 }
 
-func (f *Fake) WithSubscribeToTypeUpdates(fn func(context.Context) (<-chan []string, []string)) *Fake {
+func (f *Fake) WithSubscribeToTypeUpdates(fn func(context.Context) (<-chan table.HostedTypes, table.HostedTypes)) *Fake {
 	f.subscribeToTypeUpdatesFn = fn
 	return f
 }
@@ -100,6 +109,7 @@ func (f *Fake) WithResumeHosting(fn func()) *Fake {
 
 func (f *Fake) Close() error                            { return f.closeFn() }
 func (f *Fake) Types() []string                         { return f.typesFn() }
+func (f *Fake) StandbyTypes() []string                  { return f.standbyTypesFn() }
 func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHostedFn(actorType) }
 func (f *Fake) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
 	return f.getOrCreateFn(ctx, actorType, actorID)
@@ -113,7 +123,7 @@ func (f *Fake) UnRegisterActorTypes(actorTypes ...string) error {
 	return f.unRegisterActorTypesFn(actorTypes...)
 }
 
-func (f *Fake) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {
+func (f *Fake) SubscribeToTypeUpdates(ctx context.Context) (<-chan table.HostedTypes, table.HostedTypes) {
 	return f.subscribeToTypeUpdatesFn(ctx)
 }
 func (f *Fake) HaltAll(ctx context.Context) error { return f.haltAllFn(ctx) }

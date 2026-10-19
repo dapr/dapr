@@ -150,6 +150,12 @@ func (o *orchestrator) armReminder(ctx context.Context, reminderName string, sta
 // per residency. Status reads call it because they are the only thing that
 // touches a stranded instance when the client does not re-issue the create.
 func (o *orchestrator) redriveOverduePendingStart(state *wfenginestate.State) {
+	// On a standby host every pending start is overdue by design: its start
+	// reminder is staged in the scheduler until a worker connects.
+	if o.standby {
+		return
+	}
+
 	now := time.Now()
 	pending := pendingstart.Overdue(state, now)
 	if pending == nil {

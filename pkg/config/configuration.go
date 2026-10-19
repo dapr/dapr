@@ -86,6 +86,19 @@ const (
 	// limits gate per job delivery, which local drives bypass. Preview
 	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
+
+	// WorkflowsStandbyHosts keeps the workflow actor type of an app placed
+	// while no daprd of the app has a workflow worker connected: such a
+	// daprd registers the type in placement as a standby host, which
+	// placement routes to only while no daprd with a worker hosts the type.
+	// Starts, raised events, terminate, suspend, resume, status queries and
+	// purges then take the normal path, with their usual synchronous errors,
+	// instead of blocking or failing with no address. A standby host runs no
+	// workflow turn: it does not advertise the type to the scheduler, so the
+	// reminders it arms fire once a worker connects. Needs a placement
+	// server which knows standby hosts; with an older one, behaves as if
+	// disabled. Preview feature; disabled by default.
+	WorkflowsStandbyHosts Feature = "WorkflowsStandbyHosts"
 )
 
 // end feature flags section

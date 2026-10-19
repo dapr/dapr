@@ -38,12 +38,13 @@ type Interface interface {
 	io.Closer
 
 	Types() []string
+	StandbyTypes() []string
 	IsActorTypeHosted(actorType string) bool
 	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
 	ActorExists(actorType, actorKey string) bool
 	RegisterActorTypes(opts RegisterActorTypeOptions)
 	UnRegisterActorTypes(actorTypes ...string) error
-	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
+	SubscribeToTypeUpdates(ctx context.Context) (<-chan HostedTypes, HostedTypes)
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
@@ -78,12 +79,28 @@ type ActorHostOptions struct {
 type RegisterActorTypeOptions struct {
 	HostOptions *ActorHostOptions
 	Factories   []ActorTypeFactory
+
+	// Standby registers the factories' types as standby: they are reported to
+	// placement apart from the active types, and placement routes a standby
+	// type to this host only while no host serves it as active. Standby types
+	// are hosted (instances can be created) but are not advertised to the
+	// scheduler, so their reminders are not delivered to this host.
+	Standby bool
+}
+
+// HostedTypes are the actor types this host advertises to placement.
+type HostedTypes struct {
+	Active  []string
+	Standby []string
 }
 
 type table struct {
 	factories   sync.Map
 	createLocks sync.Map
-	typeUpdates *broadcaster.Broadcaster[[]string]
+	typeUpdates *broadcaster.Broadcaster[HostedTypes]
+
+	// standby holds the registered types which are hosted as standby.
+	standby sync.Map
 
 	entityConfigs map[string]api.EntityConfig
 
@@ -102,7 +119,7 @@ func New(opts Options) Interface {
 	t := &table{
 		entityConfigs:   make(map[string]api.EntityConfig),
 		clock:           clock.RealClock{},
-		typeUpdates:     broadcaster.New[[]string](),
+		typeUpdates:     broadcaster.New[HostedTypes](),
 		reentrancyStore: opts.ReentrancyStore,
 		timers:          opts.Timers,
 	}
@@ -110,23 +127,41 @@ func New(opts Options) Interface {
 	return t
 }
 
-// Types returns the actor types advertised by this host. While hosting is
-// suspended no types are advertised, even though factories remain registered.
+// Types returns the active actor types advertised by this host. While
+// hosting is suspended no types are advertised, even though factories remain
+// registered. Standby types are not included.
 func (t *table) Types() []string {
 	if t.suspended.Load() {
 		return nil
 	}
-	return t.types()
+	return t.types(false)
 }
 
-// types returns the registered actor types regardless of suspension.
-func (t *table) types() []string {
+// StandbyTypes returns the standby actor types advertised by this host. While
+// hosting is suspended no types are advertised.
+func (t *table) StandbyTypes() []string {
+	if t.suspended.Load() {
+		return nil
+	}
+	return t.types(true)
+}
+
+// types returns the registered active or standby actor types regardless of
+// suspension.
+func (t *table) types(standby bool) []string {
 	var keys []string
 	t.factories.Range(func(key, _ any) bool {
-		keys = append(keys, key.(string))
+		if _, ok := t.standby.Load(key); ok == standby {
+			keys = append(keys, key.(string))
+		}
 		return true
 	})
 	return keys
+}
+
+// hostedTypes returns the active and standby types to advertise.
+func (t *table) hostedTypes() HostedTypes {
+	return HostedTypes{Active: t.Types(), Standby: t.StandbyTypes()}
 }
 
 func (t *table) Len() map[string]int {
@@ -252,10 +287,15 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
+		if opts.Standby {
+			t.standby.Store(opt.Type, struct{}{})
+		} else {
+			t.standby.Delete(opt.Type)
+		}
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
-	t.typeUpdates.Broadcast(t.Types())
+	t.typeUpdates.Broadcast(t.hostedTypes())
 }
 
 func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
@@ -278,6 +318,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		t.reentrancyStore.Delete(actorType)
 
 		fact, ok := t.factories.LoadAndDelete(actorType)
+		t.standby.Delete(actorType)
 		if !ok {
 			continue
 		}
@@ -293,15 +334,15 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 
 	wg.Wait()
 
-	t.typeUpdates.Broadcast(t.Types())
+	t.typeUpdates.Broadcast(t.hostedTypes())
 
 	return errors.Join(errs.Slice()...)
 }
 
-func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {
-	ch := make(chan []string)
+func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan HostedTypes, HostedTypes) {
+	ch := make(chan HostedTypes)
 	t.typeUpdates.Subscribe(ctx, ch)
-	return ch, t.Types()
+	return ch, t.hostedTypes()
 }
 
 // SuspendHosting stops this host from hosting actors: registered types are
@@ -317,7 +358,7 @@ func (t *table) SuspendHosting(ctx context.Context) error {
 
 	// De-advertise before halting so new work is routed away from this host
 	// while instances drain.
-	t.typeUpdates.Broadcast(nil)
+	t.typeUpdates.Broadcast(HostedTypes{})
 
 	return t.HaltAll(ctx)
 }
@@ -330,7 +371,7 @@ func (t *table) ResumeHosting() {
 		return
 	}
 
-	t.typeUpdates.Broadcast(t.types())
+	t.typeUpdates.Broadcast(t.hostedTypes())
 }
 
 func (t *table) Close() error {

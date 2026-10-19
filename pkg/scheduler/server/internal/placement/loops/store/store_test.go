@@ -124,3 +124,68 @@ func TestTypes(t *testing.T) {
 	s.Set(2, host("b:1", "app-b", "t2", "t3"))
 	assert.Equal(t, []string{"t1", "t2", "t3"}, s.Types())
 }
+
+func standbyHost(addr, appID string, types ...string) *schedulerv1pb.ActorHost {
+	return &schedulerv1pb.ActorHost{
+		Address:           addr,
+		AppId:             appID,
+		Namespace:         "ns",
+		StandbyActorTypes: types,
+	}
+}
+
+func tableHosts(tables *schedulerv1pb.PlacementTables, actorType string) []string {
+	addrs := make([]string, 0, len(tables.GetEntries()[actorType].GetHosts()))
+	for addr := range tables.GetEntries()[actorType].GetHosts() {
+		addrs = append(addrs, addr)
+	}
+	return addrs
+}
+
+func TestStandby(t *testing.T) {
+	t.Parallel()
+
+	t.Run("standby hosts are placed while no host is active", func(t *testing.T) {
+		t.Parallel()
+		s := New()
+		assert.Equal(t, []string{"wf"}, s.Set(1, standbyHost("a:1", "app", "wf")))
+		assert.Equal(t, []string{"wf"}, s.Set(2, standbyHost("b:1", "app", "wf")))
+		assert.True(t, s.Has(1))
+		assert.Equal(t, []string{"wf"}, s.Types())
+		assert.ElementsMatch(t, []string{"a:1", "b:1"}, tableHosts(s.Tables([]string{"wf"}), "wf"))
+	})
+
+	t.Run("an active host replaces the standby hosts", func(t *testing.T) {
+		t.Parallel()
+		s := New()
+		s.Set(1, standbyHost("a:1", "app", "wf"))
+		assert.Equal(t, []string{"wf"}, s.Set(2, host("b:1", "app", "wf")))
+		assert.Equal(t, []string{"b:1"}, tableHosts(s.Tables([]string{"wf"}), "wf"))
+
+		// A standby change does not move a table which has an active host.
+		assert.Empty(t, s.Set(3, standbyHost("c:1", "app", "wf")))
+		assert.Empty(t, s.Delete(3))
+
+		// The last active host leaving places the standby hosts again.
+		assert.Equal(t, []string{"wf"}, s.Delete(2))
+		assert.Equal(t, []string{"a:1"}, tableHosts(s.Tables([]string{"wf"}), "wf"))
+	})
+
+	t.Run("an active host turning standby changes the table", func(t *testing.T) {
+		t.Parallel()
+		s := New()
+		s.Set(1, standbyHost("a:1", "app", "wf"))
+		s.Set(2, host("b:1", "app", "wf"))
+		assert.Equal(t, []string{"wf"}, s.Set(2, standbyHost("b:1", "app", "wf")))
+		assert.ElementsMatch(t, []string{"a:1", "b:1"}, tableHosts(s.Tables([]string{"wf"}), "wf"))
+	})
+
+	t.Run("deleting the last standby host removes the type", func(t *testing.T) {
+		t.Parallel()
+		s := New()
+		s.Set(1, standbyHost("a:1", "app", "wf"))
+		assert.Equal(t, []string{"wf"}, s.Delete(1))
+		assert.Empty(t, s.Types())
+		assert.Empty(t, tableHosts(s.Tables([]string{"wf"}), "wf"))
+	})
+}

@@ -145,6 +145,10 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	if o.standby {
+		return errStandbyTurn(o.actorID, reminder.Name)
+	}
+
 	if err := o.enter("reminder"); err != nil {
 		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}

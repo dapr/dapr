@@ -97,6 +97,7 @@ type Workflow struct {
 	clustered    bool
 	fastPath     bool
 	signing      bool
+	standbyHosts bool
 
 	schedulerPlacement bool
 }
@@ -217,7 +218,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// features replaces every earlier feature list. All harness-driven
 	// features must therefore land in a single manifest per daprd; it is
 	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath)
+	baseFeatures := baseFeatureList(clustered, fastPath, opts.standbyHosts)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -286,6 +287,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		clustered:    clustered,
 		fastPath:     fastPath,
 		signing:      signing,
+		standbyHosts: opts.standbyHosts,
 
 		schedulerPlacement: schedulerPlacement,
 	}
@@ -447,13 +449,16 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-func baseFeatureList(clustered, fastPath bool) []string {
-	features := make([]string, 0, 2)
+func baseFeatureList(clustered, fastPath, standbyHosts bool) []string {
+	features := make([]string, 0, 3)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
 	}
 	if fastPath {
 		features = append(features, "WorkflowsFastPath")
+	}
+	if standbyHosts {
+		features = append(features, "WorkflowsStandbyHosts")
 	}
 	return features
 }
@@ -463,7 +468,7 @@ func baseFeatureList(clustered, fastPath bool) []string {
 // the Sentry wiring.
 func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	t.Helper()
-	features := baseFeatureList(w.clustered, w.fastPath)
+	features := baseFeatureList(w.clustered, w.fastPath, w.standbyHosts)
 	var opts []daprd.Option
 	if w.sentry != nil {
 		opts = append(opts, daprd.WithSentry(t, w.sentry))

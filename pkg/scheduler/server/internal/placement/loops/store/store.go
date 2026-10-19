@@ -21,6 +21,8 @@ import (
 	"slices"
 	"sort"
 
+	"google.golang.org/protobuf/proto"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
@@ -38,30 +40,39 @@ func New() *Store {
 // Set installs or updates the host reported by a stream. It returns the actor
 // types whose placement table changed as a result: types the host started or
 // stopped hosting, or every reported type when the host identity changed.
-// Hosts with no actor types are not stored.
+// A standby type is returned only when the host's change moves the type's
+// table, which it does only while no host serves the type as active. Hosts
+// with no actor types are not stored.
 func (s *Store) Set(streamIDx uint64, host *schedulerv1pb.ActorHost) []string {
 	//nolint:protogetter
 	sort.Strings(host.ActorTypes)
+	//nolint:protogetter
+	sort.Strings(host.StandbyActorTypes)
 
 	existing, ok := s.hosts[streamIDx]
 
-	var changed []string
+	var changed, standby []string
 	switch {
 	case !ok:
 		changed = slices.Clone(host.GetActorTypes())
+		standby = slices.Clone(host.GetStandbyActorTypes())
 	case existing.GetAddress() != host.GetAddress() || existing.GetAppId() != host.GetAppId():
 		changed = union(existing.GetActorTypes(), host.GetActorTypes())
+		standby = union(existing.GetStandbyActorTypes(), host.GetStandbyActorTypes())
 	default:
 		changed = symmetricDiff(existing.GetActorTypes(), host.GetActorTypes())
+		standby = symmetricDiff(existing.GetStandbyActorTypes(), host.GetStandbyActorTypes())
 	}
 
-	if len(host.GetActorTypes()) == 0 {
+	before := s.Tables(standby)
+
+	if !hostsActors(host) {
 		delete(s.hosts, streamIDx)
 	} else {
 		s.hosts[streamIDx] = host
 	}
 
-	return changed
+	return union(changed, s.tablesChanged(before, standby))
 }
 
 // Delete removes a stream's host, returning the actor types whose placement
@@ -72,8 +83,31 @@ func (s *Store) Delete(streamIDx uint64) []string {
 		return nil
 	}
 
+	before := s.Tables(existing.GetStandbyActorTypes())
 	delete(s.hosts, streamIDx)
-	return slices.Clone(existing.GetActorTypes())
+	return union(existing.GetActorTypes(), s.tablesChanged(before, existing.GetStandbyActorTypes()))
+}
+
+// tablesChanged returns the types whose table now differs from before.
+func (s *Store) tablesChanged(before *schedulerv1pb.PlacementTables, types []string) []string {
+	if len(types) == 0 {
+		return nil
+	}
+
+	after := s.Tables(types)
+	var changed []string
+	for _, t := range types {
+		if !proto.Equal(before.GetEntries()[t], after.GetEntries()[t]) {
+			changed = append(changed, t)
+		}
+	}
+	return changed
+}
+
+// hostsActors returns whether the host reports any actor type, active or
+// standby.
+func hostsActors(host *schedulerv1pb.ActorHost) bool {
+	return len(host.GetActorTypes()) > 0 || len(host.GetStandbyActorTypes()) > 0
 }
 
 // Has returns whether the stream has a stored host.
@@ -82,11 +116,15 @@ func (s *Store) Has(streamIDx uint64) bool {
 	return ok
 }
 
-// Types returns every actor type currently hosted in the namespace.
+// Types returns every actor type currently hosted in the namespace, active or
+// standby.
 func (s *Store) Types() []string {
 	set := make(map[string]struct{})
 	for _, host := range s.hosts {
 		for _, t := range host.GetActorTypes() {
+			set[t] = struct{}{}
+		}
+		for _, t := range host.GetStandbyActorTypes() {
 			set[t] = struct{}{}
 		}
 	}
@@ -114,15 +152,34 @@ func (s *Store) Tables(types []string) *schedulerv1pb.PlacementTables {
 		}
 	}
 
+	add := func(t string, host *schedulerv1pb.ActorHost) {
+		entry, ok := tables.GetEntries()[t]
+		if !ok {
+			return
+		}
+		entry.Hosts[host.GetAddress()] = &schedulerv1pb.PlacementHost{
+			Address: host.GetAddress(),
+			AppId:   host.GetAppId(),
+		}
+	}
+
 	for _, host := range s.hosts {
 		for _, t := range host.GetActorTypes() {
-			entry, ok := tables.GetEntries()[t]
-			if !ok {
-				continue
-			}
-			entry.Hosts[host.GetAddress()] = &schedulerv1pb.PlacementHost{
-				Address: host.GetAddress(),
-				AppId:   host.GetAppId(),
+			add(t, host)
+		}
+	}
+
+	// A standby host is placed for an actor type only while no host serves
+	// the type as active, so the type's table is either all active or all
+	// standby hosts. Actors move to the active hosts as soon as one exists.
+	active := make(map[string]bool, len(types))
+	for _, t := range types {
+		active[t] = len(tables.GetEntries()[t].GetHosts()) > 0
+	}
+	for _, host := range s.hosts {
+		for _, t := range host.GetStandbyActorTypes() {
+			if !active[t] {
+				add(t, host)
 			}
 		}
 	}

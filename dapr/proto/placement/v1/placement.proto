@@ -80,6 +80,13 @@ message Host {
   // version made optional to check for presence. Version should match the
   // current operation table version.
   optional uint64 version = 10;
+
+  // standby_entities are actor types this host can serve but only as a
+  // standby: the placement server routes a type to its standby hosts only
+  // while no host reports it in entities. A server which does not know this
+  // field ignores it, so a standby host is never placed, as before standby
+  // hosts existed.
+  repeated string standby_entities = 11;
 }
 
 enum HostOperation {
