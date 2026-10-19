@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,11 +28,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 // Held operations (the WorkflowsHeldOperations preview): while no daprd of
@@ -43,40 +46,52 @@ import (
 // Only operations aimed at this app are held: the scheduler refuses a
 // reminder on another app's workflow actor.
 
-// canHold reports whether an operation aimed at actorType may be held.
-func (abe *Actors) canHold(actorType string) bool {
-	return abe.workflowsHeldOperations && actorType == abe.workflowActorType
-}
-
-// noHost reports whether an operation aimed at actorType should be held
-// because placement has no host for the actor. Checking before the call
-// avoids the actor router's own retries on a missing host, which would delay
-// every held operation by several seconds.
-func (abe *Actors) noHost(ctx context.Context, actorType, actorID string) bool {
-	if !abe.canHold(actorType) {
-		return false
+// failFastIfHoldable returns ctx set up for a call aimed at actorType: when
+// the operation may be held, the actor router fails at once with
+// ErrActorNoAddress on a missing host, instead of retrying for several
+// seconds, so the caller can hold it.
+//
+// An operation is held only once placement is ready: before its first table,
+// a daprd cannot tell a missing host from one it has not heard of yet.
+func (abe *Actors) failFastIfHoldable(ctx context.Context, actorType string) context.Context {
+	if !abe.workflowsHeldOperations || actorType != abe.workflowActorType {
+		return ctx
 	}
 
 	placement, err := abe.actors.Placement(ctx)
-	if err != nil {
-		return false
+	if err != nil || !placement.Ready() {
+		return ctx
 	}
 
-	_, _, cancel, err := placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-	if cancel != nil {
-		cancel(nil)
-	}
-	return errors.Is(err, messages.ErrActorNoAddress)
+	return router.WithFailFastNoAddress(ctx)
 }
 
-// isNoHost reports whether err from an actor call aimed at actorType means
-// the operation should be held: the host went away between the placement
-// check and the call.
-func (abe *Actors) isNoHost(actorType string, err error) bool {
-	return abe.canHold(actorType) && errors.Is(err, messages.ErrActorNoAddress)
+// isNoHost reports whether err from an actor call made with a ctx from
+// failFastIfHoldable means the operation should be held: placement has no
+// host for the actor.
+func (abe *Actors) isNoHost(ctx context.Context, err error) bool {
+	return router.IsFailFastNoAddress(ctx) && errors.Is(err, messages.ErrActorNoAddress)
+}
+
+type heldMarkerKey struct{}
+
+// WithHeldMarker returns ctx carrying a marker that records whether an
+// operation made with it was held. WatchWorkflowRuntimeStatus returns at
+// once under a marked ctx: a held operation has nothing to wait for until a
+// worker connects.
+func WithHeldMarker(ctx context.Context) context.Context {
+	return context.WithValue(ctx, heldMarkerKey{}, new(atomic.Bool))
+}
+
+func markHeld(ctx context.Context) {
+	if m, ok := ctx.Value(heldMarkerKey{}).(*atomic.Bool); ok {
+		m.Store(true)
+	}
+}
+
+func wasHeld(ctx context.Context) bool {
+	m, ok := ctx.Value(heldMarkerKey{}).(*atomic.Bool)
+	return ok && m.Load()
 }
 
 // holdStart holds a workflow start until a host of this app's workflow actor
@@ -93,6 +108,7 @@ func (abe *Actors) holdStart(ctx context.Context, instanceID string, req *backen
 		return fmt.Errorf("failed to hold the start of workflow '%s' while no worker is connected: %w", instanceID, err)
 	}
 
+	markHeld(ctx)
 	log.Debugf("Workflow '%s': no worker is connected, holding its start until one connects", instanceID)
 	return nil
 }
@@ -111,6 +127,7 @@ func (abe *Actors) holdEvent(ctx context.Context, id api.InstanceID, e *backend.
 		return fmt.Errorf("failed to hold an event for workflow '%s' while no worker is connected: %w", id, err)
 	}
 
+	markHeld(ctx)
 	log.Debugf("Workflow '%s': no worker is connected, holding a %T event until one connects", id, e.GetEventType())
 	return nil
 }
@@ -118,6 +135,12 @@ func (abe *Actors) holdEvent(ctx context.Context, id api.InstanceID, e *backend.
 // hold creates the reminder that carries a held operation. It goes straight
 // to the scheduler: the actor reminders API refuses an actor type that this
 // daprd does not host, which is always the case here.
+//
+// The reminder never overwrites one of the same name: a second held start of
+// an instance that differs from the first (another workflow name or input)
+// must not silently replace the start its caller was already told was
+// accepted. The first held start wins, as the first create wins when a worker
+// is connected; CreateReminderWithRetry treats the AlreadyExists as created.
 func (abe *Actors) hold(ctx context.Context, actorID, name string, data proto.Message) error {
 	adata, err := anypb.New(data)
 	if err != nil {
@@ -141,6 +164,7 @@ func (abe *Actors) hold(ctx context.Context, actorID, name string, data proto.Me
 		Data:          adata,
 		DueTime:       time.Now().UTC().Format(time.RFC3339Nano),
 		FailurePolicy: common.HeldOperationPolicy(),
+		Overwrite:     ptr.Of(false),
 	})
 }
 

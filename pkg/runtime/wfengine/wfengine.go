@@ -219,23 +219,16 @@ func New(opts Options) (Interface, error) {
 		}
 	})
 
-	execOpts := []backend.GrpcExecutorOption{
+	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(wfe.onWorkItemConnection),
 		backend.WithOnGetWorkItemsDisconnectCallback(wfe.onWorkItemDisconnection),
-		backend.WithStreamSendTimeout(time.Second * 10),
+		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
-	}
+	)
 	if opts.WorkflowsHeldOperations {
-		// A held operation is accepted before any worker can apply it, so
-		// waiting for the instance to start or change state would block the
-		// SDK client until its deadline.
-		execOpts = append(execOpts,
-			backend.WithSkipWaitForInstanceStart(),
-			backend.WithSkipWaitForStateChange(),
-		)
+		registerGrpcServerFn = registerHeldAware(registerGrpcServerFn)
 	}
-	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log, execOpts...)
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {

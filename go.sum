@@ -521,6 +521,8 @@ github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70 h1
 github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70/go.mod h1:Ymr5rroMpBSXLqUTxtC71C5dI3Js+0dqaqaA+SFbr1c=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
+github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c h1:9MBEhvJ8DZ7tvYDyxugPin/t4EJxrn4c3UaUVl/xogA=
+github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc h1:h2sqtltE2b2va5dSTH0KDu4XBNBNPpj223btE55aZmw=
 github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -615,8 +617,6 @@ github.com/evanphx/json-patch/v5 v5.9.0 h1:kcBlZQbplgElYIlo/n1hJbls2z/1awpXxpRi0
 github.com/evanphx/json-patch/v5 v5.9.0/go.mod h1:VNkHZ/282BpEyt/tObQO8s5CMPmYYq14uClGH4abBuQ=
 github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 h1:JWuenKqqX8nojtoVVWjGfOF9635RETekkoH6Cc9SX0A=
 github.com/facebookgo/stack v0.0.0-20160209184415-751773369052/go.mod h1:UbMTZqLaRiH3MsBH8va0n7s1pQYcu3uTb8G4tygF4Zg=
-github.com/famarting/durabletask-go v0.0.0-20261016145901-69d0e9935dc1 h1:3zTlV8rWU/w5aX6RImnakjqQ3D8eaLQmpfxMZMzovE8=
-github.com/famarting/durabletask-go v0.0.0-20261016145901-69d0e9935dc1/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 h1:M4CVMQ5ueVmGZAtkW2bsO+ftesCYpfxl27JTqtzKBzE=
 github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5/go.mod h1:MQXNGeXkpojWTxbN7vXoE3f7EmlA11MlJbsrJpVBINA=
 github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239/go.mod h1:Gdwt2ce0yfBxPvZrHkprdPPTTS3N5rwmLE8T22KBXlw=

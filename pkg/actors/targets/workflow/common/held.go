@@ -33,24 +33,24 @@ import (
 // or "parent-notify".
 const (
 	// ReminderNameHeldStart is the one held start of an instance. The
-	// reminder is keyed by the instance ID, so retries of the same start,
-	// which each mint a new execution ID, collapse onto it.
+	// reminder is keyed by the instance ID and never overwritten, so retries
+	// of the same start, which each mint a new execution ID, collapse onto
+	// the first.
 	ReminderNameHeldStart = "held-start"
 
 	// ReminderPrefixHeldEvent prefixes each held event of an instance; a
-	// unique suffix keeps distinct events apart.
+	// unique suffix keeps distinct events apart. The replay orders them by
+	// the time they were requested, not by name.
 	ReminderPrefixHeldEvent = "held-event-"
 )
 
 const (
 	defaultHeldOperationTimeout = time.Hour
 
-	// heldOperationRetryInterval and heldOperationMaxRetries bound how long a
-	// replay that fails keeps being retried once a host runs it. It covers a
-	// held event delivered before the held start of its instance: scheduler
-	// jobs are partitioned by name, so the two can arrive in either order.
-	heldOperationRetryInterval = time.Second
-	heldOperationMaxRetries    = 60
+	// heldOperationRetryInterval spaces the retries of a replay that fails
+	// once a host runs it, such as a held event whose instance does not
+	// exist yet.
+	heldOperationRetryInterval = 5 * time.Second
 )
 
 // HeldOperationTimeout bounds how long an operation may be held. go-cron
@@ -68,15 +68,17 @@ func HeldOperationExpired(requested time.Time) bool {
 	return time.Since(requested) > HeldOperationTimeout()
 }
 
-// HeldOperationPolicy is the failure policy of a held operation's reminder:
-// a bounded number of retries, unlike the retry-forever policy of the
-// reminders a host creates for an instance it already owns.
+// HeldOperationPolicy is the failure policy of a held operation's reminder.
+// Its retries outlast HeldOperationTimeout, so an operation is never dropped
+// for running out of retries: the replay drops it, with a warning, once it
+// has been held for longer than that. Unlike the retry-forever policy of the
+// reminders a host creates for an instance it already owns, it still ends.
 func HeldOperationPolicy() *commonv1pb.JobFailurePolicy {
 	return &commonv1pb.JobFailurePolicy{
 		Policy: &commonv1pb.JobFailurePolicy_Constant{
 			Constant: &commonv1pb.JobFailurePolicyConstant{
 				Interval:   durationpb.New(heldOperationRetryInterval),
-				MaxRetries: ptr.Of(uint32(heldOperationMaxRetries)),
+				MaxRetries: ptr.Of(uint32(HeldOperationTimeout()/heldOperationRetryInterval) + 1),
 			},
 		},
 	}

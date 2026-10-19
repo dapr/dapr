@@ -210,11 +210,9 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		}
 		return err
 
-	case reminder.Name == common.ReminderNameHeldStart:
-		return o.replayHeldStart(ctx, reminder)
-
-	case strings.HasPrefix(reminder.Name, common.ReminderPrefixHeldEvent):
-		return o.replayHeldEvent(ctx, reminder)
+	case reminder.Name == common.ReminderNameHeldStart,
+		strings.HasPrefix(reminder.Name, common.ReminderPrefixHeldEvent):
+		return o.replayHeld(ctx, reminder)
 
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)

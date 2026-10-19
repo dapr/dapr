@@ -96,14 +96,14 @@ const (
 	// A status read re-asserted the start reminder of an overdue pending
 	// start; ~0 in healthy steady state.
 	StatusPendingStartRedriven = "pending_start_redriven"
-	// Completions-fold outcomes: a sender-retried completion committed
-	// inside its folding turn (folded), or was nacked back into the
-	// sender's retry chain (turn failure, timeout, deactivation).
 	// An operation was held while no daprd of the app had a workflow worker
 	// connected (WorkflowsHeldOperations), or its replay found it held past
 	// the hold timeout.
 	StatusHeld        = "held"
 	StatusHeldExpired = "held_expired"
+	// Completions-fold outcomes: a sender-retried completion committed
+	// inside its folding turn (folded), or was nacked back into the
+	// sender's retry chain (turn failure, timeout, deactivation).
 	StatusFolded      = "folded"
 	StatusFoldNacked  = "fold_nacked"
 	StatusTerminated  = "terminated"

@@ -526,10 +526,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
-
-	if abe.noHost(ctx, actorType, workflowInstanceID) {
-		return abe.holdStart(ctx, workflowInstanceID, req, start)
-	}
+	ctx = abe.failFastIfHoldable(ctx, actorType)
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
@@ -540,10 +537,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
 
-		// The host went away after the check above. A missing host is
-		// FailedPrecondition, which this loop would retry until the caller's
-		// deadline: hold the start instead.
-		if abe.isNoHost(actorType, eerr) {
+		// No host: a missing host is FailedPrecondition, which this loop
+		// would retry until the caller's deadline. Hold the start instead.
+		if abe.isNoHost(ctx, eerr) {
 			held = true
 			return nil
 		}
@@ -753,10 +749,7 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 		WithContentType(invokev1.OctetStreamContentType)
 
 	start := time.Now()
-
-	if abe.noHost(ctx, actorType, string(id)) {
-		return abe.holdEvent(ctx, id, e, start)
-	}
+	ctx = abe.failFastIfHoldable(ctx, actorType)
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
@@ -764,7 +757,7 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	}
 
 	_, err = router.Call(ctx, req)
-	if abe.isNoHost(actorType, err) {
+	if abe.isNoHost(ctx, err) {
 		return abe.holdEvent(ctx, id, e, start)
 	}
 
@@ -841,6 +834,12 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+
+	// The operation this watch follows was held: nothing changes until a
+	// worker connects, so waiting would block the caller until its deadline.
+	if wasHeld(ctx) {
+		return nil
+	}
 
 	// A router targeting another app watches that app's workflow actor. This
 	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app

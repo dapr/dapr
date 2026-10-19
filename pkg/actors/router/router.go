@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -116,6 +117,21 @@ func (r *router) Run(ctx context.Context) error {
 	})
 
 	return ctx.Err()
+}
+
+type failFastNoAddressKey struct{}
+
+// WithFailFastNoAddress returns a context under which Call fails at once with
+// messages.ErrActorNoAddress when placement has no host for the actor,
+// instead of retrying until one appears.
+func WithFailFastNoAddress(ctx context.Context) context.Context {
+	return context.WithValue(ctx, failFastNoAddressKey{}, true)
+}
+
+// IsFailFastNoAddress reports whether ctx came from WithFailFastNoAddress.
+func IsFailFastNoAddress(ctx context.Context) bool {
+	v, _ := ctx.Value(failFastNoAddressKey{}).(bool)
+	return v
 }
 
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -255,7 +271,11 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup actor: %w", err)
+		err = fmt.Errorf("failed to lookup actor: %w", err)
+		if IsFailFastNoAddress(ctx) && errors.Is(err, messages.ErrActorNoAddress) {
+			return nil, backoff.Permanent(err)
+		}
+		return nil, err
 	}
 
 	if lar.Local {

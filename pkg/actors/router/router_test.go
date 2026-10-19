@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -371,4 +372,32 @@ func TestIsRetryableRemoteError(t *testing.T) {
 			assert.Equal(t, tc.want, router.IsRetryableRemoteError(tc.err))
 		})
 	}
+}
+
+func TestCallFailFastNoAddress(t *testing.T) {
+	t.Parallel()
+
+	noAddress := func(context.Context, int) (context.Context, error) {
+		return nil, messages.ErrActorNoAddress.WithFormat("abc||foo")
+	}
+
+	t.Run("fails at once under WithFailFastNoAddress", func(t *testing.T) {
+		t.Parallel()
+
+		r := newLocalTimerRouter(t, noAddress, nil)
+		_, err := r.Call(router.WithFailFastNoAddress(t.Context()), internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo"))
+		require.ErrorIs(t, err, messages.ErrActorNoAddress)
+		assert.Equal(t, 1, r.lookups, "a call with fail-fast on no address was retried")
+	})
+
+	t.Run("retries without it", func(t *testing.T) {
+		t.Parallel()
+
+		r := newLocalTimerRouter(t, noAddress, nil)
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		defer cancel()
+		_, err := r.Call(ctx, internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo"))
+		require.Error(t, err)
+		assert.Greater(t, r.lookups, 1, "a call without fail-fast on no address was not retried")
+	})
 }
