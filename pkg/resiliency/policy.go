@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
@@ -98,15 +99,46 @@ func (p PolicyDefinition) String() string {
 	)
 }
 
-// Timeout returns the timeout applied to each attempt of the operation, or
-// zero if the policy has none.
+// HasRetries returns true if the policy is configured to have more than 1 retry.
+func (p PolicyDefinition) HasRetries() bool {
+	return p.r != nil && p.r.MaxRetries != 0
+}
+
+// Timeout returns the policy's timeout, or 0 if none is configured.
 func (p PolicyDefinition) Timeout() time.Duration {
 	return p.t
 }
 
-// HasRetries returns true if the policy is configured to have more than 1 retry.
-func (p PolicyDefinition) HasRetries() bool {
-	return p.r != nil && p.r.MaxRetries != 0
+// HasBoundedRetries reports whether a retry policy is configured and can run
+// out of attempts on its own. A nil retry means no policy was configured for
+// this operation at all.
+//
+// A non-negative MaxRetries bounds the attempt count; 0 counts, because it is
+// an explicit "try once, then give up". An exponential policy is also bounded
+// by MaxElapsedTime, which backoff enforces independently of the attempt
+// count, so it exhausts even when MaxRetries is negative.
+func (p PolicyDefinition) HasBoundedRetries() bool {
+	if p.r == nil {
+		return false
+	}
+	if p.r.MaxRetries >= 0 {
+		return true
+	}
+	return p.r.Policy == retry.PolicyExponential && p.r.MaxElapsedTime > 0
+}
+
+// RetryExcluded reports whether err is one the policy's retry condition
+// excludes, which stops the retry loop after a single attempt. That is a
+// decision not to retry this particular failure, not a budget that ran out.
+func (p PolicyDefinition) RetryExcluded(err error) bool {
+	if p.r == nil {
+		return false
+	}
+	var cErr CodeError
+	if !errors.As(err, &cErr) {
+		return false
+	}
+	return !p.r.ErrorNeedRetry(cErr)
 }
 
 type RunnerOpts[T any] struct {
@@ -117,6 +149,41 @@ type RunnerOpts[T any] struct {
 	// The accumulator is a function that is invoked synchronously when an operation completes without timing out, whether successfully or not. It receives the value returned by the operation function as long as it's non-zero (e.g. non-nil for pointer types).
 	// The accumulator can be used to collect intermediate results and not just the final ones, for example in case of working with batched operations.
 	Accumulator func(T)
+}
+
+// Windows nanotime advances once per timer tick, so a downstream can enforce
+// the propagated deadline before time.Now() reads past it.
+const deadlineClockTolerance = 16 * time.Millisecond
+
+// timeoutError returns the timeout to report for an attempt which returned
+// err after its deadline passed, and nil when the attempt did not time out.
+// The operation can observe the deadline before the runner does and fail with
+// its own error, such as a gRPC status derived from the cancelled context, or
+// a DeadlineExceeded answered by a downstream enforcing the propagated deadline
+// in the gap before the local timer cancels ctx. Reporting the timeout instead
+// keeps a retry condition matching on status codes from reading that as the
+// operation's answer and refusing the retry.
+func timeoutError(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if cerr := ctx.Err(); cerr != nil {
+		return cerr
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil
+	}
+	if !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	if time.Until(deadline) <= deadlineClockTolerance {
+		var cErr CodeError
+		if errors.As(err, &cErr) && cErr.StatusCode == int32(codes.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+	}
+	return nil
 }
 
 // NewRunner returns a policy runner that encapsulates the configured resiliency policies in a simple execution wrapper.
@@ -173,6 +240,15 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 				select {
 				case v := <-done:
+					if terr := timeoutError(ctx, v.err); terr != nil {
+						if opts.Disposer != nil && !isZero(v.res) {
+							opts.Disposer(v.res)
+						}
+						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
+							def.addTimeoutActivatedMetric()
+						}
+						return zero, terr
+					}
 					return v.res, v.err
 				case <-ctx.Done():
 					// Because done has a capacity of 1, adding a message on the channel signals that there was a timeout

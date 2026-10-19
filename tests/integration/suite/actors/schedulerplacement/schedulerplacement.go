@@ -19,3 +19,7 @@ limitations under the License.
 // sidecars hosting the same actor type can never be talking to two different
 // placement authorities.
 package schedulerplacement
+
+import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/schedulerplacement/coldstart"
+)

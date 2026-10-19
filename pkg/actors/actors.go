@@ -410,6 +410,23 @@ func (a *actors) waitForReady(ctx context.Context) error {
 		return *err
 	}
 
+	// A closed or ready runtime must not lose to a done ctx. The select below
+	// picks at random among ready cases, and its ctx case reports
+	// ErrActorRuntimeNotFound for a runtime that is ready.
+	select {
+	case <-a.closedCh:
+		return messages.ErrActorRuntimeClosed
+	default:
+	}
+	select {
+	case <-a.readyCh:
+		if err := a.disabled.Load(); err != nil {
+			return *err
+		}
+		return nil
+	default:
+	}
+
 	select {
 	case <-a.closedCh:
 		return messages.ErrActorRuntimeClosed

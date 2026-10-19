@@ -66,6 +66,7 @@ const (
 	Conversation                  ComponentType         = "Conversation"
 	Search                        ComponentType         = "Search"
 	Vector                        ComponentType         = "Vector"
+	Binarystore                   ComponentType         = "Binarystore"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
 	Inbound                       ComponentDirection    = "Inbound"

@@ -27,6 +27,7 @@ const (
 	CategoryConversation      Category = "conversation"
 	CategorySearch            Category = "search"
 	CategoryVector            Category = "vector"
+	CategoryBinaryStore       Category = "binarystore"
 	CategoryServiceInvocation Category = "service-invocation"
 	CategoryBinding           Category = "binding"
 	CategoryLock              Category = "lock"
@@ -161,6 +162,17 @@ var (
 	VectorInvalidRequest     = ErrorCode{"ERR_VECTOR_INVALID_REQUEST", "DAPR_VECTOR_INVALID_REQUEST", CategoryVector}           // Invalid vector request
 	VectorCollectionNotFound = ErrorCode{"ERR_VECTOR_COLLECTION_NOT_FOUND", "DAPR_VECTOR_COLLECTION_NOT_FOUND", CategoryVector} // Vector collection not found
 	VectorOperationFailed    = ErrorCode{"ERR_VECTOR_OPERATION_FAILED", "DAPR_VECTOR_OPERATION_FAILED", CategoryVector}         // Vector operation failed
+
+	// ### Binary Store API
+	BinaryStoreNotFound     = ErrorCode{"ERR_BINARY_STORE_NOT_FOUND", "", CategoryBinaryStore}           // Binary store component not found
+	BinaryStoreNameMissing  = ErrorCode{"ERR_BINARY_STORE_NAME_MISSING", "", CategoryBinaryStore}        // Binary file name missing
+	BinaryStoreSet          = ErrorCode{"ERR_BINARY_STORE_SET", "", CategoryBinaryStore}                 // Error storing binary file
+	BinaryStoreGet          = ErrorCode{"ERR_BINARY_STORE_GET", "", CategoryBinaryStore}                 // Error retrieving binary file
+	BinaryStoreDelete       = ErrorCode{"ERR_BINARY_STORE_DELETE", "", CategoryBinaryStore}              // Error deleting binary file
+	BinaryStoreFileNotFound = ErrorCode{"ERR_BINARY_STORE_FILE_NOT_FOUND", "", CategoryBinaryStore}      // Binary file not found
+	BinaryStoreFileExists   = ErrorCode{"ERR_BINARY_STORE_FILE_ALREADY_EXISTS", "", CategoryBinaryStore} // Binary file already exists
+	BinaryStoreFileTooLarge = ErrorCode{"ERR_BINARY_STORE_FILE_TOO_LARGE", "", CategoryBinaryStore}      // Binary file exceeds maximum size
+	BinaryStoreFull         = ErrorCode{"ERR_BINARY_STORE_FULL", "", CategoryBinaryStore}                // Binary store is full
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service

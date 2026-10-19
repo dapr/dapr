@@ -170,6 +170,11 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/QueryVectorsAlpha1",
 		daprRuntimePrefix + "v1.Dapr/BatchQueryVectorsAlpha1",
 	},
+	"binarystore.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SetBinaryFileAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetBinaryFileAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteBinaryFileAlpha1",
+	},
 }
 
 // Returns the middlewares (unary and stream) for supporting API allowlist

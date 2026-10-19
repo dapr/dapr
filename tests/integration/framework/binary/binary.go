@@ -40,6 +40,7 @@ var buildTags = []string{
 	"state_etcd",
 	"crypto_localstorage",
 	"middleware_http_routeralias",
+	"middleware_http_wasm",
 	"conversation_echo",
 	"search_meilisearch",
 	"vector_meilisearch",
@@ -57,6 +58,11 @@ var buildTags = []string{
 	// assert which metadata daprd forwards to a component. Never set for
 	// released daprd flavors.
 	"bindings_metadataprobe",
+	// middleware_http_bodyprobe compiles in an integration-test-only HTTP
+	// middleware that records how many request body bytes it can read,
+	// letting a test assert the max body size limit is applied before the
+	// middleware pipeline runs. Never set for released daprd flavors.
+	"middleware_http_bodyprobe",
 }
 
 func BuildAll(t *testing.T) {

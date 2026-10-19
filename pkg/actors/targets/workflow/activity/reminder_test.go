@@ -274,7 +274,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1},
 		},
 	}
-	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", result))
+	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", "exec-1", result))
 
 	// Repeated creates so the decorrelation assertion below has enough draws.
 	for range 50 {
@@ -284,6 +284,8 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 	sched.mu.Lock()
 	defer sched.mu.Unlock()
 	require.Len(t, sched.creates, 52)
+	assert.Equal(t, "exec-1", common.ActivityResultParentExecutionID(sched.creates[1].Name),
+		"the result reminder carries the dispatching execution ID")
 
 	seen := make(map[time.Duration]struct{})
 	for _, req := range sched.creates {

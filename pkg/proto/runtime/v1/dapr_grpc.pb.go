@@ -124,6 +124,9 @@ const (
 	Dapr_GetVectorsAlpha1_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetVectorsAlpha1"
 	Dapr_QueryVectorsAlpha1_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/QueryVectorsAlpha1"
 	Dapr_BatchQueryVectorsAlpha1_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/BatchQueryVectorsAlpha1"
+	Dapr_SetBinaryFileAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/SetBinaryFileAlpha1"
+	Dapr_GetBinaryFileAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/GetBinaryFileAlpha1"
+	Dapr_DeleteBinaryFileAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/DeleteBinaryFileAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -331,6 +334,13 @@ type DaprClient interface {
 	// Issue multiple queries against the same collection, each succeeding or
 	// failing on its own.
 	BatchQueryVectorsAlpha1(ctx context.Context, in *BatchQueryVectorsRequestAlpha1, opts ...grpc.CallOption) (*BatchQueryVectorsResponseAlpha1, error)
+	// Stores a binary file using a streaming request. The first message must
+	// contain the options; subsequent messages carry the file content as chunks.
+	SetBinaryFileAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SetBinaryFileAlpha1Client, error)
+	// Retrieves a binary file as a stream of chunks.
+	GetBinaryFileAlpha1(ctx context.Context, in *GetBinaryFileRequestAlpha1, opts ...grpc.CallOption) (Dapr_GetBinaryFileAlpha1Client, error)
+	// Deletes a binary file.
+	DeleteBinaryFileAlpha1(ctx context.Context, in *DeleteBinaryFileRequestAlpha1, opts ...grpc.CallOption) (*DeleteBinaryFileResponseAlpha1, error)
 }
 
 type daprClient struct {
@@ -1307,6 +1317,81 @@ func (c *daprClient) BatchQueryVectorsAlpha1(ctx context.Context, in *BatchQuery
 	return out, nil
 }
 
+func (c *daprClient) SetBinaryFileAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SetBinaryFileAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[6], Dapr_SetBinaryFileAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSetBinaryFileAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_SetBinaryFileAlpha1Client interface {
+	Send(*SetBinaryFileRequestAlpha1) error
+	CloseAndRecv() (*SetBinaryFileResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprSetBinaryFileAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprSetBinaryFileAlpha1Client) Send(m *SetBinaryFileRequestAlpha1) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprSetBinaryFileAlpha1Client) CloseAndRecv() (*SetBinaryFileResponseAlpha1, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(SetBinaryFileResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) GetBinaryFileAlpha1(ctx context.Context, in *GetBinaryFileRequestAlpha1, opts ...grpc.CallOption) (Dapr_GetBinaryFileAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[7], Dapr_GetBinaryFileAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprGetBinaryFileAlpha1Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_GetBinaryFileAlpha1Client interface {
+	Recv() (*GetBinaryFileResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprGetBinaryFileAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprGetBinaryFileAlpha1Client) Recv() (*GetBinaryFileResponseAlpha1, error) {
+	m := new(GetBinaryFileResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) DeleteBinaryFileAlpha1(ctx context.Context, in *DeleteBinaryFileRequestAlpha1, opts ...grpc.CallOption) (*DeleteBinaryFileResponseAlpha1, error) {
+	out := new(DeleteBinaryFileResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteBinaryFileAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -1512,6 +1597,13 @@ type DaprServer interface {
 	// Issue multiple queries against the same collection, each succeeding or
 	// failing on its own.
 	BatchQueryVectorsAlpha1(context.Context, *BatchQueryVectorsRequestAlpha1) (*BatchQueryVectorsResponseAlpha1, error)
+	// Stores a binary file using a streaming request. The first message must
+	// contain the options; subsequent messages carry the file content as chunks.
+	SetBinaryFileAlpha1(Dapr_SetBinaryFileAlpha1Server) error
+	// Retrieves a binary file as a stream of chunks.
+	GetBinaryFileAlpha1(*GetBinaryFileRequestAlpha1, Dapr_GetBinaryFileAlpha1Server) error
+	// Deletes a binary file.
+	DeleteBinaryFileAlpha1(context.Context, *DeleteBinaryFileRequestAlpha1) (*DeleteBinaryFileResponseAlpha1, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1790,6 +1882,15 @@ func (UnimplementedDaprServer) QueryVectorsAlpha1(context.Context, *QueryVectors
 }
 func (UnimplementedDaprServer) BatchQueryVectorsAlpha1(context.Context, *BatchQueryVectorsRequestAlpha1) (*BatchQueryVectorsResponseAlpha1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BatchQueryVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) SetBinaryFileAlpha1(Dapr_SetBinaryFileAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SetBinaryFileAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetBinaryFileAlpha1(*GetBinaryFileRequestAlpha1, Dapr_GetBinaryFileAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method GetBinaryFileAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteBinaryFileAlpha1(context.Context, *DeleteBinaryFileRequestAlpha1) (*DeleteBinaryFileResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteBinaryFileAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -3479,6 +3580,71 @@ func _Dapr_BatchQueryVectorsAlpha1_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_SetBinaryFileAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).SetBinaryFileAlpha1(&daprSetBinaryFileAlpha1Server{stream})
+}
+
+type Dapr_SetBinaryFileAlpha1Server interface {
+	SendAndClose(*SetBinaryFileResponseAlpha1) error
+	Recv() (*SetBinaryFileRequestAlpha1, error)
+	grpc.ServerStream
+}
+
+type daprSetBinaryFileAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprSetBinaryFileAlpha1Server) SendAndClose(m *SetBinaryFileResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprSetBinaryFileAlpha1Server) Recv() (*SetBinaryFileRequestAlpha1, error) {
+	m := new(SetBinaryFileRequestAlpha1)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Dapr_GetBinaryFileAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetBinaryFileRequestAlpha1)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).GetBinaryFileAlpha1(m, &daprGetBinaryFileAlpha1Server{stream})
+}
+
+type Dapr_GetBinaryFileAlpha1Server interface {
+	Send(*GetBinaryFileResponseAlpha1) error
+	grpc.ServerStream
+}
+
+type daprGetBinaryFileAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprGetBinaryFileAlpha1Server) Send(m *GetBinaryFileResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Dapr_DeleteBinaryFileAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBinaryFileRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteBinaryFileAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteBinaryFileAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteBinaryFileAlpha1(ctx, req.(*DeleteBinaryFileRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3826,6 +3992,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "BatchQueryVectorsAlpha1",
 			Handler:    _Dapr_BatchQueryVectorsAlpha1_Handler,
 		},
+		{
+			MethodName: "DeleteBinaryFileAlpha1",
+			Handler:    _Dapr_DeleteBinaryFileAlpha1_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -3861,6 +4031,16 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Dapr_DecryptAlpha1_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "SetBinaryFileAlpha1",
+			Handler:       _Dapr_SetBinaryFileAlpha1_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "GetBinaryFileAlpha1",
+			Handler:       _Dapr_GetBinaryFileAlpha1_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",

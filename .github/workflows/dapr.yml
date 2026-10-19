@@ -165,6 +165,10 @@ jobs:
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
+          # Verifying the config downloads its JSON schema from golangci-lint.run,
+          # which sometimes fails on push. Config changes land through PRs, so
+          # verifying there is enough.
+          verify: ${{ github.event_name == 'pull_request' }}
           args: --build-tags allcomponents --timeout=15m
 
   unit-tests:
@@ -532,6 +536,17 @@ jobs:
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+      # Docker on GitHub Windows runners sometimes fails to start at boot and
+      # stays stopped (actions/runner-images#13729). Start it before any step
+      # that needs the daemon.
+      - name: Start Docker service
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dockerState = Get-Service -Name "docker"
+          if ($dockerState.Status -ne "Running") {
+            Start-Service -Name "docker"
+          }
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -962,23 +977,42 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
+  # Opens or updates the pull request in dapr/test-infra that sets the release
+  # longhaul cluster to this version. Merging that pull request deploys it.
   update-longhauls:
     name: Update the dapr version in longhaul tests
     needs: helmpublish
     runs-on: ubuntu-latest
     permissions: {}
     if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
-    env:
-      GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+    # Two tags must not push the pull request branch at the same time.
+    concurrency:
+      group: update-longhauls
+      cancel-in-progress: false
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+      - name: Check out the longhaul tests repo
+        uses: actions/checkout@v6
+        with:
+          repository: dapr/test-infra
+          ref: refs/heads/master
+          token: ${{ secrets.DAPR_BOT_TOKEN }}
+          path: longhaul
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
-      - name: Trigger GitHub workflow
+      - name: Open or update the longhaul version pull request
+        if: env.ALPHA_RELEASE != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          LONGHAUL_DIR: longhaul
         run: |
-          gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
-            -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
+          python3 -m pip install packaging
+          ./.github/scripts/update_longhaul_version.sh
 
   # Opens (or comments on) a tracking issue only when a publish job itself fails:
   # publish (release binaries/assets), docker-publish (images), or helmpublish

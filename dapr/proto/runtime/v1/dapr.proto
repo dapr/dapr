@@ -33,6 +33,7 @@ import "dapr/proto/runtime/v1/jobs.proto";
 import "dapr/proto/runtime/v1/ai.proto";
 import "dapr/proto/runtime/v1/search.proto";
 import "dapr/proto/runtime/v1/vector.proto";
+import "dapr/proto/runtime/v1/binarystore.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -351,6 +352,16 @@ service Dapr {
   // Issue multiple queries against the same collection, each succeeding or
   // failing on its own.
   rpc BatchQueryVectorsAlpha1(BatchQueryVectorsRequestAlpha1) returns (BatchQueryVectorsResponseAlpha1) {}
+
+  // Stores a binary file using a streaming request. The first message must
+  // contain the options; subsequent messages carry the file content as chunks.
+  rpc SetBinaryFileAlpha1(stream SetBinaryFileRequestAlpha1) returns (SetBinaryFileResponseAlpha1) {}
+
+  // Retrieves a binary file as a stream of chunks.
+  rpc GetBinaryFileAlpha1(GetBinaryFileRequestAlpha1) returns (stream GetBinaryFileResponseAlpha1) {}
+
+  // Deletes a binary file.
+  rpc DeleteBinaryFileAlpha1(DeleteBinaryFileRequestAlpha1) returns (DeleteBinaryFileResponseAlpha1) {}
 }
 
 // ShutdownRequest is the request for Shutdown.

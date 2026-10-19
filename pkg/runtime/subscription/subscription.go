@@ -29,7 +29,9 @@ import (
 	pluggablepubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
@@ -234,6 +236,10 @@ func New(opts Options) (*Subscription, error) {
 				cloudEvent[contribpubsub.TraceStateField] = tracestate
 			}
 
+			if baggage, ok := msg.Metadata[diagConsts.BaggageHeader]; ok {
+				cloudEvent[diagConsts.BaggageHeader] = baggage
+			}
+
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
@@ -303,6 +309,12 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceStateField] = tracestate
 				}
 			}
+
+			if _, ok := cloudEvent[diagConsts.BaggageHeader]; !ok {
+				if baggage, ok := msg.Metadata[diagConsts.BaggageHeader]; ok {
+					cloudEvent[diagConsts.BaggageHeader] = baggage
+				}
+			}
 		}
 
 		if contribpubsub.HasExpired(cloudEvent) {
@@ -355,7 +367,7 @@ func New(opts Options) (*Subscription, error) {
 			PubSub:       name,
 			SubscriberID: s.connectionID,
 		}
-		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
+		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			pErr := s.postman.Deliver(ctx, sm)
 
@@ -406,6 +418,41 @@ func New(opts Options) (*Subscription, error) {
 			}
 
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+
+			// A bounded retry policy that has run out, with no dead letter
+			// topic to divert the message to, is a decision to stop trying.
+			// Tell the component so it can record the message as handled
+			// rather than redelivering it on the next reconnect, where it
+			// would only exhaust the same budget again. Components that
+			// cannot act on the sentinel are unaffected: it wraps the error
+			// they already received.
+			//
+			// Everything below has to hold, because a component acting on the
+			// sentinel stops redelivering the message for good:
+			//
+			//   - the policy can run out on its own. Without one configured
+			//     the delivery made a single attempt, and a retriable failure
+			//     still means retry.
+			//   - the handler context is still live. A context cancelled by a
+			//     rebalance or shutdown, or a component handler timeout such
+			//     as Azure Service Bus's handlerTimeoutInSec, interrupted the
+			//     delivery rather than exhausting it, and the message has to
+			//     go back. A per-attempt timeout from the policy does not
+			//     cancel this context, so retries that time out their way
+			//     through the budget still qualify.
+			//   - the retry condition did not exclude the error. A status the
+			//     policy's `matching` rules leave out stops the loop after one
+			//     attempt, which is not a budget running out.
+			//   - the circuit breaker was closed. An open breaker rejected the
+			//     message before the application ever saw it.
+			if route.DeadLetterTopic == "" &&
+				policyDef != nil &&
+				policyDef.HasBoundedRetries() &&
+				ctx.Err() == nil &&
+				!policyDef.RetryExcluded(err) &&
+				!breaker.IsErrorPermanent(err) {
+				return fmt.Errorf("%w: %w", contribpubsub.ErrRetriesExhausted, err)
+			}
 
 			return err
 		}

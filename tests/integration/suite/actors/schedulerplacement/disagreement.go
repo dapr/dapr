@@ -75,8 +75,13 @@ func (d *disagreement) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
+	clients := make([]schedulerv1pb.SchedulerClient, 3)
+	for n := range clients {
+		clients[n] = d.cluster.ClientN(t, ctx, n)
+	}
+
 	hosts := func(n int) (leader, capable bool, ok bool) {
-		stream, serr := d.cluster.ClientN(t, ctx, n).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		stream, serr := clients[n].WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if serr != nil {
 			return false, false, false
 		}

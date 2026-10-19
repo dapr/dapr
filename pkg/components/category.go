@@ -31,4 +31,5 @@ const (
 	CategoryConversation    Category = "conversation"
 	CategorySearch          Category = "search"
 	CategoryVector          Category = "vector"
+	CategoryBinaryStore     Category = "binarystore"
 )

@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -534,67 +535,73 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-	scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
-	cancel()
-	if err != nil {
+	// The deployment controller can bump the resourceVersion between the get
+	// and the update, so retry on conflict.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
+		cancel()
+		if err != nil {
+			return err
+		}
+
+		if scale.Spec.Replicas == replicas {
+			return nil
+		}
+
+		scale.Spec.Replicas = replicas
+		m.app.Replicas = replicas
+
+		ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
+		_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
+		cancel()
+
 		return err
-	}
-
-	if scale.Spec.Replicas == replicas {
-		return nil
-	}
-
-	scale.Spec.Replicas = replicas
-	m.app.Replicas = replicas
-
-	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
-	_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
-	cancel()
-
-	return err
+	})
 }
 
 // SetAppEnv sets an environment variable.
 func (m *AppManager) SetAppEnv(key, value string) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-	deployment, err := deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
-	cancel()
-	if err != nil {
-		return err
-	}
-
-	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name != DaprSideCarName {
-			found := false
-			for j, envName := range deployment.Spec.Template.Spec.Containers[i].Env {
-				if envName.Name == key {
-					deployment.Spec.Template.Spec.Containers[i].Env[j].Value = value
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				deployment.Spec.Template.Spec.Containers[i].Env = append(
-					deployment.Spec.Template.Spec.Containers[i].Env,
-					apiv1.EnvVar{
-						Name:  key,
-						Value: value,
-					},
-				)
-			}
-			break
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		deployment, err := deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		cancel()
+		if err != nil {
+			return err
 		}
-	}
 
-	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
-	_, err = deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
-	cancel()
+		for i, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name != DaprSideCarName {
+				found := false
+				for j, envName := range deployment.Spec.Template.Spec.Containers[i].Env {
+					if envName.Name == key {
+						deployment.Spec.Template.Spec.Containers[i].Env[j].Value = value
+						found = true
+						break
+					}
+				}
 
-	return err
+				if !found {
+					deployment.Spec.Template.Spec.Containers[i].Env = append(
+						deployment.Spec.Template.Spec.Containers[i].Env,
+						apiv1.EnvVar{
+							Name:  key,
+							Value: value,
+						},
+					)
+				}
+				break
+			}
+		}
+
+		ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
+		_, err = deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
+		cancel()
+
+		return err
+	})
 }
 
 // CreateIngressService creates Ingress endpoint for test app.

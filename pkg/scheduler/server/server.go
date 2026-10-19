@@ -243,7 +243,13 @@ func (s *Server) Run(ctx context.Context) error {
 	runners := []concurrency.Runner{
 		s.runServer,
 		func(ctx context.Context) error {
-			defer cronCancel()
+			defer func() {
+				// Hand off etcd leadership before cron re-election writes.
+				if s.etcd != nil {
+					s.etcd.TransferLeadership()
+				}
+				cronCancel()
+			}()
 			return s.placement.Run(ctx)
 		},
 		func(context.Context) error {
@@ -253,6 +259,11 @@ func (s *Server) Run(ctx context.Context) error {
 					log.Errorf("Error running scheduler cron: %s", err)
 				}
 				return cronCtx.Err()
+			}
+			if err != nil {
+				log.Warnf("Scheduler cron exited unexpectedly, restarting server: %s", err)
+			} else {
+				log.Warn("Scheduler cron exited unexpectedly, restarting server")
 			}
 			return err
 		},

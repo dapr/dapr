@@ -266,6 +266,15 @@ const (
 	// DaprBatchQueryVectorsAlpha1Procedure is the fully-qualified name of the Dapr's
 	// BatchQueryVectorsAlpha1 RPC.
 	DaprBatchQueryVectorsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/BatchQueryVectorsAlpha1"
+	// DaprSetBinaryFileAlpha1Procedure is the fully-qualified name of the Dapr's SetBinaryFileAlpha1
+	// RPC.
+	DaprSetBinaryFileAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/SetBinaryFileAlpha1"
+	// DaprGetBinaryFileAlpha1Procedure is the fully-qualified name of the Dapr's GetBinaryFileAlpha1
+	// RPC.
+	DaprGetBinaryFileAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetBinaryFileAlpha1"
+	// DaprDeleteBinaryFileAlpha1Procedure is the fully-qualified name of the Dapr's
+	// DeleteBinaryFileAlpha1 RPC.
+	DaprDeleteBinaryFileAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteBinaryFileAlpha1"
 )
 
 // DaprClient is a client for the dapr.proto.runtime.v1.Dapr service.
@@ -484,6 +493,13 @@ type DaprClient interface {
 	// Issue multiple queries against the same collection, each succeeding or
 	// failing on its own.
 	BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error)
+	// Stores a binary file using a streaming request. The first message must
+	// contain the options; subsequent messages carry the file content as chunks.
+	SetBinaryFileAlpha1(context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1]
+	// Retrieves a binary file as a stream of chunks.
+	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponseAlpha1], error)
+	// Deletes a binary file.
+	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error)
 }
 
 // NewDaprClient constructs a client for the dapr.proto.runtime.v1.Dapr service. By default, it uses
@@ -1043,6 +1059,24 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("BatchQueryVectorsAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
+		setBinaryFileAlpha1: connect.NewClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1](
+			httpClient,
+			baseURL+DaprSetBinaryFileAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("SetBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		getBinaryFileAlpha1: connect.NewClient[v1.GetBinaryFileRequestAlpha1, v1.GetBinaryFileResponseAlpha1](
+			httpClient,
+			baseURL+DaprGetBinaryFileAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("GetBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteBinaryFileAlpha1: connect.NewClient[v1.DeleteBinaryFileRequestAlpha1, v1.DeleteBinaryFileResponseAlpha1](
+			httpClient,
+			baseURL+DaprDeleteBinaryFileAlpha1Procedure,
+			connect.WithSchema(daprMethods.ByName("DeleteBinaryFileAlpha1")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -1139,6 +1173,9 @@ type daprClient struct {
 	getVectorsAlpha1               *connect.Client[v1.GetVectorsRequestAlpha1, v1.GetVectorsResponseAlpha1]
 	queryVectorsAlpha1             *connect.Client[v1.QueryVectorsRequestAlpha1, v1.QueryVectorsResponseAlpha1]
 	batchQueryVectorsAlpha1        *connect.Client[v1.BatchQueryVectorsRequestAlpha1, v1.BatchQueryVectorsResponseAlpha1]
+	setBinaryFileAlpha1            *connect.Client[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1]
+	getBinaryFileAlpha1            *connect.Client[v1.GetBinaryFileRequestAlpha1, v1.GetBinaryFileResponseAlpha1]
+	deleteBinaryFileAlpha1         *connect.Client[v1.DeleteBinaryFileRequestAlpha1, v1.DeleteBinaryFileResponseAlpha1]
 }
 
 // InvokeService calls dapr.proto.runtime.v1.Dapr.InvokeService.
@@ -1622,6 +1659,21 @@ func (c *daprClient) BatchQueryVectorsAlpha1(ctx context.Context, req *connect.R
 	return c.batchQueryVectorsAlpha1.CallUnary(ctx, req)
 }
 
+// SetBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.SetBinaryFileAlpha1.
+func (c *daprClient) SetBinaryFileAlpha1(ctx context.Context) *connect.ClientStreamForClient[v1.SetBinaryFileRequestAlpha1, v1.SetBinaryFileResponseAlpha1] {
+	return c.setBinaryFileAlpha1.CallClientStream(ctx)
+}
+
+// GetBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.GetBinaryFileAlpha1.
+func (c *daprClient) GetBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.GetBinaryFileRequestAlpha1]) (*connect.ServerStreamForClient[v1.GetBinaryFileResponseAlpha1], error) {
+	return c.getBinaryFileAlpha1.CallServerStream(ctx, req)
+}
+
+// DeleteBinaryFileAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteBinaryFileAlpha1.
+func (c *daprClient) DeleteBinaryFileAlpha1(ctx context.Context, req *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error) {
+	return c.deleteBinaryFileAlpha1.CallUnary(ctx, req)
+}
+
 // DaprHandler is an implementation of the dapr.proto.runtime.v1.Dapr service.
 type DaprHandler interface {
 	// Invokes a method on a remote Dapr app.
@@ -1838,6 +1890,13 @@ type DaprHandler interface {
 	// Issue multiple queries against the same collection, each succeeding or
 	// failing on its own.
 	BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error)
+	// Stores a binary file using a streaming request. The first message must
+	// contain the options; subsequent messages carry the file content as chunks.
+	SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequestAlpha1]) (*connect.Response[v1.SetBinaryFileResponseAlpha1], error)
+	// Retrieves a binary file as a stream of chunks.
+	GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1], *connect.ServerStream[v1.GetBinaryFileResponseAlpha1]) error
+	// Deletes a binary file.
+	DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error)
 }
 
 // NewDaprHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -2393,6 +2452,24 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		connect.WithSchema(daprMethods.ByName("BatchQueryVectorsAlpha1")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daprSetBinaryFileAlpha1Handler := connect.NewClientStreamHandler(
+		DaprSetBinaryFileAlpha1Procedure,
+		svc.SetBinaryFileAlpha1,
+		connect.WithSchema(daprMethods.ByName("SetBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprGetBinaryFileAlpha1Handler := connect.NewServerStreamHandler(
+		DaprGetBinaryFileAlpha1Procedure,
+		svc.GetBinaryFileAlpha1,
+		connect.WithSchema(daprMethods.ByName("GetBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daprDeleteBinaryFileAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteBinaryFileAlpha1Procedure,
+		svc.DeleteBinaryFileAlpha1,
+		connect.WithSchema(daprMethods.ByName("DeleteBinaryFileAlpha1")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.runtime.v1.Dapr/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaprInvokeServiceProcedure:
@@ -2577,6 +2654,12 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprQueryVectorsAlpha1Handler.ServeHTTP(w, r)
 		case DaprBatchQueryVectorsAlpha1Procedure:
 			daprBatchQueryVectorsAlpha1Handler.ServeHTTP(w, r)
+		case DaprSetBinaryFileAlpha1Procedure:
+			daprSetBinaryFileAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetBinaryFileAlpha1Procedure:
+			daprGetBinaryFileAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteBinaryFileAlpha1Procedure:
+			daprDeleteBinaryFileAlpha1Handler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2948,4 +3031,16 @@ func (UnimplementedDaprHandler) QueryVectorsAlpha1(context.Context, *connect.Req
 
 func (UnimplementedDaprHandler) BatchQueryVectorsAlpha1(context.Context, *connect.Request[v1.BatchQueryVectorsRequestAlpha1]) (*connect.Response[v1.BatchQueryVectorsResponseAlpha1], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.BatchQueryVectorsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) SetBinaryFileAlpha1(context.Context, *connect.ClientStream[v1.SetBinaryFileRequestAlpha1]) (*connect.Response[v1.SetBinaryFileResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.SetBinaryFileAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetBinaryFileAlpha1(context.Context, *connect.Request[v1.GetBinaryFileRequestAlpha1], *connect.ServerStream[v1.GetBinaryFileResponseAlpha1]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetBinaryFileAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteBinaryFileAlpha1(context.Context, *connect.Request[v1.DeleteBinaryFileRequestAlpha1]) (*connect.Response[v1.DeleteBinaryFileResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteBinaryFileAlpha1 is not implemented"))
 }

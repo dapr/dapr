@@ -14,6 +14,7 @@ limitations under the License.
 package registry
 
 import (
+	"github.com/dapr/dapr/pkg/components/binarystore"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
@@ -42,6 +43,7 @@ type Options struct {
 	conversation       *conversation.Registry
 	search             *compsearch.Registry
 	vector             *compvector.Registry
+	binaryStore        *binarystore.Registry
 	componentsCallback ComponentsCallback
 	reporter           Reporter
 }
@@ -60,6 +62,7 @@ func NewOptions() *Options {
 		conversation:   conversation.DefaultRegistry,
 		search:         compsearch.DefaultRegistry,
 		vector:         compvector.DefaultRegistry,
+		binaryStore:    binarystore.DefaultRegistry,
 	}
 }
 
@@ -132,6 +135,12 @@ func (o *Options) WithSearches(registry *compsearch.Registry) *Options {
 // WithVectors adds vector components to the runtime.
 func (o *Options) WithVectors(registry *compvector.Registry) *Options {
 	o.vector = registry
+	return o
+}
+
+// WithBinaryStores adds binary store components to the runtime.
+func (o *Options) WithBinaryStores(registry *binarystore.Registry) *Options {
+	o.binaryStore = registry
 	return o
 }
 
