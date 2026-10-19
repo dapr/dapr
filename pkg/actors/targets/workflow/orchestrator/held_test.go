@@ -28,6 +28,8 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -65,8 +67,8 @@ func heldEvent(at time.Time, e *protos.HistoryEvent) *protos.HistoryEvent {
 }
 
 // The scheduler fires held reminders in no particular order, so the replay
-// orders them itself: the start first, then the events in the order they
-// were requested, whatever their names.
+// orders them itself: in the order they were requested, the start included,
+// whatever their names.
 func TestListHeldOrder(t *testing.T) {
 	now := time.Now()
 	suspend := heldEvent(now.Add(time.Second), &protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}})
@@ -106,13 +108,13 @@ func TestListHeldOrder(t *testing.T) {
 	for i, op := range ops {
 		names[i] = op.name
 	}
-	// held-event-c has no timestamp, so it sorts as requested first among
-	// the events; held-startx is not a held start name and is ignored.
+	// held-event-c has no timestamp, so it sorts as requested first;
+	// held-startx is not a held start name and is ignored.
 	assert.Equal(t, []string{
-		common.ReminderNameHeldStart,
 		common.ReminderPrefixHeldEvent + "c",
 		common.ReminderPrefixHeldEvent + "b",
 		common.ReminderPrefixHeldEvent + "a",
+		common.ReminderNameHeldStart,
 	}, names)
 	assert.Empty(t, deleted)
 }
@@ -159,4 +161,105 @@ func TestReplayHeldAlreadyApplied(t *testing.T) {
 	}
 
 	require.NoError(t, o.replayHeld(t.Context(), &actorapi.Reminder{Name: common.ReminderPrefixHeldEvent + "a"}))
+}
+
+// Only a client's start, raise event, terminate, suspend or resume can have
+// been held, so only those replay the held operations first.
+func TestIsHeldCall(t *testing.T) {
+	create := func(parent *protos.ParentInstanceInfo) []byte {
+		b, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{StartEvent: &protos.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{ParentInstance: parent}},
+		}})
+		require.NoError(t, err)
+		return b
+	}
+
+	assert.True(t, isHeldCall(todo.CreateWorkflowInstanceMethod, create(nil), nil))
+	assert.False(t, isHeldCall(todo.CreateWorkflowInstanceMethod, create(&protos.ParentInstanceInfo{}), nil))
+	assert.False(t, isHeldCall(todo.CreateWorkflowInstanceMethod, []byte{0xff}, nil))
+
+	for _, e := range []*protos.HistoryEvent{
+		{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}},
+		{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}},
+		{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}},
+		{EventType: &protos.HistoryEvent_ExecutionResumed{ExecutionResumed: &protos.ExecutionResumedEvent{}}},
+	} {
+		assert.Truef(t, isHeldCall(todo.AddWorkflowEventMethod, nil, e), "%T", e.GetEventType())
+	}
+	assert.False(t, isHeldCall(todo.AddWorkflowEventMethod, nil, &protos.HistoryEvent{
+		EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{}},
+	}))
+	assert.False(t, isHeldCall(todo.PurgeWorkflowStateMethod, nil, nil))
+}
+
+// The first client call of a residency lists the held operations once; with
+// the feature off it never does.
+func TestReplayHeldBeforeCall(t *testing.T) {
+	var lists int
+	rem := remindersfake.New().
+		WithList(func(context.Context, *actorapi.ListRemindersRequest) ([]*actorapi.Reminder, error) {
+			lists++
+			return nil, nil
+		})
+
+	o := &orchestrator{
+		factory: &factory{appID: "app", reminders: rem, actorTypeBuilder: common.NewActorTypeBuilder("ns")},
+		actorID: "id",
+	}
+	require.NoError(t, o.replayHeldBeforeCall(t.Context()))
+	assert.Zero(t, lists)
+
+	o.heldOperations = true
+	require.NoError(t, o.replayHeldBeforeCall(t.Context()))
+	require.NoError(t, o.replayHeldBeforeCall(t.Context()))
+	assert.Equal(t, 1, lists)
+}
+
+// A held start that finds its instance still running waits only while a
+// termination is pending in the inbox.
+func TestTerminationPending(t *testing.T) {
+	assert.False(t, terminationPending(nil))
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.AddToInbox(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}})
+	assert.False(t, terminationPending(state))
+
+	state.AddToInbox(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}})
+	assert.True(t, terminationPending(state))
+}
+
+// A completed run deletes its reminders one by one while held operations of
+// the instance are still to be replayed, and by actor ID otherwise.
+func TestDeleteRemindersKeepingHeld(t *testing.T) {
+	newOrchestrator := func(listed []*actorapi.Reminder, deleted *[]string) *orchestrator {
+		rem := remindersfake.New().
+			WithList(func(context.Context, *actorapi.ListRemindersRequest) ([]*actorapi.Reminder, error) {
+				return listed, nil
+			}).
+			WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+				*deleted = append(*deleted, req.Name)
+				return nil
+			})
+		return &orchestrator{
+			factory: &factory{appID: "app", reminders: rem, actorTypeBuilder: common.NewActorTypeBuilder("ns"), heldOperations: true},
+			actorID: "id",
+		}
+	}
+
+	var deleted []string
+	kept, err := newOrchestrator([]*actorapi.Reminder{{Name: "timer-0"}}, &deleted).deleteRemindersKeepingHeld(t.Context())
+	require.NoError(t, err)
+	assert.False(t, kept)
+	assert.Empty(t, deleted)
+
+	kept, err = newOrchestrator([]*actorapi.Reminder{
+		{Name: "timer-0"},
+		{Name: common.ReminderNameHeldStart},
+		nil,
+		{Name: "new-event-x"},
+		{Name: common.ReminderPrefixHeldEvent + "a"},
+	}, &deleted).deleteRemindersKeepingHeld(t.Context())
+	require.NoError(t, err)
+	assert.True(t, kept)
+	assert.Equal(t, []string{"timer-0", "new-event-x"}, deleted)
 }

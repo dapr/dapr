@@ -78,6 +78,11 @@ type Options struct {
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
 
+	// HeldOperations is the WorkflowsHeldOperations preview feature: the
+	// first client call of an actor residency replays the operations held
+	// while no daprd hosted this actor type (held.go).
+	HeldOperations bool
+
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
@@ -107,6 +112,10 @@ type factory struct {
 
 	deactivateCh  chan *orchestrator
 	deactivateCtx context.Context
+
+	// heldOperations replays held operations before the first client call of
+	// an actor residency (held.go).
+	heldOperations bool
 
 	// fastPath and the wake* fields drive the detached local wake goroutines
 	// (see wake.go). wakeCtx is factory-owned rather than scoped to the
@@ -203,6 +212,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
+		heldOperations:         opts.HeldOperations,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,
@@ -254,6 +264,7 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or.lastActive.Store(time.Now().UnixNano())
 
 	or.janitorAsserted.Store(false)
+	or.heldReplayed.Store(false)
 	or.janitorRedispatched = nil
 	or.driveRunning.Store(false)
 	or.driveNotify = make(chan struct{}, 1)

@@ -102,6 +102,12 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
+	if isHeldCall(methodName, request, parsedAddEvent) {
+		if err := o.replayHeldBeforeCall(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
 		return nil, o.createWorkflowInstance(ctx, request)

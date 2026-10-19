@@ -291,6 +291,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		HeldOperations:         abe.workflowsHeldOperations,
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)

@@ -57,7 +57,13 @@ func (w *wait) Run(t *testing.T, ctx context.Context) {
 		return nil, ctx.WaitForSingleEvent("go", time.Hour).Await(nil)
 	}))
 
+	// The worker's connect returns before placement disseminates the new
+	// host; a start before that would be held.
+	version := w.workflow.PlacementVersion(t, ctx)
 	w.workflow.ConnectWorker(t, ctx, w.workflow.Registry())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Greater(c, w.workflow.PlacementVersion(t, ctx), version)
+	}, time.Second*10, time.Millisecond*10)
 	mgmt := w.workflow.ManagementClient(t, ctx)
 
 	id, err := mgmt.ScheduleNewWorkflow(ctx, "wf", api.WithInstanceID("held-wait"))

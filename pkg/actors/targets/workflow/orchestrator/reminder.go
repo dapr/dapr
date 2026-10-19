@@ -345,12 +345,18 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 
 	log.Debugf("Workflow actor '%s': deleting all reminders for completed workflow", o.actorID)
 
-	if err := common.DeleteRemindersWithRetry(ctx, o.reminders, &actorapi.DeleteRemindersByActorIDRequest{
-		ActorType:       actorType,
-		ActorID:         o.actorID,
-		MatchIDAsPrefix: false,
-	}); err != nil {
+	kept, err := o.deleteRemindersKeepingHeld(ctx)
+	if err != nil {
 		return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
+	}
+	if !kept {
+		if err := common.DeleteRemindersWithRetry(ctx, o.reminders, &actorapi.DeleteRemindersByActorIDRequest{
+			ActorType:       actorType,
+			ActorID:         o.actorID,
+			MatchIDAsPrefix: false,
+		}); err != nil {
+			return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
+		}
 	}
 
 	if err := common.DeleteRemindersWithRetry(ctx, o.reminders, &actorapi.DeleteRemindersByActorIDRequest{

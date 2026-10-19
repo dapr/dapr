@@ -51,6 +51,10 @@ type orchestrator struct {
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
+	// heldReplayed tracks whether the held operations of this instance were
+	// replayed before a client call this actor residency
+	// (WorkflowsHeldOperations; see held.go).
+	heldReplayed atomic.Bool
 	// Drive-loop state (see wake.go localDrive/driveLoop): driveNotify is a
 	// buffered-1 coalescing notification channel, driveRunning guards the
 	// single loop, driveName carries the reminder name of the latest wake.

@@ -23,6 +23,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -30,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -41,16 +43,27 @@ import (
 //
 // Scheduler jobs fire in no particular order, so replaying each held
 // operation on its own fire could apply a resume before the suspend it
-// follows, or an event before the start of its instance. Instead, whichever
-// held reminder of an instance fires first replays all of them: the start
-// first, then the events in the order they were requested.
+// follows. Instead, whichever held reminder of an instance fires first
+// replays all of them in the order they were requested, the start included:
+// an event requested before a re-start belongs to the run it was aimed at.
+// The first client call of an actor residency replays them too, so a call
+// made directly once a host is up does not overtake them.
 //
-// Each reminder is deleted once its operation is applied, so a later fire of
-// it finds it gone and acks. A failure stops the replay and retries it under
-// the reminder's failure policy: what was applied is gone, and the rest
-// replays in order on the retry. If a delete fails, the operation's own fire
-// applies it again: held operations are applied at least once, like every
-// reminder.
+// An operation the instance refuses is dropped with a warning, as a caller
+// with a connected worker would have been refused: an event for an instance
+// that does not exist or is stalled, a start for an instance that is still
+// running. A start whose instance has a termination pending waits for it
+// instead. Each reminder is deleted once its operation is applied or
+// dropped, so a later fire of it finds it gone and acks. Any other failure
+// stops the replay and retries it under the reminder's failure policy: what
+// was applied is gone, and the rest replays in order on the retry. If a
+// delete fails, the operation's own fire applies it again: held operations
+// are applied at least once, like every reminder.
+
+// errHeldStartWaits stops a replay at a held start whose instance has a
+// termination pending. The reminder retries until the termination is applied
+// and the start can create the next run.
+var errHeldStartWaits = errors.New("held start waits for the pending termination of the instance")
 
 // heldOp is one held operation of this instance, decoded from its reminder.
 type heldOp struct {
@@ -70,7 +83,8 @@ func (h heldOp) requested() time.Time {
 	return h.event.GetTimestamp().AsTime()
 }
 
-// replayHeld replays every held operation of this instance.
+// replayHeld replays every held operation of this instance on the fire of
+// one of their reminders.
 func (o *orchestrator) replayHeld(ctx context.Context, fired *actorapi.Reminder) error {
 	if !o.heldByThisApp(fired) {
 		return nil
@@ -86,7 +100,40 @@ func (o *orchestrator) replayHeld(ctx context.Context, fired *actorapi.Reminder)
 		return nil
 	}
 
+	return o.replayHeldOps(ctx, ops)
+}
+
+// replayHeldBeforeCall replays the held operations of this instance before
+// the first client call of this actor residency. Held operations are only
+// created while no daprd hosts this actor type, so once they are replayed
+// here, later calls of the residency cannot overtake any.
+func (o *orchestrator) replayHeldBeforeCall(ctx context.Context) error {
+	if !o.heldOperations || o.heldReplayed.Load() {
+		return nil
+	}
+
+	ops, err := o.listHeld(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = o.replayHeldOps(ctx, ops)
+	if errors.Is(err, errHeldStartWaits) {
+		// The start's reminder retries it, and the next client call checks
+		// again. Failing this call would not get the start applied sooner.
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	o.heldReplayed.Store(true)
+	return nil
+}
+
+func (o *orchestrator) replayHeldOps(ctx context.Context, ops []heldOp) error {
 	for _, op := range ops {
+		var err error
 		if op.start != nil {
 			err = o.replayHeldStart(ctx, op)
 		} else {
@@ -98,6 +145,70 @@ func (o *orchestrator) replayHeld(ctx context.Context, fired *actorapi.Reminder)
 		o.deleteHeld(ctx, op.name, "applied held operation")
 	}
 	return nil
+}
+
+// deleteRemindersKeepingHeld deletes the reminders of a completed run one by
+// one when held operations of the instance are still to be replayed. Deleting
+// them by actor ID would drop those too, such as a held start waiting for
+// this run's termination. It reports false when none are held, for the
+// caller to delete by actor ID.
+func (o *orchestrator) deleteRemindersKeepingHeld(ctx context.Context) (bool, error) {
+	if !o.heldOperations {
+		return false, nil
+	}
+
+	actorType := o.actorTypeBuilder.Workflow(o.appID)
+	reminders, err := o.reminders.List(ctx, &actorapi.ListRemindersRequest{
+		ActorType: actorType,
+		ActorID:   &o.actorID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list reminders: %w", err)
+	}
+	if !slices.ContainsFunc(reminders, isHeldReminder) {
+		return false, nil
+	}
+
+	for _, r := range reminders {
+		if r == nil || isHeldReminder(r) {
+			continue
+		}
+		err := o.reminders.Delete(ctx, &actorapi.DeleteReminderRequest{
+			Name:      r.Name,
+			ActorType: actorType,
+			ActorID:   o.actorID,
+		})
+		if err != nil && status.Code(err) != codes.NotFound {
+			return true, fmt.Errorf("failed to delete reminder '%s': %w", r.Name, err)
+		}
+	}
+	return true, nil
+}
+
+func isHeldReminder(r *actorapi.Reminder) bool {
+	return r != nil && (r.Name == common.ReminderNameHeldStart || strings.HasPrefix(r.Name, common.ReminderPrefixHeldEvent))
+}
+
+// isHeldCall reports whether an invoke of method may have been held while no
+// daprd hosted this actor type: a client's start, raise event, terminate,
+// suspend or resume. Child workflow creates, activity results and child
+// completions are never held.
+func isHeldCall(method string, request []byte, e *backend.HistoryEvent) bool {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		var req backend.CreateWorkflowInstanceRequest
+		if err := proto.Unmarshal(request, &req); err != nil {
+			return false
+		}
+		return req.GetStartEvent().GetExecutionStarted().GetParentInstance() == nil
+	case todo.AddWorkflowEventMethod:
+		return e.GetEventRaised() != nil ||
+			e.GetExecutionTerminated() != nil ||
+			e.GetExecutionSuspended() != nil ||
+			e.GetExecutionResumed() != nil
+	default:
+		return false
+	}
 }
 
 // listHeld returns the held operations of this instance in replay order.
@@ -141,12 +252,6 @@ func (o *orchestrator) listHeld(ctx context.Context) ([]heldOp, error) {
 	}
 
 	slices.SortFunc(ops, func(a, b heldOp) int {
-		if (a.start != nil) != (b.start != nil) {
-			if a.start != nil {
-				return -1
-			}
-			return 1
-		}
 		if c := a.requested().Compare(b.requested()); c != 0 {
 			return c
 		}
@@ -172,13 +277,30 @@ func (o *orchestrator) replayHeldStart(ctx context.Context, op heldOp) error {
 	}
 
 	err := o.createWorkflowInstance(ctx, op.raw)
-	if status.Code(err) == codes.AlreadyExists {
-		// The caller was told the start was accepted, so this is the only
-		// place the refusal can be reported.
-		log.Warnf("Workflow actor '%s': dropping held start: %v", o.actorID, err)
-		return nil
+	if status.Code(err) != codes.AlreadyExists {
+		return err
 	}
-	return err
+
+	state, _, lerr := o.loadInternalState(ctx)
+	if lerr != nil {
+		return lerr
+	}
+	if terminationPending(state) {
+		// A terminate requested before this start is in the inbox but not
+		// applied yet: the start creates the next run once it is.
+		return fmt.Errorf("%w: %w", errHeldStartWaits, err)
+	}
+
+	// The caller was told the start was accepted, so this is the only place
+	// the refusal can be reported.
+	log.Warnf("Workflow actor '%s': dropping held start: %v", o.actorID, err)
+	return nil
+}
+
+func terminationPending(state *wfenginestate.State) bool {
+	return state != nil && slices.ContainsFunc(state.Inbox, func(e *backend.HistoryEvent) bool {
+		return e.GetExecutionTerminated() != nil
+	})
 }
 
 // replayHeldEvent replays a held raise event, terminate, suspend or resume.
@@ -191,11 +313,12 @@ func (o *orchestrator) replayHeldEvent(ctx context.Context, op heldOp) error {
 	}
 
 	err := o.addWorkflowEvent(ctx, e, completionSender{})
-	if errors.Is(err, api.ErrInstanceNotFound) {
-		// Unlike the other reminder arms, which ack here because a purged
-		// instance looks the same, retry until the hold expires: the start
-		// of this instance may still be on its way to being held.
-		log.Debugf("Workflow actor '%s': held %T event found no instance yet, retrying", o.actorID, e.GetEventType())
+	if errors.Is(err, api.ErrInstanceNotFound) || errors.Is(err, api.ErrStalled) {
+		// Refused for good, as a caller with a connected worker would have
+		// been. Retrying would only hold back the events behind it. A held
+		// start of this instance requested earlier was replayed before it.
+		log.Warnf("Workflow actor '%s': dropping held %T event: %v", o.actorID, e.GetEventType(), err)
+		return nil
 	}
 	return err
 }
