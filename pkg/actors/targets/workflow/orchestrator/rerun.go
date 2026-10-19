@@ -196,11 +196,20 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 	}
 
-	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+	var actErr error
+	switch {
+	case len(activities) == 0:
+	case o.standby:
+		actErr = o.armStandbyJanitor(ctx, newState)
+	default:
 		// Rerun always dispatches with durable reminders: the new instance
 		// has no janitor yet, so the elision cannot be certified here.
-		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err,
+		actErr = o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err
+	}
+
+	if err = errors.Join(
+		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+		actErr,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
