@@ -151,6 +151,36 @@ func (b *Broker) PublishHelloWorld(topic string) <-chan *compv1.PullMessagesRequ
 	return b.pmrReqCh
 }
 
+// helloWorldCloudEvent returns a cloud event with ID id, published to topic.
+func helloWorldCloudEvent(id, topic string) []byte {
+	return fmt.Appendf(nil,
+		`{"data":{"foo": "helloworld"},"datacontenttype":"application/json","id":%q,"pubsubname":"mypub","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":%q,"traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`,
+		id, topic)
+}
+
+// PublishCloudEvents delivers one cloud event per ID to daprd on topic, in
+// order. The pluggable component dispatches messages to daprd concurrently, so
+// they are spaced out to keep this order in a bulk subscriber's batch.
+func (b *Broker) PublishCloudEvents(t *testing.T, ctx context.Context, topic string, ids ...string) {
+	t.Helper()
+
+	for _, id := range ids {
+		select {
+		case b.pmrRespCh <- &compv1.PullMessagesResponse{
+			Data:      helloWorldCloudEvent(id, topic),
+			Id:        id,
+			TopicName: topic,
+		}:
+		case <-ctx.Done():
+			require.FailNow(t, "context cancelled publishing to the broker")
+		case <-time.After(10 * time.Second):
+			require.FailNow(t, "timed out publishing to the broker")
+		}
+
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // NextPublish waits for daprd to publish a message to the broker and returns
 // the publish request the component received, including its metadata. A bulk
 // publish is received as one publish per entry. The broker must have been
