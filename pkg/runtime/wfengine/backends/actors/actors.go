@@ -38,6 +38,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
@@ -147,6 +148,11 @@ type Actors struct {
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
+
+	// standbyFactory is the workflow actor factory of the standby
+	// registration, until HaltStandbyActors halts it. Guarded by the
+	// engine's actor registration lock.
+	standbyFactory targets.Factory
 
 	// lastEventNano is the highest external-event ingestion timestamp (unix
 	// nanoseconds) this backend has issued. It is used to hand out strictly

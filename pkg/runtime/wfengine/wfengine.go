@@ -366,21 +366,10 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 // registerActors registers the workflow actor types, replacing the standby
 // registration if there is one. Must be called with actorRegLock held.
 func (wfe *engine) registerActors(ctx context.Context) error {
-	if wfe.standbyRegistered {
-		// Halt the standby actors before the active ones replace them: their
-		// state is in the state store, so the next call loads it afresh. Not
-		// cancellable for the reason given in onWorkItemDisconnection: the
-		// standby types must be gone before standbyRegistered is reset.
-		log.Debug("Unregistering standby workflow actors")
-		if err := wfe.backend.UnRegisterActors(context.WithoutCancel(ctx)); err != nil {
-			log.Warnf("Failed to unregister standby workflow actors: %s", err)
-		}
-		// Stop the standby factory's background goroutines.
-		wfe.standbyCancel()
-		wfe.standbyCancel = nil
-		wfe.standbyRegistered = false
-	}
-
+	// The active types replace the standby ones in the table in place, so the
+	// workflow actor type is hosted throughout: unregistering the standby
+	// types first would leave a standby turn in flight, such as a start
+	// creating its reminder, with its type no longer hosted.
 	if err := wfe.backend.RegisterActors(ctx); err != nil {
 		// Do not stay unplaced: a failed registration leaves the standby
 		// host the app had before.
@@ -388,6 +377,21 @@ func (wfe *engine) registerActors(ctx context.Context) error {
 		return err
 	}
 	wfe.actorsRegistered = true
+
+	if wfe.standbyRegistered {
+		// Halt the standby actors, waiting out their turns in flight: their
+		// state is in the state store, so the next call loads it afresh on the
+		// active actor. Not cancellable for the reason given in
+		// onWorkItemDisconnection.
+		log.Debug("Halting standby workflow actors")
+		if err := wfe.backend.HaltStandbyActors(context.WithoutCancel(ctx)); err != nil {
+			log.Warnf("Failed to halt standby workflow actors: %s", err)
+		}
+		// Stop the standby factory's background goroutines.
+		wfe.standbyCancel()
+		wfe.standbyCancel = nil
+		wfe.standbyRegistered = false
+	}
 	return nil
 }
 

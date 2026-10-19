@@ -66,8 +66,23 @@ func (abe *Actors) RegisterStandbyActors(ctx context.Context) error {
 		},
 		Standby: true,
 	})
+	abe.standbyFactory = factory
 
 	return nil
+}
+
+// HaltStandbyActors halts the standby workflow actors once RegisterActors has
+// replaced the standby registration in the table. The type stays hosted
+// throughout, so a standby turn still in flight, such as a start creating its
+// reminder, completes: deactivating an actor waits for its turn. The refusing
+// factories hold no actors to halt.
+func (abe *Actors) HaltStandbyActors(ctx context.Context) error {
+	factory := abe.standbyFactory
+	abe.standbyFactory = nil
+	if factory == nil {
+		return nil
+	}
+	return factory.HaltAll(ctx)
 }
 
 // refusingFactory is the factory of a standby actor type whose actors cannot

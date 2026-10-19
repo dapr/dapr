@@ -102,10 +102,11 @@ func TestEngine_StandbyTransitions(t *testing.T) {
 		assert.True(t, wfe.standbyRegistered)
 		assert.False(t, wfe.actorsRegistered)
 
-		// The first worker replaces the standby host with the active one,
-		// halting the standby actors first.
+		// The first worker replaces the standby host with the active one in
+		// place, never unregistering: the workflow actor type stays hosted
+		// for a standby turn in flight.
 		require.NoError(t, wfe.onWorkItemConnection(t.Context()))
-		assert.Equal(t, []string{"unregister", "register"}, st.take())
+		assert.Equal(t, []string{"register"}, st.take())
 		assert.False(t, wfe.standbyRegistered)
 		assert.True(t, wfe.actorsRegistered)
 
