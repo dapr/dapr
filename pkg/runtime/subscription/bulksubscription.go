@@ -116,9 +116,13 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 
 			entryIdIndexMap[message.EntryId] = i
 			if rawPayload {
-				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
+				rPath, processable, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
 				if routeErr != nil {
 					hasAnyError = true
+					continue
+				}
+
+				if !processable {
 					continue
 				}
 
@@ -161,9 +165,13 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 					continue
 				}
 
-				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
+				rPath, processable, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
 				if routeErr != nil {
 					hasAnyError = true
+					continue
+				}
+
+				if !processable {
 					continue
 				}
 
@@ -244,10 +252,11 @@ func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCal
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
 
-// getRouteIfProcessable returns the route path if the message is processable.
+// getRouteIfProcessable returns the route path and whether the message matches
+// a route. A matching route can have a blank path.
 func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallData *todo.BulkSubscribeCallData, route rtpubsub.Subscription, message *contribpubsub.BulkMessageEntry,
 	i int, matchElem any,
-) (string, error) {
+) (string, bool, error) {
 	bscData := *bulkSubCallData
 
 	rPath, shouldProcess, routeErr := findMatchingRoute(route.Rules, matchElem)
@@ -255,7 +264,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 		log.Errorf("Error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", bscData.PsName, bscData.Topic, message.EntryId, routeErr)
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, routeErr)
 
-		return "", routeErr
+		return "", false, routeErr
 	}
 
 	if !shouldProcess {
@@ -274,10 +283,10 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, nil)
 
-		return "", nil
+		return "", false, nil
 	}
 
-	return rPath, nil
+	return rPath, true, nil
 }
 
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
