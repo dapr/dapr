@@ -42,6 +42,8 @@ var buildTags = []string{
 	"middleware_http_routeralias",
 	"middleware_http_wasm",
 	"conversation_echo",
+	"search_inmemory",
+	"vector_inmemory",
 	// state_spiffeprobe compiles in an integration-test-only state store that
 	// reports whether the SPIFFE identity reached the component operation
 	// context. Never set for released daprd flavors.

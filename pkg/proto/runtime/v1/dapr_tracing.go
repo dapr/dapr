@@ -328,3 +328,87 @@ func (*UnregisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map
 func (*UnsubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
+func appendSearchSpanAttributes(storeName, rpcMethod string, m map[string]string) {
+	m[diagConsts.DBNameSpanAttributeKey] = storeName
+	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.SearchBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SearchBuildingBlockType
+}
+
+func (x *CreateIndexRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *GetIndexRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *ListIndexesRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *DeleteIndexRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *IndexDocumentsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *GetDocumentsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *DeleteDocumentsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *SearchRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendSearchSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func appendVectorSpanAttributes(storeName, rpcMethod string, m map[string]string) {
+	m[diagConsts.DBNameSpanAttributeKey] = storeName
+	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.VectorBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.VectorBuildingBlockType
+}
+
+func (x *CreateCollectionRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *GetCollectionRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *ListCollectionsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *DeleteCollectionRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *UpsertVectorsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *GetVectorsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *DeleteVectorsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *QueryVectorsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
+
+func (x *BatchQueryVectorsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	appendVectorSpanAttributes(x.GetStoreName(), rpcMethod, m)
+}
