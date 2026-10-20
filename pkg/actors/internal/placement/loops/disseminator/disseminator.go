@@ -100,6 +100,11 @@ type disseminator struct {
 
 	// v2Completed are the seqs of rounds completed on this stream.
 	v2Completed map[uint64]struct{}
+
+	// reminderTypesLoaded is set once a dissemination round on this stream
+	// loaded the reminder types into the scheduler. Until then, a change of
+	// the reminder types in place waits for that round.
+	reminderTypesLoaded bool
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -117,6 +122,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.schedulerPlacement = opts.SchedulerPlacement
 	diss.v2Rounds = make(map[uint64]*v2Round)
 	diss.v2Completed = make(map[uint64]struct{})
+	diss.reminderTypesLoaded = false
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
@@ -153,6 +159,10 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		d.handleAcquireRequest(e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
+	case *loops.ReloadReminderTypes:
+		if d.reminderTypesLoaded {
+			d.reloadReminderTypes()
+		}
 	case *loops.StreamOrder:
 		if d.schedulerPlacement {
 			return d.handleOrderV2(ctx, e)

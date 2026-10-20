@@ -38,12 +38,15 @@ type Interface interface {
 	io.Closer
 
 	Types() []string
+	ReminderTypes() []string
 	IsActorTypeHosted(actorType string) bool
 	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
 	ActorExists(actorType, actorKey string) bool
 	RegisterActorTypes(opts RegisterActorTypeOptions)
 	UnRegisterActorTypes(actorTypes ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
+	SetReminderDelivery(enabled bool, actorTypes ...string)
+	SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
@@ -78,12 +81,28 @@ type ActorHostOptions struct {
 type RegisterActorTypeOptions struct {
 	HostOptions *ActorHostOptions
 	Factories   []ActorTypeFactory
+
+	// NoReminderDelivery hosts the types without advertising them to the
+	// scheduler for reminder delivery: they are placed, and their actors
+	// serve calls routed to this host, but the scheduler delivers their
+	// reminders only to the hosts which advertise them. A host which does not
+	// advertise a type still forwards a reminder it receives for one of its
+	// actors to the actor's owner. SetReminderDelivery toggles it in place.
+	NoReminderDelivery bool
 }
 
 type table struct {
 	factories   sync.Map
 	createLocks sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
+
+	// noReminders holds the registered types which are not advertised for
+	// reminder delivery (RegisterActorTypeOptions.NoReminderDelivery).
+	// reminderLock serializes its changes with their broadcast on
+	// reminderTypeUpdates.
+	noReminders         sync.Map
+	reminderLock        sync.Mutex
+	reminderTypeUpdates *broadcaster.Broadcaster[[]string]
 
 	entityConfigs map[string]api.EntityConfig
 
@@ -105,6 +124,8 @@ func New(opts Options) Interface {
 		typeUpdates:     broadcaster.New[[]string](),
 		reentrancyStore: opts.ReentrancyStore,
 		timers:          opts.Timers,
+
+		reminderTypeUpdates: broadcaster.New[[]string](),
 	}
 	t.suspended.Store(opts.StartSuspended)
 	return t
@@ -117,6 +138,20 @@ func (t *table) Types() []string {
 		return nil
 	}
 	return t.types()
+}
+
+// ReminderTypes returns the actor types advertised to the scheduler for
+// reminder delivery: the advertised types, less those registered with
+// NoReminderDelivery.
+func (t *table) ReminderTypes() []string {
+	types := t.Types()
+	keys := types[:0]
+	for _, actorType := range types {
+		if _, ok := t.noReminders.Load(actorType); !ok {
+			keys = append(keys, actorType)
+		}
+	}
+	return keys
 }
 
 // types returns the registered actor types regardless of suspension.
@@ -249,13 +284,58 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		t.entityConfigs = opts.EntityConfigs
 	}
 
+	t.reminderLock.Lock()
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
+		if opts.NoReminderDelivery {
+			t.noReminders.Store(opt.Type, struct{}{})
+		} else {
+			t.noReminders.Delete(opt.Type)
+		}
 		t.factories.Store(opt.Type, opt.Factory)
 	}
+	t.reminderLock.Unlock()
 
 	t.typeUpdates.Broadcast(t.Types())
+}
+
+// SetReminderDelivery advertises the given registered types to the scheduler
+// for reminder delivery, or stops advertising them, without changing their
+// placement: the types stay hosted, and the actors they host keep serving.
+// Unregistered types are ignored. The new reminder types are broadcast to
+// SubscribeToReminderTypeUpdates subscribers if they changed.
+func (t *table) SetReminderDelivery(enabled bool, actorTypes ...string) {
+	t.reminderLock.Lock()
+	defer t.reminderLock.Unlock()
+
+	var changed bool
+	for _, actorType := range actorTypes {
+		if _, ok := t.factories.Load(actorType); !ok {
+			continue
+		}
+		if enabled {
+			_, ok := t.noReminders.LoadAndDelete(actorType)
+			changed = changed || ok
+		} else {
+			_, ok := t.noReminders.LoadOrStore(actorType, struct{}{})
+			changed = changed || !ok
+		}
+	}
+
+	if changed {
+		t.reminderTypeUpdates.Broadcast(t.ReminderTypes())
+	}
+}
+
+// SubscribeToReminderTypeUpdates sends the reminder types (see ReminderTypes)
+// whenever SetReminderDelivery changes them. Changes made by registering or
+// unregistering types reach the scheduler with the placement round they
+// cause, so they are not sent here.
+func (t *table) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string {
+	ch := make(chan []string)
+	t.reminderTypeUpdates.Subscribe(ctx, ch)
+	return ch
 }
 
 func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
@@ -276,6 +356,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	var wg sync.WaitGroup
 	for _, actorType := range actorTypes {
 		t.reentrancyStore.Delete(actorType)
+		t.noReminders.Delete(actorType)
 
 		fact, ok := t.factories.LoadAndDelete(actorType)
 		if !ok {
@@ -335,5 +416,6 @@ func (t *table) ResumeHosting() {
 
 func (t *table) Close() error {
 	t.typeUpdates.Close()
+	t.reminderTypeUpdates.Close()
 	return nil
 }

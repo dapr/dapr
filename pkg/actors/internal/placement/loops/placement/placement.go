@@ -181,6 +181,12 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		return p.handleCloseStream(ctx, e)
 	case *loops.UpdateTypes:
 		p.handleUpdateTypes(e)
+	case *loops.ReloadReminderTypes:
+		// No stream yet: the reminder types go to the scheduler once the
+		// first dissemination round completes.
+		if p.dissLoop != nil {
+			p.dissLoop.Enqueue(e)
+		}
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.SetEntityDrainOngoingCallTimeouts:

@@ -268,6 +268,7 @@ func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
 
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
+	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -288,6 +289,8 @@ func (p *placement) Run(ctx context.Context) error {
 					p.loop.Enqueue(&loops.UpdateTypes{
 						ActorTypes: atypes,
 					})
+				case <-reminderCh:
+					p.loop.Enqueue(new(loops.ReloadReminderTypes))
 				case <-ctx.Done():
 					log.Info("Placement client shutting down")
 					p.loop.Close(&loops.Shutdown{Error: ctx.Err()})

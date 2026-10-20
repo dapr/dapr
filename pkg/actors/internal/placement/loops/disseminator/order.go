@@ -30,6 +30,13 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 	d.inflight.Acquire(req)
 }
 
+// reloadReminderTypes advertises the actor types this host takes reminders
+// for to the scheduler.
+func (d *disseminator) reloadReminderTypes() {
+	d.reminderTypesLoaded = true
+	d.scheduler.ReloadActorTypes(d.actorTable.ReminderTypes())
+}
+
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 	d.streamLoop.Enqueue(&loops.StreamSend{
 		Report: report.Report,
@@ -139,7 +146,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		)
 
 		d.currentOperation = loops.OrderUnlock
-		d.scheduler.ReloadActorTypes(d.actorTable.Types())
+		d.reloadReminderTypes()
 
 		d.inflight.UnlockTypes(toUnlock)
 		clear(d.roundChangedTypes)

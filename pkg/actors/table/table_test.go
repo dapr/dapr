@@ -232,3 +232,100 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.Equal(t, []string{"test1"}, tble.Types())
 	})
 }
+
+func Test_ReminderDelivery(t *testing.T) {
+	newTable := func(t *testing.T) table.Interface {
+		t.Helper()
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "plain", Factory: fake.NewFactory()}},
+		})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "quiet1", Factory: fake.NewFactory()},
+				{Type: "quiet2", Factory: fake.NewFactory()},
+			},
+			NoReminderDelivery: true,
+		})
+		return tble
+	}
+
+	recv := func(t *testing.T, ch <-chan []string) []string {
+		t.Helper()
+		select {
+		case got := <-ch:
+			return got
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "no reminder types update")
+			return nil
+		}
+	}
+	none := func(t *testing.T, ch <-chan []string) {
+		t.Helper()
+		select {
+		case got := <-ch:
+			require.Failf(t, "unexpected reminder types update", "%v", got)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	t.Run("types registered without reminder delivery are hosted but not reminder types", func(t *testing.T) {
+		tble := newTable(t)
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.Types())
+		assert.Equal(t, []string{"plain"}, tble.ReminderTypes())
+		assert.True(t, tble.IsActorTypeHosted("quiet1"))
+	})
+
+	t.Run("toggling reminder delivery keeps the types hosted and broadcasts the change", func(t *testing.T) {
+		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
+		typesCh, _ := tble.SubscribeToTypeUpdates(t.Context())
+
+		tble.SetReminderDelivery(true, "quiet1", "quiet2")
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.ReminderTypes())
+
+		// No change, no broadcast.
+		tble.SetReminderDelivery(true, "quiet1")
+		none(t, ch)
+
+		tble.SetReminderDelivery(false, "plain", "quiet1")
+		assert.Equal(t, []string{"quiet2"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.Types())
+
+		// The placement report is untouched: hosting did not change.
+		none(t, typesCh)
+	})
+
+	t.Run("an unregistered type is ignored", func(t *testing.T) {
+		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
+		tble.SetReminderDelivery(false, "unknown")
+		none(t, ch)
+		assert.Equal(t, []string{"plain"}, tble.ReminderTypes())
+	})
+
+	t.Run("registering again with reminder delivery enables it", func(t *testing.T) {
+		tble := newTable(t)
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
+	})
+
+	t.Run("unregistering a type forgets it has no reminder delivery", func(t *testing.T) {
+		tble := newTable(t)
+		require.NoError(t, tble.UnRegisterActorTypes("quiet1"))
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
+	})
+
+	t.Run("suspended hosting advertises no reminder types", func(t *testing.T) {
+		tble := newTable(t)
+		require.NoError(t, tble.SuspendHosting(t.Context()))
+		assert.Empty(t, tble.ReminderTypes())
+	})
+}
