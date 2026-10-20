@@ -140,7 +140,7 @@ func (w *workerchurn) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
 			assert.True(col, held.Load() > before || allCompleted(),
 				"the churned host must resume executing, or every instance must have completed")
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 250*time.Millisecond)
 	}
 	worker.Disconnect(t)
 	w.workflow.WaitForNoConnectedWorkersN(t, ctx, churned)
