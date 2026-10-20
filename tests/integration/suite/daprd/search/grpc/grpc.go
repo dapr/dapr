@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -32,41 +31,47 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/meilisearch"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
-const storeName = "mysearch"
+const (
+	storeName     = "mysearch"
+	slowStoreName = "mysearch-slow"
+)
 
 func init() {
 	suite.Register(new(search))
 }
 
 type search struct {
-	meili *meilisearch.Meilisearch
 	daprd *procdaprd.Daprd
 }
 
 func (s *search) Setup(t *testing.T) []framework.Option {
-	s.meili = meilisearch.New(t)
 	s.daprd = procdaprd.New(t,
 		procdaprd.WithResourceFiles(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: %s
 spec:
-  type: search.meilisearch
+  type: search.in-memory
+  version: v1
+`, storeName), fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: %s
+spec:
+  type: search.in-memory
   version: v1
   metadata:
-    - name: host
-      value: %s
-    - name: apiKey
-      value: %s
-`, storeName, s.meili.Address(), s.meili.APIKey())),
+    # Writes land only after this delay, so a short wait times out.
+    - name: indexingDelay
+      value: 2s
+`, slowStoreName)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.meili, s.daprd),
+		framework.WithProcesses(s.daprd),
 	}
 }
 
@@ -80,8 +85,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("index lifecycle", func(t *testing.T) {
 		index := indexName("lifecycle")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.ListIndexesAlpha1(ctx, &runtimev1pb.ListIndexesRequestAlpha1{StoreName: storeName})
@@ -106,8 +111,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("documents", func(t *testing.T) {
 		index := indexName("documents")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		idxResp, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
 			StoreName: storeName,
@@ -184,8 +189,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("non-object content is reported per item", func(t *testing.T) {
 		index := indexName("non-object")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		// content must be a JSON object. A document that is not one is
 		// rejected in failed_items while the rest of the batch still indexes.
@@ -224,8 +229,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("error index already exists", func(t *testing.T) {
 		index := indexName("exists")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		// Creating an existing index does not reconcile settings.
 		_, err := client.CreateIndexAlpha1(ctx, &runtimev1pb.CreateIndexRequestAlpha1{StoreName: storeName, Index: index})
@@ -288,8 +293,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("wait for completion", func(t *testing.T) {
 		index := indexName("wait")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		// A write that waits reports COMPLETED and is readable as soon as it
 		// returns, whichever timeout action is selected.
@@ -332,22 +337,15 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("wait timeout actions", func(t *testing.T) {
-		// A batch large enough that the provider cannot finish it within the
-		// shortest wait.
-		bulk := make([]*runtimev1pb.SearchDocument, 0, 5000)
-		for i := range cap(bulk) {
-			bulk = append(bulk, newDocument(t, fmt.Sprintf("doc-%d", i), map[string]any{
-				"title": fmt.Sprintf("alpha guide %d", i), "body": strings.Repeat("lorem ipsum ", 20),
-			}))
-		}
+		bulk := documents(t)
 
 		t.Run("continue async reports queued and the write still lands", func(t *testing.T) {
 			index := indexName("wait-async")
-			requireCreateIndex(t, ctx, client, index)
-			t.Cleanup(func() { dropIndex(client, index) })
+			requireCreateIndex(t, ctx, client, slowStoreName, index)
+			t.Cleanup(func() { dropIndex(client, slowStoreName, index) })
 
 			resp, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
-				StoreName: storeName,
+				StoreName: slowStoreName,
 				Index:     index,
 				Documents: bulk,
 				Options:   waitOptions(time.Millisecond, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_CONTINUE_ASYNC),
@@ -356,7 +354,7 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, runtimev1pb.IndexAck_INDEX_ACK_QUEUED, resp.GetAck())
 
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
-				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: storeName, Index: index})
+				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: slowStoreName, Index: index})
 				if !assert.NoError(c, err) {
 					return
 				}
@@ -366,21 +364,20 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("fail request reports deadline exceeded", func(t *testing.T) {
 			index := indexName("wait-fail")
-			requireCreateIndex(t, ctx, client, index)
-			t.Cleanup(func() { dropIndex(client, index) })
+			requireCreateIndex(t, ctx, client, slowStoreName, index)
+			t.Cleanup(func() { dropIndex(client, slowStoreName, index) })
 
 			_, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
-				StoreName: storeName,
+				StoreName: slowStoreName,
 				Index:     index,
 				Documents: bulk,
 				Options:   waitOptions(time.Millisecond, runtimev1pb.IndexingWaitTimeoutAction_INDEXING_WAIT_TIMEOUT_ACTION_FAIL_REQUEST),
 			})
 			assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
 
-			// The provider work is not cancelled. Let it drain so that later
-			// waits are not queued behind it.
+			// The queued write is not cancelled and still lands.
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
-				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: storeName, Index: index})
+				got, err := client.GetIndexAlpha1(ctx, &runtimev1pb.GetIndexRequestAlpha1{StoreName: slowStoreName, Index: index})
 				if !assert.NoError(c, err) {
 					return
 				}
@@ -391,8 +388,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("continuation token lifecycle", func(t *testing.T) {
 		index := indexName("pages")
-		requireCreateIndex(t, ctx, client, index)
-		t.Cleanup(func() { dropIndex(client, index) })
+		requireCreateIndex(t, ctx, client, storeName, index)
+		t.Cleanup(func() { dropIndex(client, storeName, index) })
 
 		_, err := client.IndexDocumentsAlpha1(ctx, &runtimev1pb.IndexDocumentsRequestAlpha1{
 			StoreName: storeName,
@@ -456,16 +453,16 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func requireCreateIndex(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient, index string) {
+func requireCreateIndex(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient, store, index string) {
 	t.Helper()
-	// Index settings are component specific and travel in metadata; the
-	// Meilisearch defaults are enough for a full text query.
-	_, err := client.CreateIndexAlpha1(ctx, &runtimev1pb.CreateIndexRequestAlpha1{StoreName: storeName, Index: index})
+	// Index settings are component specific and travel in metadata; none
+	// are needed for a full text query.
+	_, err := client.CreateIndexAlpha1(ctx, &runtimev1pb.CreateIndexRequestAlpha1{StoreName: store, Index: index})
 	require.NoError(t, err)
 }
 
-func dropIndex(client runtimev1pb.DaprClient, index string) {
-	_, _ = client.DeleteIndexAlpha1(context.Background(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: storeName, Index: index})
+func dropIndex(client runtimev1pb.DaprClient, store, index string) {
+	_, _ = client.DeleteIndexAlpha1(context.Background(), &runtimev1pb.DeleteIndexRequestAlpha1{StoreName: store, Index: index})
 }
 
 func waitOptions(wait time.Duration, action runtimev1pb.IndexingWaitTimeoutAction) *runtimev1pb.IndexingOptionsAlpha1 {

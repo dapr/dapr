@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/meilisearch"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -44,30 +43,23 @@ func init() {
 }
 
 type search struct {
-	meili *meilisearch.Meilisearch
 	daprd *procdaprd.Daprd
 }
 
 func (s *search) Setup(t *testing.T) []framework.Option {
-	s.meili = meilisearch.New(t)
 	s.daprd = procdaprd.New(t,
 		procdaprd.WithResourceFiles(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: %s
 spec:
-  type: search.meilisearch
+  type: search.in-memory
   version: v1
-  metadata:
-    - name: host
-      value: %s
-    - name: apiKey
-      value: %s
-`, storeName, s.meili.Address(), s.meili.APIKey())),
+`, storeName)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.meili, s.daprd),
+		framework.WithProcesses(s.daprd),
 	}
 }
 
@@ -239,8 +231,8 @@ func (s *search) Run(t *testing.T, ctx context.Context) {
 
 func createIndex(t *testing.T, ctx context.Context, httpClient *nethttp.Client, baseURL, index string) {
 	t.Helper()
-	// Index settings are component specific and travel in metadata; the
-	// Meilisearch defaults are enough for a full text query.
+	// Index settings are component specific and travel in metadata; none
+	// are needed for a full text query.
 	status, body := do(t, ctx, httpClient, nethttp.MethodPost, indexURL(baseURL, index), &runtimev1pb.CreateIndexRequestAlpha1{}, nil)
 	require.Equal(t, nethttp.StatusOK, status, string(body))
 }

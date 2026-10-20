@@ -244,8 +244,6 @@ jobs:
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
-      # The Linux runner has Docker, so tests that need it must not skip.
-      DAPR_INTEGRATION_REQUIRE_DOCKER: "${{ matrix.target_os == 'linux' }}"
     steps:
       - name: Check localhost DNS resolution
         run: |

@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/meilisearch"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -48,12 +47,10 @@ func init() {
 }
 
 type vector struct {
-	meili *meilisearch.Meilisearch
 	daprd *procdaprd.Daprd
 }
 
 func (v *vector) Setup(t *testing.T) []framework.Option {
-	v.meili = meilisearch.New(t)
 	v.daprd = procdaprd.New(t,
 		procdaprd.WithDaprGracefulShutdownSeconds(1),
 		procdaprd.WithResourceFiles(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
@@ -61,17 +58,12 @@ kind: Component
 metadata:
   name: %s
 spec:
-  type: vector.meilisearch
+  type: vector.in-memory
   version: v1
-  metadata:
-    - name: host
-      value: %s
-    - name: apiKey
-      value: %s
-`, storeName, v.meili.Address(), v.meili.APIKey())))
+`, storeName)))
 
 	return []framework.Option{
-		framework.WithProcesses(v.meili, v.daprd),
+		framework.WithProcesses(v.daprd),
 	}
 }
 
@@ -82,7 +74,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("collection-lifecycle", func(t *testing.T) {
 		collection := "http_lifecycle"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -116,7 +108,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("upsert-get-query", func(t *testing.T) {
 		collection := "http_upsert"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -183,9 +175,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("filter-metadata", func(t *testing.T) {
 		collection := "http_filter"
-		// Meilisearch stores record metadata under the daprMetadata attribute
-		// and needs the filtered path declared filterable up front.
-		createCollection(t, ctx, httpClient, baseURL, collection, map[string]string{"filterableAttributes": "daprMetadata.rank"})
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -210,7 +200,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("batch-query", func(t *testing.T) {
 		collection := "http_batch"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -242,7 +232,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("batch-query-invalid-query", func(t *testing.T) {
 		collection := "http_batch_invalid"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -290,7 +280,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("error-collection-already-exists", func(t *testing.T) {
 		collection := "http_exists"
-		createCollection(t, ctx, httpClient, baseURL, collection, nil)
+		createCollection(t, ctx, httpClient, baseURL, collection)
 		t.Cleanup(func() {
 			_, _ = do(t, context.Background(), httpClient, nethttp.MethodDelete, baseURL+"/"+collection, nil, nil)
 		})
@@ -326,14 +316,11 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func createCollection(t *testing.T, ctx context.Context, httpClient *nethttp.Client, baseURL, collection string, metadata map[string]string) {
+func createCollection(t *testing.T, ctx context.Context, httpClient *nethttp.Client, baseURL, collection string) {
 	t.Helper()
-	// dimensions and metric are typed request fields; any remaining
-	// collection settings are component specific and travel in metadata.
 	status, body := do(t, ctx, httpClient, nethttp.MethodPost, baseURL+"/"+collection, &runtimev1pb.CreateCollectionRequestAlpha1{
 		Dimensions: dimensions,
 		Metric:     runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE,
-		Metadata:   metadata,
 	}, nil)
 	require.Equal(t, nethttp.StatusOK, status, string(body))
 }

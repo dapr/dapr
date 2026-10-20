@@ -32,7 +32,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/meilisearch"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -46,12 +45,10 @@ func init() {
 }
 
 type vector struct {
-	meili *meilisearch.Meilisearch
 	daprd *procdaprd.Daprd
 }
 
 func (v *vector) Setup(t *testing.T) []framework.Option {
-	v.meili = meilisearch.New(t)
 	v.daprd = procdaprd.New(t,
 		procdaprd.WithDaprGracefulShutdownSeconds(1),
 		procdaprd.WithResourceFiles(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
@@ -59,17 +56,12 @@ kind: Component
 metadata:
   name: %s
 spec:
-  type: vector.meilisearch
+  type: vector.in-memory
   version: v1
-  metadata:
-    - name: host
-      value: %s
-    - name: apiKey
-      value: %s
-`, storeName, v.meili.Address(), v.meili.APIKey())))
+`, storeName)))
 
 	return []framework.Option{
-		framework.WithProcesses(v.meili, v.daprd),
+		framework.WithProcesses(v.daprd),
 	}
 }
 
@@ -83,7 +75,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("collection-lifecycle", func(t *testing.T) {
 		collection := "grpc_lifecycle"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -111,7 +103,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("upsert-get-query", func(t *testing.T) {
 		collection := "grpc_upsert"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 
 		upsertVectors(t, ctx, client, collection)
@@ -186,9 +178,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("filter-metadata", func(t *testing.T) {
 		collection := "grpc_filter"
-		// Meilisearch stores record metadata under the daprMetadata attribute
-		// and needs the filtered path declared filterable up front.
-		createCollection(t, ctx, client, collection, map[string]string{"filterableAttributes": "daprMetadata.rank"})
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 		upsertVectors(t, ctx, client, collection)
 
@@ -210,7 +200,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("batch-query", func(t *testing.T) {
 		collection := "grpc_batch"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 		upsertVectors(t, ctx, client, collection)
 
@@ -243,7 +233,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("batch-query-invalid-query", func(t *testing.T) {
 		collection := "grpc_batch_invalid"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 		upsertVectors(t, ctx, client, collection)
 
@@ -282,7 +272,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("wait-for-completion", func(t *testing.T) {
 		collection := "grpc_wait"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 
 		// A write that waits reports COMPLETED and is readable as soon as it
@@ -349,7 +339,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("error-dimension-mismatch", func(t *testing.T) {
 		collection := "grpc_dimensions"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 
 		// The collection holds vectors of length dimensions; one value short
@@ -381,7 +371,7 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("error-collection-already-exists", func(t *testing.T) {
 		collection := "grpc_exists"
-		createCollection(t, ctx, client, collection, nil)
+		createCollection(t, ctx, client, collection)
 		t.Cleanup(func() { dropCollection(client, collection) })
 
 		// Creating an existing collection does not reconcile settings.
@@ -429,16 +419,13 @@ func (v *vector) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func createCollection(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient, collection string, metadata map[string]string) {
+func createCollection(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient, collection string) {
 	t.Helper()
-	// dimensions and metric are typed request fields; any remaining
-	// collection settings are component specific and travel in metadata.
 	_, err := client.CreateCollectionAlpha1(ctx, &runtimev1pb.CreateCollectionRequestAlpha1{
 		StoreName:  storeName,
 		Collection: collection,
 		Dimensions: dimensions,
 		Metric:     runtimev1pb.DistanceMetric_DISTANCE_METRIC_COSINE,
-		Metadata:   metadata,
 	})
 	require.NoError(t, err)
 }

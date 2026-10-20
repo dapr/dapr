@@ -29,7 +29,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/meilisearch"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -41,20 +40,18 @@ func init() {
 // components while daprd is running.
 type searchvector struct {
 	daprd *daprd.Daprd
-	meili *meilisearch.Meilisearch
 
 	resDir string
 }
 
 func (s *searchvector) Setup(t *testing.T) []framework.Option {
 	s.resDir = t.TempDir()
-	s.meili = meilisearch.New(t)
 	s.daprd = daprd.New(t,
 		daprd.WithResourcesDir(s.resDir),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.meili, s.daprd),
+		framework.WithProcesses(s.daprd),
 	}
 }
 
@@ -79,7 +76,7 @@ func (s *searchvector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("creating the components makes both stores available", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(
-			s.component("search", "search.meilisearch")+"\n---\n"+s.component("vector", "vector.meilisearch"),
+			s.component("search", "search.in-memory")+"\n---\n"+s.component("vector", "vector.in-memory"),
 		), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -90,7 +87,7 @@ func (s *searchvector) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("changing the vector component type removes only that store", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(
-			s.component("search", "search.meilisearch")+"\n---\n"+`apiVersion: dapr.io/v1alpha1
+			s.component("search", "search.in-memory")+"\n---\n"+`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: vector
@@ -123,10 +120,5 @@ metadata:
 spec:
   type: %s
   version: v1
-  metadata:
-    - name: host
-      value: %s
-    - name: apiKey
-      value: %s
-`, name, typ, s.meili.Address(), s.meili.APIKey())
+`, name, typ)
 }
