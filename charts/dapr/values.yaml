@@ -107,9 +107,9 @@ global:
       # Enable this only once every sidecar runs a Dapr version which supports
       # it: older sidecars can only use the placement service, so with it
       # undeployed their Actor and Workflow APIs stall until the pod is
-      # upgraded. No actor state is lost. Schedulers also withhold serving
-      # placement while any older sidecar is connected, so the cluster keeps
-      # a single placement authority throughout the rollout.
+      # upgraded. No actor state is lost. This does not block placement for
+      # sidecars that have already upgraded: the cluster still has exactly
+      # one placement authority throughout the rollout.
       #
       # Toggling this in either direction needs no sidecar restarts: on
       # enabling, sidecars adopt scheduler placement once the placement
