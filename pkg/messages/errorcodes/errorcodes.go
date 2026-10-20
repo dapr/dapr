@@ -25,6 +25,8 @@ const (
 	CategorySecret            Category = "secret"
 	CategoryPubsub            Category = "pubsub"
 	CategoryConversation      Category = "conversation"
+	CategorySearch            Category = "search"
+	CategoryVector            Category = "vector"
 	CategoryBinaryStore       Category = "binarystore"
 	CategoryServiceInvocation Category = "service-invocation"
 	CategoryBinding           Category = "binding"
@@ -146,6 +148,16 @@ var (
 	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
 	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
+
+	// ### Search API
+	SearchStoreNotFound      = ErrorCode{"ERR_SEARCH_STORE_NOT_FOUND", "DAPR_SEARCH_STORE_NOT_FOUND", CategorySearch}           // Search store not found
+	SearchStoreNotConfigured = ErrorCode{"ERR_SEARCH_STORE_NOT_CONFIGURED", "DAPR_SEARCH_STORE_NOT_CONFIGURED", CategorySearch} // Search store not configured
+	SearchInvalidRequest     = ErrorCode{"ERR_SEARCH_INVALID_REQUEST", "DAPR_SEARCH_INVALID_REQUEST", CategorySearch}           // Invalid search request
+
+	// ### Vector API
+	VectorStoreNotFound      = ErrorCode{"ERR_VECTOR_STORE_NOT_FOUND", "DAPR_VECTOR_STORE_NOT_FOUND", CategoryVector}           // Vector store not found
+	VectorStoreNotConfigured = ErrorCode{"ERR_VECTOR_STORE_NOT_CONFIGURED", "DAPR_VECTOR_STORE_NOT_CONFIGURED", CategoryVector} // Vector store not configured
+	VectorInvalidRequest     = ErrorCode{"ERR_VECTOR_INVALID_REQUEST", "DAPR_VECTOR_INVALID_REQUEST", CategoryVector}           // Invalid vector request
 
 	// ### Binary Store API
 	BinaryStoreNotFound     = ErrorCode{"ERR_BINARY_STORE_NOT_FOUND", "", CategoryBinaryStore}           // Binary store component not found

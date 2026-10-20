@@ -12,9 +12,9 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261013165752-e90662b02d70
-	github.com/dapr/durabletask-go v0.15.1-0.20261012153102-a89450ad839c
-	github.com/dapr/kit v0.18.3-0.20261013150804-579f006d8ebc
+	github.com/dapr/components-contrib v1.18.0-rc.1.0.20261020124308-c3afac39e602
+	github.com/dapr/durabletask-go v0.15.1
+	github.com/dapr/kit v0.19.0
 	github.com/diagridio/go-etcd-cron v0.12.10
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.3.2
@@ -367,6 +367,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/meilisearch/meilisearch-go v0.36.2 // indirect
 	github.com/microsoft/go-mssqldb v1.6.0 // indirect
 	github.com/miekg/dns v1.1.57 // indirect
 	github.com/mikeee/aws_credential_helper v0.0.1 // indirect

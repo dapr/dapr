@@ -238,6 +238,10 @@ jobs:
       run: |
         make setup-test-env-postgres
 
+    - name: Setup Meilisearch
+      run: |
+        make setup-test-env-meilisearch
+
     - name: Setup test components
       run: |
         make setup-test-components

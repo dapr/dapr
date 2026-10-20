@@ -61,6 +61,7 @@ pluggable_kafka-bindings \
 tracingapp \
 configurationapp \
 workflowsapp \
+searchvector \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp jobs
@@ -287,7 +288,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres setup-test-env-meilisearch
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -621,8 +622,15 @@ setup-test-env-zipkin:
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
+# install meilisearch to the cluster
+setup-test-env-meilisearch:
+	$(KUBECTL) apply -f ./tests/config/meilisearch.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) rollout status deployment/dapr-meilisearch -n $(DAPR_TEST_NAMESPACE) --timeout=5m
+delete-test-env-meilisearch:
+	$(KUBECTL) delete -f ./tests/config/meilisearch.yaml -n $(DAPR_TEST_NAMESPACE)
+
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-meilisearch
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
