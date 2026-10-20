@@ -101,7 +101,7 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.NotEmpty(t, onServiceDiscovered)
 	})
 	t.Run("serviceDiscovery should return empty services if directory not exists", func(t *testing.T) {
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestComponentDiscovery(t *testing.T) {
 		_, err = os.CreateTemp(fakeSocketFolder, pattern)
 		require.NoError(t, err)
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestComponentDiscovery(t *testing.T) {
 
 		reflectService := &fakeReflectService{}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		_, err = serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return nil, nil, errors.New("fake-err")
 		})
 		require.Error(t, err)
@@ -158,7 +158,7 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesErr: errors.New("fake-err"),
 		}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		_, err = serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
 		require.Error(t, err)
@@ -186,7 +186,7 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesResp: svcList,
 		}
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesResp: []string{"svcA"},
 		}
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -239,7 +239,7 @@ func TestComponentDiscovery(t *testing.T) {
 		})
 
 		start := time.Now()
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
