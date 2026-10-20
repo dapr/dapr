@@ -312,6 +312,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
@@ -361,6 +362,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
@@ -525,7 +527,8 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		return "", err
 	}
 
-	_, err = engine.Call(ctx, areq)
+	res, err := engine.Call(ctx, areq)
+	markFallback(ctx, res)
 	if err != nil {
 		return "", abe.noWorkerError(err, req.GetRouter().GetTargetAppID())
 	}
@@ -591,7 +594,8 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, ireq)
+		res, eerr := router.Call(ctx, ireq)
+		markFallback(ctx, res)
 
 		// A host named by a stale placement table no longer registers the
 		// type: placement is about to drop it, so retry.
@@ -808,7 +812,8 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	}
 
 	start := time.Now()
-	_, err = router.Call(ctx, req)
+	res, err := router.Call(ctx, req)
+	markFallback(ctx, res)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -883,6 +888,12 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+
+	// The operation this watch follows was served by a fallback host: the
+	// instance does not change until it moves to a daprd with an executor.
+	if servedByFallback(ctx) {
+		return nil
+	}
 
 	// A router targeting another app watches that app's workflow actor. This
 	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app

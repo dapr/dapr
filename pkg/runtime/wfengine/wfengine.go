@@ -242,6 +242,9 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
 	)
+	if opts.WorkflowsFallbackHosts {
+		registerGrpcServerFn = registerFallbackAware(registerGrpcServerFn)
+	}
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {

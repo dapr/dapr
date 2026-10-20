@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -58,6 +60,45 @@ func (abe *Actors) requireLocalExecutor() error {
 		return errNoLocalExecutor
 	}
 	return nil
+}
+
+// fallbackFunc returns the factories' Fallback option: nil with the feature
+// off.
+func (abe *Actors) fallbackFunc() func() bool {
+	if !abe.fallbackHosts {
+		return nil
+	}
+	return func() bool { return !abe.pendingTasksBackend.ExecutorAvailable() }
+}
+
+type fallbackMarkerKey struct{}
+
+// WithFallbackMarker returns ctx carrying a marker that records whether an
+// operation made with it was served by a fallback host.
+// WatchWorkflowRuntimeStatus returns at once under a marked ctx: the instance
+// does not change until it moves to a daprd with an executor, so the
+// durabletask executor's wait after a start, rerun, terminate, suspend or
+// resume would block the caller until its deadline.
+func WithFallbackMarker(ctx context.Context) context.Context {
+	return context.WithValue(ctx, fallbackMarkerKey{}, new(atomic.Bool))
+}
+
+// markFallback records on ctx's marker, if any, that res was served by a
+// fallback host.
+func markFallback(ctx context.Context, res *internalsv1pb.InternalInvokeResponse) {
+	if !common.IsFallback(res) {
+		return
+	}
+	if m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool); ok {
+		m.Store(true)
+	}
+}
+
+// servedByFallback returns whether an operation made with ctx was served by
+// a fallback host.
+func servedByFallback(ctx context.Context) bool {
+	m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool)
+	return ok && m.Load()
 }
 
 // HasLocalExecutor reports whether this daprd has a local executor, under

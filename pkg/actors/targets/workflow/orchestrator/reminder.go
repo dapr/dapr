@@ -101,7 +101,7 @@ func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *back
 	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
 
 	due := start
-	if o.fastPath && !start.After(time.Now()) {
+	if o.localFastPath() && !start.After(time.Now()) {
 		due = time.Now().Add(pendingstart.RedriveGrace())
 	}
 	if err := o.createWorkflowReminder(ctx, reminderName, nil, due, o.appID, &workflowName); err != nil {
@@ -142,7 +142,7 @@ const detachedReminderTimeout = 30 * time.Second
 // Durability first: if the janitor cannot be ensured, fall back to the
 // durable per-event reminder path.
 func (o *orchestrator) driveNewEvent(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
-	if !o.fastPath {
+	if !o.localFastPath() {
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 

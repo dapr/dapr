@@ -78,6 +78,15 @@ type Options struct {
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
 
+	// Fallback, if set, reports whether this daprd hosts the workflow actor
+	// type as a fallback host (the WorkflowsFallbackHosts preview): with no
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
+	Fallback func() bool
+
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
@@ -116,6 +125,7 @@ type factory struct {
 	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
 	// the Wait.
 	fastPath   bool
+	fallback   func() bool
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc
@@ -203,6 +213,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
+		fallback:               opts.Fallback,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,

@@ -90,13 +90,19 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// Delayed executions keep the scheduler path so the delay is honoured; a
 	// drive that cannot be armed (factory halting) falls through to the
 	// durable reminder.
-	if a.fastPath && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
+	if a.localFastPath() && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
 		if a.localDrive(invocation, activityName) {
 			return nil, nil
 		}
 	}
 
 	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
+}
+
+// localFastPath reports whether an activity may be driven locally: never on
+// a fallback host (factory.fallback), which has no local executor to run it.
+func (a *activity) localFastPath() bool {
+	return a.fastPath && (a.fallback == nil || !a.fallback())
 }
 
 // metaFlagged reports whether the orchestrator set key to "true" on this
