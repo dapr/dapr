@@ -151,3 +151,36 @@ func TestRefreshRemoteHosts(t *testing.T) {
 	require.NoError(t, diss.Handle(t.Context(), new(loops.RefreshRemoteHosts)))
 	assert.False(t, recv(t, late))
 }
+
+func TestCompleteDrainsOnUnlock(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+	diss.roundChangedTypes = make(map[string]struct{})
+
+	var placed []bool
+	diss.actorTable = tablefake.New().WithCompleteDrains(func(fn func(string) bool) {
+		placed = append(placed, fn("local"), fn("remote"))
+	})
+
+	tables := &v1pb.PlacementTables{
+		ReplicationFactor: 100,
+		Entries: map[string]*v1pb.PlacementTable{
+			"local": {LoadMap: map[string]*v1pb.Host{
+				"localhost:3500": {Name: "localhost:3500", Id: "self", Port: 3500},
+			}},
+			"remote": {LoadMap: map[string]*v1pb.Host{
+				"10.0.0.2:3500": {Name: "10.0.0.2:3500", Id: "other", Port: 3500},
+			}},
+		},
+	}
+	for _, op := range []loops.OrderOp{loops.OrderLock, loops.OrderUpdate} {
+		require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: op, Version: 1, V1Tables: tables},
+		}))
+	}
+	assert.Empty(t, placed, "drains complete only once the round does")
+
+	require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+		Order: &loops.Order{Op: loops.OrderUnlock, Version: 1},
+	}))
+	assert.Equal(t, []bool{true, false}, placed)
+}

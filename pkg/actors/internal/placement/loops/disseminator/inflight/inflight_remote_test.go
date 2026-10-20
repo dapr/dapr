@@ -63,3 +63,19 @@ func TestHasRemoteHosts(t *testing.T) {
 		assert.False(t, i.HasRemoteHosts("remote"))
 	})
 }
+
+func TestHasLocalHost(t *testing.T) {
+	t.Parallel()
+	i := New(Options{Hostname: "10.0.0.1", Port: "50002"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"local":  {"10.0.0.1:50002": 50002},
+		"remote": {"10.0.0.2:50002": 50002},
+	}), 1)
+	_, err := i.Merge(tables(map[string][]string{"v2local": {"10.0.0.1:50002"}}), nil)
+	require.NoError(t, err)
+
+	assert.True(t, i.HasLocalHost("local"))
+	assert.True(t, i.HasLocalHost("v2local"))
+	assert.False(t, i.HasLocalHost("remote"))
+	assert.False(t, i.HasLocalHost("unknown"))
+}

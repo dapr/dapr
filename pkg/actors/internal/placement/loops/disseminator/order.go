@@ -34,6 +34,7 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 // stream, once its tables are installed.
 func (d *disseminator) completeRound() {
 	d.roundCompleted = true
+	d.actorTable.CompleteDrains(d.inflight.HasLocalHost)
 	d.updateRemoteHosts()
 	d.reloadReminderTypes()
 }

@@ -27,6 +27,8 @@ type Fake struct {
 	reminderTypesFn          func() []string
 	setReminderDeliveryFn    func(bool, ...string)
 	subscribeReminderTypesFn func(context.Context) <-chan []string
+	drainActorTypesFn        func(...string)
+	completeDrainsFn         func(func(string) bool)
 	isActorTypeHostedFn      func(string) bool
 	getOrCreateFn            func(context.Context, string, string) (targets.Interface, error)
 	actorExistsFn            func(string, string) bool
@@ -47,6 +49,8 @@ func New() *Fake {
 		reminderTypesFn:          func() []string { return nil },
 		setReminderDeliveryFn:    func(bool, ...string) {},
 		subscribeReminderTypesFn: func(context.Context) <-chan []string { return nil },
+		drainActorTypesFn:        func(...string) {},
+		completeDrainsFn:         func(func(string) bool) {},
 		isActorTypeHostedFn:      func(string) bool { return false },
 		getOrCreateFn:            func(context.Context, string, string) (targets.Interface, error) { return nil, nil },
 		actorExistsFn:            func(string, string) bool { return false },
@@ -68,6 +72,16 @@ func (f *Fake) WithReminderTypes(fn func() []string) *Fake { f.reminderTypesFn =
 
 func (f *Fake) WithSetReminderDelivery(fn func(bool, ...string)) *Fake {
 	f.setReminderDeliveryFn = fn
+	return f
+}
+
+func (f *Fake) WithDrainActorTypes(fn func(...string)) *Fake {
+	f.drainActorTypesFn = fn
+	return f
+}
+
+func (f *Fake) WithCompleteDrains(fn func(func(string) bool)) *Fake {
+	f.completeDrainsFn = fn
 	return f
 }
 
@@ -149,6 +163,9 @@ func (f *Fake) SetReminderDelivery(enabled bool, actorTypes ...string) {
 func (f *Fake) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string {
 	return f.subscribeReminderTypesFn(ctx)
 }
+
+func (f *Fake) DrainActorTypes(actorTypes ...string)    { f.drainActorTypesFn(actorTypes...) }
+func (f *Fake) CompleteDrains(placed func(string) bool) { f.completeDrainsFn(placed) }
 
 func (f *Fake) SuspendHosting(ctx context.Context) error { return f.suspendHostingFn(ctx) }
 func (f *Fake) ResumeHosting()                           { f.resumeHostingFn() }

@@ -329,3 +329,80 @@ func Test_ReminderDelivery(t *testing.T) {
 		assert.Empty(t, tble.ReminderTypes())
 	})
 }
+
+func Test_DrainActorTypes(t *testing.T) {
+	newTable := func(t *testing.T) (table.Interface, *atomic.Int32) {
+		t.Helper()
+		var halted atomic.Int32
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "kept", Factory: fake.NewFactory()},
+				{Type: "drained", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+					halted.Add(1)
+					return nil
+				})},
+			},
+		})
+		return tble, &halted
+	}
+
+	t.Run("a draining type leaves the report but keeps serving", func(t *testing.T) {
+		tble, halted := newTable(t)
+		typesCh, _ := tble.SubscribeToTypeUpdates(t.Context())
+
+		tble.DrainActorTypes("drained", "unknown")
+		select {
+		case got := <-typesCh:
+			assert.Equal(t, []string{"kept"}, got)
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "no types update")
+		}
+		assert.Equal(t, []string{"kept"}, tble.Types())
+		assert.Equal(t, []string{"kept"}, tble.ReminderTypes())
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+		_, err := tble.GetOrCreate(t.Context(), "drained", "1")
+		require.NoError(t, err)
+
+		// A round which still places the type here keeps it.
+		tble.CompleteDrains(func(actorType string) bool { return actorType == "drained" })
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+		assert.Zero(t, halted.Load())
+
+		// The round which moves it away unregisters it.
+		tble.CompleteDrains(func(string) bool { return false })
+		assert.False(t, tble.IsActorTypeHosted("drained"))
+		_, err = tble.GetOrCreate(t.Context(), "drained", "1")
+		require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
+		assert.Eventually(t, func() bool { return halted.Load() == 1 }, 5*time.Second, time.Millisecond)
+		assert.True(t, tble.IsActorTypeHosted("kept"))
+	})
+
+	t.Run("registering a draining type again halts its draining factory first", func(t *testing.T) {
+		tble, halted := newTable(t)
+		tble.DrainActorTypes("drained")
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+		})
+		assert.EqualValues(t, 1, halted.Load())
+		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
+
+		// No longer draining: a round does not unregister it.
+		tble.CompleteDrains(func(string) bool { return false })
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+	})
+
+	t.Run("unregistering a draining type ends its drain", func(t *testing.T) {
+		tble, halted := newTable(t)
+		tble.DrainActorTypes("drained")
+		require.NoError(t, tble.UnRegisterActorTypes("drained"))
+		assert.EqualValues(t, 1, halted.Load())
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
+	})
+}

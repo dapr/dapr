@@ -31,7 +31,10 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/broadcaster"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.table")
 
 //nolint:interfacebloat
 type Interface interface {
@@ -47,6 +50,8 @@ type Interface interface {
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	SetReminderDelivery(enabled bool, actorTypes ...string)
 	SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string
+	DrainActorTypes(actorTypes ...string)
+	CompleteDrains(placed func(actorType string) bool)
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
@@ -97,11 +102,14 @@ type table struct {
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
 	// noReminders holds the registered types which are not advertised for
-	// reminder delivery (RegisterActorTypeOptions.NoReminderDelivery).
-	// reminderLock serializes its changes with their broadcast on
-	// reminderTypeUpdates.
+	// reminder delivery (RegisterActorTypeOptions.NoReminderDelivery), and
+	// draining those which are no longer advertised to placement but keep
+	// their factories until placement moves them (DrainActorTypes).
+	// flagsLock serializes their changes, with the broadcast of the reminder
+	// types on reminderTypeUpdates.
 	noReminders         sync.Map
-	reminderLock        sync.Mutex
+	draining            sync.Map
+	flagsLock           sync.Mutex
 	reminderTypeUpdates *broadcaster.Broadcaster[[]string]
 
 	entityConfigs map[string]api.EntityConfig
@@ -159,11 +167,14 @@ func (t *table) ReminderTypes() []string {
 	return keys
 }
 
-// types returns the registered actor types regardless of suspension.
+// types returns the registered actor types regardless of suspension, less
+// the draining ones.
 func (t *table) types() []string {
 	var keys []string
 	t.factories.Range(func(key, _ any) bool {
-		keys = append(keys, key.(string))
+		if _, ok := t.draining.Load(key); !ok {
+			keys = append(keys, key.(string))
+		}
 		return true
 	})
 	return keys
@@ -289,7 +300,20 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		t.entityConfigs = opts.EntityConfigs
 	}
 
-	t.reminderLock.Lock()
+	// A type registered again while it drains first gives up the actors of
+	// its draining factory, so one actor ID is never live in two factories.
+	t.flagsLock.Lock()
+	var drained []string
+	for _, opt := range opts.Factories {
+		if _, ok := t.draining.Load(opt.Type); ok {
+			drained = append(drained, opt.Type)
+		}
+	}
+	old := t.detachLocked(drained)
+	t.flagsLock.Unlock()
+	t.haltDetached(old)
+
+	t.flagsLock.Lock()
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
@@ -300,7 +324,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		}
 		t.factories.Store(opt.Type, opt.Factory)
 	}
-	t.reminderLock.Unlock()
+	t.flagsLock.Unlock()
 
 	t.typeUpdates.Broadcast(t.Types())
 }
@@ -311,8 +335,8 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 // Unregistered types are ignored. The new reminder types are broadcast to
 // SubscribeToReminderTypeUpdates subscribers if they changed.
 func (t *table) SetReminderDelivery(enabled bool, actorTypes ...string) {
-	t.reminderLock.Lock()
-	defer t.reminderLock.Unlock()
+	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
 
 	var changed bool
 	for _, actorType := range actorTypes {
@@ -331,6 +355,95 @@ func (t *table) SetReminderDelivery(enabled bool, actorTypes ...string) {
 	if changed {
 		t.reminderTypeUpdates.Broadcast(t.ReminderTypes())
 	}
+}
+
+// DrainActorTypes unregisters the given registered types gracefully: they
+// stop being advertised to placement at once, but keep their factories, so
+// the calls the placement tables still route to this host are served rather
+// than failed with the type not registered. CompleteDrains unregisters each
+// once a dissemination round no longer places it here. Registering a type
+// again while it drains replaces its draining factory.
+func (t *table) DrainActorTypes(actorTypes ...string) {
+	t.flagsLock.Lock()
+	var changed bool
+	for _, actorType := range actorTypes {
+		if _, ok := t.factories.Load(actorType); !ok {
+			continue
+		}
+		if _, loaded := t.draining.LoadOrStore(actorType, struct{}{}); !loaded {
+			changed = true
+		}
+	}
+	t.flagsLock.Unlock()
+
+	if changed {
+		t.typeUpdates.Broadcast(t.Types())
+	}
+}
+
+// CompleteDrains unregisters the draining types placed reports this host no
+// longer hosts. Called by the placement disseminator at the end of each
+// dissemination round, when the tables are final. Their actors were halted
+// when the round's tables moved them, so the factories are halted in the
+// background.
+func (t *table) CompleteDrains(placed func(actorType string) bool) {
+	t.flagsLock.Lock()
+	var done []string
+	t.draining.Range(func(key, _ any) bool {
+		if !placed(key.(string)) {
+			done = append(done, key.(string))
+		}
+		return true
+	})
+	old := t.detachLocked(done)
+	t.flagsLock.Unlock()
+
+	if len(old) > 0 {
+		go t.haltDetached(old)
+	}
+}
+
+// detachLocked removes the given types from the table and returns their
+// factories, to be halted with haltDetached. Must be called with flagsLock
+// held.
+func (t *table) detachLocked(actorTypes []string) map[string]targets.Factory {
+	if len(actorTypes) == 0 {
+		return nil
+	}
+
+	removed := make(map[string]struct{}, len(actorTypes))
+	for _, actorType := range actorTypes {
+		removed[actorType] = struct{}{}
+	}
+	t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
+		_, ok := removed[actorType]
+		return ok
+	})
+
+	detached := make(map[string]targets.Factory, len(actorTypes))
+	for _, actorType := range actorTypes {
+		t.draining.Delete(actorType)
+		t.noReminders.Delete(actorType)
+		t.reentrancyStore.Delete(actorType)
+		if fact, ok := t.factories.LoadAndDelete(actorType); ok {
+			detached[actorType] = fact.(targets.Factory)
+		}
+	}
+	return detached
+}
+
+// haltDetached halts the factories detachLocked removed.
+func (t *table) haltDetached(detached map[string]targets.Factory) {
+	var wg sync.WaitGroup
+	for actorType, fact := range detached {
+		wg.Go(func() {
+			t.waitCreates(actorType)
+			if err := fact.HaltAll(context.Background()); err != nil {
+				log.Warnf("Failed to halt the actors of drained actor type %s: %s", actorType, err)
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // SubscribeToReminderTypeUpdates sends the reminder types (see ReminderTypes)
@@ -362,6 +475,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	for _, actorType := range actorTypes {
 		t.reentrancyStore.Delete(actorType)
 		t.noReminders.Delete(actorType)
+		t.draining.Delete(actorType)
 
 		fact, ok := t.factories.LoadAndDelete(actorType)
 		if !ok {
