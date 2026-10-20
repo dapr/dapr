@@ -114,11 +114,15 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 func TestStartWorkflowRetries(t *testing.T) {
 	tests := map[string]struct {
-		code         codes.Code
+		err          error
 		wantAttempts int32
 	}{
-		"already exists is not retried": {code: codes.AlreadyExists, wantAttempts: 1},
-		"unavailable is retried":        {code: codes.Unavailable, wantAttempts: 4},
+		"already exists is not retried": {err: status.Error(codes.AlreadyExists, "create failed"), wantAttempts: 1},
+		"unavailable is retried":        {err: status.Error(codes.Unavailable, "create failed"), wantAttempts: 4},
+		"no worker connected is not retried": {
+			err:          fmt.Errorf("no workflow worker is connected for app 'x': failed to lookup actor: %w", messages.ErrActorNoAddress.WithFormat("x")),
+			wantAttempts: 1,
+		},
 	}
 
 	for name, tc := range tests {
@@ -130,7 +134,7 @@ func TestStartWorkflowRetries(t *testing.T) {
 				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
 					return fake.NewClient().WithScheduleNewWorkflow(func(context.Context, any, ...api.NewWorkflowOptions) (api.InstanceID, error) {
 						attempts.Add(1)
-						return "", fmt.Errorf("failed to start workflow: %w", status.Error(tc.code, "create failed"))
+						return "", fmt.Errorf("failed to start workflow: %w", tc.err)
 					})
 				}),
 				actors: actorsfake.New(),

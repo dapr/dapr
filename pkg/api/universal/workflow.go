@@ -187,6 +187,11 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 			if status.Code(serr) == codes.AlreadyExists {
 				return id, backoff.Permanent(werr)
 			}
+			// No workflow worker is connected: the backend has already waited
+			// out the actor not found retries.
+			if errors.Is(serr, messages.ErrActorNoAddress) {
+				return id, backoff.Permanent(werr)
+			}
 			return id, werr
 		}
 		return id, nil
