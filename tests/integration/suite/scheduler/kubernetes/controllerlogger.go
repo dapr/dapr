@@ -50,6 +50,11 @@ type controllerlogger struct {
 	logline   *logline.LogLine
 }
 
+// Timeout extends the default case timeout, as the test has to wait for 30s.
+func (c *controllerlogger) Timeout() time.Duration {
+	return time.Second * 90
+}
+
 func (c *controllerlogger) Setup(t *testing.T) []framework.Option {
 	// Skip windows as test requires a resolvconf lookup.
 	os.SkipWindows(t)
@@ -140,7 +145,9 @@ func (c *controllerlogger) Run(t *testing.T, ctx context.Context) {
 		assert.Empty(col, resp.Kvs)
 	}, time.Second*5, 10*time.Millisecond)
 
-	assert.Never(t, func() bool {
-		return c.logline.Contains("log.SetLogger(...) was never called")
-	}, time.Second*2, time.Millisecond*100)
+	// Stop the scheduler and wait for its output to be fully read before
+	// checking it.
+	c.scheduler.Cleanup(t)
+	c.logline.EventuallyFoundAll(t)
+	assert.False(t, c.logline.Contains("log.SetLogger(...) was never called"))
 }
