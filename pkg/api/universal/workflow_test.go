@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -114,11 +115,19 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 func TestStartWorkflowRetries(t *testing.T) {
 	tests := map[string]struct {
-		code         codes.Code
+		err          error
 		wantAttempts int32
 	}{
-		"already exists is not retried": {code: codes.AlreadyExists, wantAttempts: 1},
-		"unavailable is retried":        {code: codes.Unavailable, wantAttempts: 4},
+		"already exists is not retried": {err: status.Error(codes.AlreadyExists, "create failed"), wantAttempts: 1},
+		"unavailable is retried":        {err: status.Error(codes.Unavailable, "create failed"), wantAttempts: 4},
+		"no worker connected is not retried": {
+			err:          fmt.Errorf("%w for app 'x': failed to lookup actor: %w", wferrors.ErrNoWorkerConnected, messages.ErrActorNoAddress.WithFormat("x")),
+			wantAttempts: 1,
+		},
+		"no worker connected on a remote host is not retried": {
+			err:          fmt.Errorf("%w for app 'x': %w", wferrors.ErrNoWorkerConnected, status.Error(codes.FailedPrecondition, "failed to lookup actor: did not find address for actor 'x'")),
+			wantAttempts: 1,
+		},
 	}
 
 	for name, tc := range tests {
@@ -130,7 +139,7 @@ func TestStartWorkflowRetries(t *testing.T) {
 				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
 					return fake.NewClient().WithScheduleNewWorkflow(func(context.Context, any, ...api.NewWorkflowOptions) (api.InstanceID, error) {
 						attempts.Add(1)
-						return "", fmt.Errorf("failed to start workflow: %w", status.Error(tc.code, "create failed"))
+						return "", fmt.Errorf("failed to start workflow: %w", tc.err)
 					})
 				}),
 				actors: actorsfake.New(),
