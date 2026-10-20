@@ -305,6 +305,9 @@ func TestTimeoutError(t *testing.T) {
 	// downstream enforcing the propagated deadline answers.
 	near := staleDeadline{Context: t.Context(), deadline: time.Now().Add(deadlineClockTolerance / 2)}
 	require.ErrorIs(t, timeoutError(near, statusErr), context.DeadlineExceeded, "a gRPC DeadlineExceeded within the clock tolerance is the timeout")
+	canceledErr := NewCodeError(int32(codes.Canceled), status.Error(codes.Canceled, "stream terminated by RST_STREAM with error code: CANCEL"))
+	require.ErrorIs(t, timeoutError(near, canceledErr), context.DeadlineExceeded, "a gRPC Canceled within the clock tolerance is the timeout")
+	require.NoError(t, timeoutError(due, canceledErr), "a gRPC Canceled well before the deadline is the operation's own")
 	unavailableErr := NewCodeError(int32(codes.Unavailable), status.Error(codes.Unavailable, "unavailable"))
 	require.NoError(t, timeoutError(near, unavailableErr), "other codes within the clock tolerance are the operation's own")
 	require.NoError(t, timeoutError(near, errors.New("any")))
@@ -392,13 +395,15 @@ func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
 	tests := []struct {
 		name string
 		// wait returns how long the first attempt waits before failing with
-		// a gRPC DeadlineExceeded, given the time left until its deadline.
+		// code, given the time left until its deadline.
 		wait     func(left time.Duration) time.Duration
+		code     codes.Code
 		expected int32
 	}{
 		{
 			name:     "app DeadlineExceeded well before the deadline is not retried",
 			wait:     func(time.Duration) time.Duration { return 0 },
+			code:     codes.DeadlineExceeded,
 			expected: 1,
 		},
 		{
@@ -406,6 +411,21 @@ func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
 			wait: func(left time.Duration) time.Duration {
 				return left - deadlineClockTolerance/2
 			},
+			code:     codes.DeadlineExceeded,
+			expected: 2,
+		},
+		{
+			name:     "app Canceled well before the deadline is not retried",
+			wait:     func(time.Duration) time.Duration { return 0 },
+			code:     codes.Canceled,
+			expected: 1,
+		},
+		{
+			name: "Canceled within the clock tolerance is retried as the timeout",
+			wait: func(left time.Duration) time.Duration {
+				return left - deadlineClockTolerance/2
+			},
+			code:     codes.Canceled,
 			expected: 2,
 		},
 	}
@@ -419,7 +439,8 @@ func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
 				}
 				deadline, _ := ctx.Deadline()
 				time.Sleep(test.wait(time.Until(deadline)))
-				return struct{}{}, NewCodeError(int32(codes.DeadlineExceeded), status.Error(codes.DeadlineExceeded, "deadline exceeded"))
+				//nolint:gosec
+				return struct{}{}, NewCodeError(int32(test.code), status.Error(test.code, "attempt failed"))
 			}
 
 			policy := NewRunner[struct{}](t.Context(), &PolicyDefinition{
