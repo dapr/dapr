@@ -56,6 +56,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
@@ -402,7 +403,11 @@ func (abe *Actors) requireActorStateStore() error {
 // MCP server is registered): placement then has no host for them, or a host
 // still named by a stale placement table has already unregistered them.
 func (abe *Actors) noWorkerError(err error, targetAppID string) error {
-	if !isActorNotRegisteredError(err) && !isActorNoAddressError(err) {
+	if err == nil {
+		return nil
+	}
+	actorType, terr := abe.targetWorkflowActorType(targetAppID)
+	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType)) {
 		return err
 	}
 	if serr := abe.requireActorStateStore(); serr != nil {
@@ -411,21 +416,21 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 	if targetAppID == "" {
 		targetAppID = abe.appID
 	}
-	return fmt.Errorf("no workflow worker is connected for app '%s' (the app must be running with its workflow worker registered with its Dapr sidecar before workflows can be started, raised, terminated, purged or waited on; retry once it has connected): %w", targetAppID, err)
+	return fmt.Errorf("%w for app '%s' (the app must be running with its workflow worker registered with its Dapr sidecar before workflows can be started, raised, terminated, purged or waited on; retry once it has connected): %w", wferrors.ErrNoWorkerConnected, targetAppID, err)
 }
 
 // isActorNotRegisteredError reports whether the host that placement routed to
-// does not register the actor type. Remote hosts return it as a wire string.
-func isActorNotRegisteredError(err error) bool {
-	return err != nil && (errors.Is(err, actorerrors.ErrCreatingActor) ||
-		strings.Contains(err.Error(), actorerrors.ErrCreatingActor.Error()))
+// does not register actorType. The two predicates below match on the actor
+// type, rather than the error type, because remote hosts return these errors
+// as wire strings, and so an error a remote workflow actor propagated from
+// another app (such as a child purge) is not attributed to the target.
+func isActorNotRegisteredError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "actor type "+actorType+" not registered")
 }
 
-// isActorNoAddressError reports whether placement has no host at all for the
-// actor type. Remote hosts return it as a wire string.
-func isActorNoAddressError(err error) bool {
-	return err != nil && (errors.Is(err, messages.ErrActorNoAddress) ||
-		strings.Contains(err.Error(), "did not find address for actor"))
+// isActorNoAddressError reports whether placement has no host for actorType.
+func isActorNoAddressError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "did not find address for actor '"+actorType+"/")
 }
 
 // targetWorkflowActorType resolves the workflow actor type for a router
@@ -563,13 +568,13 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 
 		// A host named by a stale placement table no longer registers the
 		// type: placement is about to drop it, so retry.
-		if isActorNotRegisteredError(eerr) {
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) || isActorNotRegisteredError(eerr, actorType) {
 			return eerr
 		}
 
 		// No host serves the workflow actor type, so no worker is connected
 		// for the app. The router already spent its not-found retry budget.
-		if isActorNoAddressError(eerr) {
+		if isActorNoAddressError(eerr, actorType) {
 			return backoff.Permanent(eerr)
 		}
 

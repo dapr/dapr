@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -120,7 +121,11 @@ func TestStartWorkflowRetries(t *testing.T) {
 		"already exists is not retried": {err: status.Error(codes.AlreadyExists, "create failed"), wantAttempts: 1},
 		"unavailable is retried":        {err: status.Error(codes.Unavailable, "create failed"), wantAttempts: 4},
 		"no worker connected is not retried": {
-			err:          fmt.Errorf("no workflow worker is connected for app 'x': failed to lookup actor: %w", messages.ErrActorNoAddress.WithFormat("x")),
+			err:          fmt.Errorf("%w for app 'x': failed to lookup actor: %w", wferrors.ErrNoWorkerConnected, messages.ErrActorNoAddress.WithFormat("x")),
+			wantAttempts: 1,
+		},
+		"no worker connected on a remote host is not retried": {
+			err:          fmt.Errorf("%w for app 'x': %w", wferrors.ErrNoWorkerConnected, status.Error(codes.FailedPrecondition, "failed to lookup actor: did not find address for actor 'x'")),
 			wantAttempts: 1,
 		},
 	}
