@@ -104,6 +104,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// WorkflowsFallbackHosts is the WorkflowsFallbackHosts preview feature:
+	// see fallback.go.
+	WorkflowsFallbackHosts bool
+
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
@@ -143,6 +147,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
@@ -237,6 +242,11 @@ func New(opts Options) (*Actors, error) {
 	// Wrapped so pending completions can be cancelled while no executor is
 	// connected; see the pendingtracker package.
 	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+	if opts.WorkflowsFallbackHosts {
+		// The engine reports every executor count change under the
+		// feature, and a fallback host registers with none.
+		trackedPendingTasksBackend.SetExecutorAvailable(false)
+	}
 
 	return &Actors{
 		appID:                     opts.AppID,
@@ -261,6 +271,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		fallbackHosts:                   opts.WorkflowsFallbackHosts,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
@@ -272,6 +283,21 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	factories, err := workflow.Factories(ctx, abe.factoryOptions())
+	if err != nil {
+		return err
+	}
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
+
+	return nil
+}
+
+// factoryOptions returns the options of the workflow actor factories,
+// including the executor actor's under WorkflowsClusteredDeployment.
+func (abe *Actors) factoryOptions() workflow.Options {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:                  abe.appID,
@@ -289,6 +315,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
@@ -313,6 +343,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				wi.InstanceID,
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
+
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done(): // engine is shutting down
@@ -354,16 +388,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		}
 	}
 
-	factories, err := workflow.Factories(ctx, opts)
-	if err != nil {
-		return err
-	}
-
-	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
-		Factories: factories,
-	})
-
-	return nil
+	return opts
 }
 
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {
@@ -377,7 +402,9 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		abe.activityActorType,
 		abe.retentionerActorType,
 	}
-	if abe.enableClusteredDeployment {
+	// Under WorkflowsFallbackHosts the executor actor type is registered
+	// apart from the others; the table ignores it if it is not registered.
+	if abe.enableClusteredDeployment || abe.fallbackHosts {
 		actorTypes = append(actorTypes, abe.executorActorType)
 	}
 

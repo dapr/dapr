@@ -86,6 +86,28 @@ const (
 	// limits gate per job delivery, which local drives bypass. Preview
 	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
+
+	// WorkflowsFallbackHosts keeps the workflow actor types of an app hosted
+	// while no daprd of the app has a workflow worker connected (or an
+	// in-process executor). A daprd with an executor registers the
+	// executor actor type as well, which tells the app's other daprds that
+	// one exists; while none does, every daprd of the app hosts the workflow
+	// actor types itself, as a fallback host. Starts, raised events,
+	// terminate, suspend, resume, status queries and purges then take the
+	// normal path, with their usual synchronous errors, instead of blocking
+	// or failing with no address. A fallback host runs no workflow code: it
+	// does not advertise the types to the scheduler for reminder delivery,
+	// so the reminders its actors arm fire once a daprd with an executor
+	// exists, and it gives the types up once one has existed for a short
+	// while. No control plane change is needed. Enable it only once every
+	// daprd of the app runs a version which knows it: an older daprd with a
+	// worker does not register the executor actor type, so a daprd with the
+	// flag and no worker would take a share of the app's instances it cannot
+	// run. Every daprd with the flag and an actor runtime hosts the types
+	// while no worker exists, so set it in the Configuration of the apps
+	// which run workflows rather than of every app. Preview feature;
+	// disabled by default.
+	WorkflowsFallbackHosts Feature = "WorkflowsFallbackHosts"
 )
 
 // end feature flags section
