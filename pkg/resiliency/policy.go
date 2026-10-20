@@ -159,10 +159,12 @@ const deadlineClockTolerance = 16 * time.Millisecond
 // err after its deadline passed, and nil when the attempt did not time out.
 // The operation can observe the deadline before the runner does and fail with
 // its own error, such as a gRPC status derived from the cancelled context, or
-// a DeadlineExceeded answered by a downstream enforcing the propagated deadline
-// in the gap before the local timer cancels ctx. Reporting the timeout instead
-// keeps a retry condition matching on status codes from reading that as the
-// operation's answer and refusing the retry.
+// a DeadlineExceeded or Canceled answered by a downstream enforcing the
+// propagated deadline in the gap before the local timer cancels ctx. A gRPC
+// server whose deadline fires resets the stream with CANCEL, which the client
+// reads as Canceled. Reporting the timeout instead keeps a retry condition
+// matching on status codes from reading that as the operation's answer and
+// refusing the retry.
 func timeoutError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
@@ -179,7 +181,8 @@ func timeoutError(ctx context.Context, err error) error {
 	}
 	if time.Until(deadline) <= deadlineClockTolerance {
 		var cErr CodeError
-		if errors.As(err, &cErr) && cErr.StatusCode == int32(codes.DeadlineExceeded) {
+		if errors.As(err, &cErr) &&
+			(cErr.StatusCode == int32(codes.DeadlineExceeded) || cErr.StatusCode == int32(codes.Canceled)) {
 			return context.DeadlineExceeded
 		}
 	}

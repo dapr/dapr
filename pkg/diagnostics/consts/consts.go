@@ -55,6 +55,8 @@ const (
 	BindingBuildingBlockType     = "bindings"
 	PubsubBuildingBlockType      = "pubsub"
 	BinaryStoreBuildingBlockType = "binarystore"
+	SearchBuildingBlockType      = "search"
+	VectorBuildingBlockType      = "vector"
 
 	DaprGRPCServiceInvocationService = "ServiceInvocation"
 	DaprGRPCDaprService              = "Dapr"
