@@ -13,6 +13,12 @@ limitations under the License.
 
 package wfbackend
 
+import "errors"
+
+// ErrNoWorkerConnected is wrapped by workflow operations that failed because
+// no workflow worker is connected for the target app.
+var ErrNoWorkerConnected = errors.New("no workflow worker is connected")
+
 type recoverable struct {
 	cause error
 }

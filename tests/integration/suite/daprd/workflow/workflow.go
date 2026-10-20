@@ -42,6 +42,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/maxconcurrent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/noworker"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/patching"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/payloadsize"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation"
