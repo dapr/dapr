@@ -127,8 +127,11 @@ func (ft *fallbackTest) setRemote(t *testing.T, remote bool) {
 	ft.wfe.actorRegLock.Unlock()
 }
 
+// hosted reports whether this daprd advertises the workflow actor type to
+// placement. A type given up drains: it is no longer advertised, but keeps
+// its actors until placement moves them.
 func (ft *fallbackTest) hosted() bool {
-	return ft.table.IsActorTypeHosted(ft.workflowType)
+	return slices.Contains(ft.table.Types(), ft.workflowType)
 }
 
 func (ft *fallbackTest) reminders() bool {
@@ -136,7 +139,7 @@ func (ft *fallbackTest) reminders() bool {
 }
 
 func (ft *fallbackTest) executor() bool {
-	return ft.table.IsActorTypeHosted(ft.executorType)
+	return slices.Contains(ft.table.Types(), ft.executorType)
 }
 
 func (ft *fallbackTest) actor(t *testing.T) targets.Interface {
@@ -284,6 +287,12 @@ func TestEngine_FallbackDamping(t *testing.T) {
 		step(t, ft, time.Second)
 		assert.Eventually(t, func() bool { return !ft.hosted() }, 5*time.Second, time.Millisecond)
 		ft.notHosted(t)
+
+		// The types drain: their actors serve the calls placement routes
+		// here until a round moves them.
+		assert.True(t, ft.table.IsActorTypeHosted(ft.workflowType))
+		ft.table.CompleteDrains(func(string) bool { return false })
+		assert.False(t, ft.table.IsActorTypeHosted(ft.workflowType))
 	})
 
 	t.Run("an executor which leaves within the damping period changes nothing", func(t *testing.T) {

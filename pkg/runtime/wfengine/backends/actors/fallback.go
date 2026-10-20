@@ -174,6 +174,27 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 	return atable.UnRegisterActorTypes(abe.executorActorType)
 }
 
+// DrainActors gives up the workflow, activity, retention and executor actor
+// types gracefully under WorkflowsFallbackHosts: they leave the placement
+// report at once, and keep their actors until a dissemination round moves
+// them to the daprds which host them, so the calls routed here meanwhile are
+// served rather than failed with the type not registered. See the actor
+// table's DrainActorTypes.
+func (abe *Actors) DrainActors(ctx context.Context) error {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil {
+		return err
+	}
+
+	atable.DrainActorTypes(
+		abe.workflowActorType,
+		abe.activityActorType,
+		abe.retentionerActorType,
+		abe.executorActorType,
+	)
+	return nil
+}
+
 // executorFactory returns the executor actor type's factory. Under
 // WorkflowsClusteredDeployment it is the executor actor, which shares the
 // pending tasks of the daprds with an executor. Otherwise nothing calls the

@@ -168,7 +168,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 
 		log.Debug("Unregistering workflow actors")
 		// Reset unconditionally: see onWorkItemDisconnection.
-		err := wfe.backend.UnRegisterActors(ctx)
+		err := wfe.giveUpActors(ctx)
 		wfe.actorsRegistered = false
 		fb.executorRegistered = false
 		wfe.syncFallbackHost()
@@ -199,6 +199,18 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		wfe.stopFallbackDamping()
 	}
 	return nil
+}
+
+// giveUpActors unregisters the workflow actor types. While Run is live they
+// are drained: the calls placement routes here until the next dissemination
+// round moves the instances are still served. At shutdown they are
+// unregistered at once, as the placement stream is going away too. Must be
+// called with actorRegLock held.
+func (wfe *engine) giveUpActors(ctx context.Context) error {
+	if wfe.fallbackAllowed() {
+		return wfe.backend.DrainActors(ctx)
+	}
+	return wfe.backend.UnRegisterActors(ctx)
 }
 
 // syncFallbackHost tells the backend whether this daprd is a fallback host:
@@ -256,7 +268,7 @@ func (wfe *engine) fallbackDampingExpired(gen uint64) {
 	log.Infof("Another daprd of app '%s' has had a workflow executor for %s; this daprd is no longer a fallback host", wfe.appID, fb.damping)
 	// A turn on a fallback host fails at once, so the halt waits on no
 	// workflow code.
-	err := wfe.backend.UnRegisterActors(context.Background())
+	err := wfe.giveUpActors(context.Background())
 	wfe.actorsRegistered = false
 	wfe.syncFallbackHost()
 	if err != nil {
