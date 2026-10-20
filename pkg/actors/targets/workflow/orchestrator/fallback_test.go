@@ -23,6 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors/fake"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -76,5 +79,47 @@ func TestFallback(t *testing.T) {
 		o.localDrive("start-1", time.Now())
 		assert.False(t, o.driveRunning.Load())
 		require.NoError(t, o.Deactivate(t.Context()))
+	})
+}
+
+func TestFallbackOperation(t *testing.T) {
+	event := func(e *protos.HistoryEvent) *backend.HistoryEvent { return e }
+	for _, tc := range []struct {
+		method string
+		ev     *backend.HistoryEvent
+		want   string
+	}{
+		{todo.CreateWorkflowInstanceMethod, nil, diag.CreateWorkflow},
+		{todo.PurgeWorkflowStateMethod, nil, diag.PurgeWorkflow},
+		{todo.RecursivePurgeWorkflowStateMethod, nil, diag.PurgeWorkflow},
+		{todo.RerunWorkflowInstance, nil, diag.RerunWorkflow},
+		{todo.ForkWorkflowHistory, nil, diag.ForkWorkflow},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}), diag.RaiseEvent},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}), diag.TerminateWorkflow},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}}), diag.SuspendWorkflow},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionResumed{ExecutionResumed: &protos.ExecutionResumedEvent{}}}), diag.ResumeWorkflow},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_TimerFired{TimerFired: &protos.TimerFiredEvent{}}}), diag.AddEvent},
+		// A read is not an operation on the instance.
+		{todo.WaitForRuntimeStatus, nil, ""},
+	} {
+		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.ev), tc.method)
+	}
+
+	t.Run("served operations reach the backend, reads do not", func(t *testing.T) {
+		var served []string
+		fact, err := New(t.Context(), Options{
+			AppID:             "appID",
+			ActivityActorType: "activity",
+			WorkflowActorType: "workflow",
+			Scheduler:         func(context.Context, *backend.WorkflowWorkItem) error { return nil },
+			Actors:            fake.New(),
+			Fallback:          func() bool { return true },
+			FallbackServed:    func(op string) { served = append(served, op) },
+		})
+		require.NoError(t, err)
+		f := fact.(*factory)
+		f.fallbackServed(t.Context(), todo.CreateWorkflowInstanceMethod, nil)
+		f.fallbackServed(t.Context(), todo.WaitForRuntimeStatus, nil)
+		assert.Equal(t, []string{diag.CreateWorkflow}, served)
 	})
 }

@@ -145,6 +145,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			}
 			fb.executorRegistered = true
 		}
+		wfe.syncFallbackHost()
 		return nil
 	}
 
@@ -159,6 +160,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			if err == nil {
 				fb.executorRegistered = false
 				log.Infof("The last workflow executor of this daprd left and no other daprd of app '%s' has one; hosting the workflow actor types as a fallback host", wfe.appID)
+				wfe.syncFallbackHost()
 				return nil
 			}
 			log.Warnf("Failed to turn into a fallback host for the workflow actor types, unregistering them: %s", err)
@@ -169,6 +171,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		err := wfe.backend.UnRegisterActors(ctx)
 		wfe.actorsRegistered = false
 		fb.executorRegistered = false
+		wfe.syncFallbackHost()
 		if err != nil {
 			return err
 		}
@@ -184,6 +187,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			return err
 		}
 		wfe.actorsRegistered = true
+		wfe.syncFallbackHost()
 		return nil
 	}
 
@@ -195,6 +199,13 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		wfe.stopFallbackDamping()
 	}
 	return nil
+}
+
+// syncFallbackHost tells the backend whether this daprd is a fallback host:
+// it hosts the workflow actor types without a local executor. Must be called
+// with actorRegLock held.
+func (wfe *engine) syncFallbackHost() {
+	wfe.backend.SetFallbackHost(wfe.fallback.runCtx, wfe.actorsRegistered && !wfe.fallback.executorRegistered)
 }
 
 // startFallbackDamping arms the damping timer of a fallback host, unless it
@@ -247,6 +258,7 @@ func (wfe *engine) fallbackDampingExpired(gen uint64) {
 	// workflow code.
 	err := wfe.backend.UnRegisterActors(context.Background())
 	wfe.actorsRegistered = false
+	wfe.syncFallbackHost()
 	if err != nil {
 		log.Warnf("Failed to unregister the workflow actors of a fallback host: %s", err)
 	}
@@ -314,6 +326,7 @@ func (wfe *engine) stopFallback() {
 	log.Debug("Unregistering the workflow actors of a fallback host")
 	err := wfe.backend.UnRegisterActors(context.Background())
 	wfe.actorsRegistered = false
+	wfe.syncFallbackHost()
 	if err != nil {
 		log.Warnf("Failed to unregister the workflow actors of a fallback host: %s", err)
 	}

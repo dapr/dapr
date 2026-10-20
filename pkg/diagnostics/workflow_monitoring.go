@@ -107,6 +107,15 @@ const (
 	GetWorkflow       = "get_workflow"
 	AddEvent          = "add_event"
 	PurgeWorkflow     = "purge_workflow"
+	// Further operations on a workflow instance, which the fallback
+	// operation count tells apart (the operation count tags them all
+	// add_event).
+	RaiseEvent        = "raise_event"
+	TerminateWorkflow = "terminate_workflow"
+	SuspendWorkflow   = "suspend_workflow"
+	ResumeWorkflow    = "resume_workflow"
+	RerunWorkflow     = "rerun_workflow"
+	ForkWorkflow      = "fork_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
@@ -228,6 +237,12 @@ type workflowMetrics struct {
 	// invocation kind (method/reminder/stream). Splits observed invocation
 	// latency into lock queueing vs turn body.
 	lockWaitLatency *stats.Float64Measure
+	// fallbackOperationCount records workflow operations served by a
+	// fallback host under the WorkflowsFallbackHosts preview feature, tagged
+	// by operation. A served start, event or rerun waits for a daprd of the
+	// app with a workflow worker, so a rising count while no worker is
+	// connected is work piling up.
+	fallbackOperationCount *stats.Int64Measure
 
 	// Cached recorders for hot-path records (built in Init): direct
 	// meter.Record through prebuilt tag maps instead of the
@@ -343,6 +358,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/lock_wait",
 			"The time a workflow orchestrator invocation spends queued on the per-actor turn lock, by invocation kind.",
 			stats.UnitMilliseconds),
+		fallbackOperationCount: stats.Int64(
+			"runtime/workflow/fallback/operation/count",
+			"The number of workflow operations served by a fallback host of the WorkflowsFallbackHosts preview feature, which wait for a daprd with a workflow worker, by operation.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -395,6 +414,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.localActivityDriveLatency, []tag.Key{appIDKey, namespaceKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.lockWaitLatency, []tag.Key{appIDKey, namespaceKey, operationKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.completionsFoldCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.fallbackOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 		diagUtils.NewMeasureView(w.completionsFoldWait, []tag.Key{appIDKey, namespaceKey}, latencyDistribution))
 	if err != nil {
 		return err
@@ -652,4 +672,16 @@ func (w *workflowMetrics) WorkflowCompletionRoute(ctx context.Context, taskType,
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.completionRouteCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, taskTypeKey, taskType, completionRouteKey, route)...),
 		stats.WithMeasurements(w.completionRouteCount.M(1)))
+}
+
+// WorkflowFallbackOperation records a workflow operation served by a fallback
+// host under the WorkflowsFallbackHosts preview feature, by operation.
+func (w *workflowMetrics) WorkflowFallbackOperation(ctx context.Context, operation string) {
+	if !w.IsEnabled() {
+		return
+	}
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(diagUtils.WithTags(w.fallbackOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation)...),
+		stats.WithMeasurements(w.fallbackOperationCount.M(1)))
 }

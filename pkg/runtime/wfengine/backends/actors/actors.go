@@ -178,6 +178,10 @@ type Actors struct {
 	detached             *detached.Runner
 
 	stopped atomic.Bool
+
+	// fallbackWaiting counts the operations served while this daprd is a
+	// fallback host; nil while it is not. See SetFallbackHost.
+	fallbackWaiting atomic.Pointer[fallbackWaiting]
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -313,6 +317,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
 		Fallback:               abe.fallbackFunc(),
+		FallbackServed:         abe.fallbackServedFunc(),
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)

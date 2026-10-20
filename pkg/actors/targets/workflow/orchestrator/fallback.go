@@ -19,8 +19,11 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 // isFallback reports whether this daprd hosts the workflow actor type as a
@@ -65,4 +68,49 @@ func (o *orchestrator) armFallbackJanitor(ctx context.Context, state *wfenginest
 		},
 		ConcurrencyKey: &wfName,
 	})
+}
+
+// fallbackOperation returns the diagnostics operation of a workflow actor
+// method served on a fallback host. ev is the parsed AddWorkflowEvent event.
+func fallbackOperation(method string, ev *backend.HistoryEvent) string {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		return diag.CreateWorkflow
+	case todo.PurgeWorkflowStateMethod, todo.RecursivePurgeWorkflowStateMethod:
+		return diag.PurgeWorkflow
+	case todo.RerunWorkflowInstance:
+		return diag.RerunWorkflow
+	case todo.ForkWorkflowHistory:
+		return diag.ForkWorkflow
+	case todo.AddWorkflowEventMethod:
+	default:
+		return ""
+	}
+
+	switch {
+	case ev.GetEventRaised() != nil:
+		return diag.RaiseEvent
+	case ev.GetExecutionTerminated() != nil:
+		return diag.TerminateWorkflow
+	case ev.GetExecutionSuspended() != nil:
+		return diag.SuspendWorkflow
+	case ev.GetExecutionResumed() != nil:
+		return diag.ResumeWorkflow
+	default:
+		return diag.AddEvent
+	}
+}
+
+// fallbackServed records an operation served on a fallback host. Reads, such
+// as a status query, are not operations on the instance and are not
+// recorded.
+func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
+	operation := fallbackOperation(method, ev)
+	if operation == "" {
+		return
+	}
+	diag.DefaultWorkflowMonitoring.WorkflowFallbackOperation(ctx, operation)
+	if f.onFallback != nil {
+		f.onFallback(operation)
+	}
 }
