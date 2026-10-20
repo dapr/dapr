@@ -56,6 +56,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
@@ -396,6 +397,42 @@ func (abe *Actors) requireActorStateStore() error {
 	return nil
 }
 
+// noWorkerError rewrites the actor routing failures a workflow operation hits
+// while no workflow worker is connected for the target app. The workflow actor
+// types are hosted only while a worker holds an open work item stream (or an
+// MCP server is registered): placement then has no host for them, or a host
+// still named by a stale placement table has already unregistered them.
+func (abe *Actors) noWorkerError(err error, targetAppID string) error {
+	if err == nil {
+		return nil
+	}
+	actorType, terr := abe.targetWorkflowActorType(targetAppID)
+	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType)) {
+		return err
+	}
+	if serr := abe.requireActorStateStore(); serr != nil {
+		return serr
+	}
+	if targetAppID == "" {
+		targetAppID = abe.appID
+	}
+	return fmt.Errorf("%w for app '%s' (the app must be running with its workflow worker registered with its Dapr sidecar before workflows can be started, raised, terminated, purged or waited on; retry once it has connected): %w", wferrors.ErrNoWorkerConnected, targetAppID, err)
+}
+
+// isActorNotRegisteredError reports whether the host that placement routed to
+// does not register actorType. The two predicates below match on the actor
+// type, rather than the error type, because remote hosts return these errors
+// as wire strings, and so an error a remote workflow actor propagated from
+// another app (such as a child purge) is not attributed to the target.
+func isActorNotRegisteredError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "actor type "+actorType+" not registered")
+}
+
+// isActorNoAddressError reports whether placement has no host for actorType.
+func isActorNoAddressError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "did not find address for actor '"+actorType+"/")
+}
+
 // targetWorkflowActorType resolves the workflow actor type for a router
 // target, returning the local type when the target is empty or this app. The
 // app ID is validated here rather than trusting the caller: requests entering
@@ -463,7 +500,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 
 	_, err = engine.Call(ctx, areq)
 	if err != nil {
-		return "", err
+		return "", abe.noWorkerError(err, req.GetRouter().GetTargetAppID())
 	}
 
 	return api.InstanceID(req.GetNewInstanceID()), nil
@@ -529,16 +566,24 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
 
+		// A host named by a stale placement table no longer registers the
+		// type: placement is about to drop it, so retry.
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) || isActorNotRegisteredError(eerr, actorType) {
+			return eerr
+		}
+
+		// No host serves the workflow actor type, so no worker is connected
+		// for the app. The router already spent its not-found retry budget.
+		if isActorNoAddressError(eerr, actorType) {
+			return backoff.Permanent(eerr)
+		}
+
 		// Aborted: a completed child refuses reuse of its ID until its
 		// parent acknowledges the completion.
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
 			status.Code() == codes.Unavailable ||
 			status.Code() == codes.Aborted) {
-			return eerr
-		}
-
-		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
 
@@ -549,7 +594,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusFailed, elapsed)
-		return err
+		return abe.noWorkerError(err, e.GetRouter().GetTargetAppID())
 	}
 	// successful request to CREATE workflow, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
@@ -655,7 +700,7 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			return nil, api.ErrInstanceNotFound
 		}
-		return nil, err
+		return nil, abe.noWorkerError(err, targetAppID)
 	}
 	if meta == nil {
 		return nil, api.ErrInstanceNotFound
@@ -742,7 +787,7 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusFailed, elapsed)
-		return err
+		return abe.noWorkerError(err, e.GetRouter().GetTargetAppID())
 	}
 	// successful request to ADD EVENT, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
@@ -850,7 +895,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
 		case !targeterrors.IsStalled(err):
-			return err
+			return abe.noWorkerError(err, taskRouter.GetTargetAppID())
 		}
 
 		// A stalled actor rejects stream registrations while the stall turn
@@ -951,7 +996,7 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 			if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 				return 0, api.ErrInstanceNotFound
 			}
-			return 0, err
+			return 0, abe.noWorkerError(err, targetAppID)
 		}
 		return 1, nil
 	}
@@ -974,7 +1019,7 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			return 0, api.ErrInstanceNotFound
 		}
-		return 0, err
+		return 0, abe.noWorkerError(err, targetAppID)
 	}
 
 	respProto := new(protos.PurgeInstancesResponse)
@@ -1291,7 +1336,7 @@ func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 
 	_, err = router.Call(ctx, req)
 	if err != nil {
-		return err
+		return abe.noWorkerError(err, "")
 	}
 
 	return nil
