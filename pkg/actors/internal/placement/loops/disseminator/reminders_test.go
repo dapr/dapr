@@ -15,11 +15,13 @@ package disseminator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
@@ -71,4 +73,81 @@ func TestReloadReminderTypes(t *testing.T) {
 		require.NoError(t, diss.Handle(t.Context(), new(loops.ReloadReminderTypes)))
 		assert.Equal(t, []string{}, last())
 	})
+}
+
+func TestRemoteHostsUpdatedOnUnlock(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+	diss.roundChangedTypes = make(map[string]struct{})
+	diss.remoteHosts = remotehosts.New()
+	ch := diss.remoteHosts.Subscribe(t.Context(), "remote")
+
+	tables := &v1pb.PlacementTables{
+		ReplicationFactor: 100,
+		Entries: map[string]*v1pb.PlacementTable{
+			"remote": {LoadMap: map[string]*v1pb.Host{
+				"10.0.0.2:3500": {Name: "10.0.0.2:3500", Id: "other", Port: 3500},
+			}},
+		},
+	}
+	for _, op := range []loops.OrderOp{loops.OrderLock, loops.OrderUpdate} {
+		require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: op, Version: 1, V1Tables: tables},
+		}))
+	}
+
+	// Not before the round completes.
+	select {
+	case v := <-ch:
+		require.Failf(t, "update before UNLOCK", "%v", v)
+	default:
+	}
+
+	require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+		Order: &loops.Order{Op: loops.OrderUnlock, Version: 1},
+	}))
+	select {
+	case v := <-ch:
+		assert.True(t, v)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "no update at UNLOCK")
+	}
+}
+
+func TestRefreshRemoteHosts(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+	diss.roundChangedTypes = make(map[string]struct{})
+	diss.remoteHosts = remotehosts.New()
+
+	recv := func(t *testing.T, ch <-chan bool) bool {
+		t.Helper()
+		select {
+		case v := <-ch:
+			return v
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "no update")
+			return false
+		}
+	}
+
+	// Before any round, a refresh tells nothing: the tables are not there.
+	early := diss.remoteHosts.Subscribe(t.Context(), "remote")
+	require.NoError(t, diss.Handle(t.Context(), new(loops.RefreshRemoteHosts)))
+	select {
+	case v := <-early:
+		require.Failf(t, "update before any round", "%v", v)
+	default:
+	}
+
+	for _, op := range []loops.OrderOp{loops.OrderLock, loops.OrderUpdate, loops.OrderUnlock} {
+		require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: op, Version: 1, V1Tables: &v1pb.PlacementTables{}},
+		}))
+	}
+	assert.False(t, recv(t, early))
+
+	// A subscriber after the round is told by the refresh its subscription
+	// enqueues.
+	late := diss.remoteHosts.Subscribe(t.Context(), "other")
+	require.NoError(t, diss.Handle(t.Context(), new(loops.RefreshRemoteHosts)))
+	assert.False(t, recv(t, late))
 }

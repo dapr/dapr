@@ -149,6 +149,13 @@ type ReloadReminderTypes struct {
 	*dissbase
 }
 
+// RefreshRemoteHosts tells new RemoteHosts subscribers what the tables
+// installed on the stream show, if a round has completed on it.
+type RefreshRemoteHosts struct {
+	*placebase
+	*dissbase
+}
+
 type ReportHost struct {
 	*dissbase
 	Report *Report

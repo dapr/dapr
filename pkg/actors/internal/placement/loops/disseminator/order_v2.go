@@ -130,7 +130,7 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 		log.Debugf("Dissemination round seq=%d complete (types %v), unlocking %s/%s",
 			seq, toUnlock, d.namespace, d.id)
 
-		d.reloadReminderTypes()
+		d.completeRound()
 		d.inflight.UnlockTypes(toUnlock)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{

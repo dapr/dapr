@@ -1,0 +1,65 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package inflight
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestHasRemoteHosts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("v1 tables", func(t *testing.T) {
+		t.Parallel()
+		i := New(Options{Hostname: "10.0.0.1", Port: "50002"})
+		i.Set(newTables(100, map[string]map[string]int64{
+			"local":  {"10.0.0.1:50002": 50002},
+			"remote": {"10.0.0.2:50002": 50002},
+			"both":   {"10.0.0.1:50002": 50002, "10.0.0.2:50002": 50002},
+		}), 1)
+
+		assert.False(t, i.HasRemoteHosts("local"))
+		assert.True(t, i.HasRemoteHosts("remote"))
+		assert.True(t, i.HasRemoteHosts("both"))
+		assert.False(t, i.HasRemoteHosts("unknown"))
+
+		// The last host leaves.
+		i.Set(newTables(100, map[string]map[string]int64{
+			"local": {"10.0.0.1:50002": 50002},
+		}), 2)
+		assert.False(t, i.HasRemoteHosts("remote"))
+	})
+
+	t.Run("v2 tables", func(t *testing.T) {
+		t.Parallel()
+		i := New(Options{Hostname: "10.0.0.1", Port: "50002"})
+		_, err := i.Merge(tables(map[string][]string{
+			"local":  {"10.0.0.1:50002"},
+			"remote": {"10.0.0.2:50002"},
+		}), nil)
+		require.NoError(t, err)
+
+		assert.False(t, i.HasRemoteHosts("local"))
+		assert.True(t, i.HasRemoteHosts("remote"))
+		assert.False(t, i.HasRemoteHosts("unknown"))
+
+		// A type with no hosts left is removed.
+		_, err = i.Merge(tables(map[string][]string{"remote": {}}), nil)
+		require.NoError(t, err)
+		assert.False(t, i.HasRemoteHosts("remote"))
+	})
+}
