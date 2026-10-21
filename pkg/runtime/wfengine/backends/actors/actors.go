@@ -181,6 +181,13 @@ type Actors struct {
 	// fallbackWaiting counts the operations served while this daprd is a
 	// fallback host; nil while it is not. See SetFallbackHost.
 	fallbackWaiting atomic.Pointer[fallbackWaiting]
+
+	// hostedCancel and executorCancel end the background work of the
+	// workflow and executor factories registered last under
+	// WorkflowsStagedOperations; see replaceCancel. Guarded by the engine's
+	// actor registration lock.
+	hostedCancel   context.CancelFunc
+	executorCancel context.CancelFunc
 }
 
 var _ backend.Backend = (*Actors)(nil)

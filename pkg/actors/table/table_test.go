@@ -394,6 +394,50 @@ func Test_DrainActorTypes(t *testing.T) {
 		assert.True(t, tble.IsActorTypeHosted("drained"))
 	})
 
+	t.Run("registering a drained type again waits for the background halt of its old factory", func(t *testing.T) {
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+
+		halting := make(chan struct{})
+		release := make(chan struct{})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+				close(halting)
+				<-release
+				return nil
+			})}},
+		})
+		tble.DrainActorTypes("drained")
+		tble.CompleteDrains(func(string) bool { return false })
+		select {
+		case <-halting:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "the drained factory was not halted")
+		}
+
+		registered := make(chan struct{})
+		go func() {
+			tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+				Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+			})
+			close(registered)
+		}()
+		select {
+		case <-registered:
+			require.Fail(t, "registered while the old factory was still halting")
+		case <-time.After(100 * time.Millisecond):
+		}
+		assert.False(t, tble.IsActorTypeHosted("drained"))
+
+		close(release)
+		select {
+		case <-registered:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "registration did not complete after the halt")
+		}
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+	})
+
 	t.Run("unregistering a draining type ends its drain", func(t *testing.T) {
 		tble, halted := newTable(t)
 		tble.DrainActorTypes("drained")

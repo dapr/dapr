@@ -15,10 +15,13 @@ package actors
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
@@ -101,6 +104,35 @@ func TestFallbackMarker(t *testing.T) {
 		ctx := WithFallbackMarker(t.Context())
 		_, err := abe.RerunWorkflowFromEvent(ctx, rerun())
 		require.NoError(t, err)
+		assert.False(t, servedByFallback(ctx))
+	})
+
+	t.Run("a create a fallback host refused and a host with an executor served leaves the ctx unmarked", func(t *testing.T) {
+		t.Parallel()
+		abe := newMarkerTestBackend(t, false)
+
+		var calls atomic.Int32
+		r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			res := new(internalsv1pb.InternalInvokeResponse)
+			if calls.Add(1) == 1 {
+				common.SetFallback(res)
+				return res, status.Error(codes.Aborted, "refused")
+			}
+			return res, nil
+		})
+		abe.actors = actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+			return r, nil
+		})
+
+		ctx := WithFallbackMarker(t.Context())
+		require.NoError(t, abe.CreateWorkflowInstance(ctx, &backend.CreateWorkflowInstanceRequest{
+			StartEvent: &backend.HistoryEvent{
+				EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+					WorkflowInstance: &protos.WorkflowInstance{InstanceId: "wf1"},
+				}},
+			},
+		}))
+		assert.Equal(t, int32(2), calls.Load())
 		assert.False(t, servedByFallback(ctx))
 	})
 

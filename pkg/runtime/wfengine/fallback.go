@@ -127,10 +127,16 @@ func (wfe *engine) fallbackWanted() bool {
 
 // reconcileFallback applies the rule to the current local executor count
 // and remote presence. Every transition goes through it, under actorRegLock,
-// after the caller updated the counts and called syncExecutorAvailable: a
-// last executor leaving has cancelled the parked completions by then, before
-// anything here waits on actor turn locks. ctx bounds the wait for the actor
-// runtime. Must be called with actorRegLock held.
+// after the caller updated the counts. A caller whose executor left has
+// called syncExecutorAvailable: a last executor leaving has cancelled the
+// parked completions by then, before anything here waits on actor turn
+// locks. A caller whose executor connected has not: the executor is marked
+// available here, once the types are registered with it. Until then a turn
+// fails at once, as on a fallback host, so the halts a registration waits
+// on (of a factory still draining, or one whose drain just completed) wait
+// on no workflow code: a turn queued for the connecting worker could not be
+// delivered before its connection callback returns. ctx bounds the wait for
+// the actor runtime. Must be called with actorRegLock held.
 func (wfe *engine) reconcileFallback(ctx context.Context) error {
 	fb := wfe.fallback
 
@@ -152,6 +158,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			}
 			fb.executorRegistered = true
 		}
+		wfe.syncExecutorAvailable()
 		// Only once the switch landed: a failed one, whose executor count
 		// is rolled back, stays a fallback host that must still give the
 		// types up when the period ends.

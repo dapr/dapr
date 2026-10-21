@@ -26,6 +26,7 @@ import (
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
@@ -245,6 +246,31 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 
 		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
 		ft.notHosted(t)
+	})
+
+	t.Run("a worker reconnecting during a drain is marked available only after the drained actors are halted", func(t *testing.T) {
+		ft := newFallbackTest(t)
+		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
+		ft.setRemote(t, true)
+		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.notHosted(t)
+
+		// Stand in for the draining workflow factory, to see what a turn on
+		// its actors would see while the reconnect halts them.
+		var halted, availableDuringHalt bool
+		ft.table.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: ft.workflowType, Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+				halted = true
+				availableDuringHalt = ft.wfe.backend.HasLocalExecutor()
+				return nil
+			})}},
+		})
+		ft.table.DrainActorTypes(ft.workflowType)
+
+		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
+		require.True(t, halted)
+		assert.False(t, availableDuringHalt, "a turn on a draining actor must fail at once, not wait on the connecting worker")
+		ft.executorHost(t)
 	})
 
 	t.Run("an executor appearing elsewhere registers a daprd's fallback once it is gone", func(t *testing.T) {

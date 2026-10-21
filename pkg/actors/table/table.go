@@ -112,6 +112,11 @@ type table struct {
 	flagsLock           sync.Mutex
 	reminderTypeUpdates *broadcaster.Broadcaster[[]string]
 
+	// halting holds, for each type whose drained factory CompleteDrains
+	// halts in the background, a channel closed once that halt is done.
+	// Registering the type again waits for it. Changed under flagsLock.
+	halting sync.Map
+
 	entityConfigs map[string]api.EntityConfig
 
 	reentrancyStore *reentrancystore.Store
@@ -301,18 +306,27 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 
 	// A type registered again while it drains first gives up the actors of
-	// its draining factory, so one actor ID is never live in two factories.
+	// its draining factory, and one whose drain completed waits out the
+	// background halt of its old factory, so one actor ID is never live in
+	// two factories.
 	t.flagsLock.Lock()
 	var drained []string
+	var halts []chan struct{}
 	for _, opt := range opts.Factories {
 		if _, ok := t.draining.Load(opt.Type); ok {
 			drained = append(drained, opt.Type)
+		}
+		if ch, ok := t.halting.Load(opt.Type); ok {
+			halts = append(halts, ch.(chan struct{}))
 		}
 	}
 	old := t.detachLocked(drained)
 	t.flagsLock.Unlock()
 	if err := t.haltDetached(old); err != nil {
 		log.Warnf("Failed to halt the actors of drained actor types: %s", err)
+	}
+	for _, ch := range halts {
+		<-ch
 	}
 
 	t.flagsLock.Lock()
@@ -387,9 +401,11 @@ func (t *table) DrainActorTypes(actorTypes ...string) {
 // longer hosts. Called by the placement disseminator at the end of each
 // dissemination round, when the tables are final. Their actors were halted
 // when the round's tables moved them, so the factories are halted in the
-// background.
+// background; RegisterActorTypes waits for that halt.
 func (t *table) CompleteDrains(placed func(actorType string) bool) {
 	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
+
 	var done []string
 	t.draining.Range(func(key, _ any) bool {
 		if !placed(key.(string)) {
@@ -398,15 +414,25 @@ func (t *table) CompleteDrains(placed func(actorType string) bool) {
 		return true
 	})
 	old := t.detachLocked(done)
-	t.flagsLock.Unlock()
-
-	if len(old) > 0 {
-		go func() {
-			if err := t.haltDetached(old); err != nil {
-				log.Warnf("Failed to halt the actors of drained actor types: %s", err)
-			}
-		}()
+	if len(old) == 0 {
+		return
 	}
+
+	halted := make(chan struct{})
+	for actorType := range old {
+		t.halting.Store(actorType, halted)
+	}
+	go func() {
+		if err := t.haltDetached(old); err != nil {
+			log.Warnf("Failed to halt the actors of drained actor types: %s", err)
+		}
+		t.flagsLock.Lock()
+		for actorType := range old {
+			t.halting.CompareAndDelete(actorType, halted)
+		}
+		t.flagsLock.Unlock()
+		close(halted)
+	}()
 }
 
 // detachLocked removes the given types from the table and returns their

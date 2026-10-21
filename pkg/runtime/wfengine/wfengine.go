@@ -294,8 +294,8 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	defer wfe.actorRegLock.Unlock()
 
 	wfe.mcpRegistrationCount.Add(1)
-	wfe.syncExecutorAvailable()
 	if wfe.fallback != nil {
+		// reconcileFallback marks the executor available once registered.
 		if err := wfe.reconcileFallback(ctx); err != nil {
 			wfe.mcpRegistrationCount.Add(-1)
 			wfe.syncExecutorAvailable()
@@ -303,6 +303,7 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 		}
 		return nil
 	}
+	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors for internal workflows")
 		if err := wfe.backend.RegisterActors(ctx); err != nil {
@@ -320,11 +321,12 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 	defer wfe.actorRegLock.Unlock()
 
 	wfe.getWorkItemsCount.Add(1)
-	wfe.syncExecutorAvailable()
 	if wfe.fallback != nil {
 		// No compensating decrement on error either; see below.
+		// reconcileFallback marks the executor available once registered.
 		return wfe.reconcileFallback(ctx)
 	}
+	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors")
 		if err := wfe.backend.RegisterActors(ctx); err != nil {

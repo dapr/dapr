@@ -83,14 +83,13 @@ func WithFallbackMarker(ctx context.Context) context.Context {
 	return context.WithValue(ctx, fallbackMarkerKey{}, new(atomic.Bool))
 }
 
-// markFallback records on ctx's marker, if any, that res was served by a
-// fallback host.
+// markFallback records on ctx's marker, if any, whether res was served by a
+// fallback host. Each call overwrites the last, so of an operation retried
+// the marker reflects the attempt which answered it: a fallback host may
+// refuse an attempt that a daprd with an executor then serves.
 func markFallback(ctx context.Context, res *internalsv1pb.InternalInvokeResponse) {
-	if !common.IsFallback(res) {
-		return
-	}
 	if m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool); ok {
-		m.Store(true)
+		m.Store(common.IsFallback(res))
 	}
 }
 
@@ -120,17 +119,22 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 		return err
 	}
 
-	factories, err := workflow.Factories(factoryCtx, abe.factoryOptions())
+	hostedCtx, hostedCancel := context.WithCancel(factoryCtx)
+	factories, err := workflow.Factories(hostedCtx, abe.factoryOptions())
 	if err != nil {
+		hostedCancel()
 		return err
 	}
 
+	var execCancel context.CancelFunc
 	if executor {
-		ef, eerr := abe.executorFactory(factoryCtx)
+		ef, cancel, eerr := abe.newExecutorFactory(factoryCtx)
 		if eerr != nil {
+			hostedCancel()
 			return eerr
 		}
 		factories = append(factories, ef)
+		execCancel = cancel
 	}
 
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
@@ -138,7 +142,39 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 		NoReminderDelivery: !executor,
 	})
 
+	// The factories these replace are halted by now: released before this
+	// call, and halted by RegisterActorTypes if they were still draining.
+	replaceCancel(&abe.hostedCancel, hostedCancel)
+	if executor {
+		replaceCancel(&abe.executorCancel, execCancel)
+	}
+
 	return nil
+}
+
+// replaceCancel cancels the background work of the factories a registration
+// replaced, and keeps the cancel of the new ones. Every registration builds
+// new factories, whose background goroutines run until their context is done:
+// without it, each fallback transition would leave those of the factories it
+// replaced running until shutdown. Called under the engine's actor
+// registration lock.
+func replaceCancel(current *context.CancelFunc, next context.CancelFunc) {
+	if *current != nil {
+		(*current)()
+	}
+	*current = next
+}
+
+// newExecutorFactory returns the executor actor type's factory, on a context
+// of its own under factoryCtx, and the cancel of that context.
+func (abe *Actors) newExecutorFactory(factoryCtx context.Context) (table.ActorTypeFactory, context.CancelFunc, error) {
+	ctx, cancel := context.WithCancel(factoryCtx)
+	ef, err := abe.executorFactory(ctx)
+	if err != nil {
+		cancel()
+		return table.ActorTypeFactory{}, nil, err
+	}
+	return ef, cancel, nil
 }
 
 // SetLocalExecutor switches a daprd registered by RegisterHostedActors in
@@ -156,20 +192,28 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 	types := []string{abe.workflowActorType, abe.activityActorType, abe.retentionerActorType}
 
 	if executor {
-		ef, eerr := abe.executorFactory(factoryCtx)
+		ef, execCancel, eerr := abe.newExecutorFactory(factoryCtx)
 		if eerr != nil {
 			return eerr
 		}
 		atable.RegisterActorTypes(table.RegisterActorTypeOptions{
 			Factories: []table.ActorTypeFactory{ef},
 		})
+		replaceCancel(&abe.executorCancel, execCancel)
 		atable.SetReminderDelivery(true, types...)
 		return nil
 	}
 
 	// Stop the reminders first: nothing on this daprd can run them any more.
 	atable.SetReminderDelivery(false, types...)
-	return atable.UnRegisterActorTypes(abe.executorActorType)
+	// A halt error comes after the executor actor type left the table: the
+	// switch is made all the same, so it is not reported as a failed one,
+	// which would make the engine give up the types it must keep hosting.
+	if err := atable.UnRegisterActorTypes(abe.executorActorType); err != nil {
+		log.Warnf("Failed to halt the executor actors of a daprd turning into a fallback host: %s", err)
+	}
+	replaceCancel(&abe.executorCancel, nil)
+	return nil
 }
 
 // DrainActors gives up the workflow, activity, retention and executor actor
