@@ -77,7 +77,8 @@ func resolveSecretKeyRefs(ctx context.Context, pairs []commonapi.NameValuePair, 
 
 // ListMCPServers returns all MCPServer resources for the requested namespace.
 func (a *apiServer) ListMCPServers(ctx context.Context, in *operatorv1pb.ListMCPServersRequest) (*operatorv1pb.ListMCPServersResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -98,8 +99,13 @@ func (a *apiServer) ListMCPServers(ctx context.Context, in *operatorv1pb.ListMCP
 		return nil, fmt.Errorf("error listing MCP servers: %w", err)
 	}
 
+	appID := id.AppID()
 	for i := range list.Items {
 		item := list.Items[i]
+		if !item.IsAppScoped(appID) {
+			continue
+		}
+
 		if err := processMCPServerSecrets(ctx, &item, item.Namespace, a.Client); err != nil {
 			log.Warnf("error processing secrets for MCP server %q/%q: %s", item.Namespace, item.Name, err)
 			return &operatorv1pb.ListMCPServersResponse{}, err
