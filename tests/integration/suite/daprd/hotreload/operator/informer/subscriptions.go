@@ -78,6 +78,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "daprsystem"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -106,6 +107,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
+		daprd.WithAppID("myapp"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),
