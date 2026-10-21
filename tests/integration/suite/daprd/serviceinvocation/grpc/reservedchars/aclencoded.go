@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,6 +83,7 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 
 	a.caller = procdaprd.New(t)
 	callerAppID := a.caller.AppID()
+	denyListAppID, allowListAppID := uuid.New().String(), uuid.New().String()
 
 	config := func(name, defaultAction string, ops ...configapi.AppOperationAction) configapi.Configuration {
 		return configapi.Configuration{
@@ -116,6 +118,7 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 			"default",
 			sen.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{callerAppID: "deny-list", denyListAppID: "deny-list", allowListAppID: "allow-list"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items: []configapi.Configuration{
@@ -152,8 +155,8 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 		}, extra...)
 	}
 
-	a.denyList = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppPort(srv.Port()))...)
-	a.allowList = procdaprd.New(t, daprdOpts("allow-list", procdaprd.WithAppPort(srv.Port()))...)
+	a.denyList = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppID(denyListAppID), procdaprd.WithAppPort(srv.Port()))...)
+	a.allowList = procdaprd.New(t, daprdOpts("allow-list", procdaprd.WithAppID(allowListAppID), procdaprd.WithAppPort(srv.Port()))...)
 	a.caller = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppID(callerAppID))...)
 
 	return []framework.Option{
