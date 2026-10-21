@@ -102,6 +102,9 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
+	// A create or purge can leave a row the settled record would match.
+	o.settled = nil
+
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
 		return nil, o.createWorkflowInstance(ctx, request)
@@ -322,20 +325,28 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		// the history is the heavy part of a resident completed actor, and
 		// dropping it in-turn frees the memory with no teardown machinery, no
 		// channel, and no race with the drive-loop reclaim handshake.
-		// The actor SHELL stays until swept by a follow-up empty-inbox ack or the
-		// factory's idle reaper; post-completion client calls (status, purge)
-		// reload the terminal state from the store.
+		// The actor SHELL stays until swept by a follow-up empty-inbox ack that
+		// no other call waits behind, or by the factory's idle reaper;
+		// post-completion client calls (status, purge) reload the terminal
+		// state from the store.
 		o.invalidateCachedState()
 	}
 	if completed == todo.RunCompletedTrue && (o.rstate == nil || runtimestate.IsCompleted(o.rstate)) {
 		// Deactivate on empty-inbox acks only for terminal (or unknown-state)
 		// workflows. A live workflow acking an empty-inbox reminder (routine after
 		// batched turns) stays resident: its next event arrives shortly and the
-		// cached state saves a full history reload Residency is bounded by the
-		// engine's max concurrent workflow invocations, terminal turns releasing
-		// their state above, and the factory idle reaper; placement churn and host
-		// shutdown still halt resident actors.
-		defer o.deactivate(o)
+		// cached state saves a full history reload. Residency is bounded by the
+		// factory idle reaper; placement churn and host shutdown still halt
+		// resident actors.
+		if o.settled != nil && o.lockWaiters.Load() > 0 {
+			// The exception: while calls wait behind this ack, typically the
+			// rest of a fan-out's wake-ups, a settled terminal instance stays
+			// resident, holding only its record instead of the history, so they
+			// ack without a full load.
+			o.invalidateCachedState()
+		} else {
+			defer o.deactivate(o)
+		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
