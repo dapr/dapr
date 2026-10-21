@@ -1,0 +1,72 @@
+# Resources for the operator_scopes e2e test. Everything is scoped to the
+# opscopes-* test apps so no other app in the test namespace loads them.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opscopes-secret
+stringData:
+  token: opscopes-otherapp-only
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: opscopes-myapp
+spec: {}
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: opscopes-otherapp
+spec: {}
+---
+apiVersion: dapr.io/v1alpha1
+kind: HTTPEndpoint
+metadata:
+  name: opscopes-myapp
+spec:
+  baseUrl: http://localhost:1
+scopes:
+- opscopes-myapp
+---
+apiVersion: dapr.io/v1alpha1
+kind: HTTPEndpoint
+metadata:
+  name: opscopes-otherapp
+spec:
+  baseUrl: http://localhost:1
+  headers:
+  - name: Authorization
+    secretKeyRef:
+      name: opscopes-secret
+      key: token
+scopes:
+- opscopes-otherapp
+---
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: opscopes-myapp
+spec:
+  ignoreErrors: true
+  endpoint:
+    streamableHTTP:
+      url: http://localhost:1/mcp
+scopes:
+- opscopes-myapp
+---
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: opscopes-otherapp
+spec:
+  ignoreErrors: true
+  endpoint:
+    streamableHTTP:
+      url: http://localhost:1/mcp
+      headers:
+      - name: Authorization
+        secretKeyRef:
+          name: opscopes-secret
+          key: token
+scopes:
+- opscopes-otherapp
