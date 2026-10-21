@@ -20,3 +20,5 @@ spec:
       secretKeyRef:
         name: dapr-tls-client
         key: tls.key
+scopes:
+- serviceinvocation-caller

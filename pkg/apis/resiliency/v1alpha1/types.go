@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
 )
 
 // +genclient
@@ -37,6 +39,11 @@ type Resiliency struct {
 func (r *Resiliency) String() string {
 	b, _ := json.Marshal(r)
 	return string(b)
+}
+
+// IsAppScoped returns true if the appID is allowed in the scopes for the resiliency.
+func (r *Resiliency) IsAppScoped(appID string) bool {
+	return (&common.Scoped{Scopes: r.Scopes}).IsAppScoped(appID)
 }
 
 type ResiliencySpec struct {

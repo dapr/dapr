@@ -15,34 +15,58 @@ package api
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
+	}
+
+	// The sidecar is not trusted to self-report which configuration it is
+	// assigned; resolve it from the pod annotation.
+	configs, err := a.appConfigurations(ctx, in.GetNamespace(), id.AppID())
+	if err != nil {
+		// Unavailable is retried by daprd's operator client, so a transient
+		// failure does not fail sidecar startup.
+		return nil, status.Errorf(codes.Unavailable, "failed to resolve assigned configuration for app %s in namespace %s: %s", id.AppID(), in.GetNamespace(), err)
+	}
+	// During a rollout that changes dapr.io/config, old and new pods share the
+	// app ID with different configurations, so any of them is allowed.
+	if !slices.Contains(configs, in.GetName()) {
+		return nil, status.Errorf(codes.PermissionDenied, "configuration %s/%s is not assigned to app %s", in.GetNamespace(), in.GetName(), id.AppID())
 	}
 
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var config configurationapi.Configuration
-	if err := a.Client.Get(ctx, key, &config); err != nil {
+	if err = a.Client.Get(ctx, key, &config); err != nil {
 		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 
-	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
-		log.Warnf("error processing configuration %s secrets from pod %s/%s: %s", config.Name, in.GetNamespace(), in.GetPodName(), err)
+	if err = processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
+		log.Warnf("error processing configuration %s secrets in namespace %s: %s", config.Name, in.GetNamespace(), err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
@@ -96,4 +120,50 @@ func processConfigurationSecrets(ctx context.Context, config *configurationapi.C
 	}
 
 	return nil
+}
+
+// appConfigurations returns the dapr.io/config annotation of every Dapr pod
+// of the app in the namespace, skipping pods without one. Pods are read from
+// the API server, selected by the app ID label the injector sets on every pod.
+// A sidecar only runs once its pod exists, so the read is authoritative.
+func (a *apiServer) appConfigurations(ctx context.Context, namespace, appID string) ([]string, error) {
+	var pods metav1.PartialObjectMetadataList
+	pods.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	if err := a.podReader.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels{injectorconsts.SidecarAppIDLabel: appID}); err != nil {
+		return nil, fmt.Errorf("error listing pods: %w", err)
+	}
+
+	var configs []string
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if !operatormeta.IsAnnotatedForDapr(pod.GetAnnotations()) || podAppID(pod) != appID {
+			continue
+		}
+		if config := daprdConfigName(pod.GetAnnotations()[annotations.KeyConfig]); config != "" {
+			configs = append(configs, config)
+		}
+	}
+
+	return configs, nil
+}
+
+// daprdConfigName returns the configuration daprd loads for a dapr.io/config
+// annotation. The injector passes the annotation verbatim to daprd's --config
+// flag, which parses it as a CSV record, and daprd in Kubernetes mode only
+// loads the first entry.
+func daprdConfigName(annotation string) string {
+	names, err := csv.NewReader(strings.NewReader(annotation)).Read()
+	if err != nil || len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+// podAppID returns the Dapr app ID of a pod, mirroring the injector: the
+// dapr.io/app-id annotation, falling back to the pod name.
+func podAppID(pod metav1.Object) string {
+	if id := pod.GetAnnotations()[annotations.KeyAppID]; id != "" {
+		return id
+	}
+	return pod.GetName()
 }

@@ -17,4 +17,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/componentupdate"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/getconfiguration"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/listcomponents"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/scopes"
 )

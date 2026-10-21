@@ -450,6 +450,10 @@ func (d *Daprd) GetMetaSubscriptionsWithType(t assert.TestingT, ctx context.Cont
 	return filteredSubs
 }
 
+func (d *Daprd) GetMetaEnabledFeatures(t assert.TestingT, ctx context.Context) []string {
+	return d.meta(t, ctx).EnabledFeatures
+}
+
 func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
 	return d.meta(t, ctx).HTTPEndpoints
 }
@@ -474,6 +478,7 @@ type Metadata struct {
 	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
 	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
 	Workflows            *MetadataWorkflows                   `json:"workflows"`
+	EnabledFeatures      []string                             `json:"enabledFeatures,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
