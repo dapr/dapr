@@ -45,8 +45,11 @@ const (
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client        client.Client
-	Cache         cache.Cache
+	Client client.Client
+	Cache  cache.Cache
+	// PodReader reads pods from the API server. The manager cache cannot be
+	// used, as it only holds pods without a sidecar for the watchdog.
+	PodReader     client.Reader
 	Security      security.Provider
 	Port          int
 	ListenAddress string
@@ -64,6 +67,7 @@ type Server interface {
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client        client.Client
+	podReader     client.Reader
 	sec           security.Provider
 	port          string
 	listenAddress string
@@ -81,8 +85,15 @@ type apiServer struct {
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
+	// Fall back to the client when no dedicated pod reader is provided.
+	podReader := opts.PodReader
+	if podReader == nil {
+		podReader = opts.Client
+	}
+
 	return &apiServer{
-		Client: opts.Client,
+		Client:    opts.Client,
+		podReader: podReader,
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),

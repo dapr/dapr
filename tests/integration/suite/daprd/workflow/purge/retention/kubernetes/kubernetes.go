@@ -60,6 +60,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentrySvc.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "wfretention"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -100,6 +101,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 	b.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("wfretention"),
+		daprd.WithAppID("myapp"),
 		daprd.WithNamespace("default"),
 		daprd.WithSentry(t, sentrySvc),
 		daprd.WithControlPlaneAddress(b.oper.Address()),

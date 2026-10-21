@@ -69,6 +69,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp1": "daprsystem", "myapp2": "daprsystem"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -108,8 +109,8 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 	}
 
-	c.daprd1 = daprd.New(t, opts...)
-	c.daprd2 = daprd.New(t, opts...)
+	c.daprd1 = daprd.New(t, append(opts, daprd.WithAppID("myapp1"))...)
+	c.daprd2 = daprd.New(t, append(opts, daprd.WithAppID("myapp2"))...)
 
 	return []framework.Option{
 		framework.WithProcesses(sentry, c.kubeapi, c.operator, c.daprd1, c.daprd2),

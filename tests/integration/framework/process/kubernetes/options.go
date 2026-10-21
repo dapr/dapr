@@ -34,6 +34,8 @@ import (
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 )
 
@@ -96,6 +98,60 @@ func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEnd
 
 func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
 	return handleClusterListResource(t, "/api/v1/pods", pods)
+}
+
+func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option {
+	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
+}
+
+// WithNamespacedPodListSelector serves pods on the namespaced pod list path
+// and asserts every request uses the given label selector.
+func WithNamespacedPodListSelector(t *testing.T, ns, selector string, pods *corev1.PodList) Option {
+	return func(o *options) {
+		handle := handleObj(t, pods)
+		o.handlers["/api/v1/namespaces/"+ns+"/pods"] = func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, selector, r.URL.Query().Get("labelSelector"))
+			handle(w, r)
+		}
+	}
+}
+
+// DaprPod returns a pod as the injector leaves it for appID, assigned the
+// given dapr.io/config annotation value.
+func DaprPod(ns, name, appID, config string) corev1.Pod {
+	return corev1.Pod{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    map[string]string{injectorconsts.SidecarAppIDLabel: appID},
+			Annotations: map[string]string{
+				annotations.KeyEnabled: "true",
+				annotations.KeyAppID:   appID,
+				annotations.KeyConfig:  config,
+			},
+		},
+	}
+}
+
+// WithDaprPodList serves the pods on the namespaced pod list path the operator
+// reads to resolve an app's assigned configuration.
+func WithDaprPodList(t *testing.T, ns string, pods ...corev1.Pod) Option {
+	return WithNamespacedPodList(t, ns, &corev1.PodList{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+		Items:    pods,
+	})
+}
+
+// WithDaprPods serves one DaprPod per app ID, named after the app ID and
+// assigned the mapped configuration, so the operator authorizes each app's
+// GetConfiguration.
+func WithDaprPods(t *testing.T, ns string, appConfigs map[string]string) Option {
+	pods := make([]corev1.Pod, 0, len(appConfigs))
+	for appID, config := range appConfigs {
+		pods = append(pods, DaprPod(ns, appID, appID, config))
+	}
+	return WithDaprPodList(t, ns, pods...)
 }
 
 func WithClusterServiceList(t *testing.T, services *corev1.ServiceList) Option {

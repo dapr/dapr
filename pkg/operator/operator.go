@@ -199,6 +199,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		apiServer: api.NewAPIServer(api.Options{
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
+			PodReader:     mgr.GetAPIReader(),
 			Security:      secProvider,
 			Port:          opts.APIPort,
 			ListenAddress: opts.APIListenAddress,
