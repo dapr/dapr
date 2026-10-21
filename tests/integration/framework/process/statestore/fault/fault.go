@@ -68,6 +68,8 @@ type Store struct {
 	getEmptyNotifyCh     chan struct{}
 
 	bulkGetCounters []bulkGetCounter
+	bulkGetDelaySub string
+	bulkGetDelay    time.Duration
 }
 
 type bulkGetCounter struct {
@@ -83,6 +85,14 @@ func (s *Store) CountBulkGets(sub string) func() int {
 	s.bulkGetCounters = append(s.bulkGetCounters, c)
 	s.mu.Unlock()
 	return func() int { return int(c.n.Load()) }
+}
+
+// DelayBulkGets makes every later BulkGet that touches a key containing sub
+// take at least d longer, as reading a large history does on a real store.
+func (s *Store) DelayBulkGets(sub string, d time.Duration) {
+	s.mu.Lock()
+	s.bulkGetDelaySub, s.bulkGetDelay = sub, d
+	s.mu.Unlock()
 }
 
 // holdSpec is a one-shot arm-able hold on a store operation matching a key
@@ -493,6 +503,15 @@ func (s *Store) BulkGet(ctx context.Context, req []state.GetRequest, opts state.
 			}
 		}
 	}
+	var delay time.Duration
+	if s.bulkGetDelay > 0 {
+		for _, r := range req {
+			if strings.Contains(r.Key, s.bulkGetDelaySub) {
+				delay = s.bulkGetDelay
+				break
+			}
+		}
+	}
 	var hold *holdSpec
 	if s.bulkGetHold != nil {
 		for _, r := range req {
@@ -509,6 +528,12 @@ func (s *Store) BulkGet(ctx context.Context, req []state.GetRequest, opts state.
 		close(hold.arrived)
 		select {
 		case <-hold.releaseCh:
+		case <-ctx.Done():
+		}
+	}
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
 		case <-ctx.Done():
 		}
 	}
