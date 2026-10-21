@@ -36,7 +36,8 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -51,9 +52,10 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	}); err != nil {
 		return nil, fmt.Errorf("error getting subscriptions: %w", err)
 	}
+	appID := id.AppID()
 	for i := range subsV2alpha1.Items {
 		s := subsV2alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		if s.APIVersion() != APIVersionV2alpha1 {
+		if s.APIVersion() != APIVersionV2alpha1 || !s.IsAppScoped(appID) {
 			continue
 		}
 		b, err := json.Marshal(&s)
