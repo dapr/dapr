@@ -48,6 +48,12 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// settled lets a wake-up of a completed instance ack after one read of
+	// its metadata and parent-notify rows (see settledTerminal). Any save
+	// rewrites the metadata row and fails that check, including the paths
+	// that bypass executeMethod (fold submits, activity-result reminders).
+	// Only touched under the turn lock.
+	settled *settledTerminal
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool

@@ -102,6 +102,9 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
+	// A create or purge can leave a row the settled record would match.
+	o.settled = nil
+
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
 		return nil, o.createWorkflowInstance(ctx, request)
@@ -331,11 +334,17 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		// Deactivate on empty-inbox acks only for terminal (or unknown-state)
 		// workflows. A live workflow acking an empty-inbox reminder (routine after
 		// batched turns) stays resident: its next event arrives shortly and the
-		// cached state saves a full history reload Residency is bounded by the
-		// engine's max concurrent workflow invocations, terminal turns releasing
-		// their state above, and the factory idle reaper; placement churn and host
-		// shutdown still halt resident actors.
-		defer o.deactivate(o)
+		// cached state saves a full history reload. Residency is bounded by the
+		// factory idle reaper; placement churn and host shutdown still halt
+		// resident actors.
+		if o.settled != nil {
+			// The exception: a settled terminal instance stays resident too,
+			// holding only its record instead of the history, so the rest of a
+			// fan-out's wake-ups ack without a full load.
+			o.invalidateCachedState()
+		} else {
+			defer o.deactivate(o)
+		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
