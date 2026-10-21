@@ -49,9 +49,12 @@ const (
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client        client.Client
-	Cache         cache.Cache
-	PodReader     client.Reader
+	Client    client.Client
+	Cache     cache.Cache
+	PodReader client.Reader
+	// PodAPIReader reads pods directly from the API server, bypassing the
+	// cache. Used when a connecting app's pod is not yet in PodReader.
+	PodAPIReader  client.Reader
 	Security      security.Provider
 	Port          int
 	ListenAddress string
@@ -67,6 +70,7 @@ type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client        client.Client
 	podReader     client.Reader
+	podAPIReader  client.Reader
 	sec           security.Provider
 	port          string
 	listenAddress string
@@ -94,8 +98,9 @@ func NewAPIServer(opts Options) Server {
 	}
 
 	return &apiServer{
-		Client:    opts.Client,
-		podReader: podReader,
+		Client:       opts.Client,
+		podReader:    podReader,
+		podAPIReader: opts.PodAPIReader,
 		compInformer: informer.New[componentsapi.Component](informer.Options{
 			Cache: opts.Cache,
 		}),
