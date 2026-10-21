@@ -45,7 +45,7 @@ type crossapp struct {
 func (c *crossapp) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 	)
 
 	return []framework.Option{

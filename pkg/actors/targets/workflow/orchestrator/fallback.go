@@ -103,13 +103,15 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 
 // fallbackServed records an operation served on a fallback host. Reads, such
 // as a status query, are not operations on the instance and are not
-// recorded.
+// recorded. A purge completes at once, so it is not counted as staged.
 func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
 	operation := fallbackOperation(method, ev)
 	if operation == "" {
 		return
 	}
-	diag.DefaultWorkflowMonitoring.WorkflowFallbackOperation(ctx, operation)
+	if operation != diag.PurgeWorkflow {
+		diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
+	}
 	if f.onFallback != nil {
 		f.onFallback(operation)
 	}

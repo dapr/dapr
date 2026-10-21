@@ -57,7 +57,7 @@ func (tr *transition) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	tr.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), withDamping(t, transitionDamping)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, transitionDamping)),
 	)

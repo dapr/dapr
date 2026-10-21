@@ -32,7 +32,7 @@ import (
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
 
-// fallbackTest is an engine with WorkflowsFallbackHosts on, a real actor
+// fallbackTest is an engine with WorkflowsStagedOperations on, a real actor
 // table, a presence channel standing in for the placement tables, and a fake
 // clock driving the damping period.
 type fallbackTest struct {
@@ -58,11 +58,11 @@ func newFallbackTest(t *testing.T) *fallbackTest {
 
 	exec := inprocess.NewExecutor()
 	abackend, err := backendactors.New(backendactors.Options{
-		AppID:                  "wfe-test",
-		Namespace:              "default",
-		Actors:                 fa,
-		ComponentStore:         compstore.New(),
-		WorkflowsFallbackHosts: true,
+		AppID:                     "wfe-test",
+		Namespace:                 "default",
+		Actors:                    fa,
+		ComponentStore:            compstore.New(),
+		WorkflowsStagedOperations: true,
 	})
 	require.NoError(t, err)
 

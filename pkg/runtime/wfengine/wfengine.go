@@ -87,9 +87,9 @@ type Options struct {
 	WorkflowsFastPath               bool
 	WorkflowHistorySigning          bool
 
-	// WorkflowsFallbackHosts is the WorkflowsFallbackHosts preview feature:
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
 	// see fallback.go.
-	WorkflowsFallbackHosts bool
+	WorkflowsStagedOperations bool
 
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	GracefulShutdownDuration time.Duration
@@ -120,7 +120,7 @@ type engine struct {
 	actorRegLock     sync.Mutex
 	actorsRegistered bool
 
-	// fallback is the WorkflowsFallbackHosts preview; nil when it is off.
+	// fallback is the WorkflowsStagedOperations preview; nil when it is off.
 	// Its fields are guarded by actorRegLock.
 	fallback *fallback
 
@@ -185,7 +185,7 @@ func New(opts Options) (Interface, error) {
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		WorkflowsFastPath:               fastPath,
-		WorkflowsFallbackHosts:          opts.WorkflowsFallbackHosts,
+		WorkflowsStagedOperations:       opts.WorkflowsStagedOperations,
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
 	})
 	if err != nil {
@@ -206,7 +206,7 @@ func New(opts Options) (Interface, error) {
 		compStore:        opts.ComponentStore,
 		streamShutdownCh: make(chan any),
 	}
-	if opts.WorkflowsFallbackHosts {
+	if opts.WorkflowsStagedOperations {
 		wfe.fallback = newFallback(abackend.WatchExecutorPresence)
 	}
 
@@ -242,7 +242,7 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
 	)
-	if opts.WorkflowsFallbackHosts {
+	if opts.WorkflowsStagedOperations {
 		registerGrpcServerFn = registerFallbackAware(registerGrpcServerFn)
 	}
 

@@ -52,7 +52,7 @@ func (c *colocated) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, 2*time.Second)),
 	)
@@ -115,6 +115,6 @@ func (c *colocated) Run(t *testing.T, ctx context.Context) {
 	// workflow actor and served nothing as a fallback host since.
 	assert.False(t, hostsWorkflows(t, ctx, c.workflow, 1))
 	assert.True(t, hostsWorkflows(t, ctx, c.workflow, 0))
-	key := "dapr_runtime_workflow_fallback_operation_count|app_id:" + c.workflow.DaprN(1).AppID() + "|namespace:|operation:create_workflow"
+	key := "dapr_runtime_workflow_staged_operation_count|app_id:" + c.workflow.DaprN(1).AppID() + "|namespace:|operation:create_workflow"
 	assert.Zero(t, c.workflow.DaprN(1).Metrics(t, ctx).All()[key])
 }

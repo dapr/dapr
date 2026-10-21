@@ -66,7 +66,7 @@ type Options struct {
 	FastPath bool
 
 	// Fallback, if set, reports whether this daprd hosts the activity actor
-	// type as a fallback host (the WorkflowsFallbackHosts preview): with no
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
 	// local executor. A fallback host creates the durable run-activity
 	// reminder in place of a local drive, which would run the activity
 	// here. Nil when the feature is off.

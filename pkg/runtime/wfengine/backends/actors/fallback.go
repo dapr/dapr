@@ -30,7 +30,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-// Fallback hosts (the WorkflowsFallbackHosts preview): a daprd hosts the
+// Fallback hosts (the WorkflowsStagedOperations preview): a daprd hosts the
 // workflow, activity and retention actor types if it has a local executor
 // (a workflow worker connected, or an in-process executor), or if no daprd of
 // its app has one. A daprd with a local executor also registers the executor
@@ -49,7 +49,7 @@ import (
 // an executor once the placement tables move the actor there.
 var errNoLocalExecutor = errors.New("no workflow worker is connected to this daprd")
 
-// requireLocalExecutor fails fast under WorkflowsFallbackHosts when this
+// requireLocalExecutor fails fast under WorkflowsStagedOperations when this
 // daprd has no local executor. Without it the work item would be queued for
 // a worker that is not connected: the pending tracker cancels its
 // completion, but the item stays in the executor's queue, is handed to the
@@ -102,13 +102,13 @@ func servedByFallback(ctx context.Context) bool {
 }
 
 // HasLocalExecutor reports whether this daprd has a local executor, under
-// WorkflowsFallbackHosts. Always true with the feature off.
+// WorkflowsStagedOperations. Always true with the feature off.
 func (abe *Actors) HasLocalExecutor() bool {
 	return abe.requireLocalExecutor() == nil
 }
 
 // RegisterHostedActors registers the workflow, activity and retention actor
-// types under WorkflowsFallbackHosts. With executor set, this daprd has a
+// types under WorkflowsStagedOperations. With executor set, this daprd has a
 // local executor: the executor actor type is registered too and the types
 // are advertised to the scheduler. Without, it is a fallback host. ctx bounds
 // the wait for the actor runtime; factoryCtx is the lifetime of the
@@ -175,7 +175,7 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 }
 
 // DrainActors gives up the workflow, activity, retention and executor actor
-// types gracefully under WorkflowsFallbackHosts: they leave the placement
+// types gracefully under WorkflowsStagedOperations: they leave the placement
 // report at once, and keep their actors until a dissemination round moves
 // them to the daprds which host them, so the calls routed here meanwhile are
 // served rather than failed with the type not registered. See the actor

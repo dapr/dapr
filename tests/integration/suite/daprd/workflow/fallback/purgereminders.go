@@ -46,7 +46,7 @@ type purgereminders struct {
 
 func (p *purgereminders) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:

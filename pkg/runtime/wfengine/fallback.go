@@ -46,7 +46,7 @@ func fallbackDamping() time.Duration {
 // registration again after one failed.
 const fallbackRetryInterval = time.Second
 
-// fallback is the engine's state of the WorkflowsFallbackHosts preview (see
+// fallback is the engine's state of the WorkflowsStagedOperations preview (see
 // backends/actors/fallback.go). The rule, which each daprd applies alone:
 // host the workflow actor types if this daprd has a local executor, or if no
 // other daprd of the app has one. The decision depends only on those two
@@ -276,7 +276,7 @@ func (wfe *engine) fallbackDampingExpired(gen uint64) {
 	}
 }
 
-// runFallback runs the WorkflowsFallbackHosts preview for Run: it follows
+// runFallback runs the WorkflowsStagedOperations preview for Run: it follows
 // whether another daprd of the app has an executor and applies the rule to
 // each change, until ctx is done. The actor runtime is ready when it is
 // called, so a registration does not block worker connections behind

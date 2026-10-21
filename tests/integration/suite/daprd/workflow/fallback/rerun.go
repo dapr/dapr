@@ -45,7 +45,7 @@ type rerun struct {
 
 func (r *rerun) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 	)
 
 	return []framework.Option{

@@ -18,7 +18,7 @@ import (
 )
 
 // FallbackHeader is set on the response of a workflow actor method served by
-// a fallback host (the WorkflowsFallbackHosts preview): a daprd with no
+// a fallback host (the WorkflowsStagedOperations preview): a daprd with no
 // local executor, on which the instance does not advance until the actor
 // moves to a daprd with one.
 const FallbackHeader = "dapr-workflow-fallback"

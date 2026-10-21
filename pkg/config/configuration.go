@@ -87,15 +87,16 @@ const (
 	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
 
-	// WorkflowsFallbackHosts keeps the workflow actor types of an app hosted
-	// while no daprd of the app has a workflow worker connected (or an
-	// in-process executor). A daprd with an executor registers the
-	// executor actor type as well, which tells the app's other daprds that
-	// one exists; while none does, every daprd of the app hosts the workflow
-	// actor types itself, as a fallback host. Starts, raised events,
-	// terminate, suspend, resume, status queries and purges then take the
-	// normal path, with their usual synchronous errors, instead of blocking
-	// or failing with no address. A fallback host runs no workflow code: it
+	// WorkflowsStagedOperations accepts workflow operations while no daprd of
+	// the app has a workflow worker connected (or an in-process executor).
+	// Starts, raised events, terminate, suspend, resume and rerun are staged:
+	// daprd saves them, with their usual synchronous errors, and they run
+	// once a worker connects. Status queries and purges complete at once.
+	// Without it they block or fail with no address. To stage them, a daprd
+	// with an executor registers the executor actor type as well, which
+	// tells the app's other daprds that one exists; while none does, every
+	// daprd of the app hosts the workflow actor types itself, as a fallback
+	// host. A fallback host runs no workflow code: it
 	// does not advertise the types to the scheduler for reminder delivery,
 	// so the reminders its actors arm fire once a daprd with an executor
 	// exists, and it gives the types up once one has existed for a short
@@ -107,7 +108,7 @@ const (
 	// while no worker exists, so set it in the Configuration of the apps
 	// which run workflows rather than of every app. Preview feature;
 	// disabled by default.
-	WorkflowsFallbackHosts Feature = "WorkflowsFallbackHosts"
+	WorkflowsStagedOperations Feature = "WorkflowsStagedOperations"
 )
 
 // end feature flags section

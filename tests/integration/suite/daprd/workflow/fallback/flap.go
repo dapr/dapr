@@ -52,7 +52,7 @@ func (f *flap) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	f.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, flapDamping)),
 	)

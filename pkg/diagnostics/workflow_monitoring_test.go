@@ -379,15 +379,15 @@ func TestExecution(t *testing.T) {
 	})
 }
 
-func TestFallbackOperation(t *testing.T) {
-	const countMetricName = "runtime/workflow/fallback/operation/count"
+func TestStagedOperation(t *testing.T) {
+	const countMetricName = "runtime/workflow/staged/operation/count"
 
 	w, meter := initWorkflowMetrics()
 	t.Cleanup(func() { meter.Stop() })
 
-	w.WorkflowFallbackOperation(t.Context(), CreateWorkflow)
-	w.WorkflowFallbackOperation(t.Context(), CreateWorkflow)
-	w.WorkflowFallbackOperation(t.Context(), RaiseEvent)
+	w.WorkflowStagedOperation(t.Context(), CreateWorkflow)
+	w.WorkflowStagedOperation(t.Context(), CreateWorkflow)
+	w.WorkflowStagedOperation(t.Context(), RaiseEvent)
 
 	viewData, err := meter.RetrieveData(countMetricName)
 	require.NoError(t, err)

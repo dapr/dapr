@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fallback tests the WorkflowsFallbackHosts preview: while no daprd
+// Package fallback tests the WorkflowsStagedOperations preview: while no daprd
 // of an app has a workflow worker connected, its daprds host the workflow
 // actor types as fallback hosts, so workflow operations take their normal
 // path and the instance runs once a daprd with a worker owns it.
@@ -55,7 +55,7 @@ func (s *start) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
 	)
@@ -120,7 +120,7 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	// Each daprd counts the starts it served as a fallback host; the
 	// duplicate failed, so it is not counted.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		key := "dapr_runtime_workflow_fallback_operation_count|app_id:" + s.workflow.Dapr().AppID() + "|namespace:|operation:create_workflow"
+		key := "dapr_runtime_workflow_staged_operation_count|app_id:" + s.workflow.Dapr().AppID() + "|namespace:|operation:create_workflow"
 		var served float64
 		for i := range 2 {
 			served += s.workflow.DaprN(i).Metrics(c, ctx).All()[key]

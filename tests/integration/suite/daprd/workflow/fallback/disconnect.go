@@ -47,7 +47,7 @@ type disconnect struct {
 
 func (d *disconnect) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t,
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 	)
 
 	return []framework.Option{

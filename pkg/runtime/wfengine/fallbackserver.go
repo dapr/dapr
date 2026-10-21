@@ -24,7 +24,7 @@ import (
 
 // registerFallbackAware wraps the durabletask executor's registration so that
 // a start, rerun, terminate, suspend or resume served by a fallback host
-// returns once it is accepted (the WorkflowsFallbackHosts preview). The
+// returns once it is accepted (the WorkflowsStagedOperations preview). The
 // executor waits for the instance to start or change state after each of
 // them, which on a fallback host happens only once the instance moves to a
 // daprd with an executor; the backend skips that wait only for an operation

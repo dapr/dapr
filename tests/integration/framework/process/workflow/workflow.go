@@ -100,7 +100,7 @@ type Workflow struct {
 
 	schedulerPlacement bool
 
-	fallbackHosts bool
+	stagedOperations bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -219,7 +219,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// features replaces every earlier feature list. All harness-driven
 	// features must therefore land in a single manifest per daprd; it is
 	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath, opts.fallbackHosts)
+	baseFeatures := baseFeatureList(clustered, fastPath, opts.stagedOperations)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -291,7 +291,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 		schedulerPlacement: schedulerPlacement,
 
-		fallbackHosts: opts.fallbackHosts,
+		stagedOperations: opts.stagedOperations,
 	}
 
 	for i := range workflow.taskregistry {
@@ -451,7 +451,7 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-func baseFeatureList(clustered, fastPath, fallbackHosts bool) []string {
+func baseFeatureList(clustered, fastPath, stagedOperations bool) []string {
 	features := make([]string, 0, 3)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
@@ -459,8 +459,8 @@ func baseFeatureList(clustered, fastPath, fallbackHosts bool) []string {
 	if fastPath {
 		features = append(features, "WorkflowsFastPath")
 	}
-	if fallbackHosts {
-		features = append(features, "WorkflowsFallbackHosts")
+	if stagedOperations {
+		features = append(features, "WorkflowsStagedOperations")
 	}
 	return features
 }
@@ -470,7 +470,7 @@ func baseFeatureList(clustered, fastPath, fallbackHosts bool) []string {
 // the Sentry wiring.
 func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	t.Helper()
-	features := baseFeatureList(w.clustered, w.fastPath, w.fallbackHosts)
+	features := baseFeatureList(w.clustered, w.fastPath, w.stagedOperations)
 	var opts []daprd.Option
 	if w.sentry != nil {
 		opts = append(opts, daprd.WithSentry(t, w.sentry))

@@ -44,7 +44,7 @@ type control struct {
 
 func (c *control) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 	)
 
 	return []framework.Option{

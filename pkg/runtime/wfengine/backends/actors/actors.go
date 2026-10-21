@@ -104,9 +104,9 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
-	// WorkflowsFallbackHosts is the WorkflowsFallbackHosts preview feature:
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
 	// see fallback.go.
-	WorkflowsFallbackHosts bool
+	WorkflowsStagedOperations bool
 
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	// It bounds how long an activity result publish in flight at shutdown
@@ -246,7 +246,7 @@ func New(opts Options) (*Actors, error) {
 	// Wrapped so pending completions can be cancelled while no executor is
 	// connected; see the pendingtracker package.
 	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
-	if opts.WorkflowsFallbackHosts {
+	if opts.WorkflowsStagedOperations {
 		// The engine reports every executor count change under the
 		// feature, and a fallback host registers with none.
 		trackedPendingTasksBackend.SetExecutorAvailable(false)
@@ -275,7 +275,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
-		fallbackHosts:                   opts.WorkflowsFallbackHosts,
+		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
@@ -409,7 +409,7 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		abe.activityActorType,
 		abe.retentionerActorType,
 	}
-	// Under WorkflowsFallbackHosts the executor actor type is registered
+	// Under WorkflowsStagedOperations the executor actor type is registered
 	// apart from the others; the table ignores it if it is not registered.
 	if abe.enableClusteredDeployment || abe.fallbackHosts {
 		actorTypes = append(actorTypes, abe.executorActorType)

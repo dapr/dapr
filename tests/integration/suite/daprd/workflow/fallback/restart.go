@@ -50,7 +50,7 @@ type restart struct {
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
-		workflow.WithFallbackHosts(),
+		workflow.WithStagedOperations(),
 	)
 
 	return []framework.Option{

@@ -79,7 +79,7 @@ type Options struct {
 	FastPath bool
 
 	// Fallback, if set, reports whether this daprd hosts the workflow actor
-	// type as a fallback host (the WorkflowsFallbackHosts preview): with no
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
 	// local executor. A fallback host serves every operation, marks its
 	// responses with common.FallbackHeader so callers do not wait for the
 	// instance to advance, and takes the durable reminder path for them

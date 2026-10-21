@@ -40,7 +40,7 @@ func newFallbackTestBackend(t *testing.T, fallbackHosts, clustered bool) (*Actor
 		Actors: actorsfake.New().WithTable(func(context.Context) (table.Interface, error) {
 			return tbl, nil
 		}),
-		WorkflowsFallbackHosts:    fallbackHosts,
+		WorkflowsStagedOperations: fallbackHosts,
 		EnableClusteredDeployment: clustered,
 	})
 	require.NoError(t, err)

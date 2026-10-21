@@ -87,7 +87,7 @@ func newFallbackWaiting(appID string) *fallbackWaiting {
 		appID: appID,
 		clock: clock.RealClock{},
 		warn: func(appID string, waiting int64, since time.Duration) {
-			log.Warnf("%d workflow operations served on this fallback host are waiting for a workflow worker to connect to a daprd of app '%s'; none has had one for %s",
+			log.Warnf("%d staged workflow operations are waiting for a workflow worker to connect to a daprd of app '%s'; none has had one for %s",
 				waiting, appID, since)
 		},
 	}
