@@ -45,6 +45,11 @@ import (
 // fanOut is the fan-out leftoverWakeups completes in one turn.
 const fanOut = 200
 
+// fullLoadKey matches a row every full load reads and the settled check does
+// not: that check reads the first history row, so history rows cannot tell
+// the two apart.
+const fullLoadKey = "||propagated-history"
+
 // TerminalCost bounds what a completed workflow costs to poke: every call a
 // completed instance can still receive in bulk must be answered without
 // reading its whole history from the store each time. Those reads run one
@@ -117,8 +122,8 @@ func (c *TerminalCost) Execute(t *testing.T, ctx context.Context) {
 
 // register registers the workflows the checks start, before the worker
 // starts, and makes every full load cost what a large history does on a real
-// store. 200 leftover reloads then take at least 10 s, well clear of the
-// completion-wait bound in leftoverWakeups.
+// store. 200 leftover reloads then sleep for 10 s on their own, above the
+// completion-wait bound in leftoverWakeups however loaded the runner is.
 func (c *TerminalCost) register(t *testing.T) {
 	t.Helper()
 
@@ -155,7 +160,7 @@ func (c *TerminalCost) register(t *testing.T) {
 		return nil, octx.CallActivity("terminalcost-act").Await(nil)
 	}))
 
-	c.store.DelayBulkGets("||history-", 50*time.Millisecond)
+	c.store.DelayBulkGets(fullLoadKey, 50*time.Millisecond)
 }
 
 // leftoverWakeups: every activity result arms one wake-up. When one turn
@@ -165,11 +170,14 @@ func (c *TerminalCost) leftoverWakeups(t *testing.T, ctx context.Context, bc *cl
 	t.Helper()
 	const wfID = "terminalcost-fanout"
 
+	// Counted from the start, so a load that races the completion log line
+	// is not missed. A running instance keeps its state cached, so the loads
+	// all come after completion.
+	fullLoads := c.store.CountBulkGets(wfID + fullLoadKey)
 	c.start(t, ctx, "terminalcost-fanout", wfID)
 
 	completedLine := fmt.Sprintf("Workflow Actor '%s': workflow completed with status", wfID)
 	require.True(t, c.log.EventuallyContains(t, completedLine, 30*time.Second, 5*time.Millisecond))
-	historyReads := c.store.CountBulkGets(wfID + "||history-")
 
 	ignored := fmt.Sprintf("Workflow actor '%s': ignoring run request for reminder 'new-event-", wfID)
 	turns := fmt.Sprintf("processing work item: %s ", wfID)
@@ -177,14 +185,14 @@ func (c *TerminalCost) leftoverWakeups(t *testing.T, ctx context.Context, bc *cl
 
 	// A client asking for the result now queues on the actor lock behind
 	// every wake-up already waiting there. Acks without a reload take about
-	// 1 s for all of them under -race.
+	// 1 s for all of them under -race; reloads take at least 10 s.
 	asked := time.Now()
 	meta, err := bc.WaitForWorkflowCompletion(ctx, api.InstanceID(wfID))
 	answered := time.Since(asked)
 	t.Logf("completion wait answered after %s", answered)
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.Less(t, answered, 4*time.Second, "the completed workflow answered its completion wait after %s", answered)
+	assert.Less(t, answered, 8*time.Second, "the completed workflow answered its completion wait after %s", answered)
 
 	// Each wake-up either drove a turn (the start turn aside) or found the
 	// inbox empty.
@@ -195,7 +203,8 @@ func (c *TerminalCost) leftoverWakeups(t *testing.T, ctx context.Context, bc *cl
 	leftover := c.log.Count(ignored) - ignoredAtCompletion
 	require.GreaterOrEqual(t, leftover, fanOut/2,
 		"the completing turn did not consume most of the results, so too few wake-ups fired after completion to test")
-	assert.LessOrEqual(t, historyReads(), 3,
+	t.Logf("%d full loads for %d wake-ups after completion", fullLoads(), leftover)
+	assert.LessOrEqual(t, fullLoads(), 3,
 		"%d wake-ups of the completed workflow reloaded its history from the store", leftover)
 }
 
@@ -237,7 +246,7 @@ func (c *TerminalCost) lateDuplicates(t *testing.T, ctx context.Context, bc *cli
 	require.NoError(t, err)
 	dropped := fmt.Sprintf("Workflow actor '%s': dropping completion", wfID)
 
-	historyReads := c.store.CountBulkGets(wfID + "||history-")
+	fullLoads := c.store.CountBulkGets(wfID + fullLoadKey)
 	ic := c.workflow.InternalGRPCClient(t, ctx)
 	for range duplicates {
 		_, err = ic.CallActor(ctx, internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
@@ -252,7 +261,7 @@ func (c *TerminalCost) lateDuplicates(t *testing.T, ctx context.Context, bc *cli
 
 	// One read per actor residency: the completion wait deactivates the
 	// actor, and that deactivation may land between two duplicates.
-	assert.LessOrEqual(t, historyReads(), 2,
+	assert.LessOrEqual(t, fullLoads(), 2,
 		"%d late duplicates of the completed workflow reloaded its history from the store", duplicates)
 }
 

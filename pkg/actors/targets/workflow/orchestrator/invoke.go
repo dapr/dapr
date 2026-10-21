@@ -325,9 +325,10 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		// the history is the heavy part of a resident completed actor, and
 		// dropping it in-turn frees the memory with no teardown machinery, no
 		// channel, and no race with the drive-loop reclaim handshake.
-		// The actor SHELL stays until swept by a follow-up empty-inbox ack or the
-		// factory's idle reaper; post-completion client calls (status, purge)
-		// reload the terminal state from the store.
+		// The actor SHELL stays until swept by a follow-up empty-inbox ack that
+		// no other call waits behind, or by the factory's idle reaper;
+		// post-completion client calls (status, purge) reload the terminal
+		// state from the store.
 		o.invalidateCachedState()
 	}
 	if completed == todo.RunCompletedTrue && (o.rstate == nil || runtimestate.IsCompleted(o.rstate)) {
@@ -337,10 +338,11 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 		// cached state saves a full history reload. Residency is bounded by the
 		// factory idle reaper; placement churn and host shutdown still halt
 		// resident actors.
-		if o.settled != nil {
-			// The exception: a settled terminal instance stays resident too,
-			// holding only its record instead of the history, so the rest of a
-			// fan-out's wake-ups ack without a full load.
+		if o.settled != nil && o.lockWaiters.Load() > 0 {
+			// The exception: while calls wait behind this ack, typically the
+			// rest of a fan-out's wake-ups, a settled terminal instance stays
+			// resident, holding only its record instead of the history, so they
+			// ack without a full load.
 			o.invalidateCachedState()
 		} else {
 			defer o.deactivate(o)

@@ -49,10 +49,10 @@ type orchestrator struct {
 
 	activityResultAwaited atomic.Bool
 	// settled lets a wake-up of a completed instance ack after one read of
-	// its metadata and parent-notify rows (see settledTerminal). Any save
-	// rewrites the metadata row and fails that check, including the paths
-	// that bypass executeMethod (fold submits, activity-result reminders).
-	// Only touched under the turn lock.
+	// its metadata, parent-notify and first history rows (see
+	// settledTerminal). Any save rewrites the metadata row and fails that
+	// check, including the paths that bypass executeMethod (fold submits,
+	// activity-result reminders). Only touched under the turn lock.
 	settled *settledTerminal
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
@@ -73,6 +73,8 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
+	// lockWaiters counts invocations blocked on the turn lock.
+	lockWaiters atomic.Int32
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,
@@ -172,6 +174,8 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
 	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+	o.lockWaiters.Add(1)
+	defer o.lockWaiters.Add(-1)
 
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)

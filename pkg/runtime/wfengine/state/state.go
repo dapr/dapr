@@ -1540,6 +1540,11 @@ func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 	s.Generation = state.GetGeneration()
 }
 
+// HistoryKey is the row that holds history event i.
+func HistoryKey(i uint64) string {
+	return getMultiEntryKeyName(historyKeyPrefix, i)
+}
+
 func getMultiEntryKeyName(prefix string, i uint64) string {
 	s := strconv.FormatUint(i, 10)
 	const padLen = 6
