@@ -202,11 +202,7 @@ func (abe *Actors) DrainActors(ctx context.Context) error {
 // one has an executor.
 func (abe *Actors) executorFactory(ctx context.Context) (table.ActorTypeFactory, error) {
 	if abe.enableClusteredDeployment {
-		factory, err := executor.New(ctx, executor.Options{
-			ActorType: abe.executorActorType,
-			Actors:    abe.actors,
-			Pending:   abe.pendingCompletions,
-		})
+		factory, err := executor.New(ctx, abe.executorOptions())
 		if err != nil {
 			return table.ActorTypeFactory{}, err
 		}

@@ -388,14 +388,21 @@ func (abe *Actors) factoryOptions() workflow.Options {
 	}
 
 	if abe.enableClusteredDeployment {
-		opts.Executor = &executor.Options{
-			ActorType: abe.executorActorType,
-			Actors:    abe.actors,
-			Pending:   abe.pendingCompletions,
-		}
+		eopts := abe.executorOptions()
+		opts.Executor = &eopts
 	}
 
 	return opts
+}
+
+// executorOptions returns the options of the executor actor's factory under
+// WorkflowsClusteredDeployment.
+func (abe *Actors) executorOptions() executor.Options {
+	return executor.Options{
+		ActorType: abe.executorActorType,
+		Actors:    abe.actors,
+		Pending:   abe.pendingCompletions,
+	}
 }
 
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {

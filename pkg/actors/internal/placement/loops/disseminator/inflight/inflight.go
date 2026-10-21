@@ -270,24 +270,18 @@ func (i *Inflight) HasTables(types []string) bool {
 // HasLocalHost returns whether the installed placement table of actorType
 // places it on this host.
 func (i *Inflight) HasLocalHost(actorType string) bool {
-	var hosts []string
-	if entry, ok := i.v2Entries[actorType]; ok {
-		hosts = entry.table.Hosts()
-	} else if table, ok := i.hashTable.Entries[actorType]; ok {
-		hosts = table.Hosts()
-	}
-
-	for _, host := range hosts {
-		if loops.IsActorLocal(host, i.hostname, i.port) {
-			return true
-		}
-	}
-	return false
+	return i.hasHost(actorType, true)
 }
 
 // HasRemoteHosts returns whether the installed placement table of actorType
 // has a host other than this one.
 func (i *Inflight) HasRemoteHosts(actorType string) bool {
+	return i.hasHost(actorType, false)
+}
+
+// hasHost returns whether the installed placement table of actorType has a
+// host which is this one (local) or another one (!local).
+func (i *Inflight) hasHost(actorType string, local bool) bool {
 	var hosts []string
 	if entry, ok := i.v2Entries[actorType]; ok {
 		hosts = entry.table.Hosts()
@@ -296,7 +290,7 @@ func (i *Inflight) HasRemoteHosts(actorType string) bool {
 	}
 
 	for _, host := range hosts {
-		if !loops.IsActorLocal(host, i.hostname, i.port) {
+		if loops.IsActorLocal(host, i.hostname, i.port) == local {
 			return true
 		}
 	}

@@ -174,12 +174,24 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 		return nil
 	}
 
+	err := o.createJanitor(ctx, state, time.Now().Add(janitorPeriod()))
+	if err != nil {
+		return err
+	}
+
+	o.janitorAsserted.Store(true)
+	return nil
+}
+
+// createJanitor creates (or overwrites by name) the janitor reminder, first
+// due at due.
+func (o *orchestrator) createJanitor(ctx context.Context, state *wfenginestate.State, due time.Time) error {
 	wfName := o.getExecutionStartedEvent(state).GetName()
-	err := common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: o.actorTypeBuilder.Workflow(o.appID),
 		ActorID:   o.actorID,
 		Name:      janitorReminderName,
-		DueTime:   time.Now().Add(janitorPeriod()).UTC().Format(time.RFC3339Nano),
+		DueTime:   due.UTC().Format(time.RFC3339Nano),
 		Period:    janitorPeriod().String(),
 		FailurePolicy: &commonv1pb.JobFailurePolicy{
 			Policy: &commonv1pb.JobFailurePolicy_Drop{
@@ -188,12 +200,6 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 		},
 		ConcurrencyKey: &wfName,
 	})
-	if err != nil {
-		return err
-	}
-
-	o.janitorAsserted.Store(true)
-	return nil
 }
 
 // deleteReminderTolerant deletes a reminder and reports whether the delete

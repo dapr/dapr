@@ -17,10 +17,7 @@ import (
 	"context"
 	"time"
 
-	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
@@ -54,20 +51,7 @@ func (f *factory) localFastPath() bool {
 // until the instance moves to such a daprd, where its re-dispatch of the
 // unresolved tasks sends the activities.
 func (o *orchestrator) armFallbackJanitor(ctx context.Context, state *wfenginestate.State) error {
-	wfName := o.getExecutionStartedEvent(state).GetName()
-	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
-		ActorType: o.actorTypeBuilder.Workflow(o.appID),
-		ActorID:   o.actorID,
-		Name:      janitorReminderName,
-		DueTime:   time.Now().UTC().Format(time.RFC3339Nano),
-		Period:    janitorPeriod().String(),
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Drop{
-				Drop: new(commonv1pb.JobFailurePolicyDrop),
-			},
-		},
-		ConcurrencyKey: &wfName,
-	})
+	return o.createJanitor(ctx, state, time.Now())
 }
 
 // fallbackOperation returns the diagnostics operation of a workflow actor
