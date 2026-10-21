@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1605,18 +1606,35 @@ func etagStore(t *testing.T, etag string, generation uint64, history, inbox []*b
 		rows[fmt.Sprintf("history-%06d", i)] = data
 	}
 
-	return statefake.New().
+	// The metadata and parent-notify rows are served by Get in a bulk read
+	// too, so a test overriding Get controls them on both paths. A bulk read
+	// counts as a history read unless it reads only those rows and the first
+	// history row, as the settled check does.
+	f := statefake.New()
+	return f.
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			if req.Key == wfenginestate.MetadataKey {
 				return &actorapi.StateResponse{Data: meta, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
 		}).
-		WithGetBulkFn(func(_ context.Context, req *actorapi.GetBulkStateRequest, _ bool) (actorapi.BulkStateResponse, error) {
-			bulkGets.Add(1)
+		WithGetBulkFn(func(ctx context.Context, req *actorapi.GetBulkStateRequest, lock bool) (actorapi.BulkStateResponse, error) {
 			res := make(actorapi.BulkStateResponse, len(req.Keys))
+			history := false
 			for _, k := range req.Keys {
-				res[k] = actorapi.BulkStateEntry{Data: rows[k]}
+				if k != wfenginestate.MetadataKey && k != wfenginestate.ParentNotifyKey {
+					history = history || k != wfenginestate.HistoryKey(0)
+					res[k] = actorapi.BulkStateEntry{Data: rows[k]}
+					continue
+				}
+				r, err := f.Get(ctx, &actorapi.GetStateRequest{ActorType: req.ActorType, ActorID: req.ActorID, Key: k}, lock)
+				if err != nil {
+					return nil, err
+				}
+				res[k] = actorapi.BulkStateEntry{Data: r.Data, ETag: r.ETag}
+			}
+			if history {
+				bulkGets.Add(1)
 			}
 			return res, nil
 		})
@@ -1682,13 +1700,14 @@ func Test_runWorkflow_emptyInboxDrivesAPendingDurableEvent(t *testing.T) {
 	assert.Equal(t, "go", driven[0].GetEventRaised().GetName())
 }
 
-// Test_runWorkflow_emptyInboxReloadsATerminalCache verifies that a terminal
-// cache is reloaded on an empty-inbox wake-up even when the store's metadata
-// row matches it. Settling a terminal instance reads what the row does not
+// Test_runWorkflow_emptyInboxReloadsATerminalCache verifies that an
+// empty-inbox wake-up of a completed instance reads the stored state even when
+// the store's metadata row matches what the actor holds, a terminal cache or a
+// settled record. Settling a terminal instance reads what the row does not
 // cover: here the instance was purged and recreated, so its generation
 // restarted at 1, and it completed again with as many events under an ETag
 // the store reused. Retention must be armed from the stored completion, not
-// the cached one, which would purge the new execution early.
+// the held one, which would purge the new execution early or not at all.
 func Test_runWorkflow_emptyInboxReloadsATerminalCache(t *testing.T) {
 	t.Parallel()
 
@@ -1697,51 +1716,68 @@ func Test_runWorkflow_emptyInboxReloadsATerminalCache(t *testing.T) {
 	storedHistory := terminalHistory(instanceID)
 	cachedAt := time.Now().Add(-time.Hour).UTC()
 	storedAt := time.Now().UTC()
+	cachedHistory[0].Timestamp = timestamppb.New(cachedAt.Add(-time.Minute))
+	storedHistory[0].Timestamp = timestamppb.New(storedAt.Add(-time.Minute))
 	cachedHistory[2].Timestamp = timestamppb.New(cachedAt)
 	storedHistory[2].Timestamp = timestamppb.New(storedAt)
-
-	var (
-		bulkGets atomic.Int32
-		mu       sync.Mutex
-		dues     = map[string]string{}
-	)
-	retention := time.Hour
-	fact, err := New(t.Context(), Options{
-		AppID:              "testapp",
-		WorkflowActorType:  "workflow",
-		ActivityActorType:  "activity",
-		RetentionActorType: "retentioner",
-		ActorTypeBuilder:   common.NewActorTypeBuilder("default"),
-		RetentionPolicy:    &config.WorkflowStateRetentionPolicy{AnyTerminal: &retention},
-		Actors: fake.New().
-			WithReminders(func(context.Context) (actorreminders.Interface, error) {
-				return remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
-					mu.Lock()
-					defer mu.Unlock()
-					dues[req.Name] = req.DueTime
-					return nil
-				}), nil
-			}).
-			WithState(func(context.Context) (actorstate.Interface, error) {
-				return etagStore(t, "meta-v1", 1, storedHistory, nil, &bulkGets), nil
-			}),
-	})
+	cachedFirstRow, err := proto.Marshal(cachedHistory[0])
 	require.NoError(t, err)
 
-	o := fact.GetOrCreate(instanceID).(*orchestrator)
-	o.state = cachedWithETag(cachedHistory, "meta-v1")
-	o.primeCachedState(o.state, nil)
-	require.True(t, runtimestate.IsCompleted(o.rstate), "precondition: the cache is terminal")
+	for name, hold := range map[string]func(o *orchestrator){
+		"terminal cache": func(o *orchestrator) {
+			o.state = cachedWithETag(cachedHistory, "meta-v1")
+			o.primeCachedState(o.state, nil)
+			require.True(t, runtimestate.IsCompleted(o.rstate), "precondition: the cache is terminal")
+		},
+		"settled record": func(o *orchestrator) {
+			o.settled = &settledTerminal{etag: "meta-v1", generation: 1, historyLength: uint64(len(cachedHistory)), firstRow: cachedFirstRow}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	completed, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-late"})
-	require.NoError(t, err)
-	assert.Equal(t, todo.RunCompletedTrue, completed)
-	assert.Equal(t, int32(1), bulkGets.Load(), "the terminal cache must be reloaded")
+			var (
+				bulkGets atomic.Int32
+				mu       sync.Mutex
+				dues     = map[string]string{}
+			)
+			retention := time.Hour
+			fact, err := New(t.Context(), Options{
+				AppID:              "testapp",
+				WorkflowActorType:  "workflow",
+				ActivityActorType:  "activity",
+				RetentionActorType: "retentioner",
+				ActorTypeBuilder:   common.NewActorTypeBuilder("default"),
+				RetentionPolicy:    &config.WorkflowStateRetentionPolicy{AnyTerminal: &retention},
+				Actors: fake.New().
+					WithReminders(func(context.Context) (actorreminders.Interface, error) {
+						return remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+							mu.Lock()
+							defer mu.Unlock()
+							dues[req.Name] = req.DueTime
+							return nil
+						}), nil
+					}).
+					WithState(func(context.Context) (actorstate.Interface, error) {
+						return etagStore(t, "meta-v1", 1, storedHistory, nil, &bulkGets), nil
+					}),
+			})
+			require.NoError(t, err)
 
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Equal(t, storedAt.Add(retention).Format(time.RFC3339Nano), dues[retentionReminderName],
-		"retention must run from the stored completion")
+			o := fact.GetOrCreate(instanceID).(*orchestrator)
+			hold(o)
+
+			completed, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-late"})
+			require.NoError(t, err)
+			assert.Equal(t, todo.RunCompletedTrue, completed)
+			assert.Equal(t, int32(1), bulkGets.Load(), "the stored state must be read")
+
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, storedAt.Add(retention).Format(time.RFC3339Nano), dues[retentionReminderName],
+				"retention must run from the stored completion")
+		})
+	}
 }
 
 // Test_confirmCachedState_checksMoreThanTheETag verifies that a drop is
@@ -1790,6 +1826,164 @@ func Test_confirmCachedState_checksMoreThanTheETag(t *testing.T) {
 			require.Error(t, err)
 			assert.True(t, wferrors.IsRecoverable(err), "the sender retries against a fresh load")
 			assert.Nil(t, o.state, "a stale cache is dropped")
+		})
+	}
+}
+
+// Test_runWorkflowFromReminder_settledTerminalSkipsTheFullLoad verifies that a
+// fan-out's leftover wake-ups of a completed instance ack after one metadata
+// read once the instance was loaded whole and settled with nothing owed, and
+// that any write to the instance brings the full load back.
+func Test_runWorkflowFromReminder_settledTerminalSkipsTheFullLoad(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-settled"
+	history := terminalHistory(instanceID)
+	meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{Generation: 1, HistoryLength: uint64(len(history))})
+	require.NoError(t, err)
+
+	var (
+		bulkGets atomic.Int32
+		turns    atomic.Int32
+		etag     atomic.Pointer[string]
+	)
+	v1 := "meta-v1"
+	etag.Store(&v1)
+	store := etagStore(t, v1, 1, history, nil, &bulkGets).
+		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+			if req.Key == wfenginestate.MetadataKey {
+				return &actorapi.StateResponse{Data: meta, ETag: etag.Load()}, nil
+			}
+			return &actorapi.StateResponse{}, nil
+		})
+	fact, err := New(t.Context(), Options{
+		AppID:              "testapp",
+		WorkflowActorType:  "workflow",
+		ActivityActorType:  "activity",
+		RetentionActorType: "retentioner",
+		ActorTypeBuilder:   common.NewActorTypeBuilder("default"),
+		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
+			turns.Add(1)
+			return errors.New("no engine in this test")
+		},
+		Actors: fake.New().
+			WithReminders(func(context.Context) (actorreminders.Interface, error) {
+				return remindersfake.New(), nil
+			}).
+			WithState(func(context.Context) (actorstate.Interface, error) {
+				return store, nil
+			}),
+	})
+	require.NoError(t, err)
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	// The rest of the fan-out's wake-ups wait on the lock behind each one.
+	o.lockWaiters.Store(1)
+
+	wake := func(name string) {
+		t.Helper()
+		require.NoError(t, o.runWorkflowFromReminder(t.Context(), &actorapi.Reminder{Name: name}))
+		assert.False(t, o.closed.Load(), "a settled terminal instance must stay resident while wake-ups wait")
+		assert.Nil(t, o.state, "the settled instance must not keep its history")
+	}
+
+	wake("new-event-tc-1")
+	require.Equal(t, int32(1), bulkGets.Load(), "the first wake-up loads the instance whole")
+	wake("new-event-tc-2")
+	wake("new-event-tc-3")
+	assert.Equal(t, int32(1), bulkGets.Load(), "later wake-ups must not reload the history")
+
+	v2 := "meta-v2"
+	etag.Store(&v2)
+	wake("new-event-tc-4")
+	assert.Equal(t, int32(2), bulkGets.Load(), "a write to the instance must bring the full load back")
+	wake("new-event-tc-5")
+	assert.Equal(t, int32(2), bulkGets.Load(), "the reload settles the instance again")
+
+	o.foldPending = []*foldEntry{{
+		event: &backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{
+			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 0},
+		}},
+		gen:       1,
+		committed: make(chan struct{}),
+	}}
+	require.Error(t, o.runWorkflowFromReminder(t.Context(), &actorapi.Reminder{Name: "new-event-tc-6"}))
+	assert.Equal(t, int32(1), turns.Load(), "a held completion must reach a turn, not an ack off the record")
+	assert.Equal(t, int32(3), bulkGets.Load())
+	assert.Nil(t, o.settled)
+
+	o.settled = &settledTerminal{etag: v2, generation: 1, historyLength: uint64(len(history))}
+	_, err = o.executeMethod(t.Context(), "unknown", nil, nil, nil)
+	require.Error(t, err)
+	assert.Nil(t, o.settled, "a method call must drop the settled record")
+
+	o.lockWaiters.Store(0)
+	require.NoError(t, o.runWorkflowFromReminder(t.Context(), &actorapi.Reminder{Name: "new-event-tc-7"}))
+	assert.True(t, o.closed.Load(), "an ack no call waits behind must deactivate the instance")
+}
+
+// Test_settledUnchanged_needsTheWholeRowAndNoOwedNotification covers the two
+// ways a store can show a settled record a different instance: a peer write
+// (a new ETag, as every save rewrites the metadata row), and a purge then
+// recreate on a store that restarts a row's version, whose row can repeat the
+// ETag but not, while it owes its parent the completion, the empty
+// parent-notify row.
+func Test_settledUnchanged_needsTheWholeRowAndNoOwedNotification(t *testing.T) {
+	t.Parallel()
+
+	const instanceID = "wf-settled-check"
+	history := terminalHistory(instanceID)
+	firstRow, err := proto.Marshal(history[0])
+	require.NoError(t, err)
+	settled := &settledTerminal{etag: "meta-v1", generation: 1, historyLength: uint64(len(history)), firstRow: firstRow}
+	recreated := slices.Clone(history)
+	recreated[0] = proto.Clone(history[0]).(*backend.HistoryEvent)
+	recreated[0].Timestamp = timestamppb.New(history[0].GetTimestamp().AsTime().Add(time.Hour))
+
+	for _, tc := range []struct {
+		name         string
+		etag         string
+		generation   uint64
+		history      []*backend.HistoryEvent
+		inbox        []*backend.HistoryEvent
+		parentNotify bool
+		want         bool
+	}{
+		{name: "unchanged", etag: "meta-v1", generation: 1, history: history, want: true},
+		{name: "written since", etag: "meta-v2", generation: 1, history: history},
+		{name: "same etag, other generation", etag: "meta-v1", generation: 2, history: history},
+		{name: "same etag, other history length", etag: "meta-v1", generation: 1, history: history[:2]},
+		{name: "pending inbox event", etag: "meta-v1", generation: 1, history: history, inbox: history[:1]},
+		{name: "notification owed to a parent", etag: "meta-v1", generation: 1, history: history, parentNotify: true},
+		{name: "recreated with the same row", etag: "meta-v1", generation: 1, history: recreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var bulkGets atomic.Int32
+			meta, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
+				Generation: tc.generation, InboxLength: uint64(len(tc.inbox)), HistoryLength: uint64(len(tc.history)),
+			})
+			require.NoError(t, err)
+			store := etagStore(t, tc.etag, tc.generation, tc.history, tc.inbox, &bulkGets).
+				WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
+					switch {
+					case req.Key == wfenginestate.MetadataKey:
+						return &actorapi.StateResponse{Data: meta, ETag: &tc.etag}, nil
+					case req.Key == wfenginestate.ParentNotifyKey && tc.parentNotify:
+						return &actorapi.StateResponse{Data: []byte{1}}, nil
+					}
+					return &actorapi.StateResponse{}, nil
+				})
+			o := &orchestrator{
+				factory: &factory{actorType: "workflow", actorState: store},
+				actorID: instanceID,
+				settled: settled,
+			}
+
+			got, err := o.settledUnchanged(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+			assert.Zero(t, bulkGets.Load(), "the check must not read the history")
 		})
 	}
 }
