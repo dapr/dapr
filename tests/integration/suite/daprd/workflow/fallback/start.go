@@ -131,9 +131,7 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	s.workflow.ConnectWorkerN(t, ctx, 1, s.workflow.RegistryN(1))
 
 	for id, out := range map[api.InstanceID]string{sdkID: `"from-sdk"`, apiID: `"from-api"`} {
-		meta, err := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-		assert.Equal(t, out, meta.GetOutput().GetValue())
+		meta := waitCompleted(t, ctx, mgmt, id)
+		assert.Equal(t, out, meta.GetOutput().GetValue(), id)
 	}
 }

@@ -90,8 +90,8 @@ func TestFallbackOperation(t *testing.T) {
 		want   string
 	}{
 		{todo.CreateWorkflowInstanceMethod, nil, diag.CreateWorkflow},
-		{todo.PurgeWorkflowStateMethod, nil, diag.PurgeWorkflow},
-		{todo.RecursivePurgeWorkflowStateMethod, nil, diag.PurgeWorkflow},
+		{todo.PurgeWorkflowStateMethod, nil, ""},
+		{todo.RecursivePurgeWorkflowStateMethod, nil, ""},
 		{todo.RerunWorkflowInstance, nil, diag.RerunWorkflow},
 		{todo.ForkWorkflowHistory, nil, diag.ForkWorkflow},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}), diag.RaiseEvent},

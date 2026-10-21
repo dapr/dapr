@@ -18,14 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -49,13 +47,7 @@ type hostdeath struct {
 }
 
 func (h *hostdeath) Setup(t *testing.T) []framework.Option {
-	appID := uuid.NewString()
-	h.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
-		workflow.WithStagedOperations(),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, 2*time.Second)),
-	)
+	h.workflow = newPair(t, 2*time.Second)
 
 	return []framework.Option{
 		framework.WithProcesses(h.workflow),
@@ -125,9 +117,7 @@ func (h *hostdeath) Run(t *testing.T, ctx context.Context) {
 	h.workflow.ConnectWorkerN(t, ctx, 1, h.workflow.RegistryN(1))
 
 	for id, out := range map[api.InstanceID]string{before: `"before"`, after: `"after"`} {
-		meta, werr := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, werr, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
+		meta := waitCompleted(t, ctx, mgmt, id)
 		assert.Equal(t, out, meta.GetOutput().GetValue(), id)
 	}
 }

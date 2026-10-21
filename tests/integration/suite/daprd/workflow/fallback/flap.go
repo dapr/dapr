@@ -19,16 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -49,13 +46,7 @@ type flap struct {
 const flapDamping = 4 * time.Second
 
 func (f *flap) Setup(t *testing.T) []framework.Option {
-	appID := uuid.NewString()
-	f.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
-		workflow.WithStagedOperations(),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, flapDamping)),
-	)
+	f.workflow = newPair(t, flapDamping)
 
 	return []framework.Option{
 		framework.WithProcesses(f.workflow),
@@ -120,9 +111,5 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*50)
 	assert.GreaterOrEqual(t, time.Since(connected), flapDamping-time.Second)
 
-	for _, id := range ids {
-		meta, err := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
-	}
+	assertCompleted(t, ctx, mgmt, ids...)
 }

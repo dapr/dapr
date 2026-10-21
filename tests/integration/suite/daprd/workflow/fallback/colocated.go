@@ -19,16 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -49,13 +46,7 @@ type colocated struct {
 }
 
 func (c *colocated) Setup(t *testing.T) []framework.Option {
-	appID := uuid.NewString()
-	c.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
-		workflow.WithStagedOperations(),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, 2*time.Second)),
-	)
+	c.workflow = newPair(t, 2*time.Second)
 
 	return []framework.Option{
 		framework.WithProcesses(c.workflow),
@@ -104,10 +95,8 @@ func (c *colocated) Run(t *testing.T, ctx context.Context) {
 
 	for i, id := range ids {
 		wctx, cancel := context.WithTimeout(ctx, time.Second*10)
-		meta, err := mgmt[(i+1)%2].WaitForWorkflowCompletion(wctx, id)
+		meta := waitCompleted(t, wctx, mgmt[(i+1)%2], id)
 		cancel()
-		require.NoError(t, err, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
 		assert.Equal(t, fmt.Sprintf(`"in-%d"`, i), meta.GetOutput().GetValue(), id)
 	}
 

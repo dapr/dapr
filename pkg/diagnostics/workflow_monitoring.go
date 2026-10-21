@@ -257,6 +257,7 @@ type workflowMetrics struct {
 	activityExecutionLatencyC *diagUtils.CachedFloat64Recorder
 	activityOperationCountC   *diagUtils.CachedInt64Counter
 	activityOperationLatencyC *diagUtils.CachedFloat64Recorder
+	stagedOperationCountC     *diagUtils.CachedInt64Counter
 
 	appID     string
 	enabled   bool
@@ -386,6 +387,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.activityExecutionLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityExecutionLatency, base...)
 	w.activityOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.activityOperationCount, base...)
 	w.activityOperationLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityOperationLatency, base...)
+	w.stagedOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.stagedOperationCount, base...)
 
 	err := meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
@@ -676,12 +678,9 @@ func (w *workflowMetrics) WorkflowCompletionRoute(ctx context.Context, taskType,
 
 // WorkflowStagedOperation records a workflow operation staged by a fallback
 // host under the WorkflowsStagedOperations preview feature, by operation.
-func (w *workflowMetrics) WorkflowStagedOperation(ctx context.Context, operation string) {
+func (w *workflowMetrics) WorkflowStagedOperation(_ context.Context, operation string) {
 	if !w.IsEnabled() {
 		return
 	}
-	stats.RecordWithOptions(ctx,
-		stats.WithRecorder(w.meter),
-		stats.WithTags(diagUtils.WithTags(w.stagedOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation)...),
-		stats.WithMeasurements(w.stagedOperationCount.M(1)))
+	w.stagedOperationCountC.Record1(operationKey, operation)
 }

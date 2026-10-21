@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
@@ -292,6 +291,14 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	if abe.enableClusteredDeployment {
+		ef, eerr := abe.executorFactory(ctx)
+		if eerr != nil {
+			return eerr
+		}
+		factories = append(factories, ef)
+	}
+
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
 	})
@@ -299,8 +306,8 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 	return nil
 }
 
-// factoryOptions returns the options of the workflow actor factories,
-// including the executor actor's under WorkflowsClusteredDeployment.
+// factoryOptions returns the options of the workflow actor factories. The
+// executor actor's factory is built apart, by executorFactory.
 func (abe *Actors) factoryOptions() workflow.Options {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
@@ -317,7 +324,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
 		Fallback:               abe.fallbackFunc(),
-		FallbackServed:         abe.fallbackServedFunc(),
+		FallbackServed:         abe.fallbackServed,
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
@@ -373,7 +380,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
-	opts := workflow.Options{
+	return workflow.Options{
 		Orchestrator: oopts,
 		Activity:     aopts,
 		Retentioner: retentioner.Options{
@@ -384,24 +391,6 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		WorkflowActorType:  abe.workflowActorType,
 		ActivityActorType:  abe.activityActorType,
 		RetentionActorType: abe.retentionerActorType,
-		ExecutorActorType:  abe.executorActorType,
-	}
-
-	if abe.enableClusteredDeployment {
-		eopts := abe.executorOptions()
-		opts.Executor = &eopts
-	}
-
-	return opts
-}
-
-// executorOptions returns the options of the executor actor's factory under
-// WorkflowsClusteredDeployment.
-func (abe *Actors) executorOptions() executor.Options {
-	return executor.Options{
-		ActorType: abe.executorActorType,
-		Actors:    abe.actors,
-		Pending:   abe.pendingCompletions,
 	}
 }
 

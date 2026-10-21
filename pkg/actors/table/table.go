@@ -311,7 +311,9 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 	old := t.detachLocked(drained)
 	t.flagsLock.Unlock()
-	t.haltDetached(old)
+	if err := t.haltDetached(old); err != nil {
+		log.Warnf("Failed to halt the actors of drained actor types: %s", err)
+	}
 
 	t.flagsLock.Lock()
 	for _, opt := range opts.Factories {
@@ -399,7 +401,11 @@ func (t *table) CompleteDrains(placed func(actorType string) bool) {
 	t.flagsLock.Unlock()
 
 	if len(old) > 0 {
-		go t.haltDetached(old)
+		go func() {
+			if err := t.haltDetached(old); err != nil {
+				log.Warnf("Failed to halt the actors of drained actor types: %s", err)
+			}
+		}()
 	}
 }
 
@@ -433,17 +439,19 @@ func (t *table) detachLocked(actorTypes []string) map[string]targets.Factory {
 }
 
 // haltDetached halts the factories detachLocked removed.
-func (t *table) haltDetached(detached map[string]targets.Factory) {
+func (t *table) haltDetached(detached map[string]targets.Factory) error {
+	errs := slice.New[error]()
 	var wg sync.WaitGroup
 	for actorType, fact := range detached {
 		wg.Go(func() {
 			t.waitCreates(actorType)
 			if err := fact.HaltAll(context.Background()); err != nil {
-				log.Warnf("Failed to halt the actors of drained actor type %s: %s", actorType, err)
+				errs.Append(fmt.Errorf("actor type %s: %w", actorType, err))
 			}
 		})
 	}
 	wg.Wait()
+	return errors.Join(errs.Slice()...)
 }
 
 // SubscribeToReminderTypeUpdates sends the reminder types (see ReminderTypes)
@@ -461,45 +469,17 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		return nil
 	}
 
-	removed := make(map[string]struct{}, len(actorTypes))
-	for _, actorType := range actorTypes {
-		removed[actorType] = struct{}{}
-	}
-	t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
-		_, ok := removed[actorType]
-		return ok
-	})
-
-	errs := slice.New[error]()
-	var wg sync.WaitGroup
 	// Under flagsLock, so a concurrent SetReminderDelivery or
 	// DrainActorTypes cannot flag a type after its flags are cleared here.
 	t.flagsLock.Lock()
-	for _, actorType := range actorTypes {
-		t.reentrancyStore.Delete(actorType)
-		t.noReminders.Delete(actorType)
-		t.draining.Delete(actorType)
-
-		fact, ok := t.factories.LoadAndDelete(actorType)
-		if !ok {
-			continue
-		}
-
-		wg.Add(1)
-
-		go func(fact targets.Factory) {
-			t.waitCreates(actorType)
-			errs.Append(fact.HaltAll(context.Background()))
-			wg.Done()
-		}(fact.(targets.Factory))
-	}
+	old := t.detachLocked(actorTypes)
 	t.flagsLock.Unlock()
 
-	wg.Wait()
+	err := t.haltDetached(old)
 
 	t.typeUpdates.Broadcast(t.Types())
 
-	return errors.Join(errs.Slice()...)
+	return err
 }
 
 func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {

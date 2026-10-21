@@ -122,9 +122,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	i.workflow.ConnectWorker(t, ctx, i.workflow.Registry())
 
 	for id, out := range map[api.InstanceID]string{actID: `"activity-done"`, timerID: `"timer-done"`} {
-		meta, werr := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, werr)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
+		meta := waitCompleted(t, ctx, mgmt, id)
 		assert.Equal(t, out, meta.GetOutput().GetValue(), id)
 	}
 	assert.GreaterOrEqual(t, activityRuns.Load(), int32(2))

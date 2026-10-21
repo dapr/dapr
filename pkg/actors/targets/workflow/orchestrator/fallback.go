@@ -15,10 +15,8 @@ package orchestrator
 
 import (
 	"context"
-	"time"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -43,25 +41,12 @@ func (f *factory) localFastPath() bool {
 	return f.fastPath && !f.isFallback()
 }
 
-// armFallbackJanitor stands in on a fallback host for dispatching the
-// activities a rerun schedules: no local executor can run them, and a
-// fallback host does not advertise the activity actor type to the
-// scheduler. It arms the instance's janitor due at once. The janitor fires
-// on a daprd with an executor, which forwards it to the instance's owner
-// until the instance moves to such a daprd, where its re-dispatch of the
-// unresolved tasks sends the activities.
-func (o *orchestrator) armFallbackJanitor(ctx context.Context, state *wfenginestate.State) error {
-	return o.createJanitor(ctx, state, time.Now())
-}
-
 // fallbackOperation returns the diagnostics operation of a workflow actor
 // method served on a fallback host. ev is the parsed AddWorkflowEvent event.
 func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 	switch method {
 	case todo.CreateWorkflowInstanceMethod:
 		return diag.CreateWorkflow
-	case todo.PurgeWorkflowStateMethod, todo.RecursivePurgeWorkflowStateMethod:
-		return diag.PurgeWorkflow
 	case todo.RerunWorkflowInstance:
 		return diag.RerunWorkflow
 	case todo.ForkWorkflowHistory:
@@ -85,17 +70,15 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 	}
 }
 
-// fallbackServed records an operation served on a fallback host. Reads, such
-// as a status query, are not operations on the instance and are not
-// recorded. A purge completes at once, so it is not counted as staged.
+// fallbackServed records an operation staged on a fallback host. Reads, such
+// as a status query, are not operations on the instance, and a purge
+// completes at once, so neither is recorded.
 func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
 	operation := fallbackOperation(method, ev)
 	if operation == "" {
 		return
 	}
-	if operation != diag.PurgeWorkflow {
-		diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
-	}
+	diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
 	if f.onFallback != nil {
 		f.onFallback(operation)
 	}

@@ -27,7 +27,6 @@ import (
 
 func TestSetFallbackHost(t *testing.T) {
 	abe, _ := newFallbackTestBackend(t, true, false)
-	require.NotNil(t, abe.fallbackServedFunc())
 
 	// Not a fallback host: nothing is counted.
 	abe.fallbackServed(diag.CreateWorkflow)
@@ -39,7 +38,6 @@ func TestSetFallbackHost(t *testing.T) {
 	w := abe.fallbackWaiting.Load()
 	require.NotNil(t, w)
 	abe.fallbackServed(diag.CreateWorkflow)
-	abe.fallbackServed(diag.PurgeWorkflow)
 	assert.EqualValues(t, 1, w.waiting.Load())
 
 	// Idempotent: the count carries on.
@@ -62,7 +60,6 @@ func TestSetFallbackHost(t *testing.T) {
 	assert.Nil(t, abe.fallbackWaiting.Load())
 
 	off, _ := newFallbackTestBackend(t, false, false)
-	assert.Nil(t, off.fallbackServedFunc())
 	assert.Nil(t, off.fallbackFunc())
 }
 
@@ -107,17 +104,14 @@ func TestFallbackWaiting(t *testing.T) {
 		}
 	}
 
-	// Nothing served: no warning at the threshold.
+	// Nothing served: no warning at the threshold, nor at the next one.
 	step(fallbackWaitingWarnAfter)
 	noWarning()
-
-	// A purge completes on a fallback host, so it is not waiting.
-	w.served(diag.PurgeWorkflow)
 	step(2 * fallbackWaitingWarnAfter)
 	noWarning()
 
-	w.served(diag.CreateWorkflow)
-	w.served(diag.RaiseEvent)
+	w.served()
+	w.served()
 
 	// Warnings come at doubling intervals since the start, capped at
 	// fallbackWaitingWarnMaxInterval: 5m and 10m (passed above), 20m, 40m,

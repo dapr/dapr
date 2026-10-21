@@ -117,6 +117,14 @@ func (wfe *engine) fallbackAllowed() bool {
 	return wfe.fallback.runCtx != nil && wfe.fallback.runCtx.Err() == nil
 }
 
+// fallbackWanted reports whether the rule makes this daprd a fallback host,
+// were it to have no local executor: a fallback registration may be made,
+// and the placement tables have shown no other daprd of the app with an
+// executor. Must be called with actorRegLock held.
+func (wfe *engine) fallbackWanted() bool {
+	return wfe.fallbackAllowed() && wfe.fallback.remoteKnown && !wfe.fallback.remote
+}
+
 // reconcileFallback applies the rule to the current local executor count
 // and remote presence. Every transition goes through it, under actorRegLock,
 // after the caller updated the counts and called syncExecutorAvailable: a
@@ -162,7 +170,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		// too, as the registration below does: with the watch failed, a
 		// fallback host made on that unknown answer would never learn of
 		// an executor elsewhere, and would keep its share for good.
-		if wfe.fallbackAllowed() && fb.remoteKnown && !fb.remote {
+		if wfe.fallbackWanted() {
 			err := wfe.backend.SetLocalExecutor(ctx, fb.factoryCtx, false)
 			if err == nil {
 				fb.executorRegistered = false
@@ -174,18 +182,13 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		}
 
 		log.Debug("Unregistering workflow actors")
-		// Reset unconditionally: see onWorkItemDisconnection.
-		err := wfe.giveUpActors(ctx)
-		wfe.actorsRegistered = false
-		fb.executorRegistered = false
-		wfe.syncFallbackHost()
-		if err != nil {
+		if err := wfe.releaseActors(ctx); err != nil {
 			return err
 		}
 	}
 
 	if !wfe.actorsRegistered {
-		if !wfe.fallbackAllowed() || !fb.remoteKnown || fb.remote {
+		if !wfe.fallbackWanted() {
 			return nil
 		}
 		log.Infof("No daprd of app '%s' has a workflow executor; hosting the workflow actor types as a fallback host", wfe.appID)
@@ -208,16 +211,23 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 	return nil
 }
 
-// giveUpActors unregisters the workflow actor types. While Run is live they
+// releaseActors unregisters the workflow actor types. While Run is live they
 // are drained: the calls placement routes here until the next dissemination
 // round moves the instances are still served. At shutdown they are
-// unregistered at once, as the placement stream is going away too. Must be
-// called with actorRegLock held.
-func (wfe *engine) giveUpActors(ctx context.Context) error {
+// unregistered at once, as the placement stream is going away too. The
+// registration state is reset even if that fails: see
+// onWorkItemDisconnection. Must be called with actorRegLock held.
+func (wfe *engine) releaseActors(ctx context.Context) error {
+	var err error
 	if wfe.fallbackAllowed() {
-		return wfe.backend.DrainActors(ctx)
+		err = wfe.backend.DrainActors(ctx)
+	} else {
+		err = wfe.backend.UnRegisterActors(ctx)
 	}
-	return wfe.backend.UnRegisterActors(ctx)
+	wfe.actorsRegistered = false
+	wfe.fallback.executorRegistered = false
+	wfe.syncFallbackHost()
+	return err
 }
 
 // syncFallbackHost tells the backend whether this daprd is a fallback host:
@@ -275,10 +285,7 @@ func (wfe *engine) fallbackDampingExpired(gen uint64) {
 	log.Infof("Another daprd of app '%s' has had a workflow executor for %s; this daprd is no longer a fallback host", wfe.appID, fb.damping)
 	// A turn on a fallback host fails at once, so the halt waits on no
 	// workflow code.
-	err := wfe.giveUpActors(context.Background())
-	wfe.actorsRegistered = false
-	wfe.syncFallbackHost()
-	if err != nil {
+	if err := wfe.releaseActors(context.Background()); err != nil {
 		log.Warnf("Failed to unregister the workflow actors of a fallback host: %s", err)
 	}
 }
@@ -343,10 +350,7 @@ func (wfe *engine) stopFallback() {
 	}
 
 	log.Debug("Unregistering the workflow actors of a fallback host")
-	err := wfe.backend.UnRegisterActors(context.Background())
-	wfe.actorsRegistered = false
-	wfe.syncFallbackHost()
-	if err != nil {
+	if err := wfe.releaseActors(context.Background()); err != nil {
 		log.Warnf("Failed to unregister the workflow actors of a fallback host: %s", err)
 	}
 }

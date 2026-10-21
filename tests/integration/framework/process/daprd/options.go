@@ -473,6 +473,13 @@ func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
 	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
 }
 
+// WithWorkflowFallbackDamping sets the damping period after which a fallback
+// host gives the workflow actor types up to a daprd with a worker, in place
+// of the default.
+func WithWorkflowFallbackDamping(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_FALLBACK_DAMPING", d.String()))
+}
+
 // WithWorkflowHealthPingInterval sets how often this daprd sends HealthPings
 // on idle work item streams, so tests need not wait the production interval.
 func WithWorkflowHealthPingInterval(t *testing.T, d time.Duration) Option {

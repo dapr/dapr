@@ -16,7 +16,6 @@ package fallback
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -70,49 +68,30 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 		worker := d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
 		d.workflow.WaitForConnectedWorkers(t, ctx, 1)
 
-		stop := make(chan struct{})
-		var wg sync.WaitGroup
-		var lock sync.Mutex
-		for g := range 4 {
-			wg.Go(func() {
-				for n := 0; ; n++ {
-					select {
-					case <-stop:
-						return
-					default:
-					}
-
-					// A start time skips the executor's wait for the instance
-					// to start, which a daprd with a worker makes, as the worker may
-					// be gone before the instance starts.
-					octx, cancel := context.WithTimeout(ctx, time.Second*10)
-					id, err := mgmt.ScheduleNewWorkflow(octx, "wf",
-						api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-disconnect-%d-%d-%d", round, g, n))),
-						api.WithStartTime(time.Now()),
-					)
-					if assert.NoError(t, err, "start during the disconnect of round %d", round) {
-						assert.NoError(t, mgmt.RaiseEvent(octx, id, "go"), "raise during the disconnect of round %d", round)
-						lock.Lock()
-						ids = append(ids, id)
-						lock.Unlock()
-					}
-					cancel()
-				}
-			})
-		}
+		stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
+			// A start time skips the executor's wait for the instance
+			// to start, which a daprd with a worker makes, as the worker may
+			// be gone before the instance starts.
+			octx, cancel := context.WithTimeout(ctx, time.Second*10)
+			defer cancel()
+			id, err := mgmt.ScheduleNewWorkflow(octx, "wf",
+				api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-disconnect-%d-%d-%d", round, g, n))),
+				api.WithStartTime(time.Now()),
+			)
+			if !assert.NoError(t, err, "start during the disconnect of round %d", round) {
+				return "", false
+			}
+			assert.NoError(t, mgmt.RaiseEvent(octx, id, "go"), "raise during the disconnect of round %d", round)
+			return id, true
+		})
 
 		time.Sleep(time.Millisecond * 100)
 		worker.Disconnect(t)
 		d.workflow.WaitForNoConnectedWorkers(t, ctx)
 		time.Sleep(time.Millisecond * 200)
-		close(stop)
-		wg.Wait()
+		ids = append(ids, stop()...)
 	}
 
 	d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
-	for _, id := range ids {
-		meta, err := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
-	}
+	assertCompleted(t, ctx, mgmt, ids...)
 }

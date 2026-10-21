@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"k8s.io/utils/clock"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 const (
@@ -55,19 +53,10 @@ func (abe *Actors) SetFallbackHost(ctx context.Context, fallback bool) {
 
 // fallbackServed counts an operation served by this daprd as a fallback
 // host; see SetFallbackHost.
-func (abe *Actors) fallbackServed(operation string) {
+func (abe *Actors) fallbackServed(string) {
 	if w := abe.fallbackWaiting.Load(); w != nil {
-		w.served(operation)
+		w.served()
 	}
-}
-
-// fallbackServedFunc returns the orchestrator factory's FallbackServed
-// option: nil with the feature off.
-func (abe *Actors) fallbackServedFunc() func(string) {
-	if !abe.fallbackHosts {
-		return nil
-	}
-	return abe.fallbackServed
 }
 
 // fallbackWaiting warns on a fallback host when the operations it served
@@ -93,12 +82,9 @@ func newFallbackWaiting(appID string) *fallbackWaiting {
 	}
 }
 
-// served counts operation as waiting for a worker, unless it is a purge,
-// which a fallback host completes.
-func (w *fallbackWaiting) served(operation string) {
-	if operation != diag.PurgeWorkflow {
-		w.waiting.Add(1)
-	}
+// served counts an operation as waiting for a worker.
+func (w *fallbackWaiting) served() {
+	w.waiting.Add(1)
 }
 
 // run warns at fallbackWaitingWarnAfter and at doubling intervals after it,

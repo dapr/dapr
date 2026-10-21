@@ -16,7 +16,6 @@ package fallback
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -76,30 +74,15 @@ func (c *connect) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*5, time.Millisecond*50)
 
-		stop := make(chan struct{})
-		var wg sync.WaitGroup
-		var lock sync.Mutex
-		for g := range 4 {
-			wg.Go(func() {
-				for n := 0; ; n++ {
-					select {
-					case <-stop:
-						return
-					default:
-					}
-					id, err := mgmt.ScheduleNewWorkflow(octx, "wf", api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-connect-%d-%d-%d", round, g, n))))
-					assert.NoError(t, err, "start during the connect of round %d", round)
-					lock.Lock()
-					ids = append(ids, id)
-					lock.Unlock()
-				}
-			})
-		}
+		stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
+			id, err := mgmt.ScheduleNewWorkflow(octx, "wf", api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-connect-%d-%d-%d", round, g, n))))
+			assert.NoError(t, err, "start during the connect of round %d", round)
+			return id, id != ""
+		})
 
 		worker := c.workflow.ConnectWorker(t, ctx, c.workflow.Registry())
 		time.Sleep(time.Millisecond * 200)
-		close(stop)
-		wg.Wait()
+		ids = append(ids, stop()...)
 		cancel()
 
 		worker.Disconnect(t)
@@ -107,12 +90,5 @@ func (c *connect) Run(t *testing.T, ctx context.Context) {
 	}
 
 	c.workflow.ConnectWorker(t, ctx, c.workflow.Registry())
-	for _, id := range ids {
-		if id == "" {
-			continue
-		}
-		meta, err := mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
-	}
+	assertCompleted(t, ctx, mgmt, ids...)
 }

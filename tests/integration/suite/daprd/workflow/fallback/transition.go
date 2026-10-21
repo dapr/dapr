@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -58,8 +57,8 @@ func (tr *transition) Setup(t *testing.T) []framework.Option {
 	tr.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), withDamping(t, transitionDamping)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), withDamping(t, transitionDamping)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithWorkflowFallbackDamping(t, transitionDamping)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithWorkflowFallbackDamping(t, transitionDamping)),
 	)
 	tr.completions = make(map[api.InstanceID]int)
 
@@ -95,37 +94,23 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 1))
 	}, time.Second*10, time.Millisecond*50)
 
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	var idsLock sync.Mutex
-	var ids []api.InstanceID
-	for g := range 4 {
+	stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
 		m := mgmt[g%2]
-		wg.Go(func() {
-			for n := 0; ; n++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
 
-				// A start time skips the executor's wait for the instance to
-				// start, which a daprd with a worker makes, as the worker may
-				// be gone before the instance starts.
-				octx, cancel := context.WithTimeout(ctx, time.Second*10)
-				id := api.InstanceID(fmt.Sprintf("fallback-transition-%d-%d", g, n))
-				_, err := m.ScheduleNewWorkflow(octx, "wf", api.WithInstanceID(id), api.WithStartTime(time.Now()))
-				if assert.NoError(t, err, "start %s", id) {
-					assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id)
-					idsLock.Lock()
-					ids = append(ids, id)
-					idsLock.Unlock()
-				}
-				cancel()
-				time.Sleep(time.Millisecond * 20)
-			}
-		})
-	}
+		// A start time skips the executor's wait for the instance to
+		// start, which a daprd with a worker makes, as the worker may
+		// be gone before the instance starts.
+		octx, cancel := context.WithTimeout(ctx, time.Second*10)
+		defer time.Sleep(time.Millisecond * 20)
+		defer cancel()
+		id := api.InstanceID(fmt.Sprintf("fallback-transition-%d-%d", g, n))
+		_, err := m.ScheduleNewWorkflow(octx, "wf", api.WithInstanceID(id), api.WithStartTime(time.Now()))
+		if !assert.NoError(t, err, "start %s", id) {
+			return "", false
+		}
+		assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id)
+		return id, true
+	})
 
 	// No worker anywhere.
 	time.Sleep(time.Second)
@@ -147,15 +132,12 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*50)
 	time.Sleep(time.Second)
 
-	close(stop)
-	wg.Wait()
+	ids := stop()
 	require.NotEmpty(t, ids)
 
 	tr.workflow.ConnectWorkerN(t, ctx, 0, tr.workflow.RegistryN(0))
 	for _, id := range ids {
-		meta, err := mgmt[0].WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err, id)
-		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
+		meta := waitCompleted(t, ctx, mgmt[0], id)
 		assert.Equal(t, fmt.Sprintf("%q", id), meta.GetOutput().GetValue(), id)
 	}
 
