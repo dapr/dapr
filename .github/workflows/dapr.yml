@@ -628,11 +628,11 @@ jobs:
           WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker images and push to Docker Hub..."
-          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+          DAPR_TAG=${{ env.REL_VERSION }} make docker-push-retry
 
           # Mariner images are built only on linux/amd64 and linux/arm64
           if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push-retry
           fi
         shell: bash
       - name: Build and push Docker images to GHCR
@@ -644,11 +644,11 @@ jobs:
           WINDOWS_VERSION: ${{ matrix.windows_version }}
         run: |
           echo "Build Docker images and push to GHCR..."
-          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+          DAPR_TAG=${{ env.REL_VERSION }} make docker-push-retry
 
           # Mariner images are built only on linux/amd64 and linux/arm64
           if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
-            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push-retry
           fi
         shell: bash
   publish:

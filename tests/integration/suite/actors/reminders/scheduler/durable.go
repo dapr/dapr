@@ -121,13 +121,18 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { d.daprd2.Cleanup(t) })
 	d.daprd2.WaitUntilRunning(t, ctx)
 
-	exp := []string{
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-		"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
-	}
+	// R2 fires every reminder twice. A reminder in flight when daprd1 is
+	// interrupted is redelivered to daprd2 (at-least-once), so it may fire a
+	// third time.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, d.triggered.Slice())
+		counts := make(map[string]int)
+		for _, name := range d.triggered.Slice() {
+			counts[name]++
+		}
+		for i := range 20 {
+			n := counts[strconv.Itoa(i)]
+			assert.GreaterOrEqualf(c, n, 2, "reminder %d fired %d times, want 2", i, n)
+			assert.LessOrEqualf(c, n, 3, "reminder %d fired %d times, want at most one redelivery", i, n)
+		}
 	}, time.Second*20, time.Millisecond*10)
 }
