@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -233,7 +234,7 @@ func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginest
 		o.invalidateCachedState()
 		return api.ErrInstanceNotFound
 	}
-	if _, ok := rowDescribesCache(res, state); !ok {
+	if _, ok := rowMatches(res, state.MetadataETag(), state.Generation, uint64(len(state.History))); !ok {
 		o.invalidateCachedState()
 		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
 	}
@@ -528,26 +529,74 @@ func (o *orchestrator) cachedInboxCurrent(ctx context.Context, state *wfenginest
 	if err != nil {
 		return false, err
 	}
-	if res == nil || len(res.Data) == 0 || res.ETag == nil {
-		return false, nil
-	}
-	meta, ok := rowDescribesCache(res, state)
-	return ok && meta.GetInboxLength() == 0, nil
+	return rowShowsEmptyInbox(res, state.MetadataETag(), state.Generation, uint64(len(state.History))), nil
 }
 
-// rowDescribesCache reports whether a metadata row read from the store
-// describes the cached state: the same generation and history length, and the
-// same ETag when both carry one. The ETag alone is not enough: the post-save
-// refresh can record a peer's newer ETag, and some stores restart a row's
-// version when the row is recreated. An unreadable row does not.
-func rowDescribesCache(res *actorsapi.StateResponse, state *wfenginestate.State) (*backend.BackendWorkflowStateMetadata, bool) {
-	if cur, have := res.ETag, state.MetadataETag(); cur != nil && have != nil && *cur != *have {
+// rowShowsEmptyInbox reports whether a metadata row read from the store has
+// the given ETag, generation and history length and an empty inbox. A missing
+// row, or one without an ETag, cannot be confirmed.
+func rowShowsEmptyInbox(res *actorsapi.StateResponse, etag *string, generation, historyLength uint64) bool {
+	if res == nil || len(res.Data) == 0 || res.ETag == nil {
+		return false
+	}
+	meta, ok := rowMatches(res, etag, generation, historyLength)
+	return ok && meta.GetInboxLength() == 0
+}
+
+// rowMatches reports whether a metadata row read from the store has the given
+// generation and history length, and the given ETag when both carry one. The
+// ETag alone is not enough: the post-save refresh can record a peer's newer
+// ETag, and some stores restart a row's version when the row is recreated. An
+// unreadable row does not match.
+func rowMatches(res *actorsapi.StateResponse, etag *string, generation, historyLength uint64) (*backend.BackendWorkflowStateMetadata, bool) {
+	if cur := res.ETag; cur != nil && etag != nil && *cur != *etag {
 		return nil, false
 	}
 	var meta backend.BackendWorkflowStateMetadata
 	if err := proto.Unmarshal(res.Data, &meta); err != nil {
 		return nil, false
 	}
-	return &meta, meta.GetGeneration() == state.Generation &&
-		meta.GetHistoryLength() == uint64(len(state.History))
+	return &meta, meta.GetGeneration() == generation && meta.GetHistoryLength() == historyLength
+}
+
+// settledTerminal stands in for the history a completed instance releases:
+// its metadata row as this host read it when it last loaded the instance
+// whole and found nothing owed. A fan-out completed in one turn leaves one
+// wake-up per result behind, and each would otherwise reload every history
+// row under the actor lock.
+type settledTerminal struct {
+	etag          string
+	generation    uint64
+	historyLength uint64
+	// firstRow is the stored first history row: the WorkflowStarted of the
+	// execution's first turn, stamped with that turn's time. A recreated
+	// execution writes its own, so it differs even where the metadata row
+	// repeats.
+	firstRow []byte
+}
+
+// settledUnchanged reports whether the store still holds the instance
+// o.settled was taken from, with nothing in its inbox and no notification
+// owed to a parent. Every save rewrites the metadata row, so any write since
+// changes its ETag. A store that restarts a recreated row's version can
+// repeat the ETag, generation and history length, so the first history row is
+// compared too, and the parent-notify row is read so that an owed
+// notification is always sent. All three rows come in one read.
+func (o *orchestrator) settledUnchanged(ctx context.Context) (bool, error) {
+	res, err := o.actorState.GetBulk(ctx, &actorsapi.GetBulkStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Keys:      []string{wfenginestate.MetadataKey, wfenginestate.ParentNotifyKey, wfenginestate.HistoryKey(0)},
+	}, false)
+	if err != nil {
+		return false, err
+	}
+	if pn := res[wfenginestate.ParentNotifyKey]; len(pn.Data) > 0 || pn.ETag != nil {
+		return false, nil
+	}
+	if !bytes.Equal(res[wfenginestate.HistoryKey(0)].Data, o.settled.firstRow) {
+		return false, nil
+	}
+	md := res[wfenginestate.MetadataKey]
+	return rowShowsEmptyInbox(&actorsapi.StateResponse{Data: md.Data, ETag: md.ETag}, &o.settled.etag, o.settled.generation, o.settled.historyLength), nil
 }
