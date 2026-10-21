@@ -127,7 +127,6 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 	fb := wfe.fallback
 
 	if wfe.localExecutor() {
-		wfe.stopFallbackDamping()
 		switch {
 		case !wfe.actorsRegistered:
 			log.Debug("Registering workflow actors")
@@ -145,6 +144,10 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			}
 			fb.executorRegistered = true
 		}
+		// Only once the switch landed: a failed one, whose executor count
+		// is rolled back, stays a fallback host that must still give the
+		// types up when the period ends.
+		wfe.stopFallbackDamping()
 		wfe.syncFallbackHost()
 		return nil
 	}
@@ -154,8 +157,12 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		// having one, the rule says to keep hosting: turn into a fallback
 		// host in place, so the workflow actor type is never left without
 		// a host. Otherwise give the types up at once, as without the
-		// feature: another daprd has an executor, and hosts them.
-		if wfe.fallbackAllowed() && !fb.remote {
+		// feature: another daprd has an executor, and hosts them. Until
+		// the placement tables have shown the other daprds, give them up
+		// too, as the registration below does: with the watch failed, a
+		// fallback host made on that unknown answer would never learn of
+		// an executor elsewhere, and would keep its share for good.
+		if wfe.fallbackAllowed() && fb.remoteKnown && !fb.remote {
 			err := wfe.backend.SetLocalExecutor(ctx, fb.factoryCtx, false)
 			if err == nil {
 				fb.executorRegistered = false

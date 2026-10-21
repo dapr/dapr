@@ -472,6 +472,9 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 
 	errs := slice.New[error]()
 	var wg sync.WaitGroup
+	// Under flagsLock, so a concurrent SetReminderDelivery or
+	// DrainActorTypes cannot flag a type after its flags are cleared here.
+	t.flagsLock.Lock()
 	for _, actorType := range actorTypes {
 		t.reentrancyStore.Delete(actorType)
 		t.noReminders.Delete(actorType)
@@ -490,6 +493,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 			wg.Done()
 		}(fact.(targets.Factory))
 	}
+	t.flagsLock.Unlock()
 
 	wg.Wait()
 
