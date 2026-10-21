@@ -243,8 +243,8 @@ docker-push-retry:
 			echo "docker-push failed after 3 attempts"; \
 			exit 1; \
 		fi; \
-		echo "docker-push attempt $$attempt failed, retrying in $$((attempt * 5))s..."; \
-		sleep $$((attempt * 5)); \
+		echo "docker-push attempt $$attempt failed, retrying in $$((attempt * 30))s..."; \
+		sleep $$((attempt * 30)); \
 	done
 
 # push docker image to kind cluster

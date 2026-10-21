@@ -352,13 +352,15 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
+	# Downloads retry, as a single connection reset otherwise fails the run.
+	command -v gotestsum || for i in 1 2 3 4 5; do go install gotest.tools/gotestsum@v1.13.0 && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done
+	# Pre-fetch modules so the test builds run offline.
+	for i in 1 2 3 4 5; do go mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done
 
 .PHONY: test-integration-deps
 test-integration-deps: test-deps
-	# Pre-fetch modules with retries so the integration binary builds run
-	# offline; a single connection reset mid-build otherwise fails the run.
-	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
+	# The integration binary builds also need the helper modules.
+	for d in $(wildcard tests/integration/framework/binary/helpers/*/); do \
 		for i in 1 2 3 4 5; do go -C $$d mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done; \
 	done
 
