@@ -330,6 +330,9 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}
 
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
