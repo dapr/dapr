@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub/broker"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,6 +43,7 @@ func init() {
 type internalgrpcshutdown struct {
 	daprd    *procdaprd.Daprd
 	broker   *broker.Broker
+	logline  *logline.LogLine
 	inInvoke atomic.Bool
 	release  chan struct{}
 }
@@ -60,10 +62,12 @@ func (i *internalgrpcshutdown) Setup(t *testing.T) []framework.Option {
 	)
 
 	i.broker = broker.New(t)
+	i.logline = logline.New(t, logline.WithStdoutLineContains("Shutting down component mypub"))
 
 	i.daprd = procdaprd.New(t,
 		i.broker.DaprdOptions(t, "mypub",
 			procdaprd.WithAppPort(app.Port()),
+			procdaprd.WithLogLineStdout(i.logline),
 			procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v2alpha1
 kind: Subscription
@@ -79,7 +83,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, i.broker),
+		framework.WithProcesses(app, i.broker, i.logline),
 	}
 }
 
@@ -100,6 +104,19 @@ func (i *internalgrpcshutdown) Run(t *testing.T, ctx context.Context) {
 		}
 		return ln.Close() == nil
 	}, time.Second*3, time.Millisecond*10, "internal gRPC port %s was not released while daprd shut down", addr)
+
+	// The port is released before daprd closes its components. Hold the app
+	// until the component close has reached the subscription, and a moment
+	// longer so its drain counts the message as in flight: a message that
+	// completes before the drain starts is not waited for, and its ack can be
+	// lost.
+	require.Eventually(t, i.logline.FoundAll, time.Second*10, time.Millisecond*10,
+		"daprd did not start closing the pubsub component")
+	select {
+	case req := <-ch:
+		require.Fail(t, "unexpected ack while the app holds the message", req)
+	case <-time.After(time.Second):
+	}
 
 	// daprd was still running: it acks the message once the app answers.
 	close(i.release)
