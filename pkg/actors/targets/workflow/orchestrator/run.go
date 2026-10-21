@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -42,7 +43,23 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
+// logEmptyInboxAck is logged by every ack of a wake-up with nothing to do.
+const logEmptyInboxAck = "Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty"
+
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (completed todo.RunCompleted, err error) {
+	// A held completion is consumed by a turn, never acked off the record.
+	if o.settled != nil && len(o.foldPending) == 0 {
+		unchanged, serr := o.settledUnchanged(ctx)
+		if serr != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to confirm the settled terminal state: %w", serr))
+		}
+		if unchanged {
+			log.Debugf(logEmptyInboxAck, o.actorID, reminder.Name)
+			return todo.RunCompletedTrue, nil
+		}
+	}
+	o.settled = nil
+
 	var state *wfenginestate.State
 	fresh := o.state == nil
 	state, _, err = o.loadInternalState(ctx)
@@ -640,13 +657,27 @@ func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.
 		rst := o.rstate
 		completed := runtimestate.IsCompleted(rst)
 		if completed {
+			owed := state.ParentNotifyPending
 			// A failure nacks the driving reminder; any driver other than the
 			// dedicated retry reminder also arms it.
 			if serr := o.settleTerminal(ctx, state, rst, reminder.Name != reminderNameParentNotify); serr != nil {
 				return state, true, todo.RunCompletedFalse, serr
 			}
+			// A terminal cache always reloads above, so this state was read
+			// whole this turn. A re-sent notification saved, and the refreshed
+			// ETag may be a peer's: leave that to the next wake-up's reload.
+			// The first row is cloned so the record does not pin the load's
+			// buffers.
+			if etag := state.MetadataETag(); !owed && etag != nil && len(state.RawHistory) > 0 {
+				o.settled = &settledTerminal{
+					etag:          *etag,
+					generation:    state.Generation,
+					historyLength: uint64(len(state.History)),
+					firstRow:      bytes.Clone(state.RawHistory[0]),
+				}
+			}
 		}
-		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		log.Debugf(logEmptyInboxAck, o.actorID, reminder.Name)
 		if o.fastPath && !completed {
 			// Returning RunCompletedTrue deactivates the actor, and a
 			// concurrent fold submit can append a held completion the moment
