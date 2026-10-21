@@ -109,22 +109,22 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		}
 		return runtimes
 	}
-	hosts := func(n int) (leader, capable bool) {
-		stream, err := b.cluster.ClientN(t, ctx, n).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	hosts := func(n int) (leader, capable bool, err error) {
+		sctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stream, err := b.cluster.ClientN(t, ctx, n).WatchHosts(sctx, new(schedulerv1pb.WatchHostsRequest))
 		if err != nil {
-			return false, false
+			return false, false, err
 		}
-		//nolint:errcheck
-		defer stream.CloseSend()
 		resp, err := stream.Recv()
 		if err != nil {
-			return false, false
+			return false, false, err
 		}
 		for _, host := range resp.GetHosts() {
 			leader = leader || host.GetLeader()
 			capable = capable || host.GetSchedulerPlacementEnabled()
 		}
-		return leader, capable
+		return leader, capable, nil
 	}
 
 	// The placement service is present, so it serves the actors and the
@@ -134,19 +134,31 @@ func (b *bothalive) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, placementRuntimes(c), float64(1))
 	}, time.Second*10, time.Millisecond*10)
 	for n := range 3 {
-		leader, capable := hosts(n)
+		leader, _, err := hosts(n)
+		require.NoError(t, err)
 		require.False(t, leader,
 			"no scheduler may advertise a placement leader while the placement service is present")
-		require.False(t, capable,
-			"every scheduler must mask the capability bit while the placement service is present")
 	}
+	// Each scheduler masks the bit once its own probe sights the placement
+	// service, which can land after the sidecar already registered there.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for n := range 3 {
+			_, capable, err := hosts(n)
+			if !assert.NoError(c, err) {
+				return
+			}
+			assert.False(c, capable,
+				"every scheduler must mask the capability bit while the placement service is present")
+		}
+	}, time.Second*15, time.Millisecond*10)
 
 	// Removing the placement service hands actor placement to the
 	// placement enabled scheduler cluster.
 	b.place.Cleanup(t)
 	for n := range 3 {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			leader, _ := hosts(n)
+			leader, _, err := hosts(n)
+			assert.NoError(c, err)
 			assert.True(c, leader)
 		}, time.Second*15, time.Millisecond*10)
 	}
