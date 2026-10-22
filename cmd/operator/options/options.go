@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
@@ -68,6 +68,8 @@ func New() *Options {
 	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(klogFlags)
 	klogFlags.Set("logtostderr", "true")
+	klogFlags.Set("legacy_stderr_threshold_behavior", "false")
+	klogFlags.Set("stderrthreshold", "INFO")
 
 	flag.StringVar(&opts.Config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 
