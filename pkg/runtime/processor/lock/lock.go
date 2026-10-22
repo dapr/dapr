@@ -82,7 +82,7 @@ func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 
-		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err)
+		wrapError := fmt.Errorf("failed to save lock keyprefix for component %s: %w", comp.Name, err)
 
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 	}
