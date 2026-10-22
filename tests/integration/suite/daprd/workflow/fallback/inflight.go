@@ -45,6 +45,7 @@ type inflight struct {
 func (i *inflight) Setup(t *testing.T) []framework.Option {
 	i.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
 	)
 
 	return []framework.Option{

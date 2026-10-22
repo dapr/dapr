@@ -46,6 +46,8 @@ func (c *crossapp) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
+		withSettle(t, 1),
 	)
 
 	return []framework.Option{
@@ -95,47 +97,69 @@ func (c *crossapp) Run(t *testing.T, ctx context.Context) {
 	c.workflow.ConnectWorkerN(t, ctx, 0, c.workflow.RegistryN(0))
 	c.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 
-	// Without fallback hosts on Y, each call to Y blocks until its deadline.
-	sctx, cancel := context.WithTimeout(ctx, time.Second*10)
-	defer cancel()
+	// Y's fallback host answers each call to Y at once; without it, each
+	// blocks until its deadline. Each such call has a deadline of its own,
+	// well below the waits of this test, so a call which blocks fails with
+	// DeadlineExceeded. The other calls get a generous deadline of their own.
+	const quick = time.Second * 5
+	const generous = time.Second * 30
 
 	mgmtX := c.workflow.ManagementClientN(t, ctx, 0)
 	mgmtY := c.workflow.ManagementClientN(t, ctx, 1)
 
-	// A start and a raise from X's client to a workflow on Y. Y's fallback
-	// host registers once the placement table arrives.
+	// Y's fallback host registers once the placement tables have shown no
+	// executor of app Y for the settle period.
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.True(col, hostsWorkflows(col, ctx, c.workflow, 1))
+	}, generous, time.Millisecond*50)
+
+	// A start and a raise from X's client to a workflow on Y. The start is
+	// retried until the placement table which shows Y's host reaches X.
 	var remoteID api.InstanceID
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
+		sctx, cancel := context.WithTimeout(ctx, quick)
+		defer cancel()
 		var err error
 		remoteID, err = mgmtX.ScheduleNewWorkflow(sctx, "remote",
 			api.WithInstanceID("fallback-crossapp-remote"),
 			api.WithAppID(appY),
 		)
 		assert.NoError(col, err)
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*50)
 
+	sctx, cancel := context.WithTimeout(ctx, generous)
 	meta, err := mgmtX.FetchWorkflowMetadata(sctx, remoteID, api.WithFetchAppID(appY))
+	cancel()
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
 
-	require.NoError(t, mgmtX.RaiseEvent(sctx, remoteID, "go",
+	sctx, cancel = context.WithTimeout(ctx, quick)
+	err = mgmtX.RaiseEvent(sctx, remoteID, "go",
 		api.WithEventPayload("raised"),
 		api.WithRaiseEventAppID(appY),
-	))
+	)
+	cancel()
+	require.NoError(t, err)
 
 	// A parent on X whose child workflow and activity run on Y.
+	sctx, cancel = context.WithTimeout(ctx, generous)
 	parentID, err := mgmtX.ScheduleNewWorkflow(sctx, "parent", api.WithInstanceID("fallback-crossapp-parent"))
+	cancel()
 	require.NoError(t, err)
 
 	// The child is created on Y's fallback host and waits there.
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		cmeta, cerr := mgmtY.FetchWorkflowMetadata(sctx, "fallback-crossapp-child")
+		fctx, fcancel := context.WithTimeout(ctx, quick)
+		defer fcancel()
+		cmeta, cerr := mgmtY.FetchWorkflowMetadata(fctx, "fallback-crossapp-child")
 		if assert.NoError(col, cerr) {
 			assert.Equal(col, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, cmeta.GetRuntimeStatus())
 		}
-	}, time.Second*10, time.Millisecond*50)
+	}, generous, time.Millisecond*50)
 
+	sctx, cancel = context.WithTimeout(ctx, generous)
 	meta, err = mgmtX.FetchWorkflowMetadata(sctx, parentID)
+	cancel()
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_RUNNING, meta.GetRuntimeStatus())
 

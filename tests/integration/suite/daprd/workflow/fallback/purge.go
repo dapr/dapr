@@ -43,6 +43,7 @@ type purge struct {
 func (p *purge) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
 	)
 
 	return []framework.Option{

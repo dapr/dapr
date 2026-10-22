@@ -41,13 +41,14 @@ func init() {
 // both daprds of an app, while the app goes from no worker to a worker
 // connecting to one daprd, past the damping period after which the other
 // gives the workflow actor types up, and back to no worker. Every call
-// succeeds, and every workflow completes, exactly once, once a worker
-// connects again.
+// succeeds, and every workflow completes, with a single completion in its
+// history, once a worker connects again. A workflow runs at least once: a
+// turn whose commit a worker's leave cut short runs again, not replaying.
 type transition struct {
 	workflow *workflow.Workflow
 
-	lock        sync.Mutex
-	completions map[api.InstanceID]int
+	lock sync.Mutex
+	runs map[api.InstanceID]int
 }
 
 const transitionDamping = 2 * time.Second
@@ -57,10 +58,12 @@ func (tr *transition) Setup(t *testing.T) []framework.Option {
 	tr.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
+		withSettle(t, 1),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithWorkflowFallbackDamping(t, transitionDamping)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithWorkflowFallbackDamping(t, transitionDamping)),
 	)
-	tr.completions = make(map[api.InstanceID]int)
+	tr.runs = make(map[api.InstanceID]int)
 
 	return []framework.Option{
 		framework.WithProcesses(tr.workflow),
@@ -77,7 +80,7 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		}
 		if !ctx.IsReplaying {
 			tr.lock.Lock()
-			tr.completions[ctx.ID]++
+			tr.runs[ctx.ID]++
 			tr.lock.Unlock()
 		}
 		return ev, nil
@@ -88,7 +91,8 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		tr.workflow.ManagementClientN(t, ctx, 1),
 	}
 
-	// Both daprds are fallback hosts once the placement tables arrive.
+	// Both daprds are fallback hosts once the placement tables have shown no
+	// executor for the settle period.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 0))
 		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 1))
@@ -124,7 +128,8 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*50)
 	time.Sleep(time.Second)
 
-	// The last worker leaves: both daprds are fallback hosts again.
+	// The last worker leaves: both daprds are fallback hosts again, the one
+	// it left at once, the other after the settle period.
 	worker.Disconnect(t)
 	tr.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -139,12 +144,22 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 	for _, id := range ids {
 		meta := waitCompleted(t, ctx, mgmt[0], id)
 		assert.Equal(t, fmt.Sprintf("%q", id), meta.GetOutput().GetValue(), id)
+
+		hist, err := mgmt[0].GetInstanceHistory(ctx, id)
+		require.NoError(t, err, id)
+		var completed int
+		for _, e := range hist.GetEvents() {
+			if e.GetExecutionCompleted() != nil {
+				completed++
+			}
+		}
+		assert.Equal(t, 1, completed, "completions in the history of %s", id)
 	}
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	assert.Len(t, tr.completions, len(ids))
+	assert.Len(t, tr.runs, len(ids))
 	for _, id := range ids {
-		assert.Equal(t, 1, tr.completions[id], id)
+		assert.GreaterOrEqual(t, tr.runs[id], 1, id)
 	}
 }

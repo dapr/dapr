@@ -46,6 +46,7 @@ type wait struct {
 func (w *wait) Setup(t *testing.T) []framework.Option {
 	w.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
 	)
 
 	return []framework.Option{

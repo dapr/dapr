@@ -56,6 +56,8 @@ func (s *start) Setup(t *testing.T) []framework.Option {
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
+		withSettle(t, 1),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
 	)
@@ -76,44 +78,61 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 		return in, nil
 	}))
 
-	// Without fallback hosts, both starts block until their deadline.
-	sctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
+	// A fallback host answers a start at once, with the instance pending;
+	// without one, a start blocks until its deadline. Each such call has a
+	// deadline of its own, well below the waits of this test, so a start
+	// which blocks fails with DeadlineExceeded.
+	const quick = time.Second * 5
 
 	mgmt := s.workflow.ManagementClientN(t, ctx, 0)
 
-	// The fallback hosts register once the placement table arrives.
+	// The fallback hosts register once the placement tables have shown no
+	// executor for the settle period.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, hostsWorkflows(c, ctx, s.workflow, 0))
+		assert.True(c, hostsWorkflows(c, ctx, s.workflow, 1))
+	}, time.Second*30, time.Millisecond*50)
+
+	// Retried until the placement table which shows them reaches daprd 0.
 	var sdkID api.InstanceID
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		sctx, cancel := context.WithTimeout(ctx, quick)
+		defer cancel()
 		var err error
 		sdkID, err = mgmt.ScheduleNewWorkflow(sctx, "wf",
 			api.WithInstanceID("fallback-sdk"),
 			api.WithInput("from-sdk"),
 		)
 		assert.NoError(c, err)
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*20, time.Millisecond*50)
 
+	sctx, cancel := context.WithTimeout(ctx, quick)
 	resp, err := s.workflow.GRPCClientN(t, ctx, 0).StartWorkflowBeta1(sctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "wf",
 		InstanceId:        "fallback-api",
 		Input:             []byte(`"from-api"`),
 	})
+	cancel()
 	require.NoError(t, err)
 	apiID := api.InstanceID(resp.GetInstanceId())
 
 	// The instances exist and are pending, read through the normal path.
 	for _, id := range []api.InstanceID{sdkID, apiID} {
-		meta, merr := mgmt.FetchWorkflowMetadata(sctx, id)
+		fctx, fcancel := context.WithTimeout(ctx, time.Second*30)
+		meta, merr := mgmt.FetchWorkflowMetadata(fctx, id)
+		fcancel()
 		require.NoError(t, merr)
 		assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
 	}
 
 	// A duplicate start fails synchronously, as it does with a worker.
+	sctx, cancel = context.WithTimeout(ctx, quick)
 	_, err = mgmt.ScheduleNewWorkflow(sctx, "wf",
 		api.WithInstanceID(sdkID),
 		api.WithInput("again"),
 	)
+	cancel()
 	require.Error(t, err)
 	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 

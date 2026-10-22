@@ -44,6 +44,7 @@ type order struct {
 func (o *order) Setup(t *testing.T) []framework.Option {
 	o.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
 	)
 
 	return []framework.Option{

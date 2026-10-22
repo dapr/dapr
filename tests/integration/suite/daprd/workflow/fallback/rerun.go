@@ -46,6 +46,7 @@ type rerun struct {
 func (r *rerun) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
+		withSettle(t, 0),
 	)
 
 	return []framework.Option{

@@ -39,15 +39,15 @@ func init() {
 // callback and no unregistration, while another daprd of the app has no
 // worker and, after the damping period, hosts nothing. Placement drops the
 // dead daprd, the other daprd sees no daprd of the app has an executor any
-// more and registers the workflow actor types as a fallback host at once:
-// status reads, starts and raises through it recover, and the instances run
-// once a worker connects to it.
+// more and, once that has held for the settle period, registers the
+// workflow actor types as a fallback host: status reads, starts and raises
+// through it recover, and the instances run once a worker connects to it.
 type hostdeath struct {
 	workflow *workflow.Workflow
 }
 
 func (h *hostdeath) Setup(t *testing.T) []framework.Option {
-	h.workflow = newPair(t, 2*time.Second)
+	h.workflow = newPair(t, 2*time.Second, fallbackSettle)
 
 	return []framework.Option{
 		framework.WithProcesses(h.workflow),
