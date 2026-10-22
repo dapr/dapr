@@ -42,8 +42,30 @@ func fallbackDamping() time.Duration {
 	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_FALLBACK_DAMPING", fallbackDampingDefault)
 }
 
+// fallbackSettleDefault is how long a daprd which does not host the workflow
+// actor types waits, with no other daprd of the app having an executor,
+// before it hosts them as a fallback host. The placement tables list only
+// the daprds connected to placement: at cold start, or once placement is
+// back after a restart, a daprd which connects before the daprd with the
+// worker sees no executor until the other connects too, which their
+// reconnect backoff of half a second, with jitter, puts some hundreds of
+// milliseconds apart. A fallback host made on that first table would own a
+// share of the app's instances for the whole damping period, and the calls
+// to them would wait. Three seconds covers several reconnect attempts,
+// while a daprd whose last executor leaves does not wait it: it keeps
+// hosting in place (see reconcileFallback), so the app is never left
+// without a host on that account.
+const fallbackSettleDefault = 3 * time.Second
+
+// fallbackSettle is the settle period. Overridden by a test-only env var,
+// not a supported production knob.
+func fallbackSettle() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_FALLBACK_SETTLE", fallbackSettleDefault)
+}
+
 // fallbackRetryInterval is how long the engine waits to try a fallback
-// registration again after one failed.
+// registration, or the watch of the other daprds' executors, again after
+// one failed.
 const fallbackRetryInterval = time.Second
 
 // fallback is the engine's state of the WorkflowsStagedOperations preview (see
@@ -51,8 +73,11 @@ const fallbackRetryInterval = time.Second
 // host the workflow actor types if this daprd has a local executor, or if no
 // other daprd of the app has one. The decision depends only on those two
 // facts, never on who hosts the workflow actor type itself, so hosting it
-// cannot feed back into the decision. All fields are guarded by the
-// engine's actorRegLock.
+// cannot feed back into the decision. Each direction is damped: a daprd
+// which hosts nothing becomes a fallback host only once no other daprd has
+// had an executor for the settle period, and a fallback host gives the types
+// up only once another daprd has had one for the damping period. All fields
+// are guarded by the engine's actorRegLock.
 //
 // Every daprd of the app must run a version which knows the feature before
 // it is enabled: an older daprd with a worker does not register the executor
@@ -92,6 +117,17 @@ type fallback struct {
 	// with remote set. dampGen tells a stale expiry apart.
 	dampTimer clock.Timer
 	dampGen   uint64
+
+	settle time.Duration
+	// settleTimer is armed while a daprd which hosts nothing waits out the
+	// settle period with no executor elsewhere. settleGen tells a stale
+	// expiry apart. settled is set once the period passed, until the types
+	// are registered or the condition ends; settledCh then tells runFallback
+	// to apply the rule, so a failed registration is retried as any other.
+	settleTimer clock.Timer
+	settleGen   uint64
+	settled     bool
+	settledCh   chan struct{}
 }
 
 func newFallback(watch func(ctx context.Context) (<-chan bool, error)) *fallback {
@@ -102,6 +138,8 @@ func newFallback(watch func(ctx context.Context) (<-chan bool, error)) *fallback
 		watch:         watch,
 		clock:         clock.RealClock{},
 		damping:       fallbackDamping(),
+		settle:        fallbackSettle(),
+		settledCh:     make(chan struct{}, 1),
 	}
 }
 
@@ -161,8 +199,10 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		wfe.syncExecutorAvailable()
 		// Only once the switch landed: a failed one, whose executor count
 		// is rolled back, stays a fallback host that must still give the
-		// types up when the period ends.
+		// types up when the period ends, or a daprd hosting nothing that
+		// must still take them when its settle period ends.
 		wfe.stopFallbackDamping()
+		wfe.stopFallbackSettle()
 		wfe.syncFallbackHost()
 		return nil
 	}
@@ -171,12 +211,14 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 		// The last local executor left. With no other daprd of the app
 		// having one, the rule says to keep hosting: turn into a fallback
 		// host in place, so the workflow actor type is never left without
-		// a host. Otherwise give the types up at once, as without the
+		// a host. This takes no settle period: the daprd hosts the types
+		// already, and giving them up meanwhile would leave the app with no
+		// host. Otherwise give the types up at once, as without the
 		// feature: another daprd has an executor, and hosts them. Until
 		// the placement tables have shown the other daprds, give them up
-		// too, as the registration below does: with the watch failed, a
-		// fallback host made on that unknown answer would never learn of
-		// an executor elsewhere, and would keep its share for good.
+		// too, as the registration below does: with no watch answering, a
+		// fallback host made on that unknown answer would not learn of an
+		// executor elsewhere, and would keep its share meanwhile.
 		if wfe.fallbackWanted() {
 			err := wfe.backend.SetLocalExecutor(ctx, fb.factoryCtx, false)
 			if err == nil {
@@ -186,6 +228,9 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 				return nil
 			}
 			log.Warnf("Failed to turn into a fallback host for the workflow actor types, unregistering them: %s", err)
+			// This daprd hosted the types up to now, so it registers them
+			// again below without a settle period.
+			fb.settled = true
 		}
 
 		log.Debug("Unregistering workflow actors")
@@ -196,6 +241,14 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 
 	if !wfe.actorsRegistered {
 		if !wfe.fallbackWanted() {
+			wfe.stopFallbackSettle()
+			return nil
+		}
+		// Only once no other daprd has had an executor for the whole settle
+		// period: the placement tables list the daprds connected so far,
+		// and the daprd with the worker may be about to connect.
+		if !fb.settled {
+			wfe.startFallbackSettle()
 			return nil
 		}
 		log.Infof("No daprd of app '%s' has a workflow executor; hosting the workflow actor types as a fallback host", wfe.appID)
@@ -204,6 +257,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context) error {
 			return err
 		}
 		wfe.actorsRegistered = true
+		wfe.stopFallbackSettle()
 		wfe.syncFallbackHost()
 		return nil
 	}
@@ -297,6 +351,55 @@ func (wfe *engine) fallbackDampingExpired(gen uint64) {
 	}
 }
 
+// startFallbackSettle arms the settle timer of a daprd which hosts nothing,
+// unless it is armed or has expired: no other daprd has had an executor
+// since. Must be called with actorRegLock held.
+func (wfe *engine) startFallbackSettle() {
+	fb := wfe.fallback
+	if fb.settleTimer != nil || fb.settled {
+		return
+	}
+	fb.settleGen++
+	gen := fb.settleGen
+	log.Debugf("No other daprd of app '%s' has a workflow executor; hosting the workflow actor types as a fallback host if none has one in %s", wfe.appID, fb.settle)
+	fb.settleTimer = fb.clock.AfterFunc(fb.settle, func() {
+		wfe.fallbackSettleExpired(gen)
+	})
+}
+
+// stopFallbackSettle disarms the settle timer, and forgets a settle period
+// which passed. Must be called with actorRegLock held.
+func (wfe *engine) stopFallbackSettle() {
+	fb := wfe.fallback
+	fb.settled = false
+	if fb.settleTimer == nil {
+		return
+	}
+	fb.settleTimer.Stop()
+	fb.settleTimer = nil
+	fb.settleGen++
+}
+
+// fallbackSettleExpired marks the settle period passed once no other daprd
+// of the app has had an executor for it, and has runFallback apply the rule,
+// which registers the types as a fallback host.
+func (wfe *engine) fallbackSettleExpired(gen uint64) {
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+
+	fb := wfe.fallback
+	if gen != fb.settleGen {
+		return
+	}
+	fb.settleTimer = nil
+	fb.settled = true
+
+	select {
+	case fb.settledCh <- struct{}{}:
+	default:
+	}
+}
+
 // runFallback runs the WorkflowsStagedOperations preview for Run: it follows
 // whether another daprd of the app has an executor and applies the rule to
 // each change, until ctx is done. The actor runtime is ready when it is
@@ -309,30 +412,57 @@ func (wfe *engine) runFallback(ctx context.Context) {
 	fb.runCtx = ctx
 	wfe.actorRegLock.Unlock()
 
-	ch, err := fb.watch(ctx)
-	if err != nil {
-		log.Errorf("Failed to watch the workflow executors of app '%s'; this daprd is no fallback host: %s", wfe.appID, err)
-		return
+	// A watch which failed or closed is set up again after the retry
+	// interval until ctx is done; ch is nil meanwhile. remote and remoteKnown
+	// keep the last answer, as the watch itself does while the placement
+	// stream is down: the new watch answers once a dissemination round has
+	// completed on the stream, as the old one would have, so the answer is no
+	// staler than with the old watch kept. Before any answer, remoteKnown
+	// stays unset, and this daprd does not become a fallback host.
+	var ch <-chan bool
+	var retry, rewatch <-chan time.Time
+	watch := func() {
+		var err error
+		if ch, err = fb.watch(ctx); err != nil {
+			ch = nil
+			rewatch = fb.clock.After(fallbackRetryInterval)
+			if ctx.Err() == nil {
+				log.Warnf("Failed to watch the workflow executors of app '%s', retrying in %s: %s", wfe.appID, fallbackRetryInterval, err)
+			}
+		}
 	}
+	watch()
 
-	var retry <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-rewatch:
+			rewatch = nil
+			watch()
+			continue
 		case <-retry:
+			wfe.actorRegLock.Lock()
+		case <-fb.settledCh:
+			wfe.actorRegLock.Lock()
 		case remote, ok := <-ch:
 			if !ok {
-				return
+				if ctx.Err() != nil {
+					return
+				}
+				log.Warnf("The watch of the workflow executors of app '%s' closed, watching again in %s", wfe.appID, fallbackRetryInterval)
+				ch = nil
+				rewatch = fb.clock.After(fallbackRetryInterval)
+				continue
 			}
+			// The rule is applied under the same lock, so no one sees the
+			// new answer before it is applied.
 			wfe.actorRegLock.Lock()
 			fb.remote = remote
 			fb.remoteKnown = true
-			wfe.actorRegLock.Unlock()
 		}
 
 		retry = nil
-		wfe.actorRegLock.Lock()
 		err := wfe.reconcileFallback(ctx)
 		wfe.actorRegLock.Unlock()
 		if err != nil {
@@ -352,6 +482,7 @@ func (wfe *engine) stopFallback() {
 
 	fb := wfe.fallback
 	wfe.stopFallbackDamping()
+	wfe.stopFallbackSettle()
 	if !wfe.actorsRegistered || fb.executorRegistered {
 		return
 	}

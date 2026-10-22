@@ -94,9 +94,10 @@ const (
 	// once a worker connects. Status queries and purges complete at once.
 	// Without it they block or fail with no address. To stage them, a daprd
 	// with an executor registers the executor actor type as well, which
-	// tells the app's other daprds that one exists; while none does, every
-	// daprd of the app hosts the workflow actor types itself, as a fallback
-	// host. A fallback host runs no workflow code: it
+	// tells the app's other daprds that one exists; once none has for a few
+	// seconds, every daprd of the app hosts the workflow actor types itself,
+	// as a fallback host, and a daprd whose last worker leaves keeps hosting
+	// them as one. A fallback host runs no workflow code: it
 	// does not advertise the types to the scheduler for reminder delivery,
 	// so the reminders its actors arm fire once a daprd with an executor
 	// exists, and it gives the types up once one has existed for a short
