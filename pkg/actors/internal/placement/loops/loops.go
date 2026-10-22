@@ -142,6 +142,20 @@ type UpdateTypes struct {
 	ActorTypes []string
 }
 
+// ReloadReminderTypes reloads the actor types advertised to the scheduler for
+// reminder delivery, after the actor table changed them in place.
+type ReloadReminderTypes struct {
+	*placebase
+	*dissbase
+}
+
+// RefreshRemoteHosts tells new RemoteHosts subscribers what the tables
+// installed on the stream show, if a round has completed on it.
+type RefreshRemoteHosts struct {
+	*placebase
+	*dissbase
+}
+
 type ReportHost struct {
 	*dissbase
 	Report *Report

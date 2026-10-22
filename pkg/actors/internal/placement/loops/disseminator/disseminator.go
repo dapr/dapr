@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/timeout"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
@@ -57,6 +58,9 @@ type Options struct {
 	Namespace string
 	ID        string
 
+	// RemoteHosts, if set, is told once each dissemination round completes.
+	RemoteHosts *remotehosts.Watch
+
 	// SchedulerPlacement speaks the v2 protocol: seq-keyed rounds
 	// scoped to actor types with partial table merges.
 	SchedulerPlacement bool
@@ -68,6 +72,7 @@ type disseminator struct {
 
 	loop         loop.Interface[loops.EventDiss]
 	inflight     *inflight.Inflight
+	remoteHosts  *remotehosts.Watch
 	actorTable   table.Interface
 	scheduler    schedclient.Reloader
 	healthTarget healthz.Target
@@ -100,6 +105,11 @@ type disseminator struct {
 
 	// v2Completed are the seqs of rounds completed on this stream.
 	v2Completed map[uint64]struct{}
+
+	// roundCompleted is set once a dissemination round completed on this
+	// stream. Until then, a change of the reminder types in place and a new
+	// RemoteHosts subscriber wait for that round, which serves both.
+	roundCompleted bool
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -117,11 +127,13 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.schedulerPlacement = opts.SchedulerPlacement
 	diss.v2Rounds = make(map[uint64]*v2Round)
 	diss.v2Completed = make(map[uint64]struct{})
+	diss.roundCompleted = false
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
 	diss.inflight = opts.Inflight
+	diss.remoteHosts = opts.RemoteHosts
 
 	diss.timeout = opts.DisseminationTimeout
 	diss.timeoutQ = timeout.New(timeout.Options{
@@ -153,6 +165,14 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		d.handleAcquireRequest(e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
+	case *loops.ReloadReminderTypes:
+		if d.roundCompleted {
+			d.reloadReminderTypes()
+		}
+	case *loops.RefreshRemoteHosts:
+		if d.roundCompleted {
+			d.updateRemoteHosts()
+		}
 	case *loops.StreamOrder:
 		if d.schedulerPlacement {
 			return d.handleOrderV2(ctx, e)

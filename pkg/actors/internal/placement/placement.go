@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/static"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	loopsplacement "github.com/dapr/dapr/pkg/actors/internal/placement/loops/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	transportv1 "github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport/v1"
@@ -60,6 +61,14 @@ type Interface interface {
 	Ready() bool
 	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 	SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration)
+
+	// WatchRemoteHosts returns a channel which receives whether a daprd
+	// other than this one hosts actorType in the placement tables: at the end
+	// of the next dissemination round, then whenever that changes. Every
+	// daprd receives the tables of its namespace whether or not it hosts
+	// actors. The last answer is kept while the placement stream is down.
+	// The channel is closed once ctx is done.
+	WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool
 }
 
 type Options struct {
@@ -100,6 +109,8 @@ type placement struct {
 	port     string
 	table    table.Interface
 	ready    *atomic.Bool
+
+	remoteHosts *remotehosts.Watch
 
 	loop loop.Interface[loops.EventPlace]
 }
@@ -220,22 +231,25 @@ func New(opts Options) (Interface, error) {
 	}
 
 	var ready atomic.Bool
+	remoteHosts := remotehosts.New()
 
 	return &placement{
-		ready:    &ready,
-		hostname: opts.Hostname,
-		port:     strconv.Itoa(opts.Port),
-		table:    opts.Table,
+		ready:       &ready,
+		remoteHosts: remoteHosts,
+		hostname:    opts.Hostname,
+		port:        strconv.Itoa(opts.Port),
+		table:       opts.Table,
 		loop: loopsplacement.New(loopsplacement.Options{
-			Ready:      &ready,
-			ActorTable: opts.Table,
-			Scheduler:  opts.Scheduler,
-			Hostname:   opts.Hostname,
-			Port:       strconv.Itoa(opts.Port),
-			ID:         opts.AppID,
-			Namespace:  opts.Namespace,
-			Healthz:    opts.Healthz,
-			Connector:  conn,
+			Ready:       &ready,
+			ActorTable:  opts.Table,
+			Scheduler:   opts.Scheduler,
+			RemoteHosts: remoteHosts,
+			Hostname:    opts.Hostname,
+			Port:        strconv.Itoa(opts.Port),
+			ID:          opts.AppID,
+			Namespace:   opts.Namespace,
+			Healthz:     opts.Healthz,
+			Connector:   conn,
 			InitialReport: &loops.Report{
 				Address:   net.JoinHostPort(opts.Hostname, strconv.Itoa(opts.Port)),
 				AppID:     opts.AppID,
@@ -268,6 +282,7 @@ func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
 
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
+	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -288,6 +303,8 @@ func (p *placement) Run(ctx context.Context) error {
 					p.loop.Enqueue(&loops.UpdateTypes{
 						ActorTypes: atypes,
 					})
+				case <-reminderCh:
+					p.loop.Enqueue(new(loops.ReloadReminderTypes))
 				case <-ctx.Done():
 					log.Info("Placement client shutting down")
 					p.loop.Close(&loops.Shutdown{Error: ctx.Err()})
@@ -362,6 +379,13 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 		Drain:   drain,
 		Timeout: timeout,
 	})
+}
+
+func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
+	ch := p.remoteHosts.Subscribe(ctx, actorType)
+	// Tell the subscriber at once if a round has already completed.
+	p.loop.Enqueue(new(loops.RefreshRemoteHosts))
+	return ch
 }
 
 func (p *placement) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {

@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
@@ -104,6 +103,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
+	// see fallback.go.
+	WorkflowsStagedOperations bool
+
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
@@ -143,6 +146,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
@@ -173,6 +177,17 @@ type Actors struct {
 	detached             *detached.Runner
 
 	stopped atomic.Bool
+
+	// fallbackWaiting counts the operations served while this daprd is a
+	// fallback host; nil while it is not. See SetFallbackHost.
+	fallbackWaiting atomic.Pointer[fallbackWaiting]
+
+	// hostedCancel and executorCancel end the background work of the
+	// workflow and executor factories registered last under
+	// WorkflowsStagedOperations; see replaceCancel. Guarded by the engine's
+	// actor registration lock.
+	hostedCancel   context.CancelFunc
+	executorCancel context.CancelFunc
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -237,6 +252,11 @@ func New(opts Options) (*Actors, error) {
 	// Wrapped so pending completions can be cancelled while no executor is
 	// connected; see the pendingtracker package.
 	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+	if opts.WorkflowsStagedOperations {
+		// The engine reports every executor count change under the
+		// feature, and a fallback host registers with none.
+		trackedPendingTasksBackend.SetExecutorAvailable(false)
+	}
 
 	return &Actors{
 		appID:                     opts.AppID,
@@ -261,6 +281,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
@@ -272,6 +293,29 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	factories, err := workflow.Factories(ctx, abe.factoryOptions())
+	if err != nil {
+		return err
+	}
+
+	if abe.enableClusteredDeployment {
+		ef, eerr := abe.executorFactory(ctx)
+		if eerr != nil {
+			return eerr
+		}
+		factories = append(factories, ef)
+	}
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
+
+	return nil
+}
+
+// factoryOptions returns the options of the workflow actor factories. The
+// executor actor's factory is built apart, by executorFactory.
+func (abe *Actors) factoryOptions() workflow.Options {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:                  abe.appID,
@@ -286,9 +330,15 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Fallback:               abe.fallbackFunc(),
+		FallbackServed:         abe.fallbackServed,
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
@@ -314,6 +364,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
 
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
+
 			select {
 			case <-ctx.Done(): // engine is shutting down
 				return ctx.Err()
@@ -327,12 +381,13 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
-	opts := workflow.Options{
+	return workflow.Options{
 		Orchestrator: oopts,
 		Activity:     aopts,
 		Retentioner: retentioner.Options{
@@ -343,27 +398,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowActorType:  abe.workflowActorType,
 		ActivityActorType:  abe.activityActorType,
 		RetentionActorType: abe.retentionerActorType,
-		ExecutorActorType:  abe.executorActorType,
 	}
-
-	if abe.enableClusteredDeployment {
-		opts.Executor = &executor.Options{
-			ActorType: abe.executorActorType,
-			Actors:    abe.actors,
-			Pending:   abe.pendingCompletions,
-		}
-	}
-
-	factories, err := workflow.Factories(ctx, opts)
-	if err != nil {
-		return err
-	}
-
-	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
-		Factories: factories,
-	})
-
-	return nil
 }
 
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {
@@ -377,7 +412,9 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		abe.activityActorType,
 		abe.retentionerActorType,
 	}
-	if abe.enableClusteredDeployment {
+	// Under WorkflowsStagedOperations the executor actor type is registered
+	// apart from the others; the table ignores it if it is not registered.
+	if abe.enableClusteredDeployment || abe.fallbackHosts {
 		actorTypes = append(actorTypes, abe.executorActorType)
 	}
 
@@ -498,7 +535,8 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		return "", err
 	}
 
-	_, err = engine.Call(ctx, areq)
+	res, err := engine.Call(ctx, areq)
+	markFallback(ctx, res)
 	if err != nil {
 		return "", abe.noWorkerError(err, req.GetRouter().GetTargetAppID())
 	}
@@ -564,7 +602,8 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, ireq)
+		res, eerr := router.Call(ctx, ireq)
+		markFallback(ctx, res)
 
 		// A host named by a stale placement table no longer registers the
 		// type: placement is about to drop it, so retry.
@@ -781,7 +820,8 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	}
 
 	start := time.Now()
-	_, err = router.Call(ctx, req)
+	res, err := router.Call(ctx, req)
+	markFallback(ctx, res)
 
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
@@ -856,6 +896,12 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Wor
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, taskRouter *protos.TaskRouter, condition func(*backend.WorkflowMetadata) bool) error {
 	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
+
+	// The operation this watch follows was served by a fallback host: the
+	// instance does not change until it moves to a daprd with an executor.
+	if servedByFallback(ctx) {
+		return nil
+	}
 
 	// A router targeting another app watches that app's workflow actor. This
 	// backs cross-app WaitForWorkflowStart/Completion (e.g. a cross-app

@@ -82,7 +82,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 			return nil, err
 		}
 
-		return &internalsv1pb.InternalInvokeResponse{
+		res := &internalsv1pb.InternalInvokeResponse{
 			Status: &internalsv1pb.Status{
 				Code: http.StatusOK,
 			},
@@ -91,7 +91,16 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 					Value: resData,
 				},
 			},
-		}, nil
+		}
+
+		// Tell the caller the instance does not advance until it moves to a
+		// daprd with an executor, so it does not wait for a state change.
+		if o.isFallback() {
+			common.SetFallback(res)
+			o.fallbackServed(ctx, method, parsedAddEvent)
+		}
+
+		return res, nil
 	})
 }
 

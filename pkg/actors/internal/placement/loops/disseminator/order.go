@@ -30,6 +30,29 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 	d.inflight.Acquire(req)
 }
 
+// completeRound runs at the end of every dissemination round on this
+// stream, once its tables are installed.
+func (d *disseminator) completeRound() {
+	d.roundCompleted = true
+	d.actorTable.CompleteDrains(d.inflight.HasLocalHost)
+	d.updateRemoteHosts()
+	d.reloadReminderTypes()
+}
+
+// reloadReminderTypes advertises the actor types this host takes reminders
+// for to the scheduler.
+func (d *disseminator) reloadReminderTypes() {
+	d.scheduler.ReloadActorTypes(d.actorTable.ReminderTypes())
+}
+
+// updateRemoteHosts tells the RemoteHosts subscribers which of their actor
+// types other hosts host.
+func (d *disseminator) updateRemoteHosts() {
+	if d.remoteHosts != nil {
+		d.remoteHosts.Update(d.inflight.HasRemoteHosts)
+	}
+}
+
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 	d.streamLoop.Enqueue(&loops.StreamSend{
 		Report: report.Report,
@@ -139,7 +162,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		)
 
 		d.currentOperation = loops.OrderUnlock
-		d.scheduler.ReloadActorTypes(d.actorTable.Types())
+		d.completeRound()
 
 		d.inflight.UnlockTypes(toUnlock)
 		clear(d.roundChangedTypes)
