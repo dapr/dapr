@@ -153,6 +153,22 @@ func (s *StateStoreError) QueryFailed(detail string) error {
 	)
 }
 
+/**** Store Operations ****/
+
+func (s *StateStoreError) Get(key string, msg string) error {
+	return s.build(
+		errors.NewBuilder(
+			codes.Internal,
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to get %s from state store %s: %s", key, s.name, msg),
+			errorcodes.StateGet.Code,
+			string(errorcodes.StateGet.Category),
+		),
+		errorcodes.StateGet.GrpcCode,
+		nil,
+	)
+}
+
 func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metadata map[string]string) error {
 	if !s.skipResourceInfo {
 		err = err.WithResourceInfo("state", s.name, "", "")
