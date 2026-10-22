@@ -102,12 +102,12 @@ func (a *DaprRuntime) initComponentBlocking(ctx context.Context, comp compapi.Co
 		if err == nil {
 			return nil
 		}
-		err = fmt.Errorf("process component %s error: %s", comp.Name, err)
+		err = fmt.Errorf("process component %s (type: %s) error: %s", comp.Name, comp.Spec.Type, err)
 		if comp.Spec.IgnoreErrors {
 			log.Errorf("Ignoring error processing component: %s", err)
 			return nil
 		}
-		log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
+		log.Warnf("Error processing component '%s' (type: %s), daprd will exit gracefully: %s", comp.Name, comp.Spec.Type, err)
 		return err
 	}
 }
