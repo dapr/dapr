@@ -16,6 +16,10 @@ spec:
   selector:
     matchLabels:
       app: dapr-scheduler-server
+  {{- with .Values.cluster.persistentVolumeClaimRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- if not .Values.cluster.inMemoryStorage }}
   volumeClaimTemplates:
   - apiVersion: v1
