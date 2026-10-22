@@ -242,9 +242,10 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
 	)
-	if opts.WorkflowsStagedOperations {
-		registerGrpcServerFn = registerFallbackAware(registerGrpcServerFn)
-	}
+	// Installed whatever this app's flag: the target app's flag decides
+	// whether an operation is staged, and a cross-app one may be staged on
+	// another app's fallback host.
+	registerGrpcServerFn = registerFallbackAware(registerGrpcServerFn)
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {

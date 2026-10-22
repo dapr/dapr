@@ -28,7 +28,11 @@ import (
 // executor waits for the instance to start or change state after each of
 // them, which on a fallback host happens only once the instance moves to a
 // daprd with an executor; the backend skips that wait only for an operation
-// a fallback host served, so every other call still waits.
+// a fallback host served, so every other call still waits. It is installed
+// whether or not this app enables the preview: an operation targeting
+// another app is staged on that app's fallback host if that app enables it,
+// and with the preview off everywhere no response carries the marker, so
+// every call waits as before.
 func registerFallbackAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
 	return func(s grpc.ServiceRegistrar) {
 		register(fallbackAwareRegistrar{s})
