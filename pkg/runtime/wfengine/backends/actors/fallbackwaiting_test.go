@@ -116,8 +116,7 @@ func TestFallbackWaiting(t *testing.T) {
 	// Warnings come at doubling intervals since the start, capped at
 	// fallbackWaitingWarnMaxInterval: 5m and 10m (passed above), 20m, 40m,
 	// 80m, 140m.
-	for _, at := range []time.Duration{20, 40, 80, 140} {
-		at *= time.Minute
+	for _, at := range []time.Duration{20 * time.Minute, 40 * time.Minute, 80 * time.Minute, 140 * time.Minute} {
 		step(at - time.Second)
 		noWarning()
 		step(at)

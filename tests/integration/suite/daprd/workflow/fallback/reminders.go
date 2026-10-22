@@ -16,6 +16,7 @@ package fallback
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 		sctx, cancel := context.WithTimeout(ctx, time.Second*10)
 		id, err := mgmt.ScheduleNewWorkflow(sctx, "wf",
 			api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-reminders-%d", i))),
-			api.WithInput(fmt.Sprintf("%d", i)),
+			api.WithInput(strconv.Itoa(i)),
 		)
 		cancel()
 		require.NoError(t, err)

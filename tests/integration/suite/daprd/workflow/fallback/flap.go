@@ -83,8 +83,9 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	mgmt := f.workflow.ManagementClientN(t, ctx, 1)
-	var ids []api.InstanceID
-	for range 5 {
+	const rounds = 5
+	ids := make([]api.InstanceID, 0, rounds)
+	for range rounds {
 		before := f.workflow.PlacementVersion(t, ctx)
 		worker := f.workflow.ConnectWorkerN(t, ctx, 0, f.workflow.RegistryN(0))
 		f.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)

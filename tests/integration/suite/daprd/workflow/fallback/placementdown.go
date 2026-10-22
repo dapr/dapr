@@ -14,6 +14,7 @@ limitations under the License.
 package fallback
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -23,6 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -52,6 +56,8 @@ func init() {
 type placementdown struct {
 	workflow  *workflow.Workflow
 	placeBack *placement.Placement
+	// logB captures the log of the daprd without a worker.
+	logB *logline.LogLine
 }
 
 // placementdownSettle is the default settle period, several times the skew
@@ -59,11 +65,18 @@ type placementdown struct {
 const placementdownSettle = 3 * time.Second
 
 func (p *placementdown) Setup(t *testing.T) []framework.Option {
-	p.workflow = newPair(t, 2*time.Second, placementdownSettle, workflow.WithPlacementService())
+	p.logB = logline.New(t, logline.WithCaptureAll())
+	p.workflow = newPair(t, 2*time.Second, placementdownSettle,
+		workflow.WithPlacementService(),
+		workflow.WithDaprdOptions(1, daprd.WithExecOptions(
+			exec.WithStdout(p.logB.Stdout()),
+			exec.WithStderr(p.logB.Stderr()),
+		)),
+	)
 	p.placeBack = placementBack(t, p.workflow)
 
 	return []framework.Option{
-		framework.WithProcesses(p.workflow),
+		framework.WithProcesses(p.logB, p.workflow),
 	}
 }
 
@@ -91,6 +104,20 @@ func (p *placementdown) Run(t *testing.T, ctx context.Context) {
 		var rerr readErrors
 		return hostsWorkflows(&rerr, ctx, p.workflow, 1) && !rerr.failed
 	}
+
+	// The daprd without a worker learns of the other's executor only once
+	// the dissemination round which lists it completes there. Stopped before
+	// that, placement leaves it seeing no executor anywhere, and it rightly
+	// hosts the types once its settle period ends.
+	executorType := "dapr.internal.default." + p.workflow.DaprN(0).AppID() + ".executor"
+	require.Eventually(t, func() bool {
+		for line := range bytes.Lines(p.logB.StdoutBuffer()) {
+			if bytes.Contains(line, []byte("Dissemination complete")) && bytes.Contains(line, []byte(executorType)) {
+				return true
+			}
+		}
+		return false
+	}, time.Second*20, time.Millisecond*50)
 
 	p.workflow.Placement().Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

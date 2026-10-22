@@ -64,7 +64,7 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 	mgmt := d.workflow.ManagementClient(t, ctx)
 
 	const rounds = 10
-	var ids []api.InstanceID
+	ids := make([]api.InstanceID, 0, rounds)
 	for round := range rounds {
 		worker := d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
 		d.workflow.WaitForConnectedWorkers(t, ctx, 1)
