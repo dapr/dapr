@@ -251,6 +251,26 @@ func (r *aclbypass) Run(t *testing.T, ctx context.Context) {
 			"caller sent: %s, callee received: %s — should resolve to /unauthorized and be denied by ACL", sent, body)
 	})
 
+	// Trailing slash (dapr/dapr#7686): the ACL must evaluate the exact
+	// same normalized method the app receives, trailing slash included.
+	t.Run("allowed path with trailing slash still allowed", func(t *testing.T) {
+		sent, body, status := invoke(t, "public/")
+		assert.Equalf(t, http.StatusOK, status, "caller sent: %s, callee received: %s", sent, body)
+		assert.Contains(t, body, "public")
+	})
+
+	t.Run("traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
+		sent, body, status := invoke(t, "admin/../public/")
+		assert.Equalf(t, http.StatusOK, status,
+			"caller sent: %s, callee received: %s — should resolve to /public/ and be allowed", sent, body)
+	})
+
+	t.Run("double traversal into allowed path with trailing slash is allowed", func(t *testing.T) {
+		sent, body, status := invoke(t, "admin/../../public/")
+		assert.Equalf(t, http.StatusOK, status,
+			"caller sent: %s, callee received: %s — should resolve to /public/ and be allowed", sent, body)
+	})
+
 	// Prove the callee was NEVER invoked with an "unauthorized" method
 	// by any of the traversal attacks above. This is the core CVE
 	// invariant: if the ACL denies the request, the callee must not
