@@ -69,7 +69,7 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 		worker := d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
 		d.workflow.WaitForConnectedWorkers(t, ctx, 1)
 
-		stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
+		stop := startConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 			// A start time skips the executor's wait for the instance
 			// to start, which a daprd with a worker makes, as the worker may
 			// be gone before the instance starts.

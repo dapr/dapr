@@ -75,7 +75,7 @@ func (c *connect) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*5, time.Millisecond*50)
 
-		stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
+		stop := startConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 			id, err := mgmt.ScheduleNewWorkflow(octx, "wf", api.WithInstanceID(api.InstanceID(fmt.Sprintf("fallback-connect-%d-%d-%d", round, g, n))))
 			assert.NoError(t, err, "start during the connect of round %d", round)
 			return id, id != ""

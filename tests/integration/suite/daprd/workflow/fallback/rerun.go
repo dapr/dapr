@@ -79,8 +79,7 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	worker.Disconnect(t)
 	r.workflow.WaitForNoConnectedWorkers(t, ctx)
 
-	// Without the fallback marker the rerun would wait for the new instance
-	// until this deadline.
+	// Bounds the rerun and the reads of the new instance.
 	octx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 

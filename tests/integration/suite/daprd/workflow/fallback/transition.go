@@ -98,7 +98,7 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 1))
 	}, time.Second*10, time.Millisecond*50)
 
-	stop := startConcurrently(4, func(g, n int) (api.InstanceID, bool) {
+	stop := startConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 		m := mgmt[g%2]
 
 		// A start time skips the executor's wait for the instance to

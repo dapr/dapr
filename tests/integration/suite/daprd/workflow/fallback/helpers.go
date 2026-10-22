@@ -60,19 +60,24 @@ func newPair(t *testing.T, damping, settle time.Duration, opts ...workflow.Optio
 // placementBack returns a placement service, not yet running, which takes
 // over the identity and address of wf's placement service once that one is
 // stopped, so the daprds reconnect to it. Start it with runPlacementBack. wf
-// must pin the placement service with workflow.WithPlacementService.
+// must pin the placement service with workflow.WithPlacementService. Under
+// mTLS it takes the same Sentry, so the daprds' TLS clients reconnect.
 func placementBack(t *testing.T, wf *workflow.Workflow) *placement.Placement {
 	t.Helper()
 
 	p := wf.Placement()
-	return placement.New(t,
+	opts := []placement.Option{
 		placement.WithID(p.ID()),
 		placement.WithPort(p.Port()),
 		placement.WithHealthzPort(p.HealthzPort()),
 		placement.WithMetricsPort(p.MetricsPort()),
 		placement.WithInitialCluster(p.InitialCluster()),
 		placement.WithInitialClusterPorts(p.InitialClusterPorts()...),
-	)
+	}
+	if sen := wf.Sentry(); sen != nil {
+		opts = append(opts, placement.WithSentry(t, sen))
+	}
+	return placement.New(t, opts...)
 }
 
 // runPlacementBack runs a placement service from placementBack and waits until
@@ -136,9 +141,14 @@ func assertCompleted(t *testing.T, ctx context.Context, c *client.TaskHubGrpcCli
 // startConcurrently runs body in a loop on each of n goroutines, with the
 // goroutine and the iteration numbers, until the returned stop is called.
 // When body returns true, the instance ID it returns is recorded; stop waits
-// for the goroutines and returns the recorded IDs.
-func startConcurrently(n int, body func(g, i int) (api.InstanceID, bool)) (stop func() []api.InstanceID) {
+// for the goroutines and returns the recorded IDs. The goroutines are also
+// stopped and waited for in t's cleanup, so a failed assertion before stop
+// does not leave them running past the test.
+func startConcurrently(t *testing.T, n int, body func(g, i int) (api.InstanceID, bool)) (stop func() []api.InstanceID) {
+	t.Helper()
+
 	done := make(chan struct{})
+	var once sync.Once
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 	var ids []api.InstanceID
@@ -160,9 +170,16 @@ func startConcurrently(n int, body func(g, i int) (api.InstanceID, bool)) (stop 
 		})
 	}
 
+	halt := func() {
+		once.Do(func() {
+			close(done)
+			wg.Wait()
+		})
+	}
+	t.Cleanup(halt)
+
 	return func() []api.InstanceID {
-		close(done)
-		wg.Wait()
+		halt()
 		return ids
 	}
 }
