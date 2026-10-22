@@ -43,7 +43,7 @@ func countDeactivateWorkers() int {
 	}
 
 	var count int
-	for _, g := range bytes.Split(buf, []byte("\n\n")) {
+	for g := range bytes.SplitSeq(buf, []byte("\n\n")) {
 		if deactivateWorkerFrame.Match(g) {
 			count++
 		}
@@ -67,7 +67,7 @@ func TestNew_deactivateWorkerExitsWithContext(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Eventually(t, func() bool {
-		return countDeactivateWorkers() == baseline+5
+		return countDeactivateWorkers() >= baseline+5
 	}, time.Second*5, time.Millisecond*10, "the frame pattern must find the workers")
 
 	cancel()

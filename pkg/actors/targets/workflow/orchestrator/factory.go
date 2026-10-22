@@ -213,9 +213,10 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}
 
 	// The worker pool and reaper are factory-lifetime: they exit when ctx, the
-	// registration's context, ends. The actors backend cancels it once the
-	// types are unregistered and when it stops, so neither leaks goroutines.
-	// HaltAll joins them when ctx has already ended.
+	// registration's context, ends. The actors backend ends it once the types
+	// are unregistered, and when it stops. HaltAll joins them only when ctx has
+	// already ended, at the runtime's final HaltAll; after an unregister they
+	// exit on their own.
 	for range 8 {
 		f.bgWG.Go(func() {
 			for {

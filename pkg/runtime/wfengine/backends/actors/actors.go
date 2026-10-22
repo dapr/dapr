@@ -373,11 +373,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 	abe.swapRegCancel(regCancel)
-	if abe.stopped.Load() {
-		// Registered while the backend stops: nothing unregisters any more,
-		// so end the background work now.
-		abe.swapRegCancel(nil)
-	}
 
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
