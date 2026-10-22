@@ -320,3 +320,31 @@ func (w *Workflow) WaitForConnectedWorkersN(t *testing.T, ctx context.Context, i
 		assert.GreaterOrEqual(c, md.Workflows.ConnectedWorkers, count)
 	}, time.Second*60, time.Millisecond*10)
 }
+
+// WaitForExactlyConnectedWorkers waits for exactly count workers on daprd
+// index 0. See WaitForExactlyConnectedWorkersN.
+func (w *Workflow) WaitForExactlyConnectedWorkers(t *testing.T, ctx context.Context, count int) {
+	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, 0, count)
+}
+
+// WaitForExactlyConnectedWorkersN waits for exactly count workers to be
+// connected to the daprd at the given index. Unlike WaitForConnectedWorkersN
+// it sees one of several workers leave, and it accepts zero, which the
+// metadata reports by omitting the workflows field.
+func (w *Workflow) WaitForExactlyConnectedWorkersN(t *testing.T, ctx context.Context, index, count int) {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		md := w.DaprN(index).GetMetadata(c, ctx)
+		if !assert.NotNil(c, md) {
+			return
+		}
+		var connected int
+		if md.Workflows != nil {
+			connected = md.Workflows.ConnectedWorkers
+		}
+		assert.Equal(c, count, connected)
+	}, time.Second*60, time.Millisecond*10)
+}
