@@ -23,7 +23,7 @@ import (
 
 const (
 	// fallbackWaitingWarnAfter is how long a daprd stays a fallback host
-	// before it warns about the operations it served, which wait for a
+	// before it warns about the operations it staged, which wait for a
 	// daprd of the app with a workflow worker. The warnings then come at
 	// doubling intervals since it became a fallback host, capped at
 	// fallbackWaitingWarnMaxInterval.
@@ -32,8 +32,8 @@ const (
 )
 
 // SetFallbackHost tells the backend whether this daprd is a fallback host.
-// While it is, the operations it serves are counted, and a warning is logged
-// on a schedule while any of them waits. ctx bounds the warnings; they stop
+// While it is, the operations it stages are counted, and a warning is logged
+// on a schedule once any has been. ctx bounds the warnings; they stop
 // once it is done or the daprd stops being a fallback host. Called by the
 // engine under its actor registration lock.
 func (abe *Actors) SetFallbackHost(ctx context.Context, fallback bool) {
@@ -59,36 +59,39 @@ func (abe *Actors) fallbackServed(string) {
 	}
 }
 
-// fallbackWaiting warns on a fallback host when the operations it served
-// keep waiting for a daprd of the app with a workflow worker: a start, event,
-// rerun or fork does not advance until one exists.
+// fallbackWaiting warns on a fallback host while no daprd of the app has a
+// workflow worker and the host has staged operations: a start, event, rerun
+// or fork does not advance until one exists.
 type fallbackWaiting struct {
-	appID   string
-	clock   clock.Clock
-	waiting atomic.Int64
-	cancel  context.CancelFunc
+	appID string
+	clock clock.Clock
+	// staged counts the operations staged since the daprd became a fallback
+	// host. It is not decremented: a staged instance purged or terminated
+	// since still counts.
+	staged atomic.Int64
+	cancel context.CancelFunc
 	// warn logs the warning; a field so unit tests can capture it.
-	warn func(appID string, waiting int64, since time.Duration)
+	warn func(appID string, staged int64, since time.Duration)
 }
 
 func newFallbackWaiting(appID string) *fallbackWaiting {
 	return &fallbackWaiting{
 		appID: appID,
 		clock: clock.RealClock{},
-		warn: func(appID string, waiting int64, since time.Duration) {
-			log.Warnf("%d staged workflow operations are waiting for a workflow worker to connect to a daprd of app '%s'; none has had one for %s",
-				waiting, appID, since)
+		warn: func(appID string, staged int64, since time.Duration) {
+			log.Warnf("No daprd of app '%s' has had a workflow worker for %s; %d workflow operations staged on this daprd since then run only once one connects",
+				appID, since, staged)
 		},
 	}
 }
 
-// served counts an operation as waiting for a worker.
+// served counts a staged operation.
 func (w *fallbackWaiting) served() {
-	w.waiting.Add(1)
+	w.staged.Add(1)
 }
 
 // run warns at fallbackWaitingWarnAfter and at doubling intervals after it,
-// while any served operation is waiting, until ctx is done.
+// once any operation has been staged, until ctx is done.
 func (w *fallbackWaiting) run(ctx context.Context) {
 	start := w.clock.Now()
 	next := fallbackWaitingWarnAfter
@@ -101,7 +104,7 @@ func (w *fallbackWaiting) run(ctx context.Context) {
 		case <-t.C():
 		}
 
-		if n := w.waiting.Load(); n > 0 {
+		if n := w.staged.Load(); n > 0 {
 			w.warn(w.appID, n, next)
 		}
 		next += min(next, fallbackWaitingWarnMaxInterval)

@@ -38,7 +38,7 @@ func TestSetFallbackHost(t *testing.T) {
 	w := abe.fallbackWaiting.Load()
 	require.NotNil(t, w)
 	abe.fallbackServed(diag.CreateWorkflow)
-	assert.EqualValues(t, 1, w.waiting.Load())
+	assert.EqualValues(t, 1, w.staged.Load())
 
 	// Idempotent: the count carries on.
 	abe.SetFallbackHost(ctx, true)
@@ -51,7 +51,7 @@ func TestSetFallbackHost(t *testing.T) {
 	abe.SetFallbackHost(ctx, true)
 	require.NotNil(t, abe.fallbackWaiting.Load())
 	assert.NotSame(t, w, abe.fallbackWaiting.Load())
-	assert.Zero(t, abe.fallbackWaiting.Load().waiting.Load())
+	assert.Zero(t, abe.fallbackWaiting.Load().staged.Load())
 
 	// Never once ctx is done.
 	abe.SetFallbackHost(ctx, false)
@@ -65,17 +65,17 @@ func TestSetFallbackHost(t *testing.T) {
 
 func TestFallbackWaiting(t *testing.T) {
 	type warning struct {
-		appID   string
-		waiting int64
-		since   time.Duration
+		appID  string
+		staged int64
+		since  time.Duration
 	}
 
 	clock := clocktesting.NewFakeClock(time.Now())
 	warnings := make(chan warning, 10)
 	w := newFallbackWaiting("myapp")
 	w.clock = clock
-	w.warn = func(appID string, waiting int64, since time.Duration) {
-		warnings <- warning{appID, waiting, since}
+	w.warn = func(appID string, staged int64, since time.Duration) {
+		warnings <- warning{appID, staged, since}
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
