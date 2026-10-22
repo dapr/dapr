@@ -443,6 +443,8 @@ func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("DaprTest-Response-2", "DaprTest-Response-Value-2")
 	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-1")
 	w.Header().Add("DaprTest-Response-Multi", "DaprTest-Response-Multi-2")
+	w.Header().Add("Set-Cookie", "cookie1=value1; Path=/")
+	w.Header().Add("Set-Cookie", "cookie2=value2; Path=/")
 
 	if val, ok := headers["Daprtest-Traceid"]; ok {
 		// val[0] is client app given trace id
