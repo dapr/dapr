@@ -21,12 +21,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func TestFallback(t *testing.T) {
@@ -122,4 +128,65 @@ func TestFallbackOperation(t *testing.T) {
 		f.fallbackServed(t.Context(), todo.WaitForRuntimeStatus, nil)
 		assert.Equal(t, []string{diag.CreateWorkflow}, served)
 	})
+}
+
+// A call that took the fast path before the turn lock, and got the lock only
+// after the last worker disconnected, is served as a fallback host serves it:
+// on the durable path, with its response marked, so the caller does not wait
+// for a state change that comes only once the instance moves.
+func TestFallbackAfterLockWait(t *testing.T) {
+	const instanceID = "wf1"
+
+	for name, ev := range map[string]*backend.HistoryEvent{
+		"suspend": {
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}},
+		},
+		"activity result": taskCompletedEvent(7),
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, true)
+			h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
+			var fallback atomic.Bool
+			h.fact.fallback = fallback.Load
+			h.primeRunning(t, instanceID, 7)
+
+			// A turn holds the lock while a worker is connected.
+			unlock, err := h.orch.lock.ContextLock(t.Context())
+			require.NoError(t, err)
+
+			data, err := proto.Marshal(ev)
+			require.NoError(t, err)
+			req := internalsv1pb.NewInternalInvokeRequest(todo.AddWorkflowEventMethod).WithData(data)
+
+			var res *internalsv1pb.InternalInvokeResponse
+			done := make(chan error, 1)
+			go func() {
+				var ierr error
+				res, ierr = h.orch.InvokeMethod(t.Context(), req)
+				done <- ierr
+			}()
+			require.Eventually(t, func() bool { return h.orch.lockWaiters.Load() == 1 }, 5*time.Second, time.Millisecond)
+
+			// The last worker disconnects before the call gets the lock.
+			fallback.Store(true)
+			unlock()
+
+			select {
+			case err = <-done:
+			case <-time.After(10 * time.Second):
+				require.Fail(t, "the call must not wait for a folding turn on a fallback host")
+			}
+			require.NoError(t, err)
+			assert.True(t, common.IsFallback(res), "the response must be marked as served by a fallback host")
+			assert.Empty(t, h.orch.foldPending, "a fallback host must not hold the event for a local turn")
+
+			ops := h.snapshotOps()
+			assert.Contains(t, ops, "save", "the event must be persisted to the inbox")
+			for _, op := range ops {
+				assert.NotContains(t, op, "callReminder:", "a fallback host must not drive a local turn")
+			}
+		})
+	}
 }
