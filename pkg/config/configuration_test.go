@@ -987,3 +987,63 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
 }
+
+func TestStringToHeader(t *testing.T) {
+	t.Run("single header", func(t *testing.T) {
+		headers, err := StringToHeader("api-key=abc123")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"api-key": "abc123"}, headers)
+	})
+
+	t.Run("multiple headers", func(t *testing.T) {
+		headers, err := StringToHeader("api-key=abc123,x-tenant=acme")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"api-key": "abc123", "x-tenant": "acme"}, headers)
+	})
+
+	t.Run("trims whitespace around key and value", func(t *testing.T) {
+		headers, err := StringToHeader(" api-key = abc123 ")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"api-key": "abc123"}, headers)
+	})
+
+	t.Run("percent decodes the value", func(t *testing.T) {
+		headers, err := StringToHeader("x-note=hello%20world")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"x-note": "hello world"}, headers)
+	})
+
+	t.Run("empty value is allowed", func(t *testing.T) {
+		headers, err := StringToHeader("x-empty=")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"x-empty": ""}, headers)
+	})
+
+	t.Run("missing equals sign returns an error naming the bad entry", func(t *testing.T) {
+		_, err := StringToHeader("api-key")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "api-key")
+	})
+
+	t.Run("invalid header key returns an error naming the bad key", func(t *testing.T) {
+		_, err := StringToHeader("bad key=abc123")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bad key")
+	})
+
+	t.Run("invalid percent encoding returns an error naming the bad value", func(t *testing.T) {
+		_, err := StringToHeader("x-note=%zz")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "%zz")
+	})
+}
+
+func TestIsValidHeaderKey(t *testing.T) {
+	assert.True(t, isValidHeaderKey("api-key"))
+	assert.True(t, isValidHeaderKey("X-Tenant-Id"))
+	assert.True(t, isValidHeaderKey("a!#$%&'*+-.^_`|~9"))
+	assert.False(t, isValidHeaderKey(""), "empty key is invalid")
+	assert.False(t, isValidHeaderKey("bad key"), "space is not a token char")
+	assert.False(t, isValidHeaderKey("bad:key"), "colon is not a token char")
+	assert.False(t, isValidHeaderKey("bad/key"), "slash is not a token char")
+}
