@@ -43,7 +43,7 @@ func countDeactivateWorkers() int {
 	}
 
 	var count int
-	for _, g := range bytes.Split(buf, []byte("\n\n")) {
+	for g := range bytes.SplitSeq(buf, []byte("\n\n")) {
 		if deactivateWorkerFrame.Match(g) {
 			count++
 		}
