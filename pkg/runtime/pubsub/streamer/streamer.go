@@ -278,7 +278,23 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 }
 
 func (s *streamer) StreamerKey(pubsub, topic string) string {
-	return "___" + pubsub + "||" + topic
+	return "___" + pubsub + "||" + normalizeTopic(topic)
+}
+
+// normalizeTopic strips the MQTT shared-subscription prefix
+// ($share/<group>/) from a topic. Components strip the prefix before
+// delivering messages, so Publish sees the bare topic while Subscribe
+// registers the prefixed one; both must build the same key.
+func normalizeTopic(topic string) string {
+	rest, ok := strings.CutPrefix(topic, "$share/")
+	if !ok {
+		return topic
+	}
+	group, stripped, ok := strings.Cut(rest, "/")
+	if !ok || group == "" || stripped == "" {
+		return topic
+	}
+	return stripped
 }
 
 func (s *streamer) Close(key string, connectionID rtpubsub.ConnectionID) {
