@@ -186,3 +186,101 @@ func TestPublishAckBeforeClose(t *testing.T) {
 		assert.Equal(t, "msg1", res.resp.GetId())
 	}
 }
+
+func TestStreamerKeySharedSubscription(t *testing.T) {
+	s := New(t.Context(), Options{}).(*streamer)
+
+	tests := map[string]string{
+		"orders":          "orders",
+		"$share/g/orders": "orders",
+		"$share/g/a/b":    "a/b",
+		"$share/g":        "$share/g",
+		"$share/":         "$share/",
+		"$share//orders":  "$share//orders",
+		"$orders":         "$orders",
+		"orders/#":        "orders/#",
+	}
+	for topic, want := range tests {
+		assert.Equal(t, "___mypub||"+want, s.StreamerKey("mypub", topic), "topic %q", topic)
+	}
+}
+
+// A streaming subscription on an MQTT shared subscription topic registers
+// under the prefixed topic, but components deliver messages on the bare
+// topic, so Publish must still find the subscriber.
+func TestSubscribeSharedSubscriptionPublish(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	s := New(t.Context(), Options{}).(*streamer)
+	stream := &fakeStream{
+		ctx:  ctx,
+		sent: make(chan *rtv1pb.SubscribeTopicEventsResponseAlpha1, 2),
+		recv: make(chan *rtv1pb.SubscribeTopicEventsRequestAlpha1),
+	}
+	req := &rtv1pb.SubscribeTopicEventsRequestInitialAlpha1{
+		PubsubName: "mqtt-pubsub",
+		Topic:      "$share/mygroup/orders",
+	}
+
+	subErr := make(chan error, 1)
+	go func() {
+		subErr <- s.Subscribe(stream, req, 1, func() error { return nil })
+	}()
+
+	select {
+	case resp := <-stream.sent:
+		require.NotNil(t, resp.GetInitialResponse(), "first response must be the initial response, got %v", resp)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for initial response")
+	}
+
+	type result struct {
+		resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+		err  error
+	}
+	pubCh := make(chan result, 1)
+	go func() {
+		resp, err := s.Publish(ctx, &rtpubsub.SubscribedMessage{
+			CloudEvent:   map[string]any{"id": "msg1"},
+			Topic:        "orders",
+			PubSub:       "mqtt-pubsub",
+			SubscriberID: 1,
+		})
+		pubCh <- result{resp, err}
+	}()
+
+	select {
+	case resp := <-stream.sent:
+		require.Equal(t, "msg1", resp.GetEventMessage().GetId())
+	case res := <-pubCh:
+		require.Failf(t, "publish returned before the message was sent", "err: %v", res.err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for event message")
+	}
+
+	stream.recv <- &rtv1pb.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1pb.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     "msg1",
+				Status: &rtv1pb.TopicEventResponse{Status: rtv1pb.TopicEventResponse_SUCCESS},
+			},
+		},
+	}
+
+	select {
+	case res := <-pubCh:
+		require.NoError(t, res.err)
+		assert.Equal(t, "msg1", res.resp.GetId())
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for publish response")
+	}
+
+	cancel()
+	select {
+	case err := <-subErr:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for Subscribe to return")
+	}
+}
