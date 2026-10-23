@@ -1290,6 +1290,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return router.Call(ctx, req)
 	})
 	if err != nil {
+		// A deadline (the caller's or the actor's resiliency timeout) is not an
+		// internal failure.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
 			return nil, err
