@@ -996,3 +996,43 @@ func TestConcurrencyLimiterContext(t *testing.T) {
 		}
 	})
 }
+
+// testTruncatedBodyHandler declares a Content-Length larger than the body
+// it writes, simulating an app whose response ends early.
+type testTruncatedBodyHandler struct{}
+
+func (t *testTruncatedBodyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Length", "17")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"complete":`))
+}
+
+func TestInvokeMethodTruncatedResponseBody(t *testing.T) {
+	ctx := t.Context()
+	server := httptest.NewServer(&testTruncatedBodyHandler{})
+	defer server.Close()
+
+	c := Channel{
+		baseAddress: server.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+		tracingSpec: &config.TracingSpec{
+			SamplingRate: "0",
+		},
+		middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+	}
+
+	fakeReq := invokev1.NewInvokeMethodRequest("method").
+		WithHTTPExtension(http.MethodGet, "")
+	defer fakeReq.Close()
+
+	resp, err := c.InvokeMethod(ctx, fakeReq, "")
+	require.NoError(t, err)
+	defer resp.Close()
+
+	// The body is a prefix of the declared response, so reading it must
+	// surface the truncation instead of a clean end of stream.
+	body, err := io.ReadAll(resp.RawData())
+	assert.Equal(t, `{"complete":`, string(body))
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}
