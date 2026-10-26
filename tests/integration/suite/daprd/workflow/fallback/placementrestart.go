@@ -76,7 +76,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	workflowType := p.workflow.WorkflowActorType(0)

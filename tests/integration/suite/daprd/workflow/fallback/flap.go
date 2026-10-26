@@ -76,7 +76,7 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, f.workflow.RegistryN(0).AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	workflowType := f.workflow.WorkflowActorType(1)
@@ -155,7 +155,7 @@ func (f *flap) waitApplied(t *testing.T, actorType string, n int) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var applied int
-		for _, line := range bytes.Split(f.logline.StdoutBuffer(), []byte("\n")) {
+		for line := range bytes.SplitSeq(f.logline.StdoutBuffer(), []byte("\n")) {
 			if bytes.Contains(line, []byte("Dissemination")) &&
 				bytes.Contains(line, []byte(" complete ")) &&
 				bytes.Contains(line, []byte(actorType)) {

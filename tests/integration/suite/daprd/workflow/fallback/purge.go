@@ -55,7 +55,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	worker := p.workflow.ConnectWorker(t, ctx, p.workflow.Registry())

@@ -28,6 +28,9 @@ import (
 // after the placement tables show that no daprd of the app has one.
 const fallbackSettle = time.Second
 
+// doneOutput is what the tests' workflows return once they complete.
+const doneOutput = "done"
+
 // withSettle gives the daprd at index the tests' settle period.
 func withSettle(t *testing.T, index int) workflow.Option {
 	return workflow.WithDaprdOptions(index, daprd.WithWorkflowFallbackSettle(t, fallbackSettle))

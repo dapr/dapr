@@ -84,7 +84,7 @@ func (c *clustered) Run(t *testing.T, ctx context.Context) {
 			}
 			return nil, ctx.Context().Err()
 		}
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	executorType := c.workflow.ExecutorActorType(0)
