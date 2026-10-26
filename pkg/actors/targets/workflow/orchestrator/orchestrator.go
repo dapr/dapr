@@ -86,6 +86,13 @@ type orchestrator struct {
 	// turn lock like every janitor field.
 	janitorIdleFires int
 
+	// rejectedTurns counts the turns in a row that runWorkflow rejected
+	// because their response re-creates a committed operation. A turn that
+	// completes the reminder without an error resets it. It sets the retry
+	// hold in rejectedTurnHold (see rejectTurn). Guarded by the turn lock.
+	rejectedTurns    int
+	rejectedTurnHold time.Duration
+
 	// janitorRedispatchedGen is the state generation janitorRedispatched
 	// was built against: a ContinueAsNew generation reuses task IDs from
 	// zero, so a stale map would skip a new task's first local re-dispatch.
@@ -153,18 +160,30 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	hold, err := o.invokeReminder(ctx, reminder)
+	// A turn that daprd rejects again and again is retried by the reminder at
+	// a constant interval. Hold the error back, without the turn lock, so the
+	// retries slow down (see rejectTurn).
+	holdRejectedTurn(ctx, hold)
+	return err
+}
+
+// invokeReminder runs the reminder under the turn lock. The second result is
+// how long InvokeReminder must hold the returned error back.
+func (o *orchestrator) invokeReminder(ctx context.Context, reminder *actorapi.Reminder) (time.Duration, error) {
 	if err := o.enter("reminder"); err != nil {
-		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
+		return 0, fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
 	defer o.wg.Done()
 
 	unlock, err := o.contextLockMeasured(ctx, "reminder")
 	if err != nil {
-		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
+		return 0, fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
 
-	return o.handleReminder(ctx, reminder)
+	err = o.handleReminder(ctx, reminder)
+	return o.takeRejectedTurnHold(), err
 }
 
 // contextLockMeasured acquires the per-actor turn lock and records the wait
