@@ -127,6 +127,12 @@ type table struct {
 }
 
 func New(opts Options) Interface {
+	// The wfengine tests build a table but cannot import the internal
+	// reentrancy store package.
+	if opts.ReentrancyStore == nil {
+		opts.ReentrancyStore = reentrancystore.New()
+	}
+
 	t := &table{
 		entityConfigs:   make(map[string]api.EntityConfig),
 		clock:           clock.RealClock{},
