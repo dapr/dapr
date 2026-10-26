@@ -312,6 +312,26 @@ spec:
                       - name
                       type: object
                     type: array
+                  workflow:
+                    description: Workflow holds metrics options specific to workflow
+                      and activity metrics.
+                    properties:
+                      latencyDistributionBuckets:
+                        description: |-
+                          LatencyDistributionBuckets specifies the latency distribution buckets used for the
+                          workflow and activity execution latency histograms. Units are defined by
+                          LatencyDistributionUnits (defaults to milliseconds). If not set or left empty,
+                          those histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
+                        items:
+                          type: integer
+                        type: array
+                      latencyDistributionUnits:
+                        description: |-
+                          LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+                          expressed in (for example "1ms" or "1s"). It scales the configured buckets into
+                          the milliseconds the histograms are recorded in.
+                        type: string
+                    type: object
                 required:
                 - enabled
                 type: object
@@ -379,6 +399,26 @@ spec:
                       - name
                       type: object
                     type: array
+                  workflow:
+                    description: Workflow holds metrics options specific to workflow
+                      and activity metrics.
+                    properties:
+                      latencyDistributionBuckets:
+                        description: |-
+                          LatencyDistributionBuckets specifies the latency distribution buckets used for the
+                          workflow and activity execution latency histograms. Units are defined by
+                          LatencyDistributionUnits (defaults to milliseconds). If not set or left empty,
+                          those histograms fall back to the shared MetricSpec.LatencyDistributionBuckets.
+                        items:
+                          type: integer
+                        type: array
+                      latencyDistributionUnits:
+                        description: |-
+                          LatencyDistributionUnits is the unit the LatencyDistributionBuckets values are
+                          expressed in (for example "1ms" or "1s"). It scales the configured buckets into
+                          the milliseconds the histograms are recorded in.
+                        type: string
+                    type: object
                 required:
                 - enabled
                 type: object

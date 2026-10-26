@@ -54,4 +54,36 @@ roleRef:
   kind: ClusterRole
 {{- end }}
   name: dapr-scheduler
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-scheduler-pods
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-scheduler-pods
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-scheduler
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dapr-scheduler-pods
 {{- end }}

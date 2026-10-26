@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -247,6 +248,40 @@ func TestSecrets(t *testing.T) {
 	})
 }
 
+func TestSearchAndVector(t *testing.T) {
+	for name, invoke := range map[string]func(c *componentMetrics, elapsed float64){
+		"search": func(c *componentMetrics, elapsed float64) {
+			c.SearchInvoked(t.Context(), componentName, "search", false, elapsed)
+		},
+		"vector": func(c *componentMetrics, elapsed float64) {
+			c.VectorInvoked(t.Context(), componentName, "query", false, elapsed)
+		},
+	} {
+		t.Run("record "+name+" count", func(t *testing.T) {
+			c, meter := componentsMetrics()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			invoke(c, 0)
+			viewData, _ := meter.RetrieveData("component/" + name + "/count")
+			v := meter.Find("component/" + name + "/count")
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("record "+name+" latency", func(t *testing.T) {
+			c, meter := componentsMetrics()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			invoke(c, 1)
+			viewData, _ := meter.RetrieveData("component/" + name + "/latencies")
+			v := meter.Find("component/" + name + "/latencies")
+			allTagsPresent(t, v, viewData[0].Tags)
+			assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+		})
+	}
+}
+
 func TestConversation(t *testing.T) {
 	t.Run("record conversation count", func(t *testing.T) {
 		c, meter := componentsMetrics()
@@ -324,4 +359,34 @@ func TestElapsedSince(t *testing.T) {
 
 	elapsed := ElapsedSince(start)
 	assert.GreaterOrEqual(t, elapsed, float64(1000))
+}
+
+func TestDurationInMilliseconds(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected float64
+	}{
+		{
+			name:     "sub-millisecond",
+			duration: 500 * time.Microsecond,
+			expected: 0.5,
+		},
+		{
+			name:     "multiple milliseconds",
+			duration: 1500 * time.Microsecond,
+			expected: 1.5,
+		},
+		{
+			name:     "zero",
+			duration: 0,
+			expected: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.InDelta(t, test.expected, durationInMilliseconds(test.duration), 1e-9)
+		})
+	}
 }

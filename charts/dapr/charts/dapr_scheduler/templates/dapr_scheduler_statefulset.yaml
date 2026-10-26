@@ -52,8 +52,10 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      {{- if .Values.securityContext.fsGroup }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- end }}
     {{- with .Values.global.initContainers.scheduler }}
       initContainers:
         {{- toYaml . | nindent 8 }}
@@ -146,6 +148,12 @@ spec:
         - "--etcd-initial-cluster"
         - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380"
         - "--etcd-embed={{ .Values.etcdEmbed }}"
+{{- /* Only when enabled: disabled is the binary default, and a helm upgrade
+       --reuse-values from a pre-1.19 release keeps the old image, which exits
+       on this unknown flag. */}}
+{{- if eq (include "dapr.schedulerPlacementEnabled" .) "true" }}
+        - "--placement-enabled=true"
+{{- end }}
 {{- if gt (len .Values.etcdClientEndpoints) 0 }}
         - "--etcd-client-endpoints"
         - "{{ join "," .Values.etcdClientEndpoints }}"

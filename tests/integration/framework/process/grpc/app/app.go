@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 )
@@ -127,7 +128,7 @@ func (a *App) runActorCallbackStream(t *testing.T) {
 		}
 		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			t.Logf("procgrpcapp: failed to dial daprd at %s: %v", addr, err)
+			iowriter.Eventf(t, "procgrpcapp: failed to dial daprd at %s: %v", addr, err)
 			select {
 			case <-a.streamCtx.Done():
 				return
@@ -186,7 +187,7 @@ func (a *App) pumpActorCallbackStream(t *testing.T, conn *grpc.ClientConn) {
 		return
 	}
 	if resp.GetInitialResponse() == nil {
-		t.Logf("procgrpcapp: expected initial response, got %T", resp.GetResponseType())
+		iowriter.Eventf(t, "procgrpcapp: expected initial response, got %T", resp.GetResponseType())
 		return
 	}
 

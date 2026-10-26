@@ -19,9 +19,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/callbackstream"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -32,20 +34,25 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	grpcchannel "github.com/dapr/dapr/pkg/channel/grpc"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/queue"
 )
 
 type Options struct {
-	ActorType    string
-	AppChannel   channel.AppChannel
-	Resiliency   resiliency.Provider
-	IdleTimeout  time.Duration
-	clock        clock.Clock
-	Reentrancy   *reentrancystore.Store
-	Placement    placement.Interface
-	EntityConfig *api.EntityConfig
+	ActorType  string
+	AppChannel channel.AppChannel
+	// CallbackStream, when set, routes callbacks over the app-initiated
+	// SubscribeActorEventsAlpha1 stream. It takes precedence over the
+	// AppChannel-derived transport and requires no app port.
+	CallbackStream *callbackstream.Manager
+	Resiliency     resiliency.Provider
+	IdleTimeout    time.Duration
+	clock          clock.Clock
+	Reentrancy     *reentrancystore.Store
+	Placement      placement.Interface
+	EntityConfig   *api.EntityConfig
 }
 
 type factory struct {
@@ -72,7 +79,7 @@ func New(opts Options) targets.Factory {
 
 	f := &factory{
 		actorType:    opts.ActorType,
-		transport:    newInvoker(opts.AppChannel, opts.Resiliency, opts.ActorType),
+		transport:    newInvoker(opts.AppChannel, opts.CallbackStream, opts.Resiliency, opts.ActorType),
 		resiliency:   opts.Resiliency,
 		placement:    opts.Placement,
 		clock:        opts.clock,
@@ -89,16 +96,19 @@ func New(opts Options) targets.Factory {
 	return f
 }
 
-// newInvoker picks the right transport based on the concrete AppChannel
-// implementation. gRPC channels expose an ActorCallbackStream manager; when
-// present the streaming transport is used so callbacks reach the app
-// through the app-initiated SubscribeActorEventsAlpha1 stream. Anything
-// else falls through to the HTTP callback protocol.
-func newInvoker(ch channel.AppChannel, r resiliency.Provider, actorType string) transport.Invoker {
-	if g, ok := ch.(*grpcchannel.Channel); ok {
-		if mgr := g.ActorCallbackStream(); mgr != nil {
-			return grpctransport.New(mgr, r, actorType)
+// newInvoker picks the right transport. An explicit callback stream
+// manager wins: callbacks reach the app through the app-initiated
+// SubscribeActorEventsAlpha1 stream, which needs no app port or channel.
+// Otherwise gRPC channels expose an ActorCallbackStream manager, and
+// anything else falls through to the HTTP callback protocol.
+func newInvoker(ch channel.AppChannel, mgr *callbackstream.Manager, r resiliency.Provider, actorType string) transport.Invoker {
+	if mgr == nil {
+		if g, ok := ch.(*grpcchannel.Channel); ok {
+			mgr = g.ActorCallbackStream()
 		}
+	}
+	if mgr != nil {
+		return grpctransport.New(mgr, r, actorType)
 	}
 	return httptransport.New(ch, r, actorType)
 }
@@ -109,8 +119,11 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newApp := f.initApp(actorID)
-		a, _ = f.table.LoadOrStore(actorID, newApp)
+		var loaded bool
+		a, loaded = f.table.LoadOrStore(actorID, f.initApp(actorID))
+		if !loaded {
+			f.idlerQueue.Enqueue(a.(*app))
+		}
 	}
 
 	aa := a.(*app)
@@ -120,9 +133,10 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 
 func (f *factory) initApp(actorID string) *app {
 	app := &app{
-		actorID: actorID,
-		factory: f,
-		clock:   f.clock,
+		actorID:      actorID,
+		activationMD: &internalv1pb.ListStringValue{Values: []string{uuid.New().String()}},
+		factory:      f,
+		clock:        f.clock,
 		lock: lock.New(lock.Options{
 			ActorType:   f.actorType,
 			ConfigStore: f.reentrancy,
@@ -130,8 +144,6 @@ func (f *factory) initApp(actorID string) *app {
 	}
 
 	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
-
-	f.idlerQueue.Enqueue(app)
 
 	return app
 }

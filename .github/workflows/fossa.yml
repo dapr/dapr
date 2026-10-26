@@ -26,6 +26,7 @@ on:
       - release-*
       - feature/*
   workflow_dispatch: {}
+  merge_group:
 
 permissions: {}
 

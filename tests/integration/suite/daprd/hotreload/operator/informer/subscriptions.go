@@ -78,6 +78,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "daprsystem"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -106,6 +107,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
+		daprd.WithAppID("myapp"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),
@@ -173,7 +175,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.kubeapi.Informer().Modify(t, &sub2)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := s.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(t, err)
+		require.NoError(c, err)
 		if assert.Len(c, resp.GetSubscriptions(), 2) {
 			assert.Equal(c, "a", resp.GetSubscriptions()[0].GetTopic())
 			assert.Equal(c, "c", resp.GetSubscriptions()[1].GetTopic())

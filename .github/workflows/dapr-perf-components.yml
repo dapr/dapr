@@ -89,7 +89,7 @@ jobs:
           hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            # Dapr perf test
+            # Dapr components perf test
 
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 
@@ -424,7 +424,7 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_scheduler.securityContext.fsGroup=65532"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''

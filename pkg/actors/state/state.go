@@ -32,7 +32,6 @@ import (
 const (
 	metadataPartitionKey = "partitionKey"
 
-	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
@@ -56,7 +55,6 @@ type Backend interface {
 
 type Options struct {
 	AppID      string
-	StoreName  string
 	CompStore  *compstore.ComponentStore
 	Resiliency resiliency.Provider
 	Table      table.Interface
@@ -68,7 +66,6 @@ type Options struct {
 
 type state struct {
 	appID      string
-	storeName  string
 	compStore  *compstore.ComponentStore
 	resiliency resiliency.Provider
 	table      table.Interface
@@ -81,7 +78,6 @@ type state struct {
 func New(opts Options) Interface {
 	return &state{
 		appID:           opts.AppID,
-		storeName:       opts.StoreName,
 		compStore:       opts.CompStore,
 		resiliency:      opts.Resiliency,
 		table:           opts.Table,
@@ -254,10 +250,13 @@ func (s *state) executeStateStoreTransaction(ctx context.Context, operations []c
 	return err
 }
 
+// stateStore resolves the actor state store from the component store on
+// every call, so the store can be hot reloaded (added, replaced, or removed)
+// at any point in the runtime's lifetime.
 func (s *state) stateStore() (string, Backend, error) {
-	storeS, ok := s.compStore.GetStateStore(s.storeName)
+	storeS, storeName, ok := s.compStore.GetStateStoreActor()
 	if !ok {
-		return "", nil, errors.New(errStateStoreNotFound)
+		return "", nil, messages.ErrActorRuntimeNotFound
 	}
 
 	store, ok := storeS.(Backend)
@@ -265,7 +264,7 @@ func (s *state) stateStore() (string, Backend, error) {
 		return "", nil, errors.New(errStateStoreNotConfigured)
 	}
 
-	return s.storeName, store, nil
+	return storeName, store, nil
 }
 
 func (s *state) constructActorStateKey(actorKey, actorID string) string {

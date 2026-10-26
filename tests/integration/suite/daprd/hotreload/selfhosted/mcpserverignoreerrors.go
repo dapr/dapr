@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -46,13 +48,14 @@ func init() {
 //     surfaces the error through the reconciler and shuts down daprd.
 //
 // All servers in this test use IgnoreErrors=true (except the final exit
-// case) so the workflow-registration step against example.com can fail
-// without crashing daprd; we are exercising the reconciler error-policy
-// machinery, not real MCP traffic.
+// case) so the workflow-registration step, against a local server answering
+// 404, fails without crashing daprd; we are exercising the reconciler
+// error-policy machinery, not real MCP traffic.
 type mcpserverignoreerrors struct {
 	daprd   *daprd.Daprd
 	logline *logline.LogLine
 	resDir  string
+	url     string
 }
 
 func (m *mcpserverignoreerrors) Setup(t *testing.T) []framework.Option {
@@ -69,6 +72,7 @@ func (m *mcpserverignoreerrors) Setup(t *testing.T) []framework.Option {
 	)
 
 	m.resDir = t.TempDir()
+	m.url = prochttp.NotFoundURL(t) + "/mcp"
 
 	m.daprd = daprd.New(t,
 		daprd.WithResourcesDir(m.resDir),
@@ -87,7 +91,7 @@ func (m *mcpserverignoreerrors) Run(t *testing.T, ctx context.Context) {
 	assert.Empty(t, m.daprd.GetMetaMCPServers(t, ctx))
 
 	t.Run("adding an MCPServer should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "1.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -96,8 +100,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/mcp
-`), 0o600))
+      url: %s
+`, m.url), 0o600))
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Len(t, m.daprd.GetMetaMCPServers(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
@@ -118,13 +122,16 @@ spec:
 `), 0o600))
 		// Reconciler runs DeleteMCPServer (close) then AddPendingMCPServer
 		// (rejected by security validation). End state: empty compstore.
+		// The reconciler handles one event at a time, and this one queues
+		// behind the previous step's workflow registration and its
+		// DaprBuiltInInitializationRetries backoff.
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Empty(t, m.daprd.GetMetaMCPServers(t, ctx))
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*15, time.Millisecond*10)
 	})
 
 	t.Run("Updating an `ignoreErrors=true` MCPServer back to valid spec should make it available again", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "1.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -133,8 +140,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/mcp
-`), 0o600))
+      url: %s
+`, m.url), 0o600))
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Len(t, m.daprd.GetMetaMCPServers(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)

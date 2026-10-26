@@ -73,7 +73,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, r.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	// scheduling a workflow with a provided start time
@@ -107,9 +107,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 		assert.NoError(c, client.RaiseEvent(ctx, id, "event1"))
 	}, time.Second*10, time.Millisecond*10)
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 }

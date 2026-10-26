@@ -77,6 +77,8 @@ const (
 	metadataPrefix       = "metadata."
 )
 
+var errAPIClosed = status.Error(codes.Unavailable, "api server closed")
+
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
 	io.Closer
@@ -103,8 +105,9 @@ type api struct {
 	processor              *processor.Processor
 	wg                     sync.WaitGroup
 
-	closeCh chan struct{}
-	closed  atomic.Bool
+	closeLock sync.RWMutex
+	closeCh   chan struct{}
+	closed    bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -176,6 +179,30 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
+func baggageFromContext(ctx context.Context) string {
+	baggage := otelbaggage.FromContext(ctx)
+	if baggage.Len() > 0 {
+		return baggage.String()
+	}
+
+	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	baggageValues := md.Get(diagConsts.BaggageHeader)
+	if len(baggageValues) == 0 {
+		return ""
+	}
+
+	baggageString := strings.Join(baggageValues, ",")
+	_, err := otelbaggage.Parse(baggageString)
+	if err != nil {
+		return ""
+	}
+	return baggageString
+}
+
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 	if validationErr != nil {
@@ -191,6 +218,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 	span := diagUtils.SpanFromContext(ctx)
 	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+	baggage := baggageFromContext(ctx)
 	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -200,6 +228,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Data:            body,
 			TraceID:         traceID,
 			TraceState:      traceState,
+			Baggage:         baggage,
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
@@ -224,6 +253,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	} else {
 		md[pubsub.TraceIDField] = traceID
 		md[pubsub.TraceStateField] = traceState
+		if baggage != "" {
+			md[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.PublishRequest{
@@ -312,6 +344,20 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
+			// A dead request context is not an internal daprd failure:
+			// preserve its gRPC classification (DeadlineExceeded/Canceled)
+			// so the caller observes the same code whether its own deadline
+			// timer or this reply wins the race. The blanket Internal wrap
+			// below would otherwise misclassify e.g. an app-channel
+			// concurrency-limiter acquire aborted by the caller's deadline.
+			if errors.Is(rErr, context.DeadlineExceeded) || errors.Is(rErr, context.Canceled) {
+				return rResp, status.FromContextError(rErr).Err()
+			}
+			// A remote hop returns the same conditions as already-classified
+			// status errors rather than context sentinels: pass them through.
+			if c := status.Code(rErr); c == codes.DeadlineExceeded || c == codes.Canceled {
+				return rResp, rErr
+			}
 			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
 		}
 
@@ -430,6 +476,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
+				Baggage:         baggageFromContext(ctx),
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -451,6 +498,17 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
+			}
+		}
+	}
+	if rawPayload {
+		baggage := baggageFromContext(ctx)
+		if baggage != "" {
+			for i := range entries {
+				if entries[i].Metadata == nil {
+					entries[i].Metadata = map[string]string{}
+				}
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
 			}
 		}
 	}
@@ -546,6 +604,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		}
 
 		for key, val := range incomingMD {
+			// Binary gRPC metadata cannot be represented in string component metadata
+			if strings.HasSuffix(key, "-bin") {
+				continue
+			}
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
@@ -1182,6 +1244,10 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 }
 
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if err := a.RejectInternalActorType(in.GetActorType()); err != nil {
+		return nil, err
+	}
+
 	response := &runtimev1pb.InvokeActorResponse{}
 
 	router, err := a.ActorRouter(ctx)
@@ -1224,6 +1290,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return router.Call(ctx, req)
 	})
 	if err != nil {
+		// A deadline (the caller's or the actor's resiliency timeout) is not an
+		// internal failure.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
 			return nil, err
@@ -1470,7 +1541,7 @@ func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, 
 
 // TODO: Remove this method when the alpha API is removed.
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
-	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
+	return a.SubscribeConfiguration(request, configurationServer)
 }
 
 // This method is deprecated and exists for backwards-compatibility only.
@@ -1505,11 +1576,29 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 func (a *api) Close() error {
 	defer a.wg.Wait()
 
-	if a.closed.CompareAndSwap(false, true) {
+	a.closeLock.Lock()
+	if !a.closed {
+		a.closed = true
 		close(a.closeCh)
 	}
+	a.closeLock.Unlock()
 
 	a.CompStore().DeleteAllConfigurationSubscribe()
+
+	return nil
+}
+
+func (a *api) goUnlessClosed(fns ...func()) error {
+	a.closeLock.RLock()
+	defer a.closeLock.RUnlock()
+
+	if a.closed {
+		return errAPIClosed
+	}
+
+	for _, fn := range fns {
+		a.wg.Go(fn)
+	}
 
 	return nil
 }

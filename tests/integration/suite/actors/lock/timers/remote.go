@@ -23,6 +23,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -95,13 +97,22 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		Name:      "foo1",
 		DueTime:   "0s",
 	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	ownerClient := r.app1.GRPCClient(t, ctx)
+	_, err = ownerClient.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
+		ActorType: "abc",
+		ActorId:   strconv.Itoa(int(i.Load())),
+		Name:      "foo1",
+		DueTime:   "0s",
+	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), r.called.Load())
 	}, time.Second*10, time.Millisecond*10)
 
-	_, err = client.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
+	_, err = ownerClient.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
 		ActorType: "abc",
 		ActorId:   strconv.Itoa(int(i.Load())),
 		Name:      "foo2",

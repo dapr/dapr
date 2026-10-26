@@ -197,6 +197,7 @@ func TestK6(t *testing.T) {
 		k6 := NewK6("")
 		k6.kubeClient = kubeClient
 		k6Client := new(fakeK6Client)
+		k6Client.On("Get", mock.Anything, k6.name).Return(apierrors.NewNotFound(schema.GroupResource{}, "k6"))
 		k6Client.On("Delete", mock.Anything, k6.name, mock.Anything).Return(nil)
 		k6.k6Client = k6Client
 		require.NoError(t, k6.Dispose())
@@ -219,6 +220,7 @@ func TestK6(t *testing.T) {
 		k6 := NewK6("")
 		k6.kubeClient = kubeClient
 		k6Client := new(fakeK6Client)
+		k6Client.On("Get", mock.Anything, k6.name).Return(apierrors.NewNotFound(schema.GroupResource{}, "k6"))
 		k6Client.On("Delete", mock.Anything, k6.name, mock.Anything).Return(apierrors.NewNotFound(schema.GroupResource{}, "k6"))
 		k6.k6Client = k6Client
 		require.NoError(t, k6.Dispose())
@@ -399,7 +401,12 @@ func TestK6(t *testing.T) {
 		called := 0
 		jobs.jobsResultF = func() *batchv1.JobList {
 			called++
-			if called == 2 {
+			// The first call comes from Dispose waiting for deletion and must
+			// see no jobs; every later call comes from waitForCompletion and
+			// must see the succeeded job. Returning the success only on one
+			// exact call count would turn any extra poll into a hang until
+			// the test binary timeout instead of a failure.
+			if called >= 2 {
 				return &batchv1.JobList{
 					Items: []batchv1.Job{{
 						Status: batchv1.JobStatus{
@@ -441,6 +448,7 @@ func TestK6(t *testing.T) {
 			},
 		}
 		k6Client := new(fakeK6Client)
+		k6Client.On("Get", mock.Anything, k6.name).Return(apierrors.NewNotFound(schema.GroupResource{}, "k6"))
 		k6Client.On("Delete", mock.Anything, k6.name, mock.Anything).Return(nil)
 		k6Client.On("Create", mock.Anything, mock.Anything).Return(nil)
 		k6.k6Client = k6Client

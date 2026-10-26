@@ -76,6 +76,7 @@ func (w *workflowaccesspolicies) Setup(t *testing.T) []framework.Option {
 			"default",
 			sen.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"wfacl-reload-caller": "daprsystem", "wfacl-reload-target": "daprsystem"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -190,7 +191,9 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "some-other-app"}},
 					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{
+							wfaclapi.WorkflowOperationSchedule,
+						}},
 					},
 				}},
 			},
@@ -221,7 +224,9 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-caller"}},
 					Workflows: []wfaclapi.WorkflowRule{
-						{Name: "*", Operations: []wfaclapi.WorkflowOperation{wfaclapi.WorkflowOperationSchedule}},
+						{Name: "*", Operations: []wfaclapi.WorkflowOperation{
+							wfaclapi.WorkflowOperationSchedule,
+						}},
 					},
 				}},
 			},

@@ -596,7 +596,7 @@ func concurrencyOf(value string) proto.StateOptions_StateConcurrency {
 	return concurrency
 }
 
-// stateStoreClient wrapps the conventional stateStoreClient and the transactional stateStore client.
+// stateStoreClient wraps the conventional stateStoreClient and the transactional stateStore client.
 type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
