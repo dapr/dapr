@@ -17,19 +17,16 @@ import (
 	"context"
 	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	"github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -56,22 +53,22 @@ func (s *staleetag) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypes("abc"),
 		actors.WithHandler("/actors/abc/{id}/method/write", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			value, _ := io.ReadAll(r.Body)
-			etag, err := s.get(r.Context(), r.PathValue("id"))
+			_, tag, err := etag.GetGRPC(r.Context(), s.grpcCl, "abc", r.PathValue("id"), "k")
 			if err != nil {
 				nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 				return
 			}
-			w.Write([]byte(s.save(r.Context(), r.PathValue("id"), string(value), etag)))
+			w.Write([]byte(s.save(r.Context(), r.PathValue("id"), string(value), tag)))
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/slow", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			etag, err := s.get(r.Context(), r.PathValue("id"))
+			_, tag, err := etag.GetGRPC(r.Context(), s.grpcCl, "abc", r.PathValue("id"), "k")
 			if err != nil {
 				s.saved <- err.Error()
 				return
 			}
 			close(s.read)
 			<-s.release
-			s.saved <- s.save(context.Background(), r.PathValue("id"), "stale", etag)
+			s.saved <- s.save(context.Background(), r.PathValue("id"), "stale", tag)
 		}),
 	)
 
@@ -122,30 +119,15 @@ func (s *staleetag) Run(t *testing.T, ctx context.Context) {
 
 func (s *staleetag) value(t *testing.T, ctx context.Context) string {
 	t.Helper()
-	resp, err := s.app.GRPCClient(t, ctx).GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: "1", Key: "k"})
+	v, _, err := etag.GetGRPC(ctx, s.app.GRPCClient(t, ctx), "abc", "1", "k")
 	require.NoError(t, err)
-	return strings.Trim(string(resp.GetData()), `"`)
+	return v
 }
 
-func (s *staleetag) get(ctx context.Context, id string) (string, error) {
-	resp, err := s.grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"}, grpc.WaitForReady(true))
+func (s *staleetag) save(ctx context.Context, id, value, tag string) string {
+	_, code, err := etag.SaveGRPC(ctx, s.grpcCl, "abc", id, false, etag.Op{Key: "k", Value: value, ETag: tag})
 	if err != nil {
-		return "", err
+		return err.Error()
 	}
-	return resp.GetEtag(), nil
-}
-
-// save returns "ok" or the gRPC code.
-func (s *staleetag) save(ctx context.Context, id, value, etag string) string {
-	_, err := s.grpcCl.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-		ActorType: "abc",
-		ActorId:   id,
-		Operations: []*rtv1.TransactionalActorStateOperation{{
-			OperationType: "upsert", Key: "k", Value: &anypb.Any{Value: []byte(value)}, Etag: etag,
-		}},
-	}, grpc.WaitForReady(true))
-	if err != nil {
-		return status.Code(err).String()
-	}
-	return "ok"
+	return code
 }

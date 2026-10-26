@@ -15,11 +15,8 @@ package http
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	nethttp "net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,6 +28,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	"github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -73,14 +71,14 @@ func (s *stalecache) Setup(t *testing.T) []framework.Option {
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/slow", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			id, act := r.PathValue("id"), activation.FromHeader(r)
-			etag, err := s.cachedETag(r.Context(), id, act)
+			tag, err := s.cachedETag(r.Context(), id, act)
 			if err != nil {
 				s.saved[id] <- err.Error()
 				return
 			}
 			close(s.read[id])
 			<-s.release
-			s.saved[id] <- s.save(context.Background(), id, act, "stale", etag)
+			s.saved[id] <- s.save(context.Background(), id, act, "stale", tag)
 		}),
 	)
 
@@ -138,19 +136,12 @@ func (s *stalecache) Run(t *testing.T, ctx context.Context) {
 	}
 }
 
-func (s *stalecache) value(t *testing.T, ctx context.Context, id string) string {
-	t.Helper()
-	resp, err := s.app.GRPCClient(t, ctx).GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"})
-	require.NoError(t, err)
-	return strings.Trim(string(resp.GetData()), `"`)
-}
-
 func (s *stalecache) write(ctx context.Context, id, act, value string) string {
-	etag, err := s.cachedETag(ctx, id, act)
+	tag, err := s.cachedETag(ctx, id, act)
 	if err != nil {
 		return err.Error()
 	}
-	return s.save(ctx, id, act, value, etag)
+	return s.save(ctx, id, act, value, tag)
 }
 
 // An empty etag means the key was absent.
@@ -163,76 +154,38 @@ func (s *stalecache) cachedETag(ctx context.Context, id, act string) (string, er
 	}
 
 	s.reads.Add(1)
-	etag, err := s.get(ctx, id)
+	_, tag, err := etag.GetHTTP(ctx, s.httpCl, s.app.Daprd().HTTPAddress(), "abc", id, "k")
 	if err != nil {
 		return "", err
 	}
-	s.setCache(id, act, etag)
-	return etag, nil
+	s.setCache(id, act, tag)
+	return tag, nil
 }
 
-func (s *stalecache) setCache(id, act, etag string) {
+func (s *stalecache) setCache(id, act, tag string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.cache[id] = cached{activationID: act, etag: etag}
+	s.cache[id] = cached{activationID: act, etag: tag}
 }
 
-func (s *stalecache) get(ctx context.Context, id string) (string, error) {
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state/k", nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != nethttp.StatusOK && resp.StatusCode != nethttp.StatusNoContent {
-		return "", fmt.Errorf("get state: %d", resp.StatusCode)
-	}
-	return resp.Header.Get("ETag"), nil
+func (s *stalecache) value(t *testing.T, ctx context.Context, id string) string {
+	t.Helper()
+	v, _, err := etag.GetGRPC(ctx, s.app.GRPCClient(t, ctx), "abc", id, "k")
+	require.NoError(t, err)
+	return v
 }
 
-// save returns "ok" or the HTTP status and error code.
-func (s *stalecache) save(ctx context.Context, id, act, value, etag string) string {
-	op := map[string]any{"key": "k", "value": value}
-	if etag != "" {
-		op["etag"] = etag
-	} else {
-		op["createOnly"] = true
-	}
-	body, err := json.Marshal([]map[string]any{{"operation": "upsert", "request": op}})
+func (s *stalecache) save(ctx context.Context, id, act, value, tag string) string {
+	etags, code, err := etag.SaveHTTP(ctx, s.httpCl, s.app.Daprd().HTTPAddress(), "abc", id, true, etag.Op{Key: "k", Value: value, ETag: tag, CreateOnly: tag == ""})
 	if err != nil {
 		return err.Error()
 	}
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state", strings.NewReader(string(body)))
-	if err != nil {
-		return err.Error()
+	if code != "ok" {
+		return code
 	}
-	req.Header.Set("dapr-return-etags", "true")
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return err.Error()
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != nethttp.StatusOK {
-		var apiErr struct {
-			ErrorCode string `json:"errorCode"`
-		}
-		_ = json.Unmarshal(b, &apiErr)
-		return fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)
-	}
-	var res struct {
-		ETags map[string]string `json:"etags"`
-	}
-	if err := json.Unmarshal(b, &res); err != nil {
-		return err.Error()
-	}
-
-	if res.ETags["k"] == "" {
+	if etags["k"] == "" {
 		return "no etag returned"
 	}
-	s.setCache(id, act, res.ETags["k"])
+	s.setCache(id, act, etags["k"])
 	return "ok"
 }

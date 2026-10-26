@@ -21,12 +21,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	fwetag "github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -55,55 +54,52 @@ func (e *etag) Run(t *testing.T, ctx context.Context) {
 	client := e.app.GRPCClient(t, ctx)
 	activation.Invoke(t, ctx, client, &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
 
-	get := func(key string) *rtv1.GetActorStateResponse {
+	get := func(key string) (string, string) {
 		t.Helper()
-		resp, err := client.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: "1", Key: key})
+		data, tag, err := fwetag.GetGRPC(ctx, client, "abc", "1", key)
 		require.NoError(t, err)
-		return resp
+		return data, tag
 	}
-	upsert := func(key, value, etag string) *rtv1.TransactionalActorStateOperation {
-		return &rtv1.TransactionalActorStateOperation{OperationType: "upsert", Key: key, Value: &anypb.Any{Value: []byte(value)}, Etag: etag}
+	txn := func(ops ...fwetag.Op) string {
+		t.Helper()
+		_, code, err := fwetag.SaveGRPC(ctx, client, "abc", "1", false, ops...)
+		require.NoError(t, err)
+		return code
 	}
-	del := func(key, etag string) *rtv1.TransactionalActorStateOperation {
-		return &rtv1.TransactionalActorStateOperation{OperationType: "delete", Key: key, Etag: etag}
-	}
-	txn := func(ops ...*rtv1.TransactionalActorStateOperation) error {
-		_, err := client.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{ActorType: "abc", ActorId: "1", Operations: ops})
-		return err
-	}
+	mismatch := codes.Aborted.String()
 
-	assert.Empty(t, get("k").GetEtag())
+	_, tag := get("k")
+	assert.Empty(t, tag)
 
-	require.NoError(t, txn(upsert("k", "v1", "")))
-	e1 := get("k").GetEtag()
+	require.Equal(t, "ok", txn(fwetag.Op{Key: "k", Value: "v1"}))
+	_, e1 := get("k")
 	require.NotEmpty(t, e1)
 
-	require.NoError(t, txn(upsert("k", "v2", e1)))
-	resp := get("k")
-	e2 := resp.GetEtag()
+	require.Equal(t, "ok", txn(fwetag.Op{Key: "k", Value: "v2", ETag: e1}))
+	data, e2 := get("k")
 	require.NotEmpty(t, e2)
 	assert.NotEqual(t, e1, e2)
-	assert.Equal(t, "v2", string(resp.GetData()))
+	assert.Equal(t, "v2", data)
 
-	err := txn(upsert("other", "o", ""), upsert("k", "v3", e1))
-	assert.Equal(t, codes.Aborted, status.Code(err), err)
-	resp = get("k")
-	assert.Equal(t, e2, resp.GetEtag())
-	assert.Equal(t, "v2", string(resp.GetData()))
-	assert.Empty(t, get("other").GetData())
+	assert.Equal(t, mismatch, txn(fwetag.Op{Key: "other", Value: "o"}, fwetag.Op{Key: "k", Value: "v3", ETag: e1}))
+	data, tag = get("k")
+	assert.Equal(t, e2, tag)
+	assert.Equal(t, "v2", data)
+	data, _ = get("other")
+	assert.Empty(t, data)
 
-	err = txn(del("k", e1))
-	assert.Equal(t, codes.Aborted, status.Code(err), err)
-	assert.Equal(t, "v2", string(get("k").GetData()))
+	assert.Equal(t, mismatch, txn(fwetag.Op{Key: "k", ETag: e1, Delete: true}))
+	data, _ = get("k")
+	assert.Equal(t, "v2", data)
 
-	err = txn(upsert("missing", "x", e2))
-	assert.Equal(t, codes.Aborted, status.Code(err), err)
+	assert.Equal(t, mismatch, txn(fwetag.Op{Key: "missing", Value: "x", ETag: e2}))
 
-	require.NoError(t, txn(upsert("k", "v4", "")))
-	resp = get("k")
-	assert.Equal(t, "v4", string(resp.GetData()))
+	require.Equal(t, "ok", txn(fwetag.Op{Key: "k", Value: "v4"}))
+	data, e4 := get("k")
+	assert.Equal(t, "v4", data)
 
-	require.NoError(t, txn(del("k", resp.GetEtag())))
-	assert.Empty(t, get("k").GetData())
-	assert.Empty(t, get("k").GetEtag())
+	require.Equal(t, "ok", txn(fwetag.Op{Key: "k", ETag: e4, Delete: true}))
+	data, tag = get("k")
+	assert.Empty(t, data)
+	assert.Empty(t, tag)
 }

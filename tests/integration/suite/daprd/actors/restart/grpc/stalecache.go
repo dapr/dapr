@@ -17,7 +17,6 @@ import (
 	"context"
 	"io"
 	nethttp "net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,13 +24,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	"github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -73,14 +70,14 @@ func (s *stalecache) Setup(t *testing.T) []framework.Option {
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/slow", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			id, act := r.PathValue("id"), activation.FromHeader(r)
-			etag, err := s.cachedETag(r.Context(), id, act)
+			tag, err := s.cachedETag(r.Context(), id, act)
 			if err != nil {
 				s.saved[id] <- err.Error()
 				return
 			}
 			close(s.read[id])
 			<-s.release
-			s.saved[id] <- s.save(context.Background(), id, act, "stale", etag)
+			s.saved[id] <- s.save(context.Background(), id, act, "stale", tag)
 		}),
 	)
 
@@ -139,19 +136,12 @@ func (s *stalecache) Run(t *testing.T, ctx context.Context) {
 	}
 }
 
-func (s *stalecache) value(t *testing.T, ctx context.Context, id string) string {
-	t.Helper()
-	resp, err := s.app.GRPCClient(t, ctx).GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"})
-	require.NoError(t, err)
-	return strings.Trim(string(resp.GetData()), `"`)
-}
-
 func (s *stalecache) write(ctx context.Context, id, act, value string) string {
-	etag, err := s.cachedETag(ctx, id, act)
+	tag, err := s.cachedETag(ctx, id, act)
 	if err != nil {
 		return err.Error()
 	}
-	return s.save(ctx, id, act, value, etag)
+	return s.save(ctx, id, act, value, tag)
 }
 
 // An empty etag means the key was absent.
@@ -164,45 +154,38 @@ func (s *stalecache) cachedETag(ctx context.Context, id, act string) (string, er
 	}
 
 	s.reads.Add(1)
-	etag, err := s.get(ctx, id)
+	_, tag, err := etag.GetGRPC(ctx, s.grpcCl, "abc", id, "k")
 	if err != nil {
 		return "", err
 	}
-	s.setCache(id, act, etag)
-	return etag, nil
+	s.setCache(id, act, tag)
+	return tag, nil
 }
 
-func (s *stalecache) setCache(id, act, etag string) {
+func (s *stalecache) setCache(id, act, tag string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.cache[id] = cached{activationID: act, etag: etag}
+	s.cache[id] = cached{activationID: act, etag: tag}
 }
 
-func (s *stalecache) get(ctx context.Context, id string) (string, error) {
-	resp, err := s.grpcCl.GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: id, Key: "k"}, grpc.WaitForReady(true))
-	if err != nil {
-		return "", err
-	}
-	return resp.GetEtag(), nil
+func (s *stalecache) value(t *testing.T, ctx context.Context, id string) string {
+	t.Helper()
+	v, _, err := etag.GetGRPC(ctx, s.app.GRPCClient(t, ctx), "abc", id, "k")
+	require.NoError(t, err)
+	return v
 }
 
-// save returns "ok" or the gRPC code.
-func (s *stalecache) save(ctx context.Context, id, act, value, etag string) string {
-	resp, err := s.grpcCl.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-		ActorType: "abc",
-		ActorId:   id,
-		Operations: []*rtv1.TransactionalActorStateOperation{{
-			OperationType: "upsert", Key: "k", Value: &anypb.Any{Value: []byte(value)}, Etag: etag, CreateOnly: etag == "",
-		}},
-		ReturnEtags: true,
-	}, grpc.WaitForReady(true))
+func (s *stalecache) save(ctx context.Context, id, act, value, tag string) string {
+	etags, code, err := etag.SaveGRPC(ctx, s.grpcCl, "abc", id, true, etag.Op{Key: "k", Value: value, ETag: tag, CreateOnly: tag == ""})
 	if err != nil {
-		return status.Code(err).String()
+		return err.Error()
 	}
-
-	if resp.GetEtags()["k"] == "" {
+	if code != "ok" {
+		return code
+	}
+	if etags["k"] == "" {
 		return "no etag returned"
 	}
-	s.setCache(id, act, resp.GetEtags()["k"])
+	s.setCache(id, act, etags["k"])
 	return "ok"
 }

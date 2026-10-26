@@ -15,11 +15,8 @@ package http
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +26,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	"github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -56,22 +54,22 @@ func (s *staleetag) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypes("abc"),
 		actors.WithHandler("/actors/abc/{id}/method/write", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			value, _ := io.ReadAll(r.Body)
-			etag, err := s.get(r.Context(), r.PathValue("id"))
+			_, tag, err := etag.GetHTTP(r.Context(), s.httpCl, s.app.Daprd().HTTPAddress(), "abc", r.PathValue("id"), "k")
 			if err != nil {
 				nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 				return
 			}
-			w.Write([]byte(s.save(r.Context(), r.PathValue("id"), string(value), etag)))
+			w.Write([]byte(s.save(r.Context(), r.PathValue("id"), string(value), tag)))
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/slow", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			etag, err := s.get(r.Context(), r.PathValue("id"))
+			_, tag, err := etag.GetHTTP(r.Context(), s.httpCl, s.app.Daprd().HTTPAddress(), "abc", r.PathValue("id"), "k")
 			if err != nil {
 				s.saved <- err.Error()
 				return
 			}
 			close(s.read)
 			<-s.release
-			s.saved <- s.save(context.Background(), r.PathValue("id"), "stale", etag)
+			s.saved <- s.save(context.Background(), r.PathValue("id"), "stale", tag)
 		}),
 	)
 
@@ -121,53 +119,15 @@ func (s *staleetag) Run(t *testing.T, ctx context.Context) {
 
 func (s *staleetag) value(t *testing.T, ctx context.Context) string {
 	t.Helper()
-	resp, err := s.app.GRPCClient(t, ctx).GetActorState(ctx, &rtv1.GetActorStateRequest{ActorType: "abc", ActorId: "1", Key: "k"})
+	v, _, err := etag.GetGRPC(ctx, s.app.GRPCClient(t, ctx), "abc", "1", "k")
 	require.NoError(t, err)
-	return strings.Trim(string(resp.GetData()), `"`)
+	return v
 }
 
-func (s *staleetag) get(ctx context.Context, id string) (string, error) {
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state/k", nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != nethttp.StatusOK && resp.StatusCode != nethttp.StatusNoContent {
-		return "", fmt.Errorf("get state: %d", resp.StatusCode)
-	}
-	return resp.Header.Get("ETag"), nil
-}
-
-// save returns "ok" or the HTTP status and error code.
-func (s *staleetag) save(ctx context.Context, id, value, etag string) string {
-	op := map[string]any{"key": "k", "value": value}
-	if etag != "" {
-		op["etag"] = etag
-	}
-	body, err := json.Marshal([]map[string]any{{"operation": "upsert", "request": op}})
+func (s *staleetag) save(ctx context.Context, id, value, tag string) string {
+	_, code, err := etag.SaveHTTP(ctx, s.httpCl, s.app.Daprd().HTTPAddress(), "abc", id, false, etag.Op{Key: "k", Value: value, ETag: tag})
 	if err != nil {
 		return err.Error()
 	}
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, "http://"+s.app.Daprd().HTTPAddress()+"/v1.0/actors/abc/"+id+"/state", strings.NewReader(string(body)))
-	if err != nil {
-		return err.Error()
-	}
-	resp, err := s.httpCl.Do(req)
-	if err != nil {
-		return err.Error()
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == nethttp.StatusNoContent {
-		return "ok"
-	}
-	var apiErr struct {
-		ErrorCode string `json:"errorCode"`
-	}
-	b, _ := io.ReadAll(resp.Body)
-	_ = json.Unmarshal(b, &apiErr)
-	return fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)
+	return code
 }

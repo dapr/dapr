@@ -15,11 +15,7 @@ package http
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +24,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/actors/activation"
+	fwetag "github.com/dapr/dapr/tests/integration/framework/actors/etag"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -39,19 +36,6 @@ func init() {
 
 type returnetags struct {
 	app *actors.Actors
-}
-
-type etagOp struct {
-	del        bool
-	key        string
-	value      string
-	etag       string
-	createOnly bool
-}
-
-type etagResult struct {
-	etags map[string]string
-	code  string
 }
 
 func (r *returnetags) Setup(t *testing.T) []framework.Option {
@@ -69,143 +53,97 @@ func (r *returnetags) Run(t *testing.T, ctx context.Context) {
 	r.app.WaitUntilRunning(t, ctx)
 	activation.Invoke(t, ctx, r.app.GRPCClient(t, ctx), &rtv1.InvokeActorRequest{ActorType: "abc", ActorId: "1", Method: "foo"})
 	httpCl := client.HTTP(t)
-	base := fmt.Sprintf("http://%s/v1.0/actors/abc/1/state", r.app.Daprd().HTTPAddress())
+	addr := r.app.Daprd().HTTPAddress()
 
 	get := func(key string) (string, string) {
 		t.Helper()
-		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, base+"/"+key, nil)
+		data, tag, err := fwetag.GetHTTP(ctx, httpCl, addr, "abc", "1", key)
 		require.NoError(t, err)
-		resp, err := httpCl.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		b, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.Contains(t, []int{nethttp.StatusOK, nethttp.StatusNoContent}, resp.StatusCode, string(b))
-		return strings.Trim(string(b), `"`), resp.Header.Get("ETag")
+		return data, tag
 	}
 
-	txn := func(returnETags bool, ops ...etagOp) etagResult {
+	txn := func(returnETags bool, ops ...fwetag.Op) (map[string]string, string) {
 		t.Helper()
-		reqs := make([]map[string]any, 0, len(ops))
-		for _, o := range ops {
-			req := map[string]any{"key": o.key}
-			if o.etag != "" {
-				req["etag"] = o.etag
-			}
-			if o.createOnly {
-				req["createOnly"] = true
-			}
-			op := "delete"
-			if !o.del {
-				op = "upsert"
-				req["value"] = o.value
-			}
-			reqs = append(reqs, map[string]any{"operation": op, "request": req})
-		}
-		body, err := json.Marshal(reqs)
+		etags, code, err := fwetag.SaveHTTP(ctx, httpCl, addr, "abc", "1", returnETags, ops...)
 		require.NoError(t, err)
-		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, base, strings.NewReader(string(body)))
-		require.NoError(t, err)
-		if returnETags {
-			req.Header.Set("dapr-return-etags", "true")
-		}
-		resp, err := httpCl.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		b, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-
-		switch {
-		case !returnETags && resp.StatusCode == nethttp.StatusNoContent:
-			assert.Empty(t, b)
-			return etagResult{code: "ok"}
-		case returnETags && resp.StatusCode == nethttp.StatusOK:
-			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-			var res struct {
-				ETags map[string]string `json:"etags"`
-			}
-			require.NoError(t, json.Unmarshal(b, &res), string(b))
-			require.NotNil(t, res.ETags, string(b))
-			return etagResult{etags: res.ETags, code: "ok"}
-		}
-		var apiErr struct {
-			ErrorCode string `json:"errorCode"`
-		}
-		require.NoError(t, json.Unmarshal(b, &apiErr), string(b))
-		return etagResult{code: fmt.Sprintf("%d %s", resp.StatusCode, apiErr.ErrorCode)}
+		return etags, code
 	}
 
 	mismatch, invalid, badRequest := "409 ERR_ACTOR_STATE_ETAG_MISMATCH", "400 ERR_ACTOR_STATE_ETAG_INVALID", "400 ERR_BAD_REQUEST"
 
 	t.Run("no opt-in keeps the old response", func(t *testing.T) {
-		res := txn(false, etagOp{key: "plain", value: "p"})
-		assert.Equal(t, "ok", res.code)
-		assert.Empty(t, res.etags)
+		etags, code := txn(false, fwetag.Op{Key: "plain", Value: "p"})
+		assert.Equal(t, "ok", code)
+		assert.Empty(t, etags)
 	})
 
 	t.Run("returned etags equal a read", func(t *testing.T) {
-		res := txn(true,
-			etagOp{key: "a", value: "1"},
-			etagOp{key: "b", value: "2", createOnly: true},
-			etagOp{key: "plain", del: true},
+		etags, code := txn(true,
+			fwetag.Op{Key: "a", Value: "1"},
+			fwetag.Op{Key: "b", Value: "2", CreateOnly: true},
+			fwetag.Op{Key: "plain", Delete: true},
 		)
-		require.Equal(t, "ok", res.code)
-		require.Len(t, res.etags, 2)
+		require.Equal(t, "ok", code)
+		require.Len(t, etags, 2)
 		for k, v := range map[string]string{"a": "1", "b": "2"} {
-			data, etag := get(k)
+			data, tag := get(k)
 			assert.Equal(t, v, data)
-			assert.Equal(t, etag, res.etags[k], k)
+			assert.Equal(t, tag, etags[k], k)
 		}
-		assert.NotContains(t, res.etags, "plain")
+		assert.NotContains(t, etags, "plain")
 	})
 
 	t.Run("returned etag guards the next save without a re-read", func(t *testing.T) {
-		res := txn(true, etagOp{key: "c", value: "1", createOnly: true})
-		require.Equal(t, "ok", res.code)
-		stale := res.etags["c"]
+		etags, code := txn(true, fwetag.Op{Key: "c", Value: "1", CreateOnly: true})
+		require.Equal(t, "ok", code)
+		stale := etags["c"]
 		require.NotEmpty(t, stale)
 
-		res = txn(true, etagOp{key: "c", value: "2", etag: stale})
-		require.Equal(t, "ok", res.code)
-		fresh := res.etags["c"]
+		etags, code = txn(true, fwetag.Op{Key: "c", Value: "2", ETag: stale})
+		require.Equal(t, "ok", code)
+		fresh := etags["c"]
 		require.NotEmpty(t, fresh)
 		assert.NotEqual(t, stale, fresh)
 
-		res = txn(true, etagOp{key: "other", value: "o"}, etagOp{key: "c", value: "stale", etag: stale})
-		assert.Equal(t, mismatch, res.code)
-		assert.Nil(t, res.etags)
-		data, etag := get("c")
+		etags, code = txn(true, fwetag.Op{Key: "other", Value: "o"}, fwetag.Op{Key: "c", Value: "stale", ETag: stale})
+		assert.Equal(t, mismatch, code)
+		assert.Nil(t, etags)
+		data, tag := get("c")
 		assert.Equal(t, "2", data)
-		assert.Equal(t, fresh, etag)
+		assert.Equal(t, fresh, tag)
 		data, _ = get("other")
 		assert.Empty(t, data)
 
-		res = txn(true, etagOp{key: "c", del: true, etag: fresh})
-		require.Equal(t, "ok", res.code)
-		assert.Empty(t, res.etags)
-		data, etag = get("c")
+		etags, code = txn(true, fwetag.Op{Key: "c", Delete: true, ETag: fresh})
+		require.Equal(t, "ok", code)
+		assert.Empty(t, etags)
+		data, tag = get("c")
 		assert.Empty(t, data)
-		assert.Empty(t, etag)
+		assert.Empty(t, tag)
 	})
 
 	t.Run("create-only on an existing key fails the whole transaction", func(t *testing.T) {
-		require.Equal(t, "ok", txn(false, etagOp{key: "d", value: "newer"}).code)
+		_, code := txn(false, fwetag.Op{Key: "d", Value: "newer"})
+		require.Equal(t, "ok", code)
 
-		res := txn(true, etagOp{key: "other", value: "o"}, etagOp{key: "d", value: "stale", createOnly: true})
-		assert.Equal(t, mismatch, res.code)
+		_, code = txn(true, fwetag.Op{Key: "other", Value: "o"}, fwetag.Op{Key: "d", Value: "stale", CreateOnly: true})
+		assert.Equal(t, mismatch, code)
 		data, _ := get("d")
 		assert.Equal(t, "newer", data)
 		data, _ = get("other")
 		assert.Empty(t, data)
 
-		assert.Equal(t, mismatch, txn(false, etagOp{key: "d", value: "stale", createOnly: true}).code)
+		_, code = txn(false, fwetag.Op{Key: "d", Value: "stale", CreateOnly: true})
+		assert.Equal(t, mismatch, code)
 	})
 
 	t.Run("create-only with an etag or on a delete is invalid", func(t *testing.T) {
-		_, etag := get("d")
-		require.NotEmpty(t, etag)
-		assert.Equal(t, invalid, txn(true, etagOp{key: "d", value: "x", etag: etag, createOnly: true}).code)
-		assert.Equal(t, badRequest, txn(true, etagOp{key: "d", del: true, createOnly: true}).code)
+		_, tag := get("d")
+		require.NotEmpty(t, tag)
+		_, code := txn(true, fwetag.Op{Key: "d", Value: "x", ETag: tag, CreateOnly: true})
+		assert.Equal(t, invalid, code)
+		_, code = txn(true, fwetag.Op{Key: "d", Delete: true, CreateOnly: true})
+		assert.Equal(t, badRequest, code)
 		data, _ := get("d")
 		assert.Equal(t, "newer", data)
 	})
