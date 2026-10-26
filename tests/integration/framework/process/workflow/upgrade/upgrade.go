@@ -132,17 +132,6 @@ func (u *Upgrade) Start(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *
 	return u.connect(t, ctx, d, reg)
 }
 
-// Restart restarts d, dropping its in-memory actor state so it reloads what
-// a test wrote to the store, and returns a client with a worker serving reg
-// reconnected to it.
-func (u *Upgrade) Restart(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *task.TaskRegistry) *client.TaskHubGrpcClient {
-	t.Helper()
-
-	d.Restart(t, ctx)
-	d.WaitUntilRunning(t, ctx)
-	return u.connect(t, ctx, d, reg)
-}
-
 func (u *Upgrade) connect(t *testing.T, ctx context.Context, d *daprd.Daprd, reg *task.TaskRegistry) *client.TaskHubGrpcClient {
 	t.Helper()
 
