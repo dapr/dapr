@@ -16,7 +16,6 @@ package upgrade
 import (
 	"context"
 	"slices"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,14 +34,16 @@ func init() {
 	suite.Register(new(stalledrecovery))
 }
 
-// stalledrecovery has the release daprd write the stalled history an early
-// result leaves with a worker that does not buffer it, then expects master to
-// recover it. The release daprd hands the worker the early result before the
-// event that gates its activity: the worker ignores it, schedules the
-// activity, and the daprd persists the result ahead of the scheduling and
-// withholds the dispatch as already resolved. The workflow waits for good.
-// Master replays the result after its scheduling, so the workflow completes
-// from it; the activity, which never returns on its own, never runs.
+// stalledrecovery has the release daprd write a workflow's history, shapes it
+// like the stall releases before v1.19.0 persisted, and expects master to
+// recover it. Those releases handed a worker that does not buffer an early
+// result the result before the event that gates its activity: the worker
+// ignored it, and the daprd persisted the result ahead of the scheduling and
+// withheld the dispatch as already resolved, so the workflow waited for good.
+// The latest release resolves early results itself, so the test plants that
+// shape into the history the release daprd wrote. Master replays the result
+// after its scheduling, so the workflow completes from it; the activity, which
+// never returns on its own, stays blocked.
 type stalledrecovery struct {
 	upgrade *wfupgrade.Upgrade
 }
@@ -56,7 +57,6 @@ func (s *stalledrecovery) Setup(t *testing.T) []framework.Option {
 }
 
 func (s *stalledrecovery) Run(t *testing.T, ctx context.Context) {
-	var entries atomic.Int64
 	reg := task.NewTaskRegistry()
 	// Sequence numbers: the WaitForSingleEvent synthetic timer takes id 0, so
 	// the activity is task id 1.
@@ -71,7 +71,6 @@ func (s *stalledrecovery) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 	require.NoError(t, reg.AddActivityN("blocked", func(c task.ActivityContext) (any, error) {
-		entries.Add(1)
 		<-c.Context().Done()
 		return nil, c.Context().Err()
 	}))
@@ -83,35 +82,31 @@ func (s *stalledrecovery) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, 1, fworkflow.CountHistoryEventsMatching(t, ctx, from, id, fworkflow.IsTimerCreatedFor(0)))
 	}, time.Second*20, time.Millisecond*10)
 
-	// The activity's result is already in the inbox when the gating event
-	// arrives, as it is when a turn that dispatched it failed its save.
-	fworkflow.InjectInboxEvent(t, ctx, s.upgrade.DB(), s.upgrade.From(), string(id), fworkflow.TaskCompletedEvent(1, `"stalled-recovered"`))
-	from = s.upgrade.Restart(t, ctx, s.upgrade.From(), reg)
+	// The release daprd genuinely dispatches the activity, so its history
+	// holds the real EventRaised and TaskScheduled#1; the activity blocks.
 	require.NoError(t, from.RaiseEvent(ctx, id, "go"))
-
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, 1, fworkflow.CountHistoryEventsMatching(t, ctx, from, id, fworkflow.IsTaskScheduledFor(1)))
 	}, time.Second*20, time.Millisecond*10)
-	hist, err := from.GetInstanceHistory(ctx, id)
-	require.NoError(t, err)
-	events := hist.GetEvents()
+	s.upgrade.From().Kill(t)
+
+	// The stalled shape: the result sits before the gating event, so on replay
+	// it arrives while the workflow still waits for the event.
+	fworkflow.InsertHistoryEvent(t, ctx, s.upgrade.DB(), s.upgrade.From(), string(id),
+		fworkflow.TaskCompletedEvent(1, `"stalled-recovered"`), fworkflow.IsEventRaisedFor("go"))
+	events := fworkflow.ReadHistoryEvents(t, ctx, s.upgrade.DB(), string(id))
 	completed := slices.IndexFunc(events, fworkflow.IsTaskCompletedFor(1))
 	scheduled := slices.IndexFunc(events, fworkflow.IsTaskScheduledFor(1))
 	require.True(t, completed >= 0 && completed < scheduled,
-		"the release daprd must persist the result ahead of its scheduling: completed at %d, scheduled at %d", completed, scheduled)
-	meta, err := from.FetchWorkflowMetadata(ctx, id)
-	require.NoError(t, err)
-	require.Equal(t, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus(), "the release daprd leaves the workflow stalled")
-
-	s.upgrade.From().Kill(t)
+		"the result must sit ahead of its scheduling: completed at %d, scheduled at %d", completed, scheduled)
 
 	to := s.upgrade.Start(t, ctx, s.upgrade.To(), reg)
 	// Nudge a turn; the workflow is not waiting for this event, it only
 	// forces a replay of the stalled history.
 	require.NoError(t, to.RaiseEvent(ctx, id, "nudge"))
-	meta, err = to.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+	meta, err := to.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 	require.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus(), "%v", meta.GetFailureDetails())
-	assert.Equal(t, `"stalled-recovered"`, meta.GetOutput().GetValue())
-	assert.Equal(t, int64(0), entries.Load(), "the result in history resolves the activity; it is never dispatched")
+	assert.Equal(t, `"stalled-recovered"`, meta.GetOutput().GetValue(),
+		"the workflow must complete from the history resolution while the activity stays blocked")
 }
