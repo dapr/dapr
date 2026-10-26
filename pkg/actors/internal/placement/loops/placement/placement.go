@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -78,6 +79,9 @@ type Options struct {
 	ActorTable table.Interface
 	Scheduler  schedclient.Reloader
 
+	// RemoteHosts, if set, is told at the end of every dissemination round.
+	RemoteHosts *remotehosts.Watch
+
 	DisseminationTimeout time.Duration
 
 	StartupTimeout time.Duration
@@ -109,8 +113,9 @@ type placement struct {
 
 	ready *atomic.Bool
 
-	actorTable table.Interface
-	scheduler  schedclient.Reloader
+	actorTable  table.Interface
+	scheduler   schedclient.Reloader
+	remoteHosts *remotehosts.Watch
 
 	inflight  *inflight.Inflight
 	connector connector.Interface
@@ -157,6 +162,7 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		}),
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
+		remoteHosts: opts.RemoteHosts,
 		dissTimeout: opts.DisseminationTimeout,
 		startupWait: opts.StartupTimeout,
 	}
@@ -181,6 +187,17 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		return p.handleCloseStream(ctx, e)
 	case *loops.UpdateTypes:
 		p.handleUpdateTypes(e)
+	case *loops.ReloadReminderTypes:
+		// No stream yet: the reminder types go to the scheduler once the
+		// first dissemination round completes.
+		if p.dissLoop != nil {
+			p.dissLoop.Enqueue(e)
+		}
+	case *loops.RefreshRemoteHosts:
+		// No stream yet: the first round tells the subscribers.
+		if p.dissLoop != nil {
+			p.dissLoop.Enqueue(e)
+		}
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.SetEntityDrainOngoingCallTimeouts:
@@ -368,6 +385,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		ID:                   p.id,
 		Namespace:            p.namespace,
 		Inflight:             p.inflight,
+		RemoteHosts:          p.remoteHosts,
 		Channel:              client,
 		StreamCancel:         streamCancel,
 		PlacementLoop:        p.loop,
