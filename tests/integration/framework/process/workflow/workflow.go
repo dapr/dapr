@@ -348,19 +348,35 @@ func (w *Workflow) WaitForNoConnectedWorkers(t *testing.T, ctx context.Context) 
 
 func (w *Workflow) WaitForNoConnectedWorkersN(t *testing.T, ctx context.Context, index int) {
 	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, index, 0)
+}
+
+// WaitForExactlyConnectedWorkers waits until daprd index 0 reports exactly
+// count connected workers. See WaitForExactlyConnectedWorkersN.
+func (w *Workflow) WaitForExactlyConnectedWorkers(t *testing.T, ctx context.Context, count int) {
+	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, 0, count)
+}
+
+// WaitForExactlyConnectedWorkersN waits until the daprd at the given index
+// reports exactly count connected workers, for example after one of several
+// workers disconnected.
+func (w *Workflow) WaitForExactlyConnectedWorkersN(t *testing.T, ctx context.Context, index, count int) {
+	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md := w.DaprN(index).GetMetadata(c, ctx)
 		if !assert.NotNil(c, md) {
 			return
 		}
 		// The workflows metadata field is omitted when there are no connected
 		// workers, so a nil value means zero workers (drained).
-		if md.Workflows == nil {
-			return
+		var connected int
+		if md.Workflows != nil {
+			connected = md.Workflows.ConnectedWorkers
 		}
-		assert.Zero(c, md.Workflows.ConnectedWorkers)
+		assert.Equal(c, count, connected)
 	}, time.Second*30, time.Millisecond*10)
 }
 

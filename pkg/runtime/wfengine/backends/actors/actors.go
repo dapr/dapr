@@ -172,6 +172,13 @@ type Actors struct {
 	detachedLock         sync.Mutex
 	detached             *detached.Runner
 
+	// regCancel ends the context the actor factories of the current
+	// registration were built with. UnRegisterActors calls it once the types
+	// are unregistered, and Stop calls it so that their background work never
+	// outlives the backend.
+	regLock   sync.Mutex
+	regCancel context.CancelFunc
+
 	stopped atomic.Bool
 }
 
@@ -354,10 +361,18 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		}
 	}
 
-	factories, err := workflow.Factories(ctx, opts)
+	// The factories' background work lives as long as this registration, not
+	// as long as the worker stream or call that triggered it: the types stay
+	// registered while any other worker is connected. It takes no values from
+	// ctx, which can be that stream's. The runtime is ready once Table has
+	// returned, so the factories do not wait on the uncancelled context.
+	regCtx, regCancel := context.WithCancel(context.Background())
+	factories, err := workflow.Factories(regCtx, opts)
 	if err != nil {
+		regCancel()
 		return err
 	}
+	abe.swapRegCancel(regCancel)
 
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
@@ -369,8 +384,14 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	table, err := abe.actors.Table(ctx)
 	if err != nil {
+		// The types are still registered: keep their background work, Stop
+		// or the next registration ends it.
 		return err
 	}
+
+	// Stop the factories' background work once the types are unregistered,
+	// so it still serves the turns HaltAll waits on.
+	defer abe.swapRegCancel(nil)
 
 	actorTypes := []string{
 		abe.workflowActorType,
@@ -382,6 +403,25 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	}
 
 	return table.UnRegisterActorTypes(actorTypes...)
+}
+
+// swapRegCancel installs the cancel func of the current registration and
+// ends the previous registration's context, if any. A registration that
+// lands after Stop is ended at once: nothing else would cancel it. Stop sets
+// stopped before it takes regLock, so checking it under the lock cannot miss
+// it.
+func (abe *Actors) swapRegCancel(cancel context.CancelFunc) {
+	abe.regLock.Lock()
+	prev := abe.regCancel
+	abe.regCancel = cancel
+	if cancel != nil && abe.stopped.Load() {
+		abe.regCancel = nil
+		defer cancel()
+	}
+	abe.regLock.Unlock()
+	if prev != nil {
+		prev()
+	}
 }
 
 // requireActorStateStore gates the externally driven workflow operations
@@ -1041,6 +1081,7 @@ func (abe *Actors) Start(ctx context.Context) error {
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.swapRegCancel(nil)
 	abe.detachedLock.Lock()
 	runner := abe.detached
 	abe.detached = nil
