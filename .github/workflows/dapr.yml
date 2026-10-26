@@ -365,11 +365,13 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - name: Resolve the latest Dapr release
+      - name: Resolve the latest Dapr 1.18 release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Upgrades to 1.19 come from 1.18, so the origin is the latest 1.18.x
+          # release, not the latest release (which is a 1.19.x once published).
           # Authenticate the API call (anonymous requests are aggressively rate
           # limited and would otherwise return an error body with no tag_name).
           tag=""
@@ -377,8 +379,8 @@ jobs:
             tag="$(curl -sSf \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/dapr/dapr/releases/latest \
-              | jq -r '.tag_name // empty')" || tag=""
+              "https://api.github.com/repos/dapr/dapr/releases?per_page=100" \
+              | jq -r '[.[] | select(.draft == false and .prerelease == false) | .tag_name | select(startswith("v1.18."))] | first // empty')" || tag=""
             if [ -n "$tag" ]; then
               break
             fi
