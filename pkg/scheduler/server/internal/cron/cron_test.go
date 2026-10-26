@@ -371,4 +371,61 @@ func Test_reclaimStaleLeadership(t *testing.T) {
 		// No key: nothing to do.
 		c.reclaimLeadership(t.Context(), client)
 	})
+
+	t.Run("a key that changed after the read is not deleted", func(t *testing.T) {
+		t.Parallel()
+
+		client := embeddedEtcdClient(t)
+		lease, err := client.Grant(t.Context(), staleTTL)
+		require.NoError(t, err)
+		_, err = client.Put(t.Context(), "dapr/leadership/0", "old", clientv3.WithLease(lease.ID))
+		require.NoError(t, err)
+
+		// Another writer replaces the key between the read and the delete.
+		racing := &clientv3.Client{KV: &rewriteAfterGet{KV: client.KV, t: t}}
+		c := New(Options{ID: "0", ReclaimStaleLeadership: true}).(*cron)
+		c.reclaimLeadership(t.Context(), racing)
+
+		resp, err := client.Get(t.Context(), "dapr/leadership/0")
+		require.NoError(t, err)
+		require.Len(t, resp.Kvs, 1)
+		assert.Equal(t, "new", string(resp.Kvs[0].Value))
+	})
+
+	t.Run("a failed read leaves the key and does not panic", func(t *testing.T) {
+		t.Parallel()
+
+		client := embeddedEtcdClient(t)
+		lease, err := client.Grant(t.Context(), staleTTL)
+		require.NoError(t, err)
+		_, err = client.Put(t.Context(), "dapr/leadership/0", "old", clientv3.WithLease(lease.ID))
+		require.NoError(t, err)
+
+		// An expired context makes every etcd call fail.
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		c := New(Options{ID: "0", ReclaimStaleLeadership: true}).(*cron)
+		c.reclaimLeadership(ctx, client)
+
+		resp, err := client.Get(t.Context(), "dapr/leadership/0")
+		require.NoError(t, err)
+		require.Len(t, resp.Kvs, 1)
+		assert.Equal(t, "old", string(resp.Kvs[0].Value))
+	})
+}
+
+// rewriteAfterGet is a KV that, after each Get, writes "new" to the same key,
+// as a concurrent writer would.
+type rewriteAfterGet struct {
+	clientv3.KV
+	t *testing.T
+}
+
+func (r *rewriteAfterGet) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
+	resp, err := r.KV.Get(ctx, key, opts...)
+	if err == nil {
+		_, perr := r.Put(ctx, key, "new")
+		require.NoError(r.t, perr)
+	}
+	return resp, err
 }
