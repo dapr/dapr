@@ -30,7 +30,6 @@ func TestReloadReminderTypes(t *testing.T) {
 	newDiss := func(t *testing.T, reminderTypes *[]string) (*disseminator, func() []string) {
 		t.Helper()
 		diss, _, sched := newTestDisseminator(t)
-		diss.roundChangedTypes = make(map[string]struct{})
 		diss.actorTable = tablefake.New().
 			WithTypes(func() []string { return []string{"a", "b"} }).
 			WithReminderTypes(func() []string { return *reminderTypes })
@@ -77,7 +76,6 @@ func TestReloadReminderTypes(t *testing.T) {
 
 func TestRemoteHostsUpdatedOnUnlock(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
-	diss.roundChangedTypes = make(map[string]struct{})
 	diss.remoteHosts = remotehosts.New()
 	ch := diss.remoteHosts.Subscribe(t.Context(), "remote")
 
@@ -115,7 +113,6 @@ func TestRemoteHostsUpdatedOnUnlock(t *testing.T) {
 
 func TestRefreshRemoteHosts(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
-	diss.roundChangedTypes = make(map[string]struct{})
 	diss.remoteHosts = remotehosts.New()
 
 	recv := func(t *testing.T, ch <-chan bool) bool {
@@ -154,7 +151,6 @@ func TestRefreshRemoteHosts(t *testing.T) {
 
 func TestRefreshRemoteHostsSkipsRoundInProgress(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
-	diss.roundChangedTypes = make(map[string]struct{})
 	diss.remoteHosts = remotehosts.New()
 	ch := diss.remoteHosts.Subscribe(t.Context(), "remote")
 
@@ -200,7 +196,6 @@ func TestRefreshRemoteHostsSkipsRoundInProgress(t *testing.T) {
 
 func TestInRoundV2(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
-	diss.roundChangedTypes = make(map[string]struct{})
 	diss.v2Rounds = map[uint64]*v2Round{
 		1: {scope: []string{"a"}, changed: map[string]struct{}{"b": {}}},
 	}
@@ -215,7 +210,6 @@ func TestInRoundV2(t *testing.T) {
 
 func TestCompleteDrainsOnUnlock(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
-	diss.roundChangedTypes = make(map[string]struct{})
 
 	var placed []bool
 	diss.actorTable = tablefake.New().WithCompleteDrains(func(fn func(string) bool) {

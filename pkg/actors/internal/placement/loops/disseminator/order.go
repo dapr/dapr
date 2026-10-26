@@ -35,7 +35,11 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 // stream, once its tables are installed.
 func (d *disseminator) completeRound() {
 	d.roundCompleted = true
-	d.actorTable.CompleteDrains(d.inflight.HasLocalHost)
+	// A type in a round still in progress keeps draining: its installed
+	// table is not final until that round completes.
+	d.actorTable.CompleteDrains(func(actorType string) bool {
+		return d.inRound(actorType) || d.inflight.HasLocalHost(actorType)
+	})
 	d.updateRemoteHosts()
 	d.reloadReminderTypes()
 }

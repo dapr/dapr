@@ -26,19 +26,21 @@ import (
 // Watch holds the subscribers. Update is called by the disseminator once a
 // dissemination round completed.
 type Watch struct {
-	lock     sync.Mutex
-	watchers map[string]map[*watcher]struct{}
+	lock  sync.Mutex
+	types map[string]*entry
 }
 
-type watcher struct {
-	ch    chan bool
+// entry is the state of one watched actor type: the last answer sent to its
+// subscribers, once one is known, and the subscribers.
+type entry struct {
 	known bool
 	last  bool
+	chs   map[chan bool]struct{}
 }
 
 func New() *Watch {
 	return &Watch{
-		watchers: make(map[string]map[*watcher]struct{}),
+		types: make(map[string]*entry),
 	}
 }
 
@@ -48,62 +50,55 @@ func New() *Watch {
 // the same type, and then whenever the answer changes. Only the latest
 // answer is kept for a slow receiver. The channel is closed once ctx is done.
 func (w *Watch) Subscribe(ctx context.Context, actorType string) <-chan bool {
-	wt := &watcher{ch: make(chan bool, 1)}
+	ch := make(chan bool, 1)
 
 	w.lock.Lock()
-	set, ok := w.watchers[actorType]
+	e, ok := w.types[actorType]
 	if !ok {
-		set = make(map[*watcher]struct{})
-		w.watchers[actorType] = set
+		e = &entry{chs: make(map[chan bool]struct{})}
+		w.types[actorType] = e
 	}
-	for other := range set {
-		if other.known {
-			wt.known, wt.last = true, other.last
-			wt.ch <- wt.last
-			break
-		}
+	if e.known {
+		ch <- e.last
 	}
-	set[wt] = struct{}{}
+	e.chs[ch] = struct{}{}
 	w.lock.Unlock()
 
 	context.AfterFunc(ctx, func() {
 		w.lock.Lock()
 		defer w.lock.Unlock()
-		delete(w.watchers[actorType], wt)
-		if len(w.watchers[actorType]) == 0 {
-			delete(w.watchers, actorType)
+		delete(e.chs, ch)
+		if len(e.chs) == 0 {
+			delete(w.types, actorType)
 		}
-		close(wt.ch)
+		close(ch)
 	})
 
-	return wt.ch
+	return ch
 }
 
-// Update sends hasRemote's answer for each watched actor type to the
-// subscribers which have not received it yet. A type for which hasRemote
-// reports no settled answer is skipped, and its subscribers keep their last
-// answer. It never blocks.
+// Update sends hasRemote's answer for each watched actor type to its
+// subscribers if it changed. A type for which hasRemote reports no settled
+// answer is skipped, and its subscribers keep their last answer. It never
+// blocks.
 func (w *Watch) Update(hasRemote func(actorType string) (remote, settled bool)) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	for actorType, set := range w.watchers {
+	for actorType, e := range w.types {
 		remote, settled := hasRemote(actorType)
-		if !settled {
+		if !settled || (e.known && e.last == remote) {
 			continue
 		}
-		for wt := range set {
-			if wt.known && wt.last == remote {
-				continue
-			}
-			wt.known, wt.last = true, remote
+		e.known, e.last = true, remote
+		for ch := range e.chs {
 			// Replace an answer the receiver has not taken yet. The lock
 			// makes this the only sender, so the send cannot block.
 			select {
-			case <-wt.ch:
+			case <-ch:
 			default:
 			}
-			wt.ch <- remote
+			ch <- remote
 		}
 	}
 }
