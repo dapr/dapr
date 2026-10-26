@@ -115,8 +115,8 @@ type table struct {
 
 	// halting holds, for each type whose drained factory CompleteDrains
 	// halts in the background, a channel closed once that halt is done.
-	// Registering the type again waits for it. Changed under flagsLock.
-	halting sync.Map
+	// Registering the type again waits for it. Guarded by flagsLock.
+	halting map[string]chan struct{}
 
 	entityConfigs map[string]api.EntityConfig
 
@@ -145,6 +145,7 @@ func New(opts Options) Interface {
 		timers:          opts.Timers,
 
 		reminderTypeUpdates: broadcaster.New[[]string](),
+		halting:             make(map[string]chan struct{}),
 	}
 	t.suspended.Store(opts.StartSuspended)
 	return t
@@ -317,8 +318,8 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		if _, ok := t.draining.Load(opt.Type); ok {
 			drained = append(drained, opt.Type)
 		}
-		if ch, ok := t.halting.Load(opt.Type); ok {
-			halts = append(halts, ch.(chan struct{}))
+		if ch, ok := t.halting[opt.Type]; ok {
+			halts = append(halts, ch)
 		}
 	}
 	old := t.detachLocked(drained)
@@ -349,9 +350,11 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	if sameTypes(typesBefore, types) && !sameTypes(reminderTypesBefore, reminderTypes) {
 		t.reminderTypeUpdates.Broadcast(reminderTypes)
 	}
-	t.flagsLock.Unlock()
-
+	// Broadcast under flagsLock, so a concurrent DrainActorTypes or
+	// UnRegisterActorTypes cannot have its newer type list overtaken by this
+	// one.
 	t.typeUpdates.Broadcast(types)
+	t.flagsLock.Unlock()
 }
 
 // sameTypes returns whether a and b hold the same actor types, in any order.
@@ -398,6 +401,8 @@ func (t *table) SetReminderDelivery(enabled bool, actorTypes ...string) {
 // again while it drains replaces its draining factory.
 func (t *table) DrainActorTypes(actorTypes ...string) {
 	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
+
 	var changed bool
 	for _, actorType := range actorTypes {
 		if _, ok := t.factories.Load(actorType); !ok {
@@ -407,7 +412,6 @@ func (t *table) DrainActorTypes(actorTypes ...string) {
 			changed = true
 		}
 	}
-	t.flagsLock.Unlock()
 
 	if changed {
 		t.typeUpdates.Broadcast(t.Types())
@@ -437,7 +441,7 @@ func (t *table) CompleteDrains(placed func(actorType string) bool) {
 
 	halted := make(chan struct{})
 	for actorType := range old {
-		t.halting.Store(actorType, halted)
+		t.halting[actorType] = halted
 	}
 	go func() {
 		if err := t.haltDetached(old); err != nil {
@@ -445,7 +449,9 @@ func (t *table) CompleteDrains(placed func(actorType string) bool) {
 		}
 		t.flagsLock.Lock()
 		for actorType := range old {
-			t.halting.CompareAndDelete(actorType, halted)
+			if t.halting[actorType] == halted {
+				delete(t.halting, actorType)
+			}
 		}
 		t.flagsLock.Unlock()
 		close(halted)
@@ -515,13 +521,26 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 
 	// Under flagsLock, so a concurrent SetReminderDelivery or
 	// DrainActorTypes cannot flag a type after its flags are cleared here.
+	// A type whose drain completed is already detached; wait out the
+	// background halt of its factory as well.
 	t.flagsLock.Lock()
 	old := t.detachLocked(actorTypes)
+	var halts []chan struct{}
+	for _, actorType := range actorTypes {
+		if ch, ok := t.halting[actorType]; ok {
+			halts = append(halts, ch)
+		}
+	}
 	t.flagsLock.Unlock()
 
 	err := t.haltDetached(old)
+	for _, ch := range halts {
+		<-ch
+	}
 
+	t.flagsLock.Lock()
 	t.typeUpdates.Broadcast(t.Types())
+	t.flagsLock.Unlock()
 
 	return err
 }
