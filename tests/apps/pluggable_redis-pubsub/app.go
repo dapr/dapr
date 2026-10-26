@@ -38,8 +38,8 @@ func (r *redisPb) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, ha
 	}, handler)
 }
 
-func (r *redisPb) Publish(req *pubsub.PublishRequest) error {
-	return r.PubSub.Publish(&pubsub.PublishRequest{
+func (r *redisPb) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	return r.PubSub.Publish(ctx, &pubsub.PublishRequest{
 		Data:        req.Data,
 		PubsubName:  topicPrefix + req.PubsubName,
 		Topic:       topicPrefix + req.Topic,

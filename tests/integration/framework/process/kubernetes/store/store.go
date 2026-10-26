@@ -78,8 +78,15 @@ func (s *Store) Objects() map[string]any {
 		objs = nil
 	}
 
+	// Core group resources (e.g. v1 Secrets) have an empty group and their
+	// apiVersion is just the version.
+	apiVersion := s.gvk.Version
+	if s.gvk.Group != "" {
+		apiVersion = s.gvk.Group + "/" + s.gvk.Version
+	}
+
 	return map[string]any{
-		"apiVersion": s.gvk.Group + "/" + s.gvk.Version,
+		"apiVersion": apiVersion,
 		"kind":       s.gvk.Kind + "List",
 		"items":      objs,
 	}

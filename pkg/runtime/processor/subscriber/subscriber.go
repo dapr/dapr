@@ -108,6 +108,9 @@ func New(opts Options) *Subscriber {
 
 func (s *Subscriber) Run(ctx context.Context) error {
 	<-ctx.Done()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.closed.Store(true)
 	s.cancelAllRetries()
 
@@ -242,6 +245,33 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	sub, _ := s.compStore.GetDeclarativeSubscription(name)
+	return s.reloadDeclaredAppSubscription(name, pubsubName, sub)
+}
+
+// AddDeclaredAppSubscription starts the consumer of a declarative subscription
+// and only then writes the subscription to the compstore. The metadata API
+// lists the compstore, and a client may publish the moment it sees the
+// subscription there. Both steps run under the lock so StartAppSubscriptions
+// and ReloadPubSub, which start what the compstore lists, cannot miss it.
+func (s *Subscriber) AddDeclaredAppSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	err := s.reloadDeclaredAppSubscription(comp.Name, sub.PubsubName, &compstore.DeclarativeSubscription{
+		Comp:              comp,
+		NamedSubscription: &compstore.NamedSubscription{Name: new(comp.Name), Subscription: sub},
+	})
+	if err != nil {
+		return err
+	}
+
+	s.compStore.AddDeclarativeSubscription(comp, sub)
+
+	return nil
+}
+
+func (s *Subscriber) reloadDeclaredAppSubscription(name, pubsubName string, sub *compstore.DeclarativeSubscription) error {
 	if !s.appSubActive || s.closed.Load() {
 		return nil
 	}
@@ -257,12 +287,7 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 	}
 
 	ps, ok := s.compStore.GetPubSub(pubsubName)
-	if !ok {
-		return nil
-	}
-
-	sub, ok := s.compStore.GetDeclarativeSubscription(name)
-	if !ok {
+	if !ok || sub == nil {
 		return nil
 	}
 
@@ -467,11 +492,12 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 		return nil
 	}
 
-	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
+	streamSubs := s.compStore.ListSubscriptionsStreamByPubSub(name)
+	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(streamSubs))
 
 	var errs []error
 
-	for _, sub := range s.compStore.ListSubscriptionsStreamByPubSub(name) {
+	for _, sub := range streamSubs {
 		ss, err := s.startSubscription(pubsub, sub, true)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
@@ -517,9 +543,10 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 
 	var errs []error
 
-	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsAppByPubSub(name)))
+	appSubs := s.compStore.ListSubscriptionsAppByPubSub(name)
+	subs := make([]*namedSubscription, 0, len(appSubs))
 
-	for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
+	for _, sub := range appSubs {
 		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
 			log.Errorf("Failed to reload subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)

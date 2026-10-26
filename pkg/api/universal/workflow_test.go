@@ -15,16 +15,25 @@ package universal
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/dapr/components-contrib/workflows"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
 
@@ -80,18 +89,10 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
-		resiliency: resiliency.New(nil),
-		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "RUNNING",
-					},
-				}, nil
-			})
-		}),
-		actors: actorsfake.New(),
+		logger:         logger.NewLogger("test"),
+		resiliency:     resiliency.New(nil),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -108,6 +109,49 @@ func TestStartWorkflowAPI(t *testing.T) {
 			} else {
 				require.ErrorIs(t, err, tt.expectedError)
 			}
+		})
+	}
+}
+
+func TestStartWorkflowRetries(t *testing.T) {
+	tests := map[string]struct {
+		err          error
+		wantAttempts int32
+	}{
+		"already exists is not retried": {err: status.Error(codes.AlreadyExists, "create failed"), wantAttempts: 1},
+		"unavailable is retried":        {err: status.Error(codes.Unavailable, "create failed"), wantAttempts: 4},
+		"no worker connected is not retried": {
+			err:          fmt.Errorf("%w for app 'x': failed to lookup actor: %w", wferrors.ErrNoWorkerConnected, messages.ErrActorNoAddress.WithFormat("x")),
+			wantAttempts: 1,
+		},
+		"no worker connected on a remote host is not retried": {
+			err:          fmt.Errorf("%w for app 'x': %w", wferrors.ErrNoWorkerConnected, status.Error(codes.FailedPrecondition, "failed to lookup actor: did not find address for actor 'x'")),
+			wantAttempts: 1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var attempts atomic.Int32
+			fakeAPI := &Universal{
+				logger:     logger.NewLogger("test"),
+				resiliency: resiliency.FromConfigurations(logger.NewLogger("test")),
+				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+					return fake.NewClient().WithScheduleNewWorkflow(func(context.Context, any, ...api.NewWorkflowOptions) (api.InstanceID, error) {
+						attempts.Add(1)
+						return "", fmt.Errorf("failed to start workflow: %w", tc.err)
+					})
+				}),
+				actors: actorsfake.New(),
+			}
+
+			_, err := fakeAPI.StartWorkflow(t.Context(), &runtimev1pb.StartWorkflowRequest{
+				WorkflowComponent: fakeComponentName,
+				InstanceId:        fakeInstanceID,
+				WorkflowName:      "fakeWorkflow",
+			})
+			require.ErrorIs(t, err, messages.ErrStartWorkflow)
+			assert.Equal(t, tc.wantAttempts, attempts.Load())
 		})
 	}
 }
@@ -179,18 +223,10 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
-		resiliency: resiliency.New(nil),
-		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "TERMINATED",
-					},
-				}, nil
-			})
-		}),
-		actors: actorsfake.New(),
+		logger:         logger.NewLogger("test"),
+		resiliency:     resiliency.New(nil),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -291,18 +327,10 @@ func TestPauseWorkflowApi(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
-		resiliency: resiliency.New(nil),
-		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "SUSPENDED",
-					},
-				}, nil
-			})
-		}),
-		actors: actorsfake.New(),
+		logger:         logger.NewLogger("test"),
+		resiliency:     resiliency.New(nil),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -365,4 +393,157 @@ func TestResumeWorkflowApi(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWorkflowInstanceNotFoundError verifies that the Terminate and Purge
+// handlers format ErrWorkflowInstanceNotFound with a single argument. The
+// message template has one verb, so passing the sentinel error as an extra
+// argument used to append a "%!(EXTRA ...)" formatting marker to the message.
+// ErrorIs cannot catch this because APIError.Is ignores the message, so the
+// exact message is asserted here.
+func TestWorkflowInstanceNotFoundError(t *testing.T) {
+	expectedMessage := messages.ErrWorkflowInstanceNotFound.WithFormat(fakeInstanceID).Message()
+
+	fakeAPI := &Universal{
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+			return fake.NewClient().
+				WithTerminateWorkflow(func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error {
+					return api.ErrInstanceNotFound
+				}).
+				WithPurgeWorkflowState(func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error {
+					return api.ErrInstanceNotFound
+				})
+		}),
+		actors: actorsfake.New(),
+	}
+
+	t.Run("Terminate returns the not-found error without extra formatting", func(t *testing.T) {
+		_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
+			WorkflowComponent: fakeComponentName,
+			InstanceId:        fakeInstanceID,
+		})
+		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
+		var apiErr messages.APIError
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, expectedMessage, apiErr.Message())
+		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+	})
+
+	t.Run("Purge returns the not-found error without extra formatting", func(t *testing.T) {
+		_, err := fakeAPI.PurgeWorkflow(t.Context(), &runtimev1pb.PurgeWorkflowRequest{
+			WorkflowComponent: fakeComponentName,
+			InstanceId:        fakeInstanceID,
+		})
+		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
+		var apiErr messages.APIError
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, expectedMessage, apiErr.Message())
+		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+	})
+}
+
+func newGetWorkflowAPI(metadata *backend.WorkflowMetadata, metadataErr error) *Universal {
+	return &Universal{
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error) {
+				return metadata, metadataErr
+			})
+		}),
+		actors: actorsfake.New(),
+	}
+}
+
+// TestGetWorkflowOutputOnFailure verifies that GetWorkflow only exposes
+// dapr.workflow.output for workflows that did not fail. On failure
+// durabletask-go stores the failure message in the completed-event result
+// (surfaced as Output), but that error is already reported via
+// dapr.workflow.failure.*, so it must not leak into output.
+func TestGetWorkflowOutputOnFailure(t *testing.T) {
+	const errMsg = "Task 'SuperSlowActivity' (#0) failed with an unhandled exception: boom"
+
+	tests := map[string]struct {
+		metadata       *backend.WorkflowMetadata
+		expectOutput   bool
+		expectedOutput string
+	}{
+		"failed workflow omits output": {
+			metadata: &backend.WorkflowMetadata{
+				RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				Output:        wrapperspb.String(errMsg),
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    "Exception",
+					ErrorMessage: errMsg,
+				},
+			},
+			expectOutput: false,
+		},
+		"completed workflow keeps output": {
+			metadata: &backend.WorkflowMetadata{
+				RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				Output:        wrapperspb.String(`{"result":42}`),
+			},
+			expectOutput:   true,
+			expectedOutput: `{"result":42}`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeAPI := newGetWorkflowAPI(tc.metadata, nil)
+
+			res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+			require.NoError(t, err)
+
+			output, ok := res.GetProperties()["dapr.workflow.output"]
+			if tc.expectOutput {
+				assert.True(t, ok, "expected dapr.workflow.output to be set")
+				assert.Equal(t, tc.expectedOutput, output)
+			} else {
+				assert.False(t, ok, "dapr.workflow.output must be omitted for a failed workflow")
+				// The failure message is still surfaced through the dedicated field.
+				assert.Equal(t, errMsg, res.GetProperties()["dapr.workflow.failure.error_message"])
+			}
+		})
+	}
+}
+
+func TestGetWorkflowRuntimeStatus(t *testing.T) {
+	tests := map[string]struct {
+		status   protos.OrchestrationStatus
+		expected string
+	}{
+		"running":   {protos.OrchestrationStatus_ORCHESTRATION_STATUS_RUNNING, "RUNNING"},
+		"completed": {protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, "COMPLETED"},
+		"failed":    {protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, "FAILED"},
+		"suspended": {protos.OrchestrationStatus_ORCHESTRATION_STATUS_SUSPENDED, "SUSPENDED"},
+		"unknown":   {protos.OrchestrationStatus(99), "UNKNOWN"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{RuntimeStatus: tc.status}, nil)
+
+			res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, res.GetRuntimeStatus())
+			assert.Equal(t, fakeInstanceID, res.GetInstanceId())
+			assert.NotNil(t, res.GetProperties())
+		})
+	}
+}
+
+// TestGetWorkflowNotFound verifies that a missing instance results in a nil
+// error and a response carrying only the requested instance ID.
+func TestGetWorkflowNotFound(t *testing.T) {
+	fakeAPI := newGetWorkflowAPI(nil, api.ErrInstanceNotFound)
+
+	res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+	require.NoError(t, err)
+	assert.Equal(t, fakeInstanceID, res.GetInstanceId())
+	assert.Empty(t, res.GetWorkflowName())
+	assert.Empty(t, res.GetRuntimeStatus())
 }

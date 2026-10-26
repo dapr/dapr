@@ -80,6 +80,7 @@ func (r *resync) Setup(t *testing.T) []framework.Option {
 			"default",
 			snt.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "appconfig"}),
 		kubernetes.WithClusterDaprConfigurationListFromStore(t, cfgStore),
 	)
 
@@ -95,6 +96,7 @@ func (r *resync) Setup(t *testing.T) []framework.Option {
 	r.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("appconfig"),
+		daprd.WithAppID("myapp"),
 		daprd.WithSentryAddress(snt.Address()),
 		daprd.WithControlPlaneAddress(r.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),

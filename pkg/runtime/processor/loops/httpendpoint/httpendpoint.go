@@ -98,14 +98,16 @@ func (h *Handler) handleAdd(ctx context.Context, ev *loops.AddHTTPEndpoint) {
 		sendResult(ev.Result, nil)
 		return
 	}
-	h.processSecrets(ctx, &endpoint)
+	ResolveSecrets(ctx, h.secret, &endpoint)
 	h.compStore.AddHTTPEndpoint(endpoint)
 	log.Debugf("HTTPEndpoint loaded: %s", endpoint.LogName())
 	sendResult(ev.Result, nil)
 }
 
-func (h *Handler) processSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
-	_, _ = h.secret.ProcessResource(ctx, endpoint)
+// ResolveSecrets resolves the endpoint's secret references in place, as the
+// loop does before it stores the endpoint.
+func ResolveSecrets(ctx context.Context, secret SecretProcessor, endpoint *httpendpointsapi.HTTPEndpoint) {
+	_, _ = secret.ProcessResource(ctx, endpoint)
 
 	tlsResource := apis.GenericNameValueResource{
 		Name:        endpoint.Name,
@@ -146,7 +148,7 @@ func (h *Handler) processSecrets(ctx context.Context, endpoint *httpendpointsapi
 		tlsResource.Pairs = append(tlsResource.Pairs, cKey)
 	}
 
-	updated, _ := h.secret.ProcessResource(ctx, tlsResource)
+	updated, _ := secret.ProcessResource(ctx, tlsResource)
 	if !updated {
 		return
 	}

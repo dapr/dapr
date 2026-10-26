@@ -19,6 +19,11 @@ package errors
 // programmatically detect the failure mode.
 const ErrorTypeHistoryTampered = "DAPR_WORKFLOW_HISTORY_TAMPERED"
 
+// ErrorTypeUnstartableState is the FailureDetails.ErrorType set on workflows
+// terminally failed because their committed start event was lost and the
+// instance could never progress; clients can match on it.
+const ErrorTypeUnstartableState = "DAPR_WORKFLOW_UNSTARTABLE_STATE"
+
 // VerificationError is returned by LoadWorkflowState when the persisted
 // workflow state has been tampered with: signature chain verification has
 // failed, signing material is missing, metadata bounds are exceeded, or

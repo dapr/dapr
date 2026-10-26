@@ -16,7 +16,6 @@ package clients
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -38,16 +37,13 @@ type Options struct {
 type Clients struct {
 	security security.Handler
 
-	clients     []schedulerv1pb.SchedulerClient
-	closeFns    []context.CancelFunc
-	lastUsedIdx atomic.Uint64
-
-	disabled     chan struct{}
+	gen          *generation
+	lastUsedIdx  atomic.Uint64
 	currentAddrs []string
 
-	wg      sync.WaitGroup
-	lock    sync.RWMutex
-	hasInit chan struct{}
+	disabled chan struct{}
+	lock     sync.RWMutex
+	hasInit  chan struct{}
 }
 
 func New(opts Options) *Clients {
@@ -62,41 +58,49 @@ func (c *Clients) Disable() {
 	close(c.disabled)
 }
 
+// Reload dials the new address set and atomically swaps it in. It never
+// blocks on borrowers of the previous generation: the old connections are
+// closed asynchronously, which aborts any RPCs still hung against dead
+// schedulers. On dial failure the current (working) generation is preserved.
 func (c *Clients) Reload(ctx context.Context, addresses []string) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.currentAddrs = []string{}
-	c.close()
-
-	c.clients = make([]schedulerv1pb.SchedulerClient, 0, len(addresses))
-	c.closeFns = make([]context.CancelFunc, 0, len(addresses))
+	newGen := &generation{
+		clients:  make([]schedulerv1pb.SchedulerClient, 0, len(addresses)),
+		closeFns: make([]context.CancelFunc, 0, len(addresses)),
+	}
 
 	for _, address := range addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
 
-		client, closeFn, err := client.New(ctx, address, c.security)
+		cl, closeFn, err := client.New(ctx, address, c.security)
 		if err != nil {
-			c.close()
-			return fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
+			newGen.close()
+			return errors.New("scheduler client not initialized for address " + address + ": " + err.Error())
 		}
 
 		log.Infof("Scheduler client initialized for address: %s", address)
 
-		c.clients = append(c.clients, client)
-		c.closeFns = append(c.closeFns, closeFn)
+		newGen.clients = append(newGen.clients, cl)
+		newGen.closeFns = append(newGen.closeFns, closeFn)
 	}
 
-	if len(c.clients) > 0 {
+	if len(newGen.clients) > 0 {
 		log.Info("Scheduler clients initialized")
 	}
 
+	c.lock.Lock()
+	old := c.gen
+	c.gen = newGen
 	c.currentAddrs = addresses
 
 	select {
 	case <-c.hasInit:
 	default:
 		close(c.hasInit)
+	}
+	c.lock.Unlock()
+
+	if old != nil {
+		go old.close()
 	}
 
 	return nil
@@ -115,13 +119,14 @@ func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, cont
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	if len(c.clients) == 0 {
+	gen := c.gen
+	if gen == nil || len(gen.clients) == 0 {
 		return nil, nil, errors.New("no scheduler client initialized")
 	}
 
-	c.wg.Add(1)
+	gen.wg.Add(1)
 	//nolint:gosec
-	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], c.wg.Done, nil
+	return gen.clients[int(c.lastUsedIdx.Add(1))%len(gen.clients)], gen.wg.Done, nil
 }
 
 func (c *Clients) Addresses() []string {
@@ -129,20 +134,4 @@ func (c *Clients) Addresses() []string {
 	defer c.lock.RUnlock()
 
 	return c.currentAddrs
-}
-
-func (c *Clients) close() {
-	c.wg.Wait()
-
-	var wg sync.WaitGroup
-	wg.Add(len(c.closeFns))
-
-	for _, closeFn := range c.closeFns {
-		go func() {
-			closeFn()
-			wg.Done()
-		}()
-	}
-
-	wg.Wait()
 }

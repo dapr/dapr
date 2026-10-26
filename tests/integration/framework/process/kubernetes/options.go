@@ -36,6 +36,8 @@ import (
 	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 )
 
@@ -120,6 +122,81 @@ func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
 	return handleClusterListResource(t, "/api/v1/pods", pods)
 }
 
+func WithClusterPodListSelector(t *testing.T, selector string, pods *corev1.PodList) Option {
+	return func(o *options) {
+		handle := handleObj(t, pods)
+		o.handlers["/api/v1/pods"] = func(w http.ResponseWriter, r *http.Request) {
+			// The fake informer handles WATCH requests before this callback.
+			// Controller-runtime applies the same selector to LIST and WATCH.
+			assert.Equal(t, selector, r.URL.Query().Get("labelSelector"))
+			handle(w, r)
+		}
+	}
+}
+
+func WithNamespacedPodList(t *testing.T, ns string, pods *corev1.PodList) Option {
+	return handleClusterListResource(t, "/api/v1/namespaces/"+ns+"/pods", pods)
+}
+
+// WithNamespacedPodListSelector serves pods on the namespaced pod list path
+// and asserts every request uses the given label selector.
+func WithNamespacedPodListSelector(t *testing.T, ns, selector string, pods *corev1.PodList) Option {
+	return func(o *options) {
+		handle := handleObj(t, pods)
+		o.handlers["/api/v1/namespaces/"+ns+"/pods"] = func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, selector, r.URL.Query().Get("labelSelector"))
+			handle(w, r)
+		}
+	}
+}
+
+func WithNamespacedPodListFromStore(t *testing.T, ns string, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/namespaces/"+ns+"/pods", store)
+}
+
+// DaprPod returns a pod as the injector leaves it for appID, assigned the
+// given dapr.io/config annotation value.
+func DaprPod(ns, name, appID, config string) corev1.Pod {
+	return corev1.Pod{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    map[string]string{injectorconsts.SidecarAppIDLabel: appID},
+			Annotations: map[string]string{
+				annotations.KeyEnabled: "true",
+				annotations.KeyAppID:   appID,
+				annotations.KeyConfig:  config,
+			},
+		},
+	}
+}
+
+// WithDaprPodList serves the pods on both the cluster and namespaced pod list
+// paths, so they are seen by the operator's pod cache and its direct API reads.
+// Must be passed after WithBaseOperatorAPI, which serves empty pod lists.
+func WithDaprPodList(t *testing.T, ns string, pods ...corev1.Pod) Option {
+	list := &corev1.PodList{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+		Items:    pods,
+	}
+	return func(o *options) {
+		WithClusterPodList(t, list)(o)
+		WithNamespacedPodList(t, ns, list)(o)
+	}
+}
+
+// WithDaprPods serves one DaprPod per app ID, named after the app ID and
+// assigned the mapped configuration, so the operator authorizes each app's
+// GetConfiguration.
+func WithDaprPods(t *testing.T, ns string, appConfigs map[string]string) Option {
+	pods := make([]corev1.Pod, 0, len(appConfigs))
+	for appID, config := range appConfigs {
+		pods = append(pods, DaprPod(ns, appID, appID, config))
+	}
+	return WithDaprPodList(t, ns, pods...)
+}
+
 func WithClusterServiceList(t *testing.T, services *corev1.ServiceList) Option {
 	return handleClusterListResource(t, "/api/v1/services", services)
 }
@@ -148,12 +225,20 @@ func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
+func WithPodGet(t *testing.T, pod *corev1.Pod) Option {
+	return handleGetResource(t, "/api/v1", "pods", pod.Namespace, pod.Name, pod)
+}
+
 func WithStatefulSetGet(t *testing.T, statefulset *appsv1.StatefulSet) Option {
 	return handleGetResource(t, "/apis/apps/v1", "statefulsets", statefulset.Namespace, statefulset.Name, statefulset)
 }
 
 func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
 	return handleClusterListResource(t, "/api/v1/secrets", secrets)
+}
+
+func WithClusterSecretListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/secrets", store)
 }
 
 func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency) Option {
@@ -178,6 +263,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 				},
 			}),
 			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
+			WithNamespacedPodList(t, ns, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),

@@ -102,8 +102,10 @@ spec:
   metadata: []
 `), 0o600))
 
+		// The condition runs on Never's own goroutines, which can outlive the
+		// subtest: assert into a throwaway collector, never into t.
 		assert.Never(t, func() bool {
-			return len(d.daprd.GetMetaRegisteredComponents(t, ctx)) != 1
+			return len(d.daprd.GetMetaRegisteredComponents(new(assert.CollectT), ctx)) != 1
 		}, time.Second*3, time.Millisecond*100,
 			"hot reload is disabled so added component must not be loaded")
 	})
@@ -112,7 +114,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(d.resDir, "initial.yaml")))
 
 		assert.Never(t, func() bool {
-			return len(d.daprd.GetMetaRegisteredComponents(t, ctx)) != 1
+			return len(d.daprd.GetMetaRegisteredComponents(new(assert.CollectT), ctx)) != 1
 		}, time.Second*3, time.Millisecond*100,
 			"hot reload is disabled so deleted component must stay registered")
 	})

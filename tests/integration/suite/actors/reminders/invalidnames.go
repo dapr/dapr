@@ -101,6 +101,7 @@ func (i *invalidnames) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 10*time.Millisecond)
 
 	badNames := map[string]string{
+		"empty":       "",
 		"slash":       "bad/name",
 		"backslash":   "bad\\name",
 		"hash":        "bad#name",

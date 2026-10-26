@@ -15,7 +15,7 @@ package universal
 
 import (
 	"context"
-	"errors"
+	"math"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -227,7 +227,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			)
 
 			if message.GetMessageTypes() == nil {
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("message type cannot be nil"))
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "message type cannot be nil")
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -339,7 +339,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					if tool.ToolTypes == nil {
-						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("tool types cannot be nil"))
+						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool types cannot be nil")
 						a.logger.Debug(err)
 						return nil, err
 					}
@@ -403,7 +403,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 			default:
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "unsupported message type")
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -420,6 +420,17 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	request.Temperature = req.GetTemperature()
+	if req.MaxTokens != nil {
+		// Bounded to int32 range so component SDKs can narrow to int safely on
+		// every architecture; no model accepts caps anywhere near this large.
+		if req.GetMaxTokens() <= 0 || req.GetMaxTokens() > math.MaxInt32 {
+			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "max_tokens must be greater than 0 and at most 2147483647")
+			a.logger.Debug(err)
+			return nil, err
+		}
+		maxTokens := req.GetMaxTokens()
+		request.MaxTokens = &maxTokens
+	}
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
 	if req.GetPromptCacheRetention() != nil {

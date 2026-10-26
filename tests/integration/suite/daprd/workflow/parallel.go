@@ -25,13 +25,13 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -94,7 +94,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		}))
 
-		backendClient := client.NewTaskHubGrpcClient(daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+		backendClient := client.NewTaskHubGrpcClient(daprd.GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
 		resp, err := daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",

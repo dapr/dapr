@@ -15,15 +15,18 @@ package remote
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	nethttp "net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -39,25 +42,15 @@ type http struct {
 	app1 *actors.Actors
 	app2 *actors.Actors
 
-	called1, called2 atomic.Int64
-	timer1, timer2   atomic.Int64
+	timer1, timer2 atomic.Int64
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
-		actors.WithHandler("/actors/abc/{id}", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			assert.Regexp(t, "/actors/abc/.+", r.URL.Path)
-			assert.Equal(t, nethttp.MethodDelete, r.Method)
-		}),
-		actors.WithHandler("/actors/abc/{id}/method/foo", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			assert.Equal(t, nethttp.MethodPut, r.Method)
-			assert.Regexp(t, "/actors/abc/.+/method/foo", r.URL.Path)
-			h.called1.Add(1)
-		}),
+		actors.WithHandler("/actors/abc/{id}", func(nethttp.ResponseWriter, *nethttp.Request) {}),
 		actors.WithHandler("/actors/abc/{id}/method/timer/foo", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			assert.Equal(t, nethttp.MethodPut, r.Method)
-			assert.Regexp(t, "/actors/abc/.+/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
 			assert.JSONEq(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
@@ -68,18 +61,9 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 	h.app2 = actors.New(t,
 		actors.WithPeerActor(h.app1),
 		actors.WithActorTypes("abc"),
-		actors.WithHandler("/actors/abc/{id}", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			assert.Regexp(t, "/actors/abc/.+", r.URL.Path)
-			assert.Equal(t, nethttp.MethodDelete, r.Method)
-		}),
-		actors.WithHandler("/actors/abc/{id}/method/foo", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			assert.Equal(t, nethttp.MethodPut, r.Method)
-			assert.Regexp(t, "/actors/abc/.+", r.URL.Path)
-			h.called2.Add(1)
-		}),
+		actors.WithHandler("/actors/abc/{id}", func(nethttp.ResponseWriter, *nethttp.Request) {}),
 		actors.WithHandler("/actors/abc/{id}/method/timer/foo", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			assert.Equal(t, nethttp.MethodPut, r.Method)
-			assert.Regexp(t, "/actors/abc/.+/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
 			assert.JSONEq(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
@@ -96,37 +80,74 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.app1.WaitUntilRunning(t, ctx)
 	h.app2.WaitUntilRunning(t, ctx)
 
-	client := client.HTTP(t)
+	httpClient := client.HTTP(t)
+	body := `{"dueTime":"0s","period":"1s","data":"hello"}`
 
-	body := `{
-"dueTime": "0s",
-"period": "1s",
-"data": "hello"
-}`
+	do := func(t require.TestingT, method, addr, id string) int {
+		var reqBody io.Reader
+		if method == nethttp.MethodPost {
+			reqBody = strings.NewReader(body)
+		}
+		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%s/timers/foo", addr, id)
+		req, err := nethttp.NewRequestWithContext(ctx, method, url, reqBody)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		if resp.StatusCode == nethttp.StatusForbidden {
+			b, rerr := io.ReadAll(resp.Body)
+			require.NoError(t, rerr)
+			var apiErr struct {
+				ErrorCode string `json:"errorCode"`
+			}
+			require.NoError(t, json.Unmarshal(b, &apiErr))
+			assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", apiErr.ErrorCode)
+		}
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
+	}
 
-	var i atomic.Int64
+	probe := func(c *assert.CollectT, addr string) int {
+		url := fmt.Sprintf("http://%s/v1.0/actors/abc/probe/timers/foo", addr)
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
+		require.NoError(c, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(c, err)
+		require.NoError(c, resp.Body.Close())
+		return resp.StatusCode
+	}
+
+	// Wait until both hosts agree on the placement table before requiring
+	// exactly one owner per actor.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app1.Daprd().HTTPAddress(), i.Add(1))
-		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		assert.NoError(t, err)
-		resp, err := client.Do(req)
-		assert.NoError(t, err)
-		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
-		assert.NoError(t, resp.Body.Close())
-
-		url = fmt.Sprintf("http://%s/v1.0/actors/abc/%d/timers/foo", h.app1.Daprd().HTTPAddress(), i.Load())
-		req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
-		assert.NoError(t, err)
-		resp, err = client.Do(req)
-		assert.NoError(t, err)
-		assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
-		assert.Positive(c, h.called1.Load())
-		assert.Positive(c, h.called2.Load())
-		assert.NoError(t, resp.Body.Close())
-	}, time.Second*10, 1)
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, h.timer1.Load(), int64(2))
-		assert.GreaterOrEqual(c, h.timer2.Load(), int64(2))
+		code1 := probe(c, h.app1.Daprd().HTTPAddress())
+		code2 := probe(c, h.app2.Daprd().HTTPAddress())
+		assert.NotEqual(c, code1 == nethttp.StatusNoContent, code2 == nethttp.StatusNoContent)
+		assert.ElementsMatch(c, []int{nethttp.StatusNoContent, nethttp.StatusForbidden}, []int{code1, code2})
 	}, time.Second*10, time.Millisecond*10)
+
+	owner1, owner2 := "", ""
+	for i := 0; owner1 == "" || owner2 == ""; i++ {
+		require.Less(t, i, 100, "actor IDs never hashed to both hosts")
+		id := strconv.Itoa(i)
+		code1 := do(t, nethttp.MethodPost, h.app1.Daprd().HTTPAddress(), id)
+		code2 := do(t, nethttp.MethodPost, h.app2.Daprd().HTTPAddress(), id)
+		codes := []int{code1, code2}
+		assert.ElementsMatch(t, []int{nethttp.StatusNoContent, nethttp.StatusForbidden}, codes)
+		if code1 == nethttp.StatusNoContent && owner1 == "" {
+			owner1 = id
+		}
+		if code2 == nethttp.StatusNoContent && owner2 == "" {
+			owner2 = id
+		}
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Positive(c, h.timer1.Load())
+		assert.Positive(c, h.timer2.Load())
+	}, time.Second*10, time.Millisecond*10)
+
+	assert.Equal(t, nethttp.StatusForbidden, do(t, nethttp.MethodDelete, h.app2.Daprd().HTTPAddress(), owner1))
+	assert.Equal(t, nethttp.StatusForbidden, do(t, nethttp.MethodDelete, h.app1.Daprd().HTTPAddress(), owner2))
+	assert.Equal(t, nethttp.StatusNoContent, do(t, nethttp.MethodDelete, h.app1.Daprd().HTTPAddress(), owner1))
+	assert.Equal(t, nethttp.StatusNoContent, do(t, nethttp.MethodDelete, h.app2.Daprd().HTTPAddress(), owner2))
 }

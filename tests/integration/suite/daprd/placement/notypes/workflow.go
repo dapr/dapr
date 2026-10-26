@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -53,7 +54,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	// With no entities, the placement table should have no hosts.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := w.actors.Placement().PlacementTables(t, ctx)
+		table := w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
@@ -61,18 +62,18 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	// Record the version after initial connection.
-	table := w.actors.Placement().PlacementTables(t, ctx)
+	table := w.actors.PlacementTables(t, ctx)
 	initVersion := table.Tables["default"].Version
 
 	// Start a workflow client which will register workflow actor types.
-	client := dworkflow.NewClient(w.actors.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(w.actors.GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
 
 	// Workflow entities should now be registered, triggering dissemination.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table = w.actors.Placement().PlacementTables(t, ctx)
+		table = w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
@@ -99,7 +100,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	// entities.
 	cancel()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := w.actors.Placement().PlacementTables(t, ctx)
+		table := w.actors.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}

@@ -14,22 +14,18 @@ limitations under the License.
 package orchestrator
 
 import (
-	"errors"
-
 	"github.com/dapr/durabletask-go/backend"
 )
 
-type dispatchResult struct {
-	failedEventIDs map[int32]struct{}
-	err            error
-}
-
-func (r *dispatchResult) recordFailure(eventID int32, err error) {
-	if r.failedEventIDs == nil {
-		r.failedEventIDs = make(map[int32]struct{})
+// warnUnsignedPropagation warns that an outbound dispatch carries workflow
+// history this app cannot sign, naming the receiver. No-op when a signer is
+// configured. Called at dispatch time, so the warning is once per target
+// that actually carries a chunk.
+func (o *orchestrator) warnUnsignedPropagation(target string) {
+	if o.signer != nil {
+		return
 	}
-	r.failedEventIDs[eventID] = struct{}{}
-	r.err = errors.Join(r.err, err)
+	log.Warnf("Workflow actor '%s': propagating unsigned workflow history to %s (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, target)
 }
 
 func hasRemoteTasks(es []*backend.HistoryEvent) bool {

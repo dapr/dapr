@@ -30,8 +30,9 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.namespaces")
 
 type Options struct {
-	Cron       api.Interface
-	CancelPool context.CancelCauseFunc
+	Cron             api.Interface
+	CancelPool       context.CancelCauseFunc
+	PlacementEnabled bool
 }
 
 type connectionLoop struct {
@@ -42,8 +43,9 @@ type connectionLoop struct {
 // namespaces is the main control loop for managing stream
 // connections for each namespace.
 type namespaces struct {
-	cron       api.Interface
-	cancelPool context.CancelCauseFunc
+	cron             api.Interface
+	cancelPool       context.CancelCauseFunc
+	placementEnabled bool
 
 	// connections holds the active namespace connections.
 	connections map[string]*connectionLoop
@@ -62,11 +64,12 @@ type namespaces struct {
 
 func New(opts Options) loop.Interface[loops.EventNS] {
 	ns := &namespaces{
-		cron:           opts.Cron,
-		cancelPool:     opts.CancelPool,
-		connections:    make(map[string]*connectionLoop),
-		schedulerCount: 1,
-		schedulerIdx:   0,
+		cron:             opts.Cron,
+		cancelPool:       opts.CancelPool,
+		placementEnabled: opts.PlacementEnabled,
+		connections:      make(map[string]*connectionLoop),
+		schedulerCount:   1,
+		schedulerIdx:     0,
 	}
 
 	ns.loop = loop.New[loops.EventNS](1024).NewLoop(ns)
@@ -79,6 +82,8 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 		return n.handleAdd(ctx, e)
 	case *loops.ConnCloseStream:
 		return n.handleCloseStream(e)
+	case *loops.ConnCloseNamespace:
+		return n.handleCloseNamespace(e)
 	case *loops.TriggerRequest:
 		return n.handleTriggerRequest(e)
 	case *loops.SchedulerInfoUpdate:
@@ -95,8 +100,9 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	connLoop, ok := n.connections[add.Request.GetNamespace()]
 	if !ok {
 		loop := connections.New(connections.Options{
-			Cron:          n.cron,
-			NamespaceLoop: n.loop,
+			Cron:             n.cron,
+			NamespaceLoop:    n.loop,
+			PlacementEnabled: n.placementEnabled,
 		})
 
 		n.wg.Go(func() {
@@ -147,13 +153,31 @@ func (n *namespaces) handleCloseStream(closeStream *loops.ConnCloseStream) error
 		return nil
 	}
 
-	connLoop.connections--
+	// Guard against a stray duplicate close event: an unguarded decrement can
+	// wrap the counter. Namespace deletion is NOT decided here: the
+	// connections loop owns the authoritative stream set and confirms
+	// emptiness with a ConnCloseNamespace event, so a stray or duplicate
+	// close cannot delete a namespace that still has live streams.
+	if connLoop.connections > 0 {
+		connLoop.connections--
+	}
 	connLoop.loop.Enqueue(closeStream)
 
-	if connLoop.connections == 0 {
-		delete(n.connections, closeStream.Namespace)
-		connLoop.loop.Close(new(loops.Shutdown))
+	return nil
+}
+
+// handleCloseNamespace deletes a namespace once its connections loop has
+// confirmed its last stream is gone AND no add has arrived since (the
+// connection count covers the window between the confirmation being enqueued
+// and processed).
+func (n *namespaces) handleCloseNamespace(closeNS *loops.ConnCloseNamespace) error {
+	connLoop, ok := n.connections[closeNS.Namespace]
+	if !ok || connLoop.connections != 0 {
+		return nil
 	}
+
+	delete(n.connections, closeNS.Namespace)
+	connLoop.loop.Close(new(loops.Shutdown))
 
 	return nil
 }

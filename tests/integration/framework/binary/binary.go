@@ -40,11 +40,29 @@ var buildTags = []string{
 	"state_etcd",
 	"crypto_localstorage",
 	"middleware_http_routeralias",
+	"middleware_http_wasm",
 	"conversation_echo",
+	"search_inmemory",
+	"vector_inmemory",
 	// state_spiffeprobe compiles in an integration-test-only state store that
 	// reports whether the SPIFFE identity reached the component operation
 	// context. Never set for released daprd flavors.
 	"state_spiffeprobe",
+	// secretstores_spiffeprobe compiles in an integration-test-only secret
+	// store that reports whether the SPIFFE identity reached the context that
+	// secretKeyRef entries are resolved on. Never set for released daprd
+	// flavors.
+	"secretstores_spiffeprobe",
+	// bindings_metadataprobe compiles in an integration-test-only output
+	// binding that echoes the request metadata it receives, letting a test
+	// assert which metadata daprd forwards to a component. Never set for
+	// released daprd flavors.
+	"bindings_metadataprobe",
+	// middleware_http_bodyprobe compiles in an integration-test-only HTTP
+	// middleware that records how many request body bytes it can read,
+	// letting a test assert the max body size limit is applied before the
+	// middleware pipeline runs. Never set for released daprd flavors.
+	"middleware_http_bodyprobe",
 }
 
 func BuildAll(t *testing.T) {
@@ -96,6 +114,9 @@ func BuildAll(t *testing.T) {
 	wg.Wait()
 
 	require.False(t, t.Failed())
+
+	generateCRDs(t)
+	require.False(t, t.Failed())
 }
 
 func RootDir(t *testing.T) string {
@@ -120,26 +141,17 @@ func build(t *testing.T, name string, opts options) {
 	}
 
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
-		t.Logf("%q not set, building %q binary", EnvKey(name), name)
+		iowriter.Eventf(t, "%s not set, building %q binary", EnvKey(name), name)
 
-		// Use a consistent temp dir for the binary so that the binary is cached on
-		// subsequent runs.
-		var tmpdir string
-		if runtime.GOOS == "darwin" {
-			tmpdir = "/tmp"
-		} else {
-			tmpdir = os.TempDir()
-		}
-		binPath := filepath.Join(tmpdir, "dapr_integration_tests/"+name)
+		binPath := filepath.Join(tmpDir(), "dapr_integration_tests/"+name)
 		if runtime.GOOS == "windows" {
 			binPath += ".exe"
 		}
 
-		ioout := iowriter.New(t, name)
-		ioerr := iowriter.New(t, name)
+		// Both streams share one writer so the build appears as a single block.
+		iow := iowriter.New(t, name)
 
-		t.Logf("Root dir: %q", opts.dir)
-		t.Logf("Compiling %q binary to: %q", name, binPath)
+		iowriter.Eventf(t, "compiling %q from %q to %q", name, opts.dir, binPath)
 
 		// get go build args
 		goBuildArgs := []string{"build"}
@@ -158,20 +170,19 @@ func build(t *testing.T, name string, opts options) {
 
 		cmd := exec.Command("go", goBuildArgs...)
 		cmd.Dir = opts.dir
-		cmd.Stdout = ioout
-		cmd.Stderr = ioerr
+		cmd.Stdout = iow
+		cmd.Stderr = iow
 		// Ensure CGO is disabled to avoid linking against system libraries.
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		assert.NoError(t, cmd.Run())
 
-		assert.NoError(t, ioout.Close())
-		assert.NoError(t, ioerr.Close())
+		assert.NoError(t, iow.Close())
 
 		// TODO: @joshvanl: check if we can use `t.Setenv`
 		//nolint:usetesting
 		assert.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {
-		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))
+		iowriter.Eventf(t, "%s set, using pre-built binary %q", EnvKey(name), EnvValue(name))
 	}
 }
 
@@ -181,4 +192,11 @@ func EnvValue(name string) string {
 
 func EnvKey(name string) string {
 	return fmt.Sprintf("DAPR_INTEGRATION_%s_PATH", strings.ToUpper(name))
+}
+
+func tmpDir() string {
+	if runtime.GOOS == "darwin" {
+		return "/tmp"
+	}
+	return os.TempDir()
 }
