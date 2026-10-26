@@ -23,5 +23,9 @@ permissions: {}
 jobs:
   backport:
     uses: dapr/.github/.github/workflows/backport.yaml@main
+    permissions:
+      pull-requests: write
+    with:
+      automerge: true
     secrets:
       dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}
