@@ -39,12 +39,17 @@ import (
 // table, a presence channel standing in for the placement tables, and a fake
 // clock driving the settle and damping periods.
 type fallbackTest struct {
-	wfe      *engine
-	table    table.Interface
+	wfe   *engine
+	table table.Interface
+	// presence is unbuffered: a send returns once runFallback received it.
 	presence chan bool
 	clock    *clocktesting.FakeClock
 	cancel   context.CancelFunc
 	done     chan struct{}
+
+	// remote is the last value sent on presence, if any.
+	remote      bool
+	remoteKnown bool
 
 	// tableDown fails every call for the actor table, as an actor runtime
 	// which is not ready does.
@@ -54,30 +59,14 @@ type fallbackTest struct {
 	executorType string
 }
 
-// fallbackTestOption changes a fallbackTest before Run starts.
-type fallbackTestOption func(*fallbackTest)
-
-// withFirstWatch makes the first watch return ch and err, and every later one
-// the presence channel. calls counts the watches.
-func withFirstWatch(ch <-chan bool, err error, calls *atomic.Int32) fallbackTestOption {
-	return func(ft *fallbackTest) {
-		ft.wfe.fallback.watch = func(context.Context) (<-chan bool, error) {
-			if calls.Add(1) == 1 {
-				return ch, err
-			}
-			return ft.presence, nil
-		}
-	}
-}
-
-func newFallbackTest(t *testing.T, opts ...fallbackTestOption) *fallbackTest {
+func newFallbackTest(t *testing.T) *fallbackTest {
 	t.Helper()
 
 	tbl := table.New(table.Options{})
 	t.Cleanup(func() { tbl.Close() })
 	ft := &fallbackTest{
 		table:    tbl,
-		presence: make(chan bool, 1),
+		presence: make(chan bool),
 		clock:    clocktesting.NewFakeClock(time.Now()),
 		done:     make(chan struct{}),
 	}
@@ -117,9 +106,6 @@ func newFallbackTest(t *testing.T, opts ...fallbackTestOption) *fallbackTest {
 	wfe.fallback.settle = 3 * time.Second
 	t.Cleanup(wfe.fallback.factoryCancel)
 	ft.wfe = wfe
-	for _, opt := range opts {
-		opt(ft)
-	}
 
 	// Mirror Run.
 	ctx, cancel := context.WithCancel(t.Context())
@@ -141,28 +127,48 @@ func newFallbackTest(t *testing.T, opts ...fallbackTestOption) *fallbackTest {
 	return ft
 }
 
+// send sends remote on presence twice: the second send returns once
+// runFallback has applied the rule after the first, which it does with the
+// state the engine had when the first was sent.
+func (ft *fallbackTest) send(t *testing.T, remote bool) {
+	t.Helper()
+	for range 2 {
+		select {
+		case ft.presence <- remote:
+		case <-time.After(5 * time.Second):
+			require.FailNow(t, "runFallback does not receive")
+		}
+	}
+	ft.remote, ft.remoteKnown = remote, true
+}
+
 // setRemote tells the engine whether another daprd of the app has an
 // executor, and waits for it to apply the rule.
 func (ft *fallbackTest) setRemote(t *testing.T, remote bool) {
 	t.Helper()
-	ft.presence <- remote
-	require.Eventually(t, func() bool {
-		ft.wfe.actorRegLock.Lock()
-		defer ft.wfe.actorRegLock.Unlock()
-		return len(ft.presence) == 0 && ft.wfe.fallback.remoteKnown && ft.wfe.fallback.remote == remote
-	}, 5*time.Second, time.Millisecond)
-	// The rule is applied under the lock taken after remote is set.
-	ft.wfe.actorRegLock.Lock()
-	//nolint:staticcheck // SA2001: waits out the reconcile in progress
-	ft.wfe.actorRegLock.Unlock()
+	ft.send(t, remote)
 }
 
-// settling reports whether the settle timer of a daprd which hosts nothing
-// is armed.
+// sync waits for runFallback to apply the rule to the engine's state, such as
+// after a local executor left.
+func (ft *fallbackTest) sync(t *testing.T) {
+	t.Helper()
+	require.True(t, ft.remoteKnown, "sync sends the last remote value again")
+	ft.send(t, ft.remote)
+}
+
+// disconnect has a worker leave, and waits for runFallback to apply the rule.
+func (ft *fallbackTest) disconnect(t *testing.T) {
+	t.Helper()
+	require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+	ft.sync(t)
+}
+
+// settling reports whether runFallback waits on the clock: the settle period
+// of a daprd which hosts nothing, the damping period of a fallback host, or a
+// retry.
 func (ft *fallbackTest) settling() bool {
-	ft.wfe.actorRegLock.Lock()
-	defer ft.wfe.actorRegLock.Unlock()
-	return ft.wfe.fallback.settleTimer != nil
+	return ft.clock.HasWaiters()
 }
 
 // settle steps the fake clock past the settle period armed by a daprd which
@@ -258,71 +264,7 @@ func TestEngine_FallbackRule(t *testing.T) {
 	})
 }
 
-func TestEngine_FallbackWatch(t *testing.T) {
-	closed := make(chan bool)
-	close(closed)
-
-	for name, first := range map[string]struct {
-		ch  <-chan bool
-		err error
-	}{
-		"a failed watch": {err: errors.New("placement unavailable")},
-		"a watch closed before the placement tables showed the executors": {ch: closed},
-	} {
-		t.Run(name+" is set up again after the retry interval", func(t *testing.T) {
-			var calls atomic.Int32
-			ft := newFallbackTest(t, withFirstWatch(first.ch, first.err, &calls))
-			require.Eventually(t, ft.clock.HasWaiters, 5*time.Second, time.Millisecond)
-			require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
-			ft.executorHost(t)
-
-			// Not knowing whether another daprd has an executor is not
-			// knowing that none has: a fallback host made on it would not
-			// learn of one, and would keep its share of instances meanwhile.
-			require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
-			ft.notHosted(t)
-			assert.Equal(t, int32(1), calls.Load())
-
-			ft.clock.Step(fallbackRetryInterval)
-			require.Eventually(t, func() bool { return calls.Load() == 2 }, 5*time.Second, time.Millisecond)
-			ft.notHosted(t)
-
-			ft.setRemote(t, false)
-			ft.settle(t)
-			ft.fallbackHost(t)
-		})
-	}
-
-	t.Run("a watch closed after an answer keeps it while it is set up again", func(t *testing.T) {
-		var calls atomic.Int32
-		first := make(chan bool, 1)
-		ft := newFallbackTest(t, withFirstWatch(first, nil, &calls))
-		first <- false
-		ft.settle(t)
-		ft.fallbackHost(t)
-
-		close(first)
-		require.Eventually(t, ft.clock.HasWaiters, 5*time.Second, time.Millisecond)
-		ft.fallbackHost(t)
-
-		// The kept answer still applies: a worker leaving turns the daprd
-		// into a fallback host, not a daprd hosting nothing.
-		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
-		ft.executorHost(t)
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
-		ft.fallbackHost(t)
-
-		// The new watch tells of an executor elsewhere, and the fallback host
-		// gives the types up after the damping period.
-		ft.clock.Step(fallbackRetryInterval)
-		require.Eventually(t, func() bool { return calls.Load() == 2 }, 5*time.Second, time.Millisecond)
-		ft.setRemote(t, true)
-		require.Eventually(t, ft.clock.HasWaiters, 5*time.Second, time.Millisecond)
-		ft.clock.Step(ft.wfe.fallback.damping)
-		assert.Eventually(t, func() bool { return !ft.hosted() }, 5*time.Second, time.Millisecond)
-		ft.notHosted(t)
-	})
-
+func TestEngine_FallbackRetry(t *testing.T) {
 	t.Run("a failed registration is applied again after the retry interval", func(t *testing.T) {
 		ft := newFallbackTest(t)
 		ft.tableDown.Store(true)
@@ -331,13 +273,31 @@ func TestEngine_FallbackWatch(t *testing.T) {
 		ft.clock.Step(ft.wfe.fallback.settle)
 		// The registration fails once the settle period passed, and is tried
 		// again after the retry interval.
-		require.Eventually(t, func() bool { return !ft.settling() && ft.clock.HasWaiters() }, 5*time.Second, time.Millisecond)
+		require.Eventually(t, ft.clock.HasWaiters, 5*time.Second, time.Millisecond)
 		ft.notHosted(t)
 
 		ft.tableDown.Store(false)
 		ft.clock.Step(fallbackRetryInterval)
 		assert.Eventually(t, ft.hosted, 5*time.Second, time.Millisecond)
 		ft.fallbackHost(t)
+	})
+
+	t.Run("a watch which closes ends the fallback hosting", func(t *testing.T) {
+		ft := newFallbackTest(t)
+		ft.setRemote(t, false)
+		ft.settle(t)
+		ft.fallbackHost(t)
+
+		// As the actor runtime shuts down: the fallback host gives the types
+		// up, and the connection callbacks act alone.
+		close(ft.presence)
+		<-ft.done
+		ft.notHosted(t)
+
+		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
+		ft.executorHost(t)
+		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.notHosted(t)
 	})
 }
 
@@ -365,7 +325,7 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
 		before := ft.actor(t)
 
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.disconnect(t)
 		ft.fallbackHost(t)
 		assert.Same(t, before, ft.actor(t), "the workflow actor type was never left without a host")
 	})
@@ -387,7 +347,7 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 		// The executor actor type has left the table by the time the halt
 		// fails, so the switch is made in place, not by giving the types up
 		// and registering them again.
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.disconnect(t)
 		ft.fallbackHost(t)
 		assert.Same(t, before, ft.actor(t), "the workflow actors were never unregistered")
 	})
@@ -398,7 +358,7 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 		ft.setRemote(t, true)
 		ft.executorHost(t)
 
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.disconnect(t)
 		ft.notHosted(t)
 	})
 
@@ -406,7 +366,7 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 		ft := newFallbackTest(t)
 		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
 		ft.setRemote(t, true)
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.disconnect(t)
 		ft.notHosted(t)
 
 		// Stand in for the draining workflow factory, to see what a turn on
@@ -445,6 +405,7 @@ func TestEngine_FallbackTransitions(t *testing.T) {
 		ft.executorHost(t)
 
 		ft.wfe.UnregisterMCPServer(server.Name)
+		ft.sync(t)
 		ft.fallbackHost(t)
 	})
 }
@@ -473,7 +434,7 @@ func TestEngine_FallbackDamping(t *testing.T) {
 		// The types drain: their actors serve the calls placement routes
 		// here until a round moves them.
 		assert.True(t, ft.table.IsActorTypeHosted(ft.workflowType))
-		ft.table.CompleteDrains(func(string) bool { return false })
+		ft.table.CompleteDrains(t.Context(), func(string) bool { return false })
 		assert.False(t, ft.table.IsActorTypeHosted(ft.workflowType))
 	})
 
@@ -507,6 +468,7 @@ func TestEngine_FallbackDamping(t *testing.T) {
 		ft.settle(t)
 		ft.setRemote(t, true)
 		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
+		ft.sync(t)
 		assert.False(t, ft.clock.HasWaiters(), "the damping timer is disarmed")
 
 		step(t, ft, time.Minute)
@@ -521,10 +483,11 @@ func TestEngine_FallbackDamping(t *testing.T) {
 		require.Eventually(t, ft.clock.HasWaiters, 5*time.Second, time.Millisecond)
 
 		// An in-process executor whose registration fails rolls its count
-		// back, and nothing applies the rule again until the period ends.
+		// back, and the period it interrupted goes on.
 		ft.tableDown.Store(true)
 		require.Error(t, ft.wfe.EnsureActorsRegistered(t.Context()))
 		ft.tableDown.Store(false)
+		ft.sync(t)
 		assert.True(t, ft.clock.HasWaiters(), "the damping timer is still armed")
 		ft.fallbackHost(t)
 
@@ -596,6 +559,7 @@ func TestEngine_FallbackSettle(t *testing.T) {
 
 		require.NoError(t, ft.wfe.onWorkItemConnection(t.Context()))
 		ft.executorHost(t)
+		ft.sync(t)
 		assert.False(t, ft.settling(), "the settle timer is disarmed")
 		ft.clock.Step(time.Minute)
 		ft.executorHost(t)
@@ -606,10 +570,11 @@ func TestEngine_FallbackSettle(t *testing.T) {
 		ft.setRemote(t, false)
 
 		// An in-process executor whose registration fails rolls its count
-		// back, and nothing applies the rule again until the period ends.
+		// back, and the period it interrupted goes on.
 		ft.tableDown.Store(true)
 		require.Error(t, ft.wfe.EnsureActorsRegistered(t.Context()))
 		ft.tableDown.Store(false)
+		ft.sync(t)
 		assert.True(t, ft.settling(), "the settle timer is still armed")
 		ft.notHosted(t)
 
@@ -625,7 +590,7 @@ func TestEngine_FallbackSettle(t *testing.T) {
 		assert.False(t, ft.settling(), "a daprd with an executor does not settle")
 		before := ft.actor(t)
 
-		require.NoError(t, ft.wfe.onWorkItemDisconnection(t.Context()))
+		ft.disconnect(t)
 		ft.fallbackHost(t)
 		assert.False(t, ft.settling(), "the daprd hosted the types already")
 		assert.Same(t, before, ft.actor(t), "the workflow actor type was never left without a host")
@@ -674,8 +639,10 @@ func TestEngine_FallbackShutdown(t *testing.T) {
 
 		// No fallback registration once Run's context is done.
 		ft.wfe.actorRegLock.Lock()
-		require.NoError(t, ft.wfe.reconcileFallback(t.Context()))
+		wait, err := ft.wfe.reconcileFallback(t.Context(), true, true)
 		ft.wfe.actorRegLock.Unlock()
+		require.NoError(t, err)
+		assert.False(t, wait)
 		ft.notHosted(t)
 	})
 

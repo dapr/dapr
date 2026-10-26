@@ -121,7 +121,7 @@ type engine struct {
 	actorsRegistered bool
 
 	// fallback is the WorkflowsStagedOperations preview; nil when it is off.
-	// Its fields are guarded by actorRegLock.
+	// Its registration state is guarded by actorRegLock.
 	fallback *fallback
 
 	// closedDisconnectContexts counts DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT
@@ -222,7 +222,7 @@ func New(opts Options) (Interface, error) {
 			// completions hold, and with no executor nothing can deliver them.
 			wfe.syncExecutorAvailable()
 			if wfe.fallback != nil {
-				if err := wfe.reconcileFallback(context.Background()); err != nil {
+				if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
 					log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
 				}
 				return
@@ -292,8 +292,8 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 
 	wfe.mcpRegistrationCount.Add(1)
 	if wfe.fallback != nil {
-		// reconcileFallback marks the executor available once registered.
-		if err := wfe.reconcileFallback(ctx); err != nil {
+		// registerLocalExecutor marks the executor available once registered.
+		if err := wfe.registerLocalExecutor(ctx); err != nil {
 			wfe.mcpRegistrationCount.Add(-1)
 			wfe.syncExecutorAvailable()
 			return err
@@ -320,8 +320,8 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 	wfe.getWorkItemsCount.Add(1)
 	if wfe.fallback != nil {
 		// No compensating decrement on error either; see below.
-		// reconcileFallback marks the executor available once registered.
-		return wfe.reconcileFallback(ctx)
+		// registerLocalExecutor marks the executor available once registered.
+		return wfe.registerLocalExecutor(ctx)
 	}
 	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
@@ -369,7 +369,7 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 		if !last {
 			return nil
 		}
-		return wfe.reconcileFallback(ctx)
+		return wfe.releaseLocalExecutor(ctx)
 	}
 
 	if last && wfe.actorsRegistered {
@@ -455,7 +455,7 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 		// Sweep parked completions before HaltAll; see the disconnect callback.
 		wfe.syncExecutorAvailable()
 		if wfe.fallback != nil {
-			if err := wfe.reconcileFallback(context.Background()); err != nil {
+			if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
 				log.Warnf("Failed to unregister workflow actors: %s", err)
 			}
 			return
