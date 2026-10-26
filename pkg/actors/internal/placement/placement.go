@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/static"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	loopsplacement "github.com/dapr/dapr/pkg/actors/internal/placement/loops/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	transportv1 "github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport/v1"
@@ -67,7 +66,7 @@ type Interface interface {
 	// of the next dissemination round, then whenever that changes. Every
 	// daprd receives the tables of its namespace whether or not it hosts
 	// actors. The last answer is kept while the placement stream is down.
-	// The channel is closed once ctx is done.
+	// The channel is closed once ctx is done, or when placement stops.
 	WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool
 }
 
@@ -109,8 +108,6 @@ type placement struct {
 	port     string
 	table    table.Interface
 	ready    *atomic.Bool
-
-	remoteHosts *remotehosts.Watch
 
 	loop loop.Interface[loops.EventPlace]
 }
@@ -231,25 +228,22 @@ func New(opts Options) (Interface, error) {
 	}
 
 	var ready atomic.Bool
-	remoteHosts := remotehosts.New()
 
 	return &placement{
-		ready:       &ready,
-		remoteHosts: remoteHosts,
-		hostname:    opts.Hostname,
-		port:        strconv.Itoa(opts.Port),
-		table:       opts.Table,
+		ready:    &ready,
+		hostname: opts.Hostname,
+		port:     strconv.Itoa(opts.Port),
+		table:    opts.Table,
 		loop: loopsplacement.New(loopsplacement.Options{
-			Ready:       &ready,
-			ActorTable:  opts.Table,
-			Scheduler:   opts.Scheduler,
-			RemoteHosts: remoteHosts,
-			Hostname:    opts.Hostname,
-			Port:        strconv.Itoa(opts.Port),
-			ID:          opts.AppID,
-			Namespace:   opts.Namespace,
-			Healthz:     opts.Healthz,
-			Connector:   conn,
+			Ready:      &ready,
+			ActorTable: opts.Table,
+			Scheduler:  opts.Scheduler,
+			Hostname:   opts.Hostname,
+			Port:       strconv.Itoa(opts.Port),
+			ID:         opts.AppID,
+			Namespace:  opts.Namespace,
+			Healthz:    opts.Healthz,
+			Connector:  conn,
 			InitialReport: &loops.Report{
 				Address:   net.JoinHostPort(opts.Hostname, strconv.Itoa(opts.Port)),
 				AppID:     opts.AppID,
@@ -382,9 +376,11 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 }
 
 func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
-	ch := p.remoteHosts.Subscribe(ctx, actorType)
-	// Tell the subscriber at once if a round has already completed.
-	p.loop.Enqueue(new(loops.RefreshRemoteHosts))
+	ch := make(chan bool, 1)
+	p.loop.Enqueue(&loops.WatchRemoteHosts{ActorType: actorType, Ch: ch})
+	context.AfterFunc(ctx, func() {
+		p.loop.Enqueue(&loops.UnwatchRemoteHosts{ActorType: actorType, Ch: ch})
+	})
 	return ch
 }
 

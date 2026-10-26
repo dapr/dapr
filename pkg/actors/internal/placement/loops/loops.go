@@ -149,11 +149,36 @@ type ReloadReminderTypes struct {
 	*dissbase
 }
 
-// RefreshRemoteHosts tells new RemoteHosts subscribers what the tables
-// installed on the stream show, if a round has completed on it.
-type RefreshRemoteHosts struct {
+// WatchRemoteHosts subscribes Ch to whether a daprd other than this one
+// hosts ActorType. The placement loop is the only sender on Ch, and closes it
+// on the matching UnwatchRemoteHosts or at shutdown.
+type WatchRemoteHosts struct {
 	*placebase
-	*dissbase
+	ActorType string
+	Ch        chan bool
+}
+
+// UnwatchRemoteHosts ends the WatchRemoteHosts subscription of Ch.
+type UnwatchRemoteHosts struct {
+	*placebase
+	ActorType string
+	Ch        chan bool
+}
+
+// RoundCompleted tells the placement loop what the installed tables show
+// once a dissemination round completed.
+type RoundCompleted struct {
+	*placebase
+
+	// Remote holds the actor types a daprd other than this one hosts. A type
+	// missing from it has no remote host, unless it is pending.
+	Remote map[string]bool
+
+	// Pending are the actor types a round still in progress covers: their
+	// installed tables are not final, so Remote says nothing about them.
+	// PendingAll is set when such a round covers every type.
+	Pending    map[string]struct{}
+	PendingAll bool
 }
 
 type ReportHost struct {

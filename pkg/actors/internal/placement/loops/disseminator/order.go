@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -37,10 +36,16 @@ func (d *disseminator) completeRound() {
 	d.roundCompleted = true
 	// A type in a round still in progress keeps draining: its installed
 	// table is not final until that round completes.
+	pendingAll, pending := d.pendingTypes()
 	d.actorTable.CompleteDrains(func(actorType string) bool {
-		return d.inRound(actorType) || d.inflight.HasLocalHost(actorType)
+		_, ok := pending[actorType]
+		return pendingAll || ok || d.inflight.HasLocalHost(actorType)
 	})
-	d.updateRemoteHosts()
+	d.placementLoop.Enqueue(&loops.RoundCompleted{
+		Remote:     d.inflight.RemoteHostTypes(),
+		Pending:    pending,
+		PendingAll: pendingAll,
+	})
 	d.reloadReminderTypes()
 }
 
@@ -50,37 +55,26 @@ func (d *disseminator) reloadReminderTypes() {
 	d.scheduler.ReloadActorTypes(d.actorTable.ReminderTypes())
 }
 
-// updateRemoteHosts tells the RemoteHosts subscribers which of their actor
-// types other hosts host. Types in a round still in progress are skipped:
-// their tables are installed but not final until the round completes.
-func (d *disseminator) updateRemoteHosts() {
-	if d.remoteHosts == nil {
-		return
-	}
-	d.remoteHosts.Update(func(actorType string) (bool, bool) {
-		if d.inRound(actorType) {
-			return false, false
-		}
-		return d.inflight.HasRemoteHosts(actorType), true
-	})
-}
-
-// inRound returns whether a dissemination round still in progress may change
-// the tables of actorType. A v2 round with an empty scope is the startup
-// snapshot, which covers every type.
-func (d *disseminator) inRound(actorType string) bool {
-	if _, ok := d.roundChangedTypes[actorType]; ok {
-		return true
+// pendingTypes returns the actor types whose tables a dissemination round
+// still in progress may change, or all if such a round is the startup
+// snapshot: a v2 round with an empty scope covers every type.
+func (d *disseminator) pendingTypes() (bool, map[string]struct{}) {
+	pending := make(map[string]struct{}, len(d.roundChangedTypes))
+	for actorType := range d.roundChangedTypes {
+		pending[actorType] = struct{}{}
 	}
 	for _, r := range d.v2Rounds {
-		if len(r.scope) == 0 || slices.Contains(r.scope, actorType) {
-			return true
+		if len(r.scope) == 0 {
+			return true, nil
 		}
-		if _, ok := r.changed[actorType]; ok {
-			return true
+		for _, actorType := range r.scope {
+			pending[actorType] = struct{}{}
+		}
+		for actorType := range r.changed {
+			pending[actorType] = struct{}{}
 		}
 	}
-	return false
+	return false, pending
 }
 
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {

@@ -62,6 +62,9 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		ready:            new(atomic.Bool),
 
 		roundChangedTypes: make(map[string]struct{}),
+		v2Rounds:          make(map[uint64]*v2Round),
+		v2Completed:       make(map[uint64]struct{}),
+		placementLoop:     loopfake.New[loops.EventPlace](),
 	}
 
 	diss.loop = dissLoop
