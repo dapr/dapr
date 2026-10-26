@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHasRemoteHosts(t *testing.T) {
+func TestRemoteHostTypes(t *testing.T) {
 	t.Parallel()
 
 	t.Run("v1 tables", func(t *testing.T) {
@@ -32,16 +32,13 @@ func TestHasRemoteHosts(t *testing.T) {
 			"both":   {"10.0.0.1:50002": 50002, "10.0.0.2:50002": 50002},
 		}), 1)
 
-		assert.False(t, i.HasRemoteHosts("local"))
-		assert.True(t, i.HasRemoteHosts("remote"))
-		assert.True(t, i.HasRemoteHosts("both"))
-		assert.False(t, i.HasRemoteHosts("unknown"))
+		assert.Equal(t, map[string]bool{"remote": true, "both": true}, i.RemoteHostTypes())
 
 		// The last host leaves.
 		i.Set(newTables(100, map[string]map[string]int64{
 			"local": {"10.0.0.1:50002": 50002},
 		}), 2)
-		assert.False(t, i.HasRemoteHosts("remote"))
+		assert.Empty(t, i.RemoteHostTypes())
 	})
 
 	t.Run("v2 tables", func(t *testing.T) {
@@ -53,14 +50,12 @@ func TestHasRemoteHosts(t *testing.T) {
 		}), nil)
 		require.NoError(t, err)
 
-		assert.False(t, i.HasRemoteHosts("local"))
-		assert.True(t, i.HasRemoteHosts("remote"))
-		assert.False(t, i.HasRemoteHosts("unknown"))
+		assert.Equal(t, map[string]bool{"remote": true}, i.RemoteHostTypes())
 
 		// A type with no hosts left is removed.
 		_, err = i.Merge(tables(map[string][]string{"remote": {}}), nil)
 		require.NoError(t, err)
-		assert.False(t, i.HasRemoteHosts("remote"))
+		assert.Empty(t, i.RemoteHostTypes())
 	})
 }
 

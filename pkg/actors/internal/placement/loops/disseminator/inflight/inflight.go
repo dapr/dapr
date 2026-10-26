@@ -273,10 +273,21 @@ func (i *Inflight) HasLocalHost(actorType string) bool {
 	return i.hasHost(actorType, true)
 }
 
-// HasRemoteHosts returns whether the installed placement table of actorType
-// has a host other than this one.
-func (i *Inflight) HasRemoteHosts(actorType string) bool {
-	return i.hasHost(actorType, false)
+// RemoteHostTypes returns the actor types whose installed placement table has
+// a host other than this one.
+func (i *Inflight) RemoteHostTypes() map[string]bool {
+	remote := make(map[string]bool)
+	for actorType := range i.hashTable.Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	for actorType := range i.v2Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	return remote
 }
 
 // hasHost returns whether the installed placement table of actorType has a

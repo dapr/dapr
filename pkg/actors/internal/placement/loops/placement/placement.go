@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -79,9 +78,6 @@ type Options struct {
 	ActorTable table.Interface
 	Scheduler  schedclient.Reloader
 
-	// RemoteHosts, if set, is told at the end of every dissemination round.
-	RemoteHosts *remotehosts.Watch
-
 	DisseminationTimeout time.Duration
 
 	StartupTimeout time.Duration
@@ -113,9 +109,13 @@ type placement struct {
 
 	ready *atomic.Bool
 
-	actorTable  table.Interface
-	scheduler   schedclient.Reloader
-	remoteHosts *remotehosts.Watch
+	actorTable table.Interface
+	scheduler  schedclient.Reloader
+
+	// remote is what the last completed dissemination round showed of the
+	// actor types other daprds host, kept across stream loss. See
+	// remotehosts.go.
+	remote remoteHosts
 
 	inflight  *inflight.Inflight
 	connector connector.Interface
@@ -162,7 +162,6 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 		}),
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
-		remoteHosts: opts.RemoteHosts,
 		dissTimeout: opts.DisseminationTimeout,
 		startupWait: opts.StartupTimeout,
 	}
@@ -187,12 +186,18 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		return p.handleCloseStream(ctx, e)
 	case *loops.UpdateTypes:
 		p.handleUpdateTypes(e)
-	case *loops.ReloadReminderTypes, *loops.RefreshRemoteHosts:
+	case *loops.ReloadReminderTypes:
 		// No stream yet: the first dissemination round sends the reminder
-		// types to the scheduler and tells the RemoteHosts subscribers.
+		// types to the scheduler.
 		if p.dissLoop != nil {
-			p.dissLoop.Enqueue(e.(loops.EventDiss))
+			p.dissLoop.Enqueue(e)
 		}
+	case *loops.WatchRemoteHosts:
+		p.remote.watch(e.ActorType, e.Ch)
+	case *loops.UnwatchRemoteHosts:
+		p.remote.unwatch(e.ActorType, e.Ch)
+	case *loops.RoundCompleted:
+		p.remote.roundCompleted(e)
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.SetEntityDrainOngoingCallTimeouts:
@@ -380,7 +385,6 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		ID:                   p.id,
 		Namespace:            p.namespace,
 		Inflight:             p.inflight,
-		RemoteHosts:          p.remoteHosts,
 		Channel:              client,
 		StreamCancel:         streamCancel,
 		PlacementLoop:        p.loop,
@@ -476,6 +480,8 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 
 func (p *placement) handleShutdown(shutdown *loops.Shutdown) {
 	defer p.wg.Wait()
+
+	p.remote.close()
 
 	if p.dissLoop == nil {
 		return

@@ -22,7 +22,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/remotehosts"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/timeout"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
@@ -58,9 +57,6 @@ type Options struct {
 	Namespace string
 	ID        string
 
-	// RemoteHosts, if set, is told once each dissemination round completes.
-	RemoteHosts *remotehosts.Watch
-
 	// SchedulerPlacement speaks the v2 protocol: seq-keyed rounds
 	// scoped to actor types with partial table merges.
 	SchedulerPlacement bool
@@ -70,13 +66,13 @@ type disseminator struct {
 	namespace string
 	id        string
 
-	loop         loop.Interface[loops.EventDiss]
-	inflight     *inflight.Inflight
-	remoteHosts  *remotehosts.Watch
-	actorTable   table.Interface
-	scheduler    schedclient.Reloader
-	healthTarget healthz.Target
-	ready        *atomic.Bool
+	loop          loop.Interface[loops.EventDiss]
+	placementLoop loop.Interface[loops.EventPlace]
+	inflight      *inflight.Inflight
+	actorTable    table.Interface
+	scheduler     schedclient.Reloader
+	healthTarget  healthz.Target
+	ready         *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
@@ -107,8 +103,8 @@ type disseminator struct {
 	v2Completed map[uint64]struct{}
 
 	// roundCompleted is set once a dissemination round completed on this
-	// stream. Until then, a change of the reminder types in place and a new
-	// RemoteHosts subscriber wait for that round, which serves both.
+	// stream. Until then, a change of the reminder types in place waits for
+	// that round, which sends them.
 	roundCompleted bool
 }
 
@@ -132,8 +128,8 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
+	diss.placementLoop = opts.PlacementLoop
 	diss.inflight = opts.Inflight
-	diss.remoteHosts = opts.RemoteHosts
 
 	diss.timeout = opts.DisseminationTimeout
 	diss.timeoutQ = timeout.New(timeout.Options{
@@ -168,10 +164,6 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 	case *loops.ReloadReminderTypes:
 		if d.roundCompleted {
 			d.reloadReminderTypes()
-		}
-	case *loops.RefreshRemoteHosts:
-		if d.roundCompleted {
-			d.updateRemoteHosts()
 		}
 	case *loops.StreamOrder:
 		if d.schedulerPlacement {
