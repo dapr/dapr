@@ -80,13 +80,18 @@ func (w *Watch) Subscribe(ctx context.Context, actorType string) <-chan bool {
 }
 
 // Update sends hasRemote's answer for each watched actor type to the
-// subscribers which have not received it yet. It never blocks.
-func (w *Watch) Update(hasRemote func(actorType string) bool) {
+// subscribers which have not received it yet. A type for which hasRemote
+// reports no settled answer is skipped, and its subscribers keep their last
+// answer. It never blocks.
+func (w *Watch) Update(hasRemote func(actorType string) (remote, settled bool)) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	for actorType, set := range w.watchers {
-		remote := hasRemote(actorType)
+		remote, settled := hasRemote(actorType)
+		if !settled {
+			continue
+		}
 		for wt := range set {
 			if wt.known && wt.last == remote {
 				continue

@@ -152,6 +152,67 @@ func TestRefreshRemoteHosts(t *testing.T) {
 	assert.False(t, recv(t, late))
 }
 
+func TestRefreshRemoteHostsSkipsRoundInProgress(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+	diss.roundChangedTypes = make(map[string]struct{})
+	diss.remoteHosts = remotehosts.New()
+	ch := diss.remoteHosts.Subscribe(t.Context(), "remote")
+
+	for _, op := range []loops.OrderOp{loops.OrderLock, loops.OrderUpdate, loops.OrderUnlock} {
+		require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: op, Version: 1, V1Tables: &v1pb.PlacementTables{}},
+		}))
+	}
+	assert.False(t, <-ch)
+
+	tables := &v1pb.PlacementTables{
+		ReplicationFactor: 100,
+		Entries: map[string]*v1pb.PlacementTable{
+			"remote": {LoadMap: map[string]*v1pb.Host{
+				"10.0.0.2:3500": {Name: "10.0.0.2:3500", Id: "other", Port: 3500},
+			}},
+		},
+	}
+	for _, op := range []loops.OrderOp{loops.OrderLock, loops.OrderUpdate} {
+		require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &loops.Order{Op: op, Version: 2, V1Tables: tables},
+		}))
+	}
+
+	// The second round's tables are installed, but not final until UNLOCK.
+	require.NoError(t, diss.Handle(t.Context(), new(loops.RefreshRemoteHosts)))
+	select {
+	case v := <-ch:
+		require.Failf(t, "update before UNLOCK", "%v", v)
+	default:
+	}
+
+	require.NoError(t, diss.handleOrder(t.Context(), &loops.StreamOrder{
+		Order: &loops.Order{Op: loops.OrderUnlock, Version: 2},
+	}))
+	select {
+	case v := <-ch:
+		assert.True(t, v)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "no update at UNLOCK")
+	}
+}
+
+func TestInRoundV2(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+	diss.roundChangedTypes = make(map[string]struct{})
+	diss.v2Rounds = map[uint64]*v2Round{
+		1: {scope: []string{"a"}, changed: map[string]struct{}{"b": {}}},
+	}
+	assert.True(t, diss.inRound("a"))
+	assert.True(t, diss.inRound("b"))
+	assert.False(t, diss.inRound("c"))
+
+	// The startup snapshot has an empty scope and covers every type.
+	diss.v2Rounds[2] = &v2Round{changed: map[string]struct{}{}}
+	assert.True(t, diss.inRound("c"))
+}
+
 func TestCompleteDrainsOnUnlock(t *testing.T) {
 	diss, _, _ := newTestDisseminator(t)
 	diss.roundChangedTypes = make(map[string]struct{})

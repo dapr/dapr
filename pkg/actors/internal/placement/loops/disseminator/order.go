@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,11 +47,36 @@ func (d *disseminator) reloadReminderTypes() {
 }
 
 // updateRemoteHosts tells the RemoteHosts subscribers which of their actor
-// types other hosts host.
+// types other hosts host. Types in a round still in progress are skipped:
+// their tables are installed but not final until the round completes.
 func (d *disseminator) updateRemoteHosts() {
-	if d.remoteHosts != nil {
-		d.remoteHosts.Update(d.inflight.HasRemoteHosts)
+	if d.remoteHosts == nil {
+		return
 	}
+	d.remoteHosts.Update(func(actorType string) (bool, bool) {
+		if d.inRound(actorType) {
+			return false, false
+		}
+		return d.inflight.HasRemoteHosts(actorType), true
+	})
+}
+
+// inRound returns whether a dissemination round still in progress may change
+// the tables of actorType. A v2 round with an empty scope is the startup
+// snapshot, which covers every type.
+func (d *disseminator) inRound(actorType string) bool {
+	if _, ok := d.roundChangedTypes[actorType]; ok {
+		return true
+	}
+	for _, r := range d.v2Rounds {
+		if len(r.scope) == 0 || slices.Contains(r.scope, actorType) {
+			return true
+		}
+		if _, ok := r.changed[actorType]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
@@ -162,10 +188,10 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		)
 
 		d.currentOperation = loops.OrderUnlock
+		clear(d.roundChangedTypes)
 		d.completeRound()
 
 		d.inflight.UnlockTypes(toUnlock)
-		clear(d.roundChangedTypes)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Ack: &loops.Ack{

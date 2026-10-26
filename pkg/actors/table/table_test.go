@@ -306,12 +306,33 @@ func Test_ReminderDelivery(t *testing.T) {
 		assert.Equal(t, []string{"plain"}, tble.ReminderTypes())
 	})
 
-	t.Run("registering again with reminder delivery enables it", func(t *testing.T) {
+	t.Run("registering again with reminder delivery enables it and broadcasts the change", func(t *testing.T) {
 		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
 		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
 			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
 		})
 		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, recv(t, ch))
+
+		// No change, no broadcast.
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
+		})
+		none(t, ch)
+	})
+
+	t.Run("registering a new type leaves its reminder types to the placement round", func(t *testing.T) {
+		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "quiet1", Factory: fake.NewFactory()},
+				{Type: "new", Factory: fake.NewFactory()},
+			},
+		})
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "new"}, tble.ReminderTypes())
+		none(t, ch)
 	})
 
 	t.Run("unregistering a type forgets it has no reminder delivery", func(t *testing.T) {
