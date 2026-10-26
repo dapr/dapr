@@ -87,11 +87,13 @@ func (r *recovery) Run(t *testing.T, ctx context.Context) {
 	// rejected while daprd's scheduler clients are still reconnecting
 	// register nothing (unique name per attempt, so exactly one job is ever
 	// accepted). The window is sized for daprd's WatchHosts reconvergence
-	// after a scheduler restart, which takes roughly 20s today (pre-existing,
-	// a follow-up candidate). Deliberately NOT gated on scheduler metrics or
-	// etcd leadership: the framework's per-process HTTP client can serve
-	// stale keep-alive connections across a restart and both helpers flake
-	// on slow runners.
+	// after a scheduler restart. Restart sends SIGKILL. The restarted
+	// scheduler deletes the leadership key that the killed process left, so
+	// it does not wait ~20s for that lease to expire (see
+	// daprd/workflow/scheduler/killrestart). Deliberately NOT gated on
+	// scheduler metrics or etcd leadership: the framework's per-process HTTP
+	// client can serve stale keep-alive connections across a restart and
+	// both helpers flake on slow runners.
 	attempt := 0
 	accepted := ""
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

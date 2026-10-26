@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -43,6 +45,15 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 const BackendEtcd = etcdcron.BackendEtcd
+
+const (
+	// etcdNamespace is the key prefix of all go-etcd-cron data in etcd.
+	etcdNamespace = "dapr"
+
+	// reclaimTimeout bounds the removal of a stale leadership key. On
+	// failure, the election waits for the stale lease to expire, as before.
+	reclaimTimeout = 5 * time.Second
+)
 
 // PlacementLeader consumes placement leadership changes derived from the cron
 // leadership table.
@@ -70,6 +81,12 @@ type Options struct {
 
 	// Handoff is this scheduler's own view of the placement handoff facts.
 	Handoff *handoff.Handoff
+
+	// ReclaimStaleLeadership removes a leadership key for ID that a previous
+	// run of this scheduler left in etcd, before the election starts. Set it
+	// only when no other live process can use ID, which is true for an
+	// embedded etcd: ID is then the name of this etcd member.
+	ReclaimStaleLeadership bool
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -104,6 +121,8 @@ type cron struct {
 	backendConfig   any
 	workers         uint32
 
+	reclaimStaleLeadership bool
+
 	readyCh chan struct{}
 	closeCh chan struct{}
 }
@@ -121,6 +140,8 @@ func New(opts Options) Interface {
 		etcd:            opts.Etcd,
 		backend:         opts.Backend,
 		backendConfig:   opts.BackendConfig,
+
+		reclaimStaleLeadership: opts.ReclaimStaleLeadership,
 	}
 }
 
@@ -151,7 +172,11 @@ func (c *cron) Run(ctx context.Context) error {
 		}
 		cronOpts.Backend = ptr.Of(etcdcron.BackendEtcd)
 		cronOpts.Client = client
-		cronOpts.Namespace = "dapr"
+		cronOpts.Namespace = etcdNamespace
+
+		if c.reclaimStaleLeadership {
+			c.reclaimLeadership(ctx, client)
+		}
 	}
 
 	c.etcdcron, err = etcdcron.New(cronOpts)
@@ -243,6 +268,50 @@ func (c *cron) Run(ctx context.Context) error {
 			}
 		},
 	).Run(ctx)
+}
+
+// reclaimLeadership deletes the leadership key of this scheduler ID if a
+// previous run left it in etcd. A scheduler that stops without a graceful
+// shutdown (SIGKILL, OOM kill, node loss) cannot revoke its leadership lease,
+// so the key stays until the lease expires: the 20s TTL, plus the election
+// timeout that etcd adds to every lease when a member becomes leader.
+// go-etcd-cron writes the leadership key only when it does not exist, so until
+// then this scheduler serves no jobs, no reminders and no hosts.
+// The key format is the one go-etcd-cron uses: <namespace>/leadership/<id>.
+func (c *cron) reclaimLeadership(ctx context.Context, client *clientv3.Client) {
+	ctx, cancel := context.WithTimeout(ctx, reclaimTimeout)
+	defer cancel()
+
+	key := path.Join(etcdNamespace, "leadership", c.id)
+
+	resp, err := client.Get(ctx, key)
+	if err != nil {
+		log.Warnf("Failed to read leadership key %s, the election waits for its lease to expire: %s", key, err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	// Delete the key only if it did not change since the read.
+	modRev := resp.Kvs[0].ModRevision
+	tresp, err := client.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", modRev)).
+		Then(clientv3.OpDelete(key)).
+		Commit()
+	if err != nil {
+		log.Warnf("Failed to delete leadership key %s, the election waits for its lease to expire: %s", key, err)
+		return
+	}
+
+	if !tresp.Succeeded {
+		// The key changed between the read and the delete: its lease expired,
+		// or another process wrote it.
+		log.Infof("Did not delete leadership key %s, because it changed after the read. The election waits for the current key to go away", key)
+		return
+	}
+
+	log.Infof("Deleted leadership key %s left by a previous run of this scheduler (lease %x)", key, resp.Kvs[0].Lease)
 }
 
 // Client returns the Cron client, blocking until Etcd and the Cron library are

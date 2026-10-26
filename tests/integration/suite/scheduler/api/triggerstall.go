@@ -216,8 +216,10 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 		errs := watchErrs
 		watchMu.Unlock()
 		require.Fail(t, "all watch streams died; no trigger can ever arrive", "%v", errs)
-	// The killed scheduler cannot revoke its 20s leadership lease, so its
-	// replacement takes the key only once the lease expires.
+	// The killed scheduler cannot revoke its 20s leadership lease. Its
+	// replacement has the same ID and data dir, so it deletes the stale key
+	// when it starts and takes the key at once. The 35s limit stays above the
+	// lease, so the test also passes when the replacement must wait for it.
 	case <-time.After(35 * time.Second):
 		t.Logf("Leadership keys: %v",
 			s.scheduler1.ListAllKeys(t, diagnosticCtx(t, ctx), "dapr/leadership"))

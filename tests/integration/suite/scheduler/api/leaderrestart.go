@@ -123,9 +123,10 @@ func (l *leaderrestart) Run(t *testing.T, ctx context.Context) {
 		}
 	}, 20*time.Second, 10*time.Millisecond)
 
-	// The killed process could not revoke its leadership lease (20s TTL), so
-	// the restarted member blocks in the elector until it expires. Wait for it
-	// to write its own key rather than for the key to exist.
+	// The killed process could not revoke its leadership lease (20s TTL). The
+	// restarted member has the same ID, so it deletes its own stale key when it
+	// starts, and writes a new one. Wait for its own key (a new create
+	// revision) rather than for the key to exist.
 	l.cluster.SchedulerN(t, leader).WaitUntilRunning(t, ctx)
 	l.watch(t, ctx, leader)
 	etcd := survivor.ETCDClient(t, ctx)

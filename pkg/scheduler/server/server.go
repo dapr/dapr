@@ -211,6 +211,10 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Workers:       opts.Workers,
 		Placement:     place,
 		Handoff:       hoff,
+		// With an embedded etcd, the cron ID is the etcd member name, so a
+		// leadership key for it can only come from a previous run of this
+		// scheduler.
+		ReclaimStaleLeadership: opts.EtcdEmbed,
 	})
 
 	if opts.Controller != nil {

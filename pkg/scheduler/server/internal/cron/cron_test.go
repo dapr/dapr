@@ -243,3 +243,132 @@ func Test_nameFromKey(t *testing.T) {
 		})
 	}
 }
+
+// Test_reclaimStaleLeadership starts a cron whose leadership key a killed
+// predecessor left in etcd, attached to a lease that nobody keeps alive.
+func Test_reclaimStaleLeadership(t *testing.T) {
+	t.Parallel()
+
+	const staleTTL = 60
+
+	// staleKey runs a cron with ID "0" once, copies its leadership record, and
+	// writes it back under a lease that expires only after staleTTL seconds.
+	// This is the state that a SIGKILL of a ready scheduler leaves behind.
+	staleKey := func(t *testing.T, client *clientv3.Client) clientv3.LeaseID {
+		t.Helper()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cr := New(Options{
+			ID:      "0",
+			Host:    &schedulerv1pb.Host{Address: "127.0.0.1:50000"},
+			Etcd:    &fakeEtcd{client: client},
+			Workers: 1,
+			Handoff: handoff.New(handoff.Options{}),
+		})
+		errCh := make(chan error, 1)
+		go func() { errCh <- cr.Run(ctx) }()
+		_, err := cr.Client(ctx)
+		require.NoError(t, err)
+
+		resp, err := client.Get(t.Context(), "dapr/leadership/0")
+		require.NoError(t, err)
+		require.Len(t, resp.Kvs, 1)
+		record := resp.Kvs[0].Value
+
+		cancel()
+		select {
+		case err = <-errCh:
+			require.NoError(t, err)
+		case <-time.After(10 * time.Second):
+			require.Fail(t, "cron did not stop")
+		}
+
+		lease, err := client.Grant(t.Context(), staleTTL)
+		require.NoError(t, err)
+		_, err = client.Put(t.Context(), "dapr/leadership/0", string(record), clientv3.WithLease(lease.ID))
+		require.NoError(t, err)
+		return lease.ID
+	}
+
+	run := func(t *testing.T, client *clientv3.Client, reclaim bool) Interface {
+		t.Helper()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cr := New(Options{
+			ID:                     "0",
+			Host:                   &schedulerv1pb.Host{Address: "127.0.0.1:50000"},
+			Etcd:                   &fakeEtcd{client: client},
+			Workers:                1,
+			Handoff:                handoff.New(handoff.Options{}),
+			ReclaimStaleLeadership: reclaim,
+		})
+		errCh := make(chan error, 1)
+		go func() { errCh <- cr.Run(ctx) }()
+		t.Cleanup(func() {
+			cancel()
+			select {
+			case <-errCh:
+			case <-time.After(10 * time.Second):
+				t.Error("cron did not stop")
+			}
+		})
+		return cr
+	}
+
+	t.Run("reclaim on: ready without waiting for the stale lease", func(t *testing.T) {
+		t.Parallel()
+
+		client := embeddedEtcdClient(t)
+		staleLease := staleKey(t, client)
+
+		cr := run(t, client, true)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		_, err := cr.Client(ctx)
+		require.NoError(t, err, "cron must not wait for the stale lease to expire")
+
+		resp, err := client.Get(t.Context(), "dapr/leadership/0")
+		require.NoError(t, err)
+		require.Len(t, resp.Kvs, 1)
+		assert.NotEqual(t, int64(staleLease), resp.Kvs[0].Lease, "leadership key must be on the new lease")
+	})
+
+	t.Run("reclaim off: waits for the stale lease", func(t *testing.T) {
+		t.Parallel()
+
+		client := embeddedEtcdClient(t)
+		staleKey(t, client)
+
+		cr := run(t, client, false)
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		defer cancel()
+		_, err := cr.Client(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("only the own key is deleted", func(t *testing.T) {
+		t.Parallel()
+
+		client := embeddedEtcdClient(t)
+		lease, err := client.Grant(t.Context(), staleTTL)
+		require.NoError(t, err)
+		for _, id := range []string{"0", "1", "00"} {
+			_, err = client.Put(t.Context(), "dapr/leadership/"+id, "x", clientv3.WithLease(lease.ID))
+			require.NoError(t, err)
+		}
+
+		c := New(Options{ID: "0", ReclaimStaleLeadership: true}).(*cron)
+		c.reclaimLeadership(t.Context(), client)
+
+		resp, err := client.Get(t.Context(), "dapr/leadership/", clientv3.WithPrefix(), clientv3.WithKeysOnly())
+		require.NoError(t, err)
+		keys := make([]string, 0, len(resp.Kvs))
+		for _, kv := range resp.Kvs {
+			keys = append(keys, string(kv.Key))
+		}
+		assert.ElementsMatch(t, []string{"dapr/leadership/00", "dapr/leadership/1"}, keys)
+
+		// No key: nothing to do.
+		c.reclaimLeadership(t.Context(), client)
+	})
+}
