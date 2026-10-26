@@ -80,10 +80,16 @@ type Options struct {
 
 	// Fallback, if set, reports whether this daprd hosts the workflow actor
 	// type as a fallback host (the WorkflowsStagedOperations preview): with no
-	// local executor. A fallback host serves every operation, and takes the
-	// durable reminder path for them rather than the WorkflowsFastPath local
-	// drives. Nil when the feature is off.
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
 	Fallback func() bool
+
+	// FallbackServed, if set, is told of each operation a fallback host
+	// served, by its diagnostics operation name.
+	FallbackServed func(operation string)
 
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
@@ -124,6 +130,7 @@ type factory struct {
 	// the Wait.
 	fastPath   bool
 	fallback   func() bool
+	onFallback func(operation string)
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc
@@ -212,6 +219,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
 		fallback:               opts.Fallback,
+		onFallback:             opts.FallbackServed,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,

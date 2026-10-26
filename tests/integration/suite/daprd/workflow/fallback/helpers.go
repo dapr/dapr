@@ -14,12 +14,15 @@ limitations under the License.
 package fallback
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 )
 
@@ -50,3 +53,63 @@ func newPair(t *testing.T, damping, settle time.Duration, opts ...workflow.Optio
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, settle), daprd.WithWorkflowFallbackDamping(t, damping)),
 	}, opts...)...)
 }
+
+// placementBack returns a placement service, not yet running, which takes
+// over the identity and address of wf's placement service once that one is
+// stopped, so the daprds reconnect to it. Start it with runPlacementBack. wf
+// must pin the placement service with workflow.WithPlacementService. Under
+// mTLS it takes the same Sentry, so the daprds' TLS clients reconnect.
+func placementBack(t *testing.T, wf *workflow.Workflow) *placement.Placement {
+	t.Helper()
+
+	p := wf.Placement()
+	opts := []placement.Option{
+		placement.WithID(p.ID()),
+		placement.WithPort(p.Port()),
+		placement.WithHealthzPort(p.HealthzPort()),
+		placement.WithMetricsPort(p.MetricsPort()),
+		placement.WithInitialCluster(p.InitialCluster()),
+		placement.WithInitialClusterPorts(p.InitialClusterPorts()...),
+	}
+	if sen := wf.Sentry(); sen != nil {
+		opts = append(opts, placement.WithSentry(t, sen))
+	}
+	return placement.New(t, opts...)
+}
+
+// runPlacementBack runs a placement service from placementBack and waits until
+// it is healthy. Its cleanup is registered here, so it runs before the test
+// case's context is cancelled, which would kill the process.
+func runPlacementBack(t *testing.T, ctx context.Context, back *placement.Placement) {
+	t.Helper()
+
+	back.Run(t, ctx)
+	t.Cleanup(func() { back.Cleanup(t) })
+	back.WaitUntilRunning(t, ctx)
+}
+
+// placementStatus returns the placement connection status the daprd at index
+// reports, such as "placement: connected". A failed metadata read fails c and
+// returns "".
+func placementStatus(c assert.TestingT, ctx context.Context, wf *workflow.Workflow, index int) string {
+	rt := wf.DaprN(index).GetMetaActorRuntime(c, ctx)
+	if rt == nil {
+		return ""
+	}
+	return rt.Placement
+}
+
+// reminderDeliveries returns how many actor reminders the scheduler delivered
+// to the daprd at index, of any actor type and whatever their outcome: the
+// daprd counts each job it receives on its scheduler stream for an actor
+// reminder, before it routes the call to the actor's owner. A failed metrics
+// read fails c.
+func reminderDeliveries(c assert.TestingT, ctx context.Context, wf *workflow.Workflow, index int) float64 {
+	return wf.DaprN(index).Metrics(c, ctx).SumWithLabels("dapr_runtime_actor_reminders_fired_total")
+}
+
+// readErrors records whether a read failed, for a background poll which
+// must not fail the test on a read cut short by its own end.
+type readErrors struct{ failed bool }
+
+func (r *readErrors) Errorf(string, ...any) { r.failed = true }

@@ -13,6 +13,14 @@ limitations under the License.
 
 package orchestrator
 
+import (
+	"context"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/backend"
+)
+
 // isFallback reports whether this daprd hosts the workflow actor type as a
 // fallback host (Options.Fallback): it has no local executor, so a turn here
 // fails at once and the instance advances only once its actor moves to a
@@ -31,4 +39,47 @@ func (f *factory) isFallback() bool {
 // only on a daprd with a local executor.
 func (f *factory) localFastPath() bool {
 	return f.fastPath && !f.isFallback()
+}
+
+// fallbackOperation returns the diagnostics operation of a workflow actor
+// method served on a fallback host. ev is the parsed AddWorkflowEvent event.
+func fallbackOperation(method string, ev *backend.HistoryEvent) string {
+	switch method {
+	case todo.CreateWorkflowInstanceMethod:
+		return diag.CreateWorkflow
+	case todo.RerunWorkflowInstance:
+		return diag.RerunWorkflow
+	case todo.ForkWorkflowHistory:
+		return diag.ForkWorkflow
+	case todo.AddWorkflowEventMethod:
+	default:
+		return ""
+	}
+
+	switch {
+	case ev.GetEventRaised() != nil:
+		return diag.RaiseEvent
+	case ev.GetExecutionTerminated() != nil:
+		return diag.TerminateWorkflow
+	case ev.GetExecutionSuspended() != nil:
+		return diag.SuspendWorkflow
+	case ev.GetExecutionResumed() != nil:
+		return diag.ResumeWorkflow
+	default:
+		return diag.AddEvent
+	}
+}
+
+// fallbackServed records an operation staged on a fallback host. Reads, such
+// as a status query, are not operations on the instance, and a purge
+// completes at once, so neither is recorded.
+func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
+	operation := fallbackOperation(method, ev)
+	if operation == "" {
+		return
+	}
+	diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
+	if f.onFallback != nil {
+		f.onFallback(operation)
+	}
 }

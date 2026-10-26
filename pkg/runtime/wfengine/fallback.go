@@ -193,6 +193,7 @@ func (wfe *engine) registerLocalExecutor(ctx context.Context) error {
 		fb.executorRegistered = true
 	}
 	wfe.syncExecutorAvailable()
+	wfe.syncFallbackHost()
 	return nil
 }
 
@@ -257,6 +258,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context, want, held bool) (bool
 			}
 			fb.executorRegistered = false
 			log.Infof("The last workflow executor of this daprd left and no other daprd of app '%s' has one; hosting the workflow actor types as a fallback host", wfe.appID)
+			wfe.syncFallbackHost()
 			return false, nil
 		}
 		log.Debug("Unregistering workflow actors")
@@ -277,6 +279,7 @@ func (wfe *engine) reconcileFallback(ctx context.Context, want, held bool) (bool
 			return false, err
 		}
 		wfe.actorsRegistered = true
+		wfe.syncFallbackHost()
 		return false, nil
 	}
 
@@ -301,7 +304,15 @@ func (wfe *engine) releaseActors(ctx context.Context) error {
 	}
 	wfe.actorsRegistered = false
 	wfe.fallback.executorRegistered = false
+	wfe.syncFallbackHost()
 	return err
+}
+
+// syncFallbackHost tells the backend whether this daprd is a fallback host:
+// it hosts the workflow actor types without a local executor. Must be called
+// with actorRegLock held.
+func (wfe *engine) syncFallbackHost() {
+	wfe.backend.SetFallbackHost(wfe.fallback.runCtx, wfe.actorsRegistered && !wfe.fallback.executorRegistered)
 }
 
 // runFallback runs the WorkflowsStagedOperations preview for Run: it follows

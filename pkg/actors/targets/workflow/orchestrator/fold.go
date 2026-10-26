@@ -90,7 +90,8 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 
 	// InvokeMethod chose this path before the lock: the last worker may have
 	// disconnected while this call waited for it. A fallback host serves the
-	// event on the durable path, as it cannot fold it into a local turn.
+	// event on the durable path and marks the response, or the caller would
+	// wait for a state change that comes only once the instance moves.
 	if o.isFallback() {
 		return o.handleInvoke(ctx, req)
 	}
