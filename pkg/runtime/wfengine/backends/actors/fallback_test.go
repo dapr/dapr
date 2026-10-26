@@ -252,3 +252,38 @@ func TestFallbackFactoryContexts(t *testing.T) {
 		})
 	}
 }
+
+func TestFallbackDrainedFactoryContexts(t *testing.T) {
+	for _, clustered := range []bool{false, true} {
+		name := "standalone"
+		if clustered {
+			name = "clustered"
+		}
+		t.Run(name, func(t *testing.T) {
+			abe, tbl := newFallbackTestBackend(t, true, clustered)
+			factoryCtx := newLiveContexts(t)
+
+			require.NoError(t, abe.RegisterHostedActors(t.Context(), factoryCtx, true))
+			assert.Equal(t, []int{0, 1}, factoryCtx.ids())
+
+			// The drained factories keep their work while they serve.
+			require.NoError(t, abe.DrainActors(t.Context()))
+			assert.Equal(t, []int{0, 1}, factoryCtx.ids())
+
+			// The workflow, activity and retention factories share their
+			// work: it ends once the table has retired them all.
+			tbl.CompleteDrains(t.Context(), func(actorType string) bool {
+				return actorType == abe.workflowActorType
+			})
+			assert.Equal(t, []int{0}, factoryCtx.ids())
+			tbl.CompleteDrains(t.Context(), func(string) bool { return false })
+			assert.Empty(t, factoryCtx.ids())
+
+			// Unregistering them ends their work too.
+			require.NoError(t, abe.RegisterHostedActors(t.Context(), factoryCtx, false))
+			assert.Equal(t, []int{2}, factoryCtx.ids())
+			require.NoError(t, abe.UnRegisterActors(t.Context()))
+			assert.Empty(t, factoryCtx.ids())
+		})
+	}
+}

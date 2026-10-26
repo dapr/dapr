@@ -598,7 +598,7 @@ func (t *table) swapLocked(tl *typeLocks, actorType string, factory targets.Fact
 	return r
 }
 
-// halt halts the retiring factories swapLocked returned.
+// halt halts the retiring factories swapLocked returned, and retires them.
 func (t *table) halt(ctx context.Context, retiring []*retiree) error {
 	errs := slice.New[error]()
 	var wg sync.WaitGroup
@@ -618,7 +618,9 @@ func (t *table) halt(ctx context.Context, retiring []*retiree) error {
 // type. While the type is registered again, r keeps serving the actor IDs it
 // holds, and may create one again after its halt deactivated it, so r is
 // halted until it holds no actors. The create lock is only taken between
-// halts, to remove r with no create in progress.
+// halts, to remove r with no create in progress. Once removed, r is retired
+// (targets.Retirer) before done is closed, whether or not its halt succeeded:
+// nothing routes to it any more.
 func (tl *typeLocks) halt(ctx context.Context, r *retiree) error {
 	defer close(r.done)
 
@@ -638,6 +640,9 @@ func (tl *typeLocks) halt(ctx context.Context, r *retiree) error {
 			tl.nretiring.Add(-1)
 			tl.route.Unlock()
 			tl.create.Unlock()
+			if f, ok := r.factory.(targets.Retirer); ok {
+				f.Retire()
+			}
 			if err == nil && left > 0 {
 				err = fmt.Errorf("%d actors left after halting", left)
 			}

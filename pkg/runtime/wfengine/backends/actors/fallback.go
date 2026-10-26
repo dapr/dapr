@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -94,6 +95,7 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 		hostedCancel()
 		return err
 	}
+	retireTogether(factories, hostedCancel)
 
 	var execCancel context.CancelFunc
 	if executor {
@@ -112,7 +114,8 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 	})
 
 	// The factories these replace are halted by now: released before this
-	// call, and halted by RegisterActorTypes if they were still draining.
+	// call, and halted and retired by RegisterActorTypes if they were still
+	// draining.
 	replaceCancel(&abe.hostedCancel, hostedCancel)
 	if executor {
 		replaceCancel(&abe.executorCancel, execCancel)
@@ -125,7 +128,9 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 // replaced, and keeps the cancel of the new ones. Every registration builds
 // new factories, whose background goroutines run until their context is done:
 // without it, each fallback transition would leave those of the factories it
-// replaced running until shutdown. Called under the engine's actor
+// replaced running until shutdown. The table ends that work already for the
+// factories it retires (see retireTogether); this covers the ones it does
+// not, and a cancel func runs only once. Called under the engine's actor
 // registration lock.
 func replaceCancel(current *context.CancelFunc, next context.CancelFunc) {
 	if *current != nil {
@@ -143,7 +148,45 @@ func (abe *Actors) newExecutorFactory(factoryCtx context.Context) (table.ActorTy
 		cancel()
 		return table.ActorTypeFactory{}, nil, err
 	}
-	return ef, cancel, nil
+	factories := []table.ActorTypeFactory{ef}
+	retireTogether(factories, cancel)
+	return factories[0], cancel, nil
+}
+
+// retireTogether has the table end the background work of factories, which
+// share the context cancel ends, once it has retired them all: drained, or
+// unregistered, and halted. A drained daprd may host nothing again for long,
+// so that work cannot wait for the next registration to replace them; nor
+// can it end when they are drained, as they serve the calls placement still
+// routes here until a round moves their actors.
+func retireTogether(factories []table.ActorTypeFactory, cancel context.CancelFunc) {
+	shared := &sharedCancel{cancel: cancel}
+	shared.left.Store(int32(len(factories))) //nolint:gosec
+	for i := range factories {
+		factories[i].Factory = &retiringFactory{Factory: factories[i].Factory, shared: shared}
+	}
+}
+
+// sharedCancel is a context cancel run once the factories sharing the
+// context have all retired.
+type sharedCancel struct {
+	left   atomic.Int32
+	cancel context.CancelFunc
+}
+
+// retiringFactory is a factory which ends its share of the background work
+// once the table retires it.
+type retiringFactory struct {
+	targets.Factory
+	shared  *sharedCancel
+	retired atomic.Bool
+}
+
+// Retire implements targets.Retirer.
+func (f *retiringFactory) Retire() {
+	if f.retired.CompareAndSwap(false, true) && f.shared.left.Add(-1) == 0 {
+		f.shared.cancel()
+	}
 }
 
 // SetLocalExecutor switches a daprd registered by RegisterHostedActors in
@@ -190,7 +233,8 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 // report at once, and keep their actors until a dissemination round moves
 // them to the daprds which host them, so the calls routed here meanwhile are
 // served rather than failed with the type not registered. See the actor
-// table's DrainActorTypes.
+// table's DrainActorTypes. The factories' background work ends once the table
+// retires them; see retireTogether.
 func (abe *Actors) DrainActors(ctx context.Context) error {
 	atable, err := abe.actors.Table(ctx)
 	if err != nil {

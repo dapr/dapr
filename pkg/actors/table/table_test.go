@@ -457,6 +457,74 @@ func Test_DrainActorTypes(t *testing.T) {
 	})
 }
 
+// retirerFactory counts the table's calls to its Retire.
+type retirerFactory struct {
+	*fake.FakeFactory
+	retired atomic.Int32
+}
+
+func (f *retirerFactory) Retire() { f.retired.Add(1) }
+
+func Test_RetireFactory(t *testing.T) {
+	newTable := func(t *testing.T) (table.Interface, *retirerFactory) {
+		t.Helper()
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		f := &retirerFactory{FakeFactory: fake.NewFactory()}
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "retired", Factory: f}},
+		})
+		return tble, f
+	}
+
+	t.Run("halting the actors of a kept factory does not retire it", func(t *testing.T) {
+		tble, f := newTable(t)
+		require.NoError(t, tble.HaltAll(t.Context()))
+		require.NoError(t, tble.SuspendHosting(t.Context()))
+		tble.ResumeHosting()
+		assert.Zero(t, f.retired.Load())
+	})
+
+	t.Run("completing a drain retires the drained factory once", func(t *testing.T) {
+		tble, f := newTable(t)
+		tble.DrainActorTypes("retired")
+		assert.Zero(t, f.retired.Load())
+		tble.CompleteDrains(t.Context(), func(string) bool { return true })
+		assert.Zero(t, f.retired.Load())
+
+		tble.CompleteDrains(t.Context(), func(string) bool { return false })
+		assert.EqualValues(t, 1, f.retired.Load())
+		tble.CompleteDrains(t.Context(), func(string) bool { return false })
+		require.NoError(t, tble.UnRegisterActorTypes("retired"))
+		assert.EqualValues(t, 1, f.retired.Load())
+	})
+
+	t.Run("unregistering a type retires its factory", func(t *testing.T) {
+		tble, f := newTable(t)
+		require.NoError(t, tble.UnRegisterActorTypes("retired"))
+		assert.EqualValues(t, 1, f.retired.Load())
+	})
+
+	t.Run("registering a draining type again retires its draining factory", func(t *testing.T) {
+		tble, f := newTable(t)
+		tble.DrainActorTypes("retired")
+		next := &retirerFactory{FakeFactory: fake.NewFactory()}
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "retired", Factory: next}},
+		})
+		assert.EqualValues(t, 1, f.retired.Load())
+		assert.Zero(t, next.retired.Load())
+	})
+
+	t.Run("registering a type which is not draining again does not retire its factory", func(t *testing.T) {
+		tble, f := newTable(t)
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "retired", Factory: fake.NewFactory()}},
+		})
+		assert.Zero(t, f.retired.Load())
+	})
+}
+
 func Test_DrainedFactoryHalt(t *testing.T) {
 	// haltingFactory holds the actor ID "held" until its halt, which blocks
 	// until release is closed. The actors it creates have type name.

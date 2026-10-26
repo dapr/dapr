@@ -187,8 +187,8 @@ type Actors struct {
 
 	// hostedCancel and executorCancel end the background work of the
 	// workflow and executor factories registered last under
-	// WorkflowsStagedOperations; see replaceCancel. Guarded by the engine's
-	// actor registration lock.
+	// WorkflowsStagedOperations; see replaceCancel and retireTogether.
+	// Guarded by the engine's actor registration lock.
 	hostedCancel   context.CancelFunc
 	executorCancel context.CancelFunc
 }
