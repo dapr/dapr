@@ -35,7 +35,7 @@ type remoteHosts struct {
 	// rounds still in progress covered them.
 	unsettled map[string]struct{}
 
-	watchers map[string]map[chan bool]struct{}
+	watchers map[string]map[*loops.RemoteHostsCh]struct{}
 }
 
 // answer returns whether a daprd other than this one hosts actorType, and
@@ -52,12 +52,12 @@ func (r *remoteHosts) answer(actorType string) (bool, bool) {
 
 // watch subscribes ch to actorType, and sends it the answer at once if it is
 // known.
-func (r *remoteHosts) watch(actorType string, ch chan bool) {
+func (r *remoteHosts) watch(actorType string, ch *loops.RemoteHostsCh) {
 	if r.watchers == nil {
-		r.watchers = make(map[string]map[chan bool]struct{})
+		r.watchers = make(map[string]map[*loops.RemoteHostsCh]struct{})
 	}
 	if r.watchers[actorType] == nil {
-		r.watchers[actorType] = make(map[chan bool]struct{})
+		r.watchers[actorType] = make(map[*loops.RemoteHostsCh]struct{})
 	}
 	r.watchers[actorType][ch] = struct{}{}
 
@@ -68,7 +68,7 @@ func (r *remoteHosts) watch(actorType string, ch chan bool) {
 
 // unwatch ends the subscription of ch and closes it. It is a no-op if ch was
 // already closed by close.
-func (r *remoteHosts) unwatch(actorType string, ch chan bool) {
+func (r *remoteHosts) unwatch(actorType string, ch *loops.RemoteHostsCh) {
 	chs, ok := r.watchers[actorType]
 	if !ok {
 		return
@@ -80,7 +80,7 @@ func (r *remoteHosts) unwatch(actorType string, ch chan bool) {
 	if len(chs) == 0 {
 		delete(r.watchers, actorType)
 	}
-	close(ch)
+	ch.Close()
 }
 
 // roundCompleted records what a completed round showed, and sends the
@@ -127,7 +127,7 @@ func (r *remoteHosts) roundCompleted(e *loops.RoundCompleted) {
 func (r *remoteHosts) close() {
 	for _, chs := range r.watchers {
 		for ch := range chs {
-			close(ch)
+			ch.Close()
 		}
 	}
 	r.watchers = nil
@@ -136,10 +136,10 @@ func (r *remoteHosts) close() {
 // send replaces an answer the receiver has not taken yet, so a slow receiver
 // gets the latest answer only. The placement loop is the only sender on ch,
 // so the send cannot block.
-func send(ch chan bool, remote bool) {
+func send(ch *loops.RemoteHostsCh, remote bool) {
 	select {
-	case <-ch:
+	case <-ch.C:
 	default:
 	}
-	ch <- remote
+	ch.C <- remote
 }

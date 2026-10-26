@@ -32,12 +32,12 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 
 // completeRound runs at the end of every dissemination round on this
 // stream, once its tables are installed.
-func (d *disseminator) completeRound() {
+func (d *disseminator) completeRound(ctx context.Context) {
 	d.roundCompleted = true
 	// A type in a round still in progress keeps draining: its installed
 	// table is not final until that round completes.
 	pendingAll, pending := d.pendingTypes()
-	d.actorTable.CompleteDrains(func(actorType string) bool {
+	d.actorTable.CompleteDrains(ctx, func(actorType string) bool {
 		_, ok := pending[actorType]
 		return pendingAll || ok || d.inflight.HasLocalHost(actorType)
 	})
@@ -187,7 +187,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 		d.currentOperation = loops.OrderUnlock
 		clear(d.roundChangedTypes)
-		d.completeRound()
+		d.completeRound(ctx)
 
 		d.inflight.UnlockTypes(toUnlock)
 

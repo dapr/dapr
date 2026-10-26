@@ -22,10 +22,10 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 )
 
-func recvAnswer(t *testing.T, ch <-chan bool) bool {
+func recvAnswer(t *testing.T, ch *loops.RemoteHostsCh) bool {
 	t.Helper()
 	select {
-	case v, ok := <-ch:
+	case v, ok := <-ch.C:
 		require.True(t, ok, "channel closed")
 		return v
 	default:
@@ -34,10 +34,10 @@ func recvAnswer(t *testing.T, ch <-chan bool) bool {
 	}
 }
 
-func noAnswer(t *testing.T, ch <-chan bool) {
+func noAnswer(t *testing.T, ch *loops.RemoteHostsCh) {
 	t.Helper()
 	select {
-	case v, ok := <-ch:
+	case v, ok := <-ch.C:
 		require.Failf(t, "unexpected answer", "%v (open %v)", v, ok)
 	default:
 	}
@@ -54,7 +54,7 @@ func roundCompleted(remote map[string]bool, pending ...string) *loops.RoundCompl
 func TestRemoteHosts(t *testing.T) {
 	t.Run("a subscriber gets the answer of the next round, then only its changes", func(t *testing.T) {
 		var r remoteHosts
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		noAnswer(t, ch)
 
@@ -70,7 +70,7 @@ func TestRemoteHosts(t *testing.T) {
 
 	t.Run("a slow subscriber gets the latest answer only", func(t *testing.T) {
 		var r remoteHosts
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		r.roundCompleted(roundCompleted(map[string]bool{"a": true}))
 		r.roundCompleted(roundCompleted(nil))
@@ -82,19 +82,19 @@ func TestRemoteHosts(t *testing.T) {
 		var r remoteHosts
 		r.roundCompleted(roundCompleted(map[string]bool{"a": true}))
 
-		a := make(chan bool, 1)
+		a := loops.NewRemoteHostsCh(nil)
 		r.watch("a", a)
 		assert.True(t, recvAnswer(t, a))
 
 		// No round showed b, so no other daprd hosts it.
-		b := make(chan bool, 1)
+		b := loops.NewRemoteHostsCh(nil)
 		r.watch("b", b)
 		assert.False(t, recvAnswer(t, b))
 	})
 
 	t.Run("a pending type keeps its last answer", func(t *testing.T) {
 		var r remoteHosts
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		r.roundCompleted(roundCompleted(map[string]bool{"a": true}))
 		assert.True(t, recvAnswer(t, ch))
@@ -103,7 +103,7 @@ func TestRemoteHosts(t *testing.T) {
 		r.roundCompleted(roundCompleted(nil, "a"))
 		noAnswer(t, ch)
 
-		late := make(chan bool, 1)
+		late := loops.NewRemoteHostsCh(nil)
 		r.watch("a", late)
 		assert.True(t, recvAnswer(t, late))
 
@@ -116,7 +116,7 @@ func TestRemoteHosts(t *testing.T) {
 		var r remoteHosts
 		r.roundCompleted(roundCompleted(map[string]bool{"a": true}, "a"))
 
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		noAnswer(t, ch)
 
@@ -129,7 +129,7 @@ func TestRemoteHosts(t *testing.T) {
 
 	t.Run("a round with every type pending changes nothing", func(t *testing.T) {
 		var r remoteHosts
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		r.roundCompleted(&loops.RoundCompleted{Remote: map[string]bool{"a": true}, PendingAll: true})
 		noAnswer(t, ch)
@@ -142,10 +142,10 @@ func TestRemoteHosts(t *testing.T) {
 
 	t.Run("unwatch closes the channel and it is no longer answered", func(t *testing.T) {
 		var r remoteHosts
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		r.watch("a", ch)
 		r.unwatch("a", ch)
-		_, ok := <-ch
+		_, ok := <-ch.C
 		assert.False(t, ok)
 
 		r.roundCompleted(roundCompleted(map[string]bool{"a": true}))
@@ -159,17 +159,17 @@ func TestRemoteHostsLoop(t *testing.T) {
 		require.NoError(t, p.Handle(t.Context(), roundCompleted(map[string]bool{"a": true})))
 
 		// No stream: a new subscriber still gets the last answer.
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		require.NoError(t, p.Handle(t.Context(), &loops.WatchRemoteHosts{ActorType: "a", Ch: ch}))
 		assert.True(t, recvAnswer(t, ch))
 	})
 
 	t.Run("shutdown closes the channels, and a later unwatch is a no-op", func(t *testing.T) {
 		p := &placement{}
-		ch := make(chan bool, 1)
+		ch := loops.NewRemoteHostsCh(nil)
 		require.NoError(t, p.Handle(t.Context(), &loops.WatchRemoteHosts{ActorType: "a", Ch: ch}))
 		require.NoError(t, p.Handle(t.Context(), &loops.Shutdown{}))
-		_, ok := <-ch
+		_, ok := <-ch.C
 		assert.False(t, ok)
 
 		require.NoError(t, p.Handle(t.Context(), &loops.UnwatchRemoteHosts{ActorType: "a", Ch: ch}))

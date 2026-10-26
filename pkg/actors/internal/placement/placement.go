@@ -20,6 +20,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -110,6 +111,13 @@ type placement struct {
 	ready    *atomic.Bool
 
 	loop loop.Interface[loops.EventPlace]
+
+	// watches are the WatchRemoteHosts channels not closed yet. Once Run
+	// returned, the placement loop no longer runs to answer or close them,
+	// so stopped is set and they are closed.
+	watchLock sync.Mutex
+	watches   map[*loops.RemoteHostsCh]struct{}
+	stopped   bool
 }
 
 func New(opts Options) (Interface, error) {
@@ -234,6 +242,7 @@ func New(opts Options) (Interface, error) {
 		hostname: opts.Hostname,
 		port:     strconv.Itoa(opts.Port),
 		table:    opts.Table,
+		watches:  make(map[*loops.RemoteHostsCh]struct{}),
 		loop: loopsplacement.New(loopsplacement.Options{
 			Ready:      &ready,
 			ActorTable: opts.Table,
@@ -277,6 +286,7 @@ func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
 	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
+	defer p.closeWatches()
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -376,12 +386,42 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 }
 
 func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
-	ch := make(chan bool, 1)
+	var ch *loops.RemoteHostsCh
+	ch = loops.NewRemoteHostsCh(func() {
+		p.watchLock.Lock()
+		delete(p.watches, ch)
+		p.watchLock.Unlock()
+	})
+
+	p.watchLock.Lock()
+	if p.stopped {
+		p.watchLock.Unlock()
+		ch.Close()
+		return ch.C
+	}
+	p.watches[ch] = struct{}{}
+	p.watchLock.Unlock()
+
 	p.loop.Enqueue(&loops.WatchRemoteHosts{ActorType: actorType, Ch: ch})
 	context.AfterFunc(ctx, func() {
 		p.loop.Enqueue(&loops.UnwatchRemoteHosts{ActorType: actorType, Ch: ch})
 	})
-	return ch
+	return ch.C
+}
+
+// closeWatches closes the WatchRemoteHosts channels once Run returned: the
+// placement loop no longer runs, so a watch or unwatch enqueued since was
+// dropped, and nothing else would close them.
+func (p *placement) closeWatches() {
+	p.watchLock.Lock()
+	p.stopped = true
+	watches := p.watches
+	p.watches = make(map[*loops.RemoteHostsCh]struct{})
+	p.watchLock.Unlock()
+
+	for ch := range watches {
+		ch.Close()
+	}
 }
 
 func (p *placement) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {

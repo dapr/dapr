@@ -14,6 +14,7 @@ limitations under the License.
 package disseminator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -231,7 +232,7 @@ func TestCompleteDrainsOnUnlock(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var placed []bool
-		diss.actorTable = tablefake.New().WithCompleteDrains(func(fn func(string) bool) {
+		diss.actorTable = tablefake.New().WithCompleteDrains(func(_ context.Context, fn func(string) bool) {
 			placed = append(placed, fn("local"), fn("remote"))
 		})
 
@@ -264,7 +265,7 @@ func TestCompleteDrainsOnUnlock(t *testing.T) {
 		collectAcks(diss)
 
 		var placed []bool
-		diss.actorTable = tablefake.New().WithCompleteDrains(func(fn func(string) bool) {
+		diss.actorTable = tablefake.New().WithCompleteDrains(func(_ context.Context, fn func(string) bool) {
 			placed = append(placed, fn("local"), fn("remote"), fn("open"))
 		})
 

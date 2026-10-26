@@ -50,9 +50,9 @@ type Interface interface {
 	UnRegisterActorTypes(actorTypes ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	SetReminderDelivery(enabled bool, actorTypes ...string)
-	SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string
+	SubscribeToReminderTypeUpdates(ctx context.Context) <-chan struct{}
 	DrainActorTypes(actorTypes ...string)
-	CompleteDrains(placed func(actorType string) bool)
+	CompleteDrains(ctx context.Context, placed func(actorType string) bool)
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
@@ -98,8 +98,9 @@ type RegisterActorTypeOptions struct {
 }
 
 type table struct {
-	factories   sync.Map
-	createLocks sync.Map
+	factories sync.Map
+	// typeLocks holds the *typeLocks of every type ever registered.
+	typeLocks   sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
 	// noReminders holds the registered types which are not advertised for
@@ -111,7 +112,7 @@ type table struct {
 	noReminders         map[string]struct{}
 	draining            map[string]struct{}
 	flagsLock           sync.Mutex
-	reminderTypeUpdates *broadcaster.Broadcaster[[]string]
+	reminderTypeUpdates *broadcaster.Broadcaster[struct{}]
 
 	entityConfigs map[string]api.EntityConfig
 
@@ -124,6 +125,32 @@ type table struct {
 	// factories. Hosting is suspended while no actor state store is
 	// configured; the store can be hot reloaded at runtime.
 	suspended atomic.Bool
+}
+
+// typeLocks are the locks of an actor type, kept across its registrations.
+type typeLocks struct {
+	// create is read locked by GetOrCreate while it creates an actor, and
+	// write locked to wait out the creates in progress. It is never held
+	// across a factory halt: a turn of an actor being halted may create an
+	// actor of the same type (an orchestrator starting a child workflow),
+	// and the halt waits for that turn.
+	create sync.RWMutex
+
+	// retiring holds the factories of the type the table detached and still
+	// halts. While it is not empty, route serializes the creates of the type,
+	// and an actor ID one of them holds is created there rather than in the
+	// registered factory, so one actor ID is never live in two factories.
+	route     sync.Mutex
+	retiring  []*retiree
+	nretiring atomic.Int32
+}
+
+// retiree is a factory detached from the table whose actors are halting.
+// done is closed once they are.
+type retiree struct {
+	actorType string
+	factory   targets.Factory
+	done      chan struct{}
 }
 
 func New(opts Options) Interface {
@@ -142,7 +169,7 @@ func New(opts Options) Interface {
 
 		noReminders:         make(map[string]struct{}),
 		draining:            make(map[string]struct{}),
-		reminderTypeUpdates: broadcaster.New[[]string](),
+		reminderTypeUpdates: broadcaster.New[struct{}](),
 	}
 	t.suspended.Store(opts.StartSuspended)
 	return t
@@ -274,17 +301,24 @@ func (t *table) ActorExists(actorType, actorID string) bool {
 	if !ok {
 		return false
 	}
-	return v.(targets.Factory).Exists(actorID)
+	if v.(targets.Factory).Exists(actorID) {
+		return true
+	}
+	if l, ok := t.typeLocks.Load(actorType); ok {
+		return l.(*typeLocks).retiringFactory(actorID) != nil
+	}
+	return false
 }
 
 // GetOrCreate checks ctx under the type's create lock, which halts wait on.
 func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
-	l, ok := t.createLocks.Load(actorType)
+	l, ok := t.typeLocks.Load(actorType)
 	if !ok {
 		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
-	l.(*sync.RWMutex).RLock()
-	defer l.(*sync.RWMutex).RUnlock()
+	tl := l.(*typeLocks)
+	tl.create.RLock()
+	defer tl.create.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -299,16 +333,68 @@ func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (tar
 		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
 
-	return factory.(targets.Factory).GetOrCreate(actorID), nil
+	return tl.getOrCreate(factory.(targets.Factory), actorID), nil
 }
 
 func (t *table) waitCreates(actorType string) {
-	if l, ok := t.createLocks.Load(actorType); ok {
-		l.(*sync.RWMutex).Lock()
-		l.(*sync.RWMutex).Unlock() //nolint:staticcheck // SA2001: waits out the creates in progress
+	if l, ok := t.typeLocks.Load(actorType); ok {
+		l.(*typeLocks).create.Lock()
+		l.(*typeLocks).create.Unlock() //nolint:staticcheck // SA2001: waits out the creates in progress
 	}
 }
 
+// getOrCreate creates actorID in factory, or returns it from a retiring
+// factory which still holds it. Must be called with create read locked.
+func (tl *typeLocks) getOrCreate(factory targets.Factory, actorID string) targets.Interface {
+	if tl.nretiring.Load() == 0 {
+		return factory.GetOrCreate(actorID)
+	}
+	tl.route.Lock()
+	defer tl.route.Unlock()
+	if old := tl.retiringLocked(actorID); old != nil {
+		return old.GetOrCreate(actorID)
+	}
+	return factory.GetOrCreate(actorID)
+}
+
+// retiringFactory returns the retiring factory which holds actorID, if any.
+func (tl *typeLocks) retiringFactory(actorID string) targets.Factory {
+	if tl.nretiring.Load() == 0 {
+		return nil
+	}
+	tl.route.Lock()
+	defer tl.route.Unlock()
+	return tl.retiringLocked(actorID)
+}
+
+// retiringLocked is retiringFactory with route held.
+func (tl *typeLocks) retiringLocked(actorID string) targets.Factory {
+	for _, r := range tl.retiring {
+		if r.factory.Exists(actorID) {
+			return r.factory
+		}
+	}
+	return nil
+}
+
+// halting returns the done channels of the type's retiring factories.
+func (tl *typeLocks) halting() []<-chan struct{} {
+	tl.route.Lock()
+	defer tl.route.Unlock()
+	done := make([]<-chan struct{}, 0, len(tl.retiring))
+	for _, r := range tl.retiring {
+		done = append(done, r.done)
+	}
+	return done
+}
+
+// RegisterActorTypes registers the given types. A type registered again
+// while it drains replaces its draining factory at once, so it is never
+// reported unregistered, and the draining factory is halted before this
+// returns. Until then the draining factory serves the actor IDs it still
+// holds, so one actor ID is never live in two factories. A halt of one of
+// the types already in progress (CompleteDrains, UnRegisterActorTypes) is
+// waited for too.
 func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	if len(opts.Factories) == 0 {
 		return
@@ -318,53 +404,61 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		t.entityConfigs = opts.EntityConfigs
 	}
 
-	// A type registered again while it drains first gives up the actors of
-	// its draining factory, so one actor ID is never live in two factories.
 	t.flagsLock.Lock()
-	var drained []string
+	var (
+		reminderChanged, newTypes bool
+		replaced                  []*retiree
+		halting                   []<-chan struct{}
+	)
 	for _, opt := range opts.Factories {
-		if _, ok := t.draining[opt.Type]; ok {
-			drained = append(drained, opt.Type)
-		}
-	}
-	old := t.detachLocked(drained)
-	t.flagsLock.Unlock()
-	if err := t.haltDetached(old); err != nil {
-		log.Warnf("Failed to halt the actors of drained actor types: %s", err)
-	}
+		_, registered := t.factories.Load(opt.Type)
+		_, draining := t.draining[opt.Type]
+		_, noReminder := t.noReminders[opt.Type]
+		// A draining type is no longer advertised: registering it again
+		// causes a placement round, like a new type.
+		registered = registered && !draining
+		newTypes = newTypes || !registered
+		reminderChanged = reminderChanged || (registered && noReminder != opts.NoReminderDelivery)
 
-	t.flagsLock.Lock()
-	typesBefore, reminderTypesBefore := t.typesLocked(), t.reminderTypesLocked()
-	for _, opt := range opts.Factories {
+		l, _ := t.typeLocks.LoadOrStore(opt.Type, new(typeLocks))
+		tl := l.(*typeLocks)
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
-		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
 		if opts.NoReminderDelivery {
 			t.noReminders[opt.Type] = struct{}{}
 		} else {
 			delete(t.noReminders, opt.Type)
 		}
-		t.factories.Store(opt.Type, opt.Factory)
+		if draining {
+			delete(t.draining, opt.Type)
+			t.deleteTimersFunc(context.Background(), func(actorType, _ string) bool {
+				return actorType == opt.Type
+			})
+			if r := t.swapLocked(tl, opt.Type, opt.Factory); r != nil {
+				replaced = append(replaced, r)
+			}
+		} else {
+			t.factories.Store(opt.Type, opt.Factory)
+		}
+		halting = append(halting, tl.halting()...)
 	}
-	types, reminderTypes := t.typesLocked(), t.reminderTypesLocked()
 	// Registering again only types already advertised to placement causes
 	// no placement round, so a change to their reminder delivery is sent
 	// the way SetReminderDelivery sends it.
-	if sameTypes(typesBefore, types) && !sameTypes(reminderTypesBefore, reminderTypes) {
-		t.reminderTypeUpdates.Broadcast(reminderTypes)
+	if reminderChanged && !newTypes {
+		t.reminderTypeUpdates.Broadcast(struct{}{})
 	}
 	// Broadcast under flagsLock, so a concurrent DrainActorTypes or
 	// UnRegisterActorTypes cannot have its newer type list overtaken by this
 	// one.
-	t.typeUpdates.Broadcast(types)
+	t.typeUpdates.Broadcast(t.typesLocked())
 	t.flagsLock.Unlock()
-}
 
-// sameTypes returns whether a and b hold the same actor types, in any order.
-func sameTypes(a, b []string) bool {
-	a, b = slices.Clone(a), slices.Clone(b)
-	slices.Sort(a)
-	slices.Sort(b)
-	return slices.Equal(a, b)
+	if err := t.halt(context.Background(), replaced); err != nil {
+		log.Warnf("Failed to halt the actors of drained actor types: %s", err)
+	}
+	for _, done := range halting {
+		<-done
+	}
 }
 
 // SetReminderDelivery advertises the given registered types to the scheduler
@@ -393,7 +487,7 @@ func (t *table) SetReminderDelivery(enabled bool, actorTypes ...string) {
 	}
 
 	if changed {
-		t.reminderTypeUpdates.Broadcast(t.reminderTypesLocked())
+		t.reminderTypeUpdates.Broadcast(struct{}{})
 	}
 }
 
@@ -428,7 +522,7 @@ func (t *table) DrainActorTypes(actorTypes ...string) {
 // dissemination round, when the tables are final. HaltNonHosted already
 // halted their actors when the round's tables moved them, so halting the
 // factories here only halts the actors created since.
-func (t *table) CompleteDrains(placed func(actorType string) bool) {
+func (t *table) CompleteDrains(ctx context.Context, placed func(actorType string) bool) {
 	t.flagsLock.Lock()
 	var done []string
 	for actorType := range t.draining {
@@ -439,15 +533,14 @@ func (t *table) CompleteDrains(placed func(actorType string) bool) {
 	old := t.detachLocked(done)
 	t.flagsLock.Unlock()
 
-	if err := t.haltDetached(old); err != nil {
+	if err := t.halt(ctx, old); err != nil {
 		log.Warnf("Failed to halt the actors of drained actor types: %s", err)
 	}
 }
 
 // detachLocked removes the given types from the table and returns their
-// factories, to be halted with haltDetached. Must be called with flagsLock
-// held.
-func (t *table) detachLocked(actorTypes []string) map[string]targets.Factory {
+// factories, to be halted with halt. Must be called with flagsLock held.
+func (t *table) detachLocked(actorTypes []string) []*retiree {
 	if len(actorTypes) == 0 {
 		return nil
 	}
@@ -461,27 +554,59 @@ func (t *table) detachLocked(actorTypes []string) map[string]targets.Factory {
 		return ok
 	})
 
-	detached := make(map[string]targets.Factory, len(actorTypes))
+	var detached []*retiree
 	for _, actorType := range actorTypes {
 		delete(t.draining, actorType)
 		delete(t.noReminders, actorType)
 		t.reentrancyStore.Delete(actorType)
-		if fact, ok := t.factories.LoadAndDelete(actorType); ok {
-			detached[actorType] = fact.(targets.Factory)
+		if l, ok := t.typeLocks.Load(actorType); ok {
+			if r := t.swapLocked(l.(*typeLocks), actorType, nil); r != nil {
+				detached = append(detached, r)
+			}
 		}
 	}
 	return detached
 }
 
-// haltDetached halts the factories detachLocked removed.
-func (t *table) haltDetached(detached map[string]targets.Factory) error {
+// swapLocked replaces the factory of actorType with factory, or removes it
+// if factory is nil, and returns the replaced factory as retiring, to be
+// halted with halt. It waits out the creates in progress, so none of them
+// creates an actor in the replaced factory once the type's creates are
+// routed past it. Must be called with flagsLock held.
+func (t *table) swapLocked(tl *typeLocks, actorType string, factory targets.Factory) *retiree {
+	tl.create.Lock()
+	defer tl.create.Unlock()
+
+	var (
+		old    any
+		loaded bool
+	)
+	if factory == nil {
+		old, loaded = t.factories.LoadAndDelete(actorType)
+	} else {
+		old, loaded = t.factories.Swap(actorType, factory)
+	}
+	if !loaded {
+		return nil
+	}
+
+	r := &retiree{actorType: actorType, factory: old.(targets.Factory), done: make(chan struct{})}
+	tl.route.Lock()
+	tl.retiring = append(tl.retiring, r)
+	tl.nretiring.Add(1)
+	tl.route.Unlock()
+	return r
+}
+
+// halt halts the retiring factories swapLocked returned.
+func (t *table) halt(ctx context.Context, retiring []*retiree) error {
 	errs := slice.New[error]()
 	var wg sync.WaitGroup
-	for actorType, fact := range detached {
+	for _, r := range retiring {
+		l, _ := t.typeLocks.Load(r.actorType)
 		wg.Go(func() {
-			t.waitCreates(actorType)
-			if err := fact.HaltAll(context.Background()); err != nil {
-				errs.Append(fmt.Errorf("actor type %s: %w", actorType, err))
+			if err := l.(*typeLocks).halt(ctx, r); err != nil {
+				errs.Append(fmt.Errorf("actor type %s: %w", r.actorType, err))
 			}
 		})
 	}
@@ -489,13 +614,46 @@ func (t *table) haltDetached(detached map[string]targets.Factory) error {
 	return errors.Join(errs.Slice()...)
 }
 
-// SubscribeToReminderTypeUpdates sends the reminder types (see ReminderTypes)
-// whenever SetReminderDelivery changes them, or registering types again
-// changes them without changing the types advertised to placement. Changes
-// made by registering or unregistering types reach the scheduler with the
-// placement round they cause, so they are not sent here.
-func (t *table) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string {
-	ch := make(chan []string)
+// halt halts the actors of the retiring factory r, then removes it from the
+// type. While the type is registered again, r keeps serving the actor IDs it
+// holds, and may create one again after its halt deactivated it, so r is
+// halted until it holds no actors. The create lock is only taken between
+// halts, to remove r with no create in progress.
+func (tl *typeLocks) halt(ctx context.Context, r *retiree) error {
+	defer close(r.done)
+
+	tl.create.Lock()
+	tl.create.Unlock() //nolint:staticcheck // SA2001: waits out the creates in progress
+
+	for {
+		before := r.factory.Len()
+		err := r.factory.HaltAll(ctx)
+
+		tl.create.Lock()
+		left := r.factory.Len()
+		// Stop when halting fails or makes no progress, rather than spin.
+		if err != nil || ctx.Err() != nil || left == 0 || left >= before {
+			tl.route.Lock()
+			tl.retiring = slices.DeleteFunc(tl.retiring, func(o *retiree) bool { return o == r })
+			tl.nretiring.Add(-1)
+			tl.route.Unlock()
+			tl.create.Unlock()
+			if err == nil && left > 0 {
+				err = fmt.Errorf("%d actors left after halting", left)
+			}
+			return err
+		}
+		tl.create.Unlock()
+	}
+}
+
+// SubscribeToReminderTypeUpdates signals whenever SetReminderDelivery changes
+// the reminder types (see ReminderTypes), or registering types again changes
+// them without changing the types advertised to placement. Changes made by
+// registering or unregistering types reach the scheduler with the placement
+// round they cause, so they are not signalled here.
+func (t *table) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan struct{} {
+	ch := make(chan struct{})
 	t.reminderTypeUpdates.Subscribe(ctx, ch)
 	return ch
 }
@@ -511,7 +669,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	old := t.detachLocked(actorTypes)
 	t.flagsLock.Unlock()
 
-	err := t.haltDetached(old)
+	err := t.halt(context.Background(), old)
 
 	t.flagsLock.Lock()
 	t.typeUpdates.Broadcast(t.typesLocked())
@@ -533,13 +691,18 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 // entity configs are retained so hosting can resume without re-registration.
 // Called when the actor state store is removed at runtime.
 func (t *table) SuspendHosting(ctx context.Context) error {
+	// Under flagsLock, like ResumeHosting, so a concurrent registration
+	// cannot broadcast its type list after the empty one.
+	t.flagsLock.Lock()
 	if !t.suspended.CompareAndSwap(false, true) {
+		t.flagsLock.Unlock()
 		return nil
 	}
 
 	// De-advertise before halting so new work is routed away from this host
 	// while instances drain.
 	t.typeUpdates.Broadcast(nil)
+	t.flagsLock.Unlock()
 
 	return t.HaltAll(ctx)
 }
@@ -548,13 +711,13 @@ func (t *table) SuspendHosting(ctx context.Context) error {
 // SuspendHosting. Called when an actor state store becomes configured at
 // runtime.
 func (t *table) ResumeHosting() {
+	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
 	if !t.suspended.CompareAndSwap(true, false) {
 		return
 	}
 
-	t.flagsLock.Lock()
 	t.typeUpdates.Broadcast(t.typesLocked())
-	t.flagsLock.Unlock()
 }
 
 func (t *table) Close() error {

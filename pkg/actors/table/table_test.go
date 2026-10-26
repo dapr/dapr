@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/fake"
 )
 
@@ -251,21 +252,22 @@ func Test_ReminderDelivery(t *testing.T) {
 		return tble
 	}
 
-	recv := func(t *testing.T, ch <-chan []string) []string {
+	// recv waits for a reminder types update and returns the reminder types.
+	recv := func(t *testing.T, tble table.Interface, ch <-chan struct{}) []string {
 		t.Helper()
 		select {
-		case got := <-ch:
-			return got
+		case <-ch:
+			return tble.ReminderTypes()
 		case <-time.After(5 * time.Second):
 			require.Fail(t, "no reminder types update")
 			return nil
 		}
 	}
-	none := func(t *testing.T, ch <-chan []string) {
+	none := func(t *testing.T, ch <-chan struct{}) {
 		t.Helper()
 		select {
-		case got := <-ch:
-			require.Failf(t, "unexpected reminder types update", "%v", got)
+		case <-ch:
+			require.Fail(t, "unexpected reminder types update")
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -283,7 +285,7 @@ func Test_ReminderDelivery(t *testing.T) {
 		typesCh, _ := tble.SubscribeToTypeUpdates(t.Context())
 
 		tble.SetReminderDelivery(true, "quiet1", "quiet2")
-		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, recv(t, tble, ch))
 		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.ReminderTypes())
 
 		// No change, no broadcast.
@@ -291,11 +293,15 @@ func Test_ReminderDelivery(t *testing.T) {
 		none(t, ch)
 
 		tble.SetReminderDelivery(false, "plain", "quiet1")
-		assert.Equal(t, []string{"quiet2"}, recv(t, ch))
+		assert.Equal(t, []string{"quiet2"}, recv(t, tble, ch))
 		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.Types())
 
 		// The placement report is untouched: hosting did not change.
-		none(t, typesCh)
+		select {
+		case got := <-typesCh:
+			require.Failf(t, "unexpected types update", "%v", got)
+		case <-time.After(100 * time.Millisecond):
+		}
 	})
 
 	t.Run("an unregistered type is ignored", func(t *testing.T) {
@@ -313,7 +319,7 @@ func Test_ReminderDelivery(t *testing.T) {
 			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
 		})
 		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
-		assert.ElementsMatch(t, []string{"plain", "quiet1"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, recv(t, tble, ch))
 
 		// No change, no broadcast.
 		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
@@ -387,12 +393,12 @@ func Test_DrainActorTypes(t *testing.T) {
 		require.NoError(t, err)
 
 		// A round which still places the type here keeps it.
-		tble.CompleteDrains(func(actorType string) bool { return actorType == "drained" })
+		tble.CompleteDrains(t.Context(), func(actorType string) bool { return actorType == "drained" })
 		assert.True(t, tble.IsActorTypeHosted("drained"))
 		assert.Zero(t, halted.Load())
 
 		// The round which moves it away unregisters it.
-		tble.CompleteDrains(func(string) bool { return false })
+		tble.CompleteDrains(t.Context(), func(string) bool { return false })
 		assert.False(t, tble.IsActorTypeHosted("drained"))
 		_, err = tble.GetOrCreate(t.Context(), "drained", "1")
 		require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
@@ -411,7 +417,7 @@ func Test_DrainActorTypes(t *testing.T) {
 		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
 
 		// No longer draining: a round does not unregister it.
-		tble.CompleteDrains(func(string) bool { return false })
+		tble.CompleteDrains(t.Context(), func(string) bool { return false })
 		assert.True(t, tble.IsActorTypeHosted("drained"))
 	})
 
@@ -427,7 +433,7 @@ func Test_DrainActorTypes(t *testing.T) {
 			})}},
 		})
 		tble.DrainActorTypes("drained")
-		tble.CompleteDrains(func(string) bool { return false })
+		tble.CompleteDrains(t.Context(), func(string) bool { return false })
 		assert.EqualValues(t, 1, halted.Load())
 		assert.False(t, tble.IsActorTypeHosted("drained"))
 
@@ -448,5 +454,138 @@ func Test_DrainActorTypes(t *testing.T) {
 			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
 		})
 		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
+	})
+}
+
+func Test_DrainedFactoryHalt(t *testing.T) {
+	// haltingFactory holds the actor ID "held" until its halt, which blocks
+	// until release is closed. The actors it creates have type name.
+	type haltingFactory struct {
+		*fake.FakeFactory
+		started chan struct{}
+		release chan struct{}
+	}
+	newHaltingFactory := func(name string, halt func(context.Context)) *haltingFactory {
+		var halted atomic.Bool
+		f := &haltingFactory{started: make(chan struct{}), release: make(chan struct{})}
+		f.FakeFactory = fake.NewFactory().
+			WithGetOrCreate(func(string) targets.Interface { return fake.New(name) }).
+			WithExists(func(actorID string) bool { return actorID == "held" && !halted.Load() }).
+			WithHaltAll(func(ctx context.Context) error {
+				close(f.started)
+				if halt != nil {
+					halt(ctx)
+				}
+				<-f.release
+				halted.Store(true)
+				return nil
+			})
+		return f
+	}
+	newFactory := func() targets.Factory {
+		return fake.NewFactory().WithGetOrCreate(func(string) targets.Interface { return fake.New("new") })
+	}
+	created := func(t *testing.T, tble table.Interface, actorID string) string {
+		t.Helper()
+		target, err := tble.GetOrCreate(t.Context(), "drained", actorID)
+		require.NoError(t, err)
+		return target.Type()
+	}
+	wait := func(t *testing.T, ch <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "timed out")
+		}
+	}
+	pending := func(t *testing.T, ch <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-ch:
+			require.Fail(t, "registered before the draining factory halted")
+		default:
+		}
+	}
+	newTable := func(t *testing.T, old targets.Factory) table.Interface {
+		t.Helper()
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: old}},
+		})
+		tble.DrainActorTypes("drained")
+		return tble
+	}
+	register := func(tble table.Interface, factory targets.Factory) <-chan struct{} {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+				Factories: []table.ActorTypeFactory{{Type: "drained", Factory: factory}},
+			})
+		}()
+		return done
+	}
+
+	t.Run("a type registered again while its draining factory halts stays registered", func(t *testing.T) {
+		old := newHaltingFactory("old", nil)
+		tble := newTable(t, old)
+
+		registered := register(tble, newFactory())
+		wait(t, old.started)
+
+		// The draining factory keeps serving the actor ID it holds; the
+		// others are created in the new factory.
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+		assert.Contains(t, tble.Types(), "drained")
+		assert.Equal(t, "old", created(t, tble, "held"))
+		assert.True(t, tble.ActorExists("drained", "held"))
+		assert.Equal(t, "new", created(t, tble, "other"))
+		pending(t, registered)
+
+		close(old.release)
+		wait(t, registered)
+		assert.Equal(t, "new", created(t, tble, "held"))
+	})
+
+	t.Run("registering again waits for the halt completing the drain", func(t *testing.T) {
+		old := newHaltingFactory("old", nil)
+		tble := newTable(t, old)
+
+		completed := make(chan struct{})
+		go func() {
+			defer close(completed)
+			tble.CompleteDrains(t.Context(), func(string) bool { return false })
+		}()
+		wait(t, old.started)
+		assert.False(t, tble.IsActorTypeHosted("drained"))
+
+		registered := register(tble, newFactory())
+		require.Eventually(t, func() bool { return tble.IsActorTypeHosted("drained") }, 5*time.Second, time.Millisecond)
+		assert.Equal(t, "old", created(t, tble, "held"))
+		assert.Equal(t, "new", created(t, tble, "other"))
+		pending(t, registered)
+
+		close(old.release)
+		wait(t, completed)
+		wait(t, registered)
+		assert.Equal(t, "new", created(t, tble, "held"))
+	})
+
+	t.Run("a halt waiting on a turn which creates an actor of the same type completes", func(t *testing.T) {
+		// An orchestrator turn starting a child workflow creates an actor of
+		// its own type, and the halt of its factory waits for that turn.
+		var tble table.Interface
+		turn := make(chan error, 1)
+		old := newHaltingFactory("old", func(ctx context.Context) {
+			_, err := tble.GetOrCreate(ctx, "drained", "child")
+			turn <- err
+		})
+		tble = newTable(t, old)
+		close(old.release)
+
+		wait(t, register(tble, newFactory()))
+		require.NoError(t, <-turn)
 	})
 }
