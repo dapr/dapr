@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -70,8 +71,8 @@ func (h *hostdeath) Run(t *testing.T, ctx context.Context) {
 	h.workflow.ConnectWorkerN(t, ctx, 0, h.workflow.RegistryN(0))
 	h.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(c, hostsWorkflows(c, ctx, h.workflow, 1))
-	}, time.Second*20, time.Millisecond*50)
+		assert.False(c, h.workflow.HostsActorType(c, ctx, 1, h.workflow.WorkflowActorType(1)))
+	}, time.Second*20, time.Millisecond*10)
 
 	mgmt := h.workflow.ManagementClientN(t, ctx, 1)
 
@@ -91,7 +92,7 @@ func (h *hostdeath) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, merr) {
 			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_RUNNING, meta.GetRuntimeStatus())
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	const after = api.InstanceID("fallback-hostdeath-after")
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -102,8 +103,8 @@ func (h *hostdeath) Run(t *testing.T, ctx context.Context) {
 		if status.Code(serr) != codes.AlreadyExists {
 			assert.NoError(c, serr)
 		}
-	}, time.Second*10, time.Millisecond*100)
-	assert.True(t, hostsWorkflows(t, ctx, h.workflow, 1))
+	}, time.Second*10, time.Millisecond*10)
+	assert.True(t, h.workflow.HostsActorType(t, ctx, 1, h.workflow.WorkflowActorType(1)))
 
 	octx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
@@ -117,7 +118,7 @@ func (h *hostdeath) Run(t *testing.T, ctx context.Context) {
 	h.workflow.ConnectWorkerN(t, ctx, 1, h.workflow.RegistryN(1))
 
 	for id, out := range map[api.InstanceID]string{before: `"before"`, after: `"after"`} {
-		meta := waitCompleted(t, ctx, mgmt, id)
+		meta := fworkflow.WaitForCompleted(t, ctx, mgmt, id)
 		assert.Equal(t, out, meta.GetOutput().GetValue(), id)
 	}
 }

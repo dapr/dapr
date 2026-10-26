@@ -14,8 +14,8 @@ limitations under the License.
 package fallback
 
 import (
+	"bytes"
 	"context"
-	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,7 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -42,17 +46,29 @@ func init() {
 // the damping period, it gives them up.
 type flap struct {
 	workflow *workflow.Workflow
+	logline  *logline.LogLine
 }
 
-// flapDamping is well above a flap cycle's connected time, about a second
-// and a half, so the damping period never runs out while the worker flaps.
-const flapDamping = 10 * time.Second
+// flapDamping is well above a flap cycle's connected time, a few placement
+// rounds, so the damping period never runs out while the worker flaps.
+const flapDamping = 5 * time.Second
 
 func (f *flap) Setup(t *testing.T) []framework.Option {
-	f.workflow = newPair(t, flapDamping, fallbackSettle)
+	// The fallback host's log tells when it has applied a placement round.
+	// The scheduler's rounds are logged at debug level.
+	f.logline = logline.New(t, logline.WithCaptureAll())
+	f.workflow = newPair(t, flapDamping, fallbackSettle,
+		workflow.WithDaprdOptions(1,
+			daprd.WithLogLevel("debug"),
+			daprd.WithExecOptions(
+				exec.WithStdout(f.logline.Stdout()),
+				exec.WithStderr(f.logline.Stderr()),
+			),
+		),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(f.workflow),
+		framework.WithProcesses(f.logline, f.workflow),
 	}
 }
 
@@ -63,9 +79,10 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 		return "done", nil
 	}))
 
+	workflowType := f.workflow.WorkflowActorType(1)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, hostsWorkflows(c, ctx, f.workflow, 1))
-	}, time.Second*10, time.Millisecond*50)
+		assert.True(c, f.workflow.HostsActorType(c, ctx, 1, workflowType))
+	}, time.Second*10, time.Millisecond*10)
 
 	// Watch the daprd without a worker throughout the flapping.
 	var unhosted atomic.Bool
@@ -75,21 +92,23 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 		defer close(watched)
 		for wctx.Err() == nil {
 			var rerr readErrors
-			if !hostsWorkflows(&rerr, wctx, f.workflow, 1) && !rerr.failed {
+			if !f.workflow.HostsActorType(&rerr, wctx, 1, workflowType) && !rerr.failed {
 				unhosted.Store(true)
 			}
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 10)
 		}
 	}()
 
+	executorType := f.workflow.ExecutorActorType(0)
 	mgmt := f.workflow.ManagementClientN(t, ctx, 1)
 	const rounds = 5
 	ids := make([]api.InstanceID, 0, rounds)
-	for range rounds {
+	for round := range rounds {
 		before := f.workflow.PlacementVersion(t, ctx)
 		worker := f.workflow.ConnectWorkerN(t, ctx, 0, f.workflow.RegistryN(0))
 		f.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
-		f.waitExecutorPlaced(t, ctx, before, true)
+		f.workflow.WaitForActorTypePlaced(t, ctx, 0, executorType, true, before)
+		f.waitApplied(t, executorType, 2*round+1)
 
 		// Calls through the fallback host keep working.
 		sctx, cancel := context.WithTimeout(ctx, time.Second*10)
@@ -98,15 +117,15 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		ids = append(ids, id)
 
-		time.Sleep(time.Second)
 		before = f.workflow.PlacementVersion(t, ctx)
 		worker.Disconnect(t)
 		f.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
-		// The leave reaches the placement tables before the next connect:
-		// a placement round which merged the two would leave the fallback
-		// host's damping period running from one cycle into the next.
-		f.waitExecutorPlaced(t, ctx, before, false)
-		time.Sleep(time.Millisecond * 500)
+		f.workflow.WaitForActorTypePlaced(t, ctx, 0, executorType, false, before)
+		// The fallback host has applied the round without the executor
+		// before the next connect: a round which merged the leave with the
+		// connect would leave its damping period running from one cycle
+		// into the next.
+		f.waitApplied(t, executorType, 2*round+2)
 	}
 
 	wcancel()
@@ -118,48 +137,37 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	connected := time.Now()
 	f.workflow.ConnectWorkerN(t, ctx, 0, f.workflow.RegistryN(0))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(c, hostsWorkflows(c, ctx, f.workflow, 1))
-	}, flapDamping+time.Second*20, time.Millisecond*50)
+		assert.False(c, f.workflow.HostsActorType(c, ctx, 1, workflowType))
+	}, flapDamping+time.Second*20, time.Millisecond*10)
 	assert.GreaterOrEqual(t, time.Since(connected), flapDamping-time.Second)
 
-	assertCompleted(t, ctx, mgmt, ids...)
+	fworkflow.WaitForAllCompleted(t, ctx, mgmt, ids...)
 }
 
-// waitExecutorPlaced waits until daprd 0, the one the worker connects to,
-// has registered the executor actor type, with placed, or no longer has,
-// and until the placement tables the app's daprds receive show it: the
-// placement service's table, or, with the scheduler serving placement, a
-// dissemination after before, a PlacementVersion read before the change.
-// The executor actor type is how the fallback host learns that another
-// daprd has an executor.
-func (f *flap) waitExecutorPlaced(t *testing.T, ctx context.Context, before uint64, placed bool) {
+// waitApplied waits until the fallback host, daprd 1, has completed n
+// placement rounds which changed actorType, as its log shows: one when the
+// worker's daprd registers the executor actor type, and one when it
+// unregisters it. The fallback host learns from these rounds whether
+// another daprd has an executor; the placement authority may show a change
+// the fallback host has not applied yet.
+func (f *flap) waitApplied(t *testing.T, actorType string, n int) {
 	t.Helper()
 
-	executorType := "dapr.internal.default." + f.workflow.DaprN(0).AppID() + ".executor"
-
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, hosted := f.workflow.DaprN(0).ActiveActorCount(c, ctx, executorType)
-		assert.Equal(c, placed, hosted)
-	}, time.Second*10, time.Millisecond*10)
-
-	if !f.workflow.HasPlacement() {
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Greater(c, f.workflow.PlacementVersion(t, ctx), before)
-		}, time.Second*10, time.Millisecond*10)
-		return
-	}
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := f.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-		if !assert.NotNil(c, table) {
-			return
-		}
-		var found bool
-		for _, host := range table.Hosts {
-			if slices.Contains(host.Entities, executorType) {
-				found = true
+		var applied int
+		for _, line := range bytes.Split(f.logline.StdoutBuffer(), []byte("\n")) {
+			if bytes.Contains(line, []byte("Dissemination")) &&
+				bytes.Contains(line, []byte(" complete ")) &&
+				bytes.Contains(line, []byte(actorType)) {
+				applied++
 			}
 		}
-		assert.Equal(c, placed, found)
+		assert.GreaterOrEqual(c, applied, n)
 	}, time.Second*10, time.Millisecond*10)
 }
+
+// readErrors records whether a read failed, for a background poll which
+// must not fail the test on a read cut short by its own end.
+type readErrors struct{ failed bool }
+
+func (r *readErrors) Errorf(string, ...any) { r.failed = true }

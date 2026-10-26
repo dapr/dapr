@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -62,7 +63,9 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	hold := make(chan struct{})
 	t.Cleanup(func() { close(hold) })
 
+	const timerDelay = time.Second * 2
 	var timerArmed atomic.Bool
+	var timerArmedAt atomic.Value
 	require.NoError(t, i.workflow.Registry().AddWorkflowN("activity", func(ctx *task.WorkflowContext) (any, error) {
 		var out string
 		if err := ctx.CallActivity("slow").Await(&out); err != nil {
@@ -81,10 +84,11 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 		return "activity-done", nil
 	}))
 	require.NoError(t, i.workflow.Registry().AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
-		if !ctx.IsReplaying {
+		if !ctx.IsReplaying && !timerArmed.Load() {
+			timerArmedAt.Store(time.Now())
 			timerArmed.Store(true)
 		}
-		if err := ctx.CreateTimer(time.Second * 2).Await(nil); err != nil {
+		if err := ctx.CreateTimer(timerDelay).Await(nil); err != nil {
 			return nil, err
 		}
 		return "timer-done", nil
@@ -115,15 +119,22 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 			if assert.NoError(c, merr) {
 				assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_RUNNING, meta.GetRuntimeStatus())
 			}
-		}, time.Second*5, time.Millisecond*50)
+		}, time.Second*5, time.Millisecond*10)
 	}
-	time.Sleep(time.Second * 3)
-	assert.Equal(t, int32(1), activityRuns.Load())
+
+	// Neither the timer coming due nor the activity's reminder runs anything
+	// on the fallback host: the activity does not run again until a worker
+	// connects. The window covers the timer's due time and a retry of its
+	// reminder.
+	window := time.Until(timerArmedAt.Load().(time.Time).Add(timerDelay + time.Second))
+	assert.Never(t, func() bool {
+		return activityRuns.Load() != 1
+	}, max(window, time.Second), time.Millisecond*10, "the activity ran again with no worker connected")
 
 	i.workflow.ConnectWorker(t, ctx, i.workflow.Registry())
 
 	for id, out := range map[api.InstanceID]string{actID: `"activity-done"`, timerID: `"timer-done"`} {
-		meta := waitCompleted(t, ctx, mgmt, id)
+		meta := fworkflow.WaitForCompleted(t, ctx, mgmt, id)
 		assert.Equal(t, out, meta.GetOutput().GetValue(), id)
 	}
 	assert.GreaterOrEqual(t, activityRuns.Load(), int32(2))

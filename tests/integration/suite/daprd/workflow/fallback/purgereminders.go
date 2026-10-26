@@ -129,7 +129,7 @@ func (p *purgereminders) Run(t *testing.T, ctx context.Context) {
 	// type stays hosted; the retry rides out the disconnect callback.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, mgmt.PurgeWorkflowState(octx, doneID))
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*5, time.Millisecond*10)
 	require.NoError(t, mgmt.PurgeWorkflowState(octx, parkedID, api.WithForcePurge(true)))
 
 	for _, id := range []api.InstanceID{doneID, parkedID} {

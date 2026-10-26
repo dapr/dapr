@@ -16,6 +16,7 @@ package fallback
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -69,7 +71,8 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 		worker := d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
 		d.workflow.WaitForConnectedWorkers(t, ctx, 1)
 
-		stop := startConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
+		var started atomic.Int64
+		stop := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 			// A start time skips the executor's wait for the instance
 			// to start, which a daprd with a worker makes, as the worker may
 			// be gone before the instance starts.
@@ -82,17 +85,27 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 			if !assert.NoError(t, err, "start during the disconnect of round %d", round) {
 				return "", false
 			}
-			assert.NoError(t, mgmt.RaiseEvent(octx, id, "go"), "raise during the disconnect of round %d", round)
+			if assert.NoError(t, mgmt.RaiseEvent(octx, id, "go"), "raise during the disconnect of round %d", round) {
+				started.Add(1)
+			}
 			return id, true
 		})
 
-		time.Sleep(time.Millisecond * 100)
+		// The load runs before the disconnect, and on after it against the
+		// fallback host.
+		waitStarted := func() {
+			from := started.Load()
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				assert.GreaterOrEqual(c, started.Load(), from+4)
+			}, time.Second*10, time.Millisecond*10)
+		}
+		waitStarted()
 		worker.Disconnect(t)
 		d.workflow.WaitForNoConnectedWorkers(t, ctx)
-		time.Sleep(time.Millisecond * 200)
+		waitStarted()
 		ids = append(ids, stop()...)
 	}
 
 	d.workflow.ConnectWorker(t, ctx, d.workflow.Registry())
-	assertCompleted(t, ctx, mgmt, ids...)
+	fworkflow.WaitForAllCompleted(t, ctx, mgmt, ids...)
 }

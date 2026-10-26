@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -93,12 +95,17 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 
 	// Both daprds are fallback hosts once the placement tables have shown no
 	// executor for the settle period.
+	hosts := func(c assert.TestingT, index int) bool {
+		return tr.workflow.HostsActorType(c, ctx, index, tr.workflow.WorkflowActorType(index))
+	}
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 0))
-		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 1))
-	}, time.Second*10, time.Millisecond*50)
+		assert.True(c, hosts(c, 0))
+		assert.True(c, hosts(c, 1))
+	}, time.Second*10, time.Millisecond*10)
 
-	stop := startConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
+	// started counts the instances started and raised through each daprd.
+	var started [2]atomic.Int64
+	stop := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 		m := mgmt[g%2]
 
 		// A start time skips the executor's wait for the instance to
@@ -112,37 +119,52 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(t, err, "start %s", id) {
 			return "", false
 		}
-		assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id)
+		if assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id) {
+			started[g%2].Add(1)
+		}
 		return id, true
 	})
 
-	// No worker anywhere.
-	time.Sleep(time.Second)
+	// waitStarted waits until a few more instances have been started and
+	// raised through each daprd, with cond holding at the end.
+	waitStarted := func(cond func(c assert.TestingT) bool) {
+		t.Helper()
+		from := [2]int64{started[0].Load(), started[1].Load()}
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.True(c, cond(c))
+			assert.GreaterOrEqual(c, started[0].Load(), from[0]+4)
+			assert.GreaterOrEqual(c, started[1].Load(), from[1]+4)
+		}, time.Second*20, time.Millisecond*10)
+	}
+
+	// No worker anywhere: both daprds are fallback hosts.
+	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && hosts(c, 1) })
 
 	// The first worker connects; the other daprd gives the types up after
-	// the damping period.
+	// the damping period, and the load runs against the daprd with the
+	// worker alone.
 	worker := tr.workflow.ConnectWorkerN(t, ctx, 0, tr.workflow.RegistryN(0))
 	tr.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(c, hostsWorkflows(c, ctx, tr.workflow, 1))
-	}, time.Second*20, time.Millisecond*50)
-	time.Sleep(time.Second)
+		assert.False(c, hosts(c, 1))
+	}, time.Second*20, time.Millisecond*10)
+	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && !hosts(c, 1) })
 
 	// The last worker leaves: both daprds are fallback hosts again, the one
 	// it left at once, the other after the settle period.
 	worker.Disconnect(t)
 	tr.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, hostsWorkflows(c, ctx, tr.workflow, 1))
-	}, time.Second*10, time.Millisecond*50)
-	time.Sleep(time.Second)
+		assert.True(c, hosts(c, 1))
+	}, time.Second*10, time.Millisecond*10)
+	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && hosts(c, 1) })
 
 	ids := stop()
 	require.NotEmpty(t, ids)
 
 	tr.workflow.ConnectWorkerN(t, ctx, 0, tr.workflow.RegistryN(0))
 	for _, id := range ids {
-		meta := waitCompleted(t, ctx, mgmt[0], id)
+		meta := fworkflow.WaitForCompleted(t, ctx, mgmt[0], id)
 		assert.Equal(t, fmt.Sprintf("%q", id), meta.GetOutput().GetValue(), id)
 
 		hist, err := mgmt[0].GetInstanceHistory(ctx, id)

@@ -81,7 +81,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
 			assert.Equal(c, `"done"`, meta.GetOutput().GetValue())
 		}
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*5, time.Millisecond*10)
 
 	require.NoError(t, mgmt.PurgeWorkflowState(octx, id))
 
