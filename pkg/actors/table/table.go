@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -330,6 +331,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 
 	t.flagsLock.Lock()
+	typesBefore, reminderTypesBefore := t.Types(), t.ReminderTypes()
 	for _, opt := range opts.Factories {
 		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.createLocks.LoadOrStore(opt.Type, new(sync.RWMutex))
@@ -340,9 +342,24 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		}
 		t.factories.Store(opt.Type, opt.Factory)
 	}
+	types, reminderTypes := t.Types(), t.ReminderTypes()
+	// Registering again only types already advertised to placement causes
+	// no placement round, so a change to their reminder delivery is sent
+	// the way SetReminderDelivery sends it.
+	if sameTypes(typesBefore, types) && !sameTypes(reminderTypesBefore, reminderTypes) {
+		t.reminderTypeUpdates.Broadcast(reminderTypes)
+	}
 	t.flagsLock.Unlock()
 
-	t.typeUpdates.Broadcast(t.Types())
+	t.typeUpdates.Broadcast(types)
+}
+
+// sameTypes returns whether a and b hold the same actor types, in any order.
+func sameTypes(a, b []string) bool {
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(a, b)
 }
 
 // SetReminderDelivery advertises the given registered types to the scheduler
@@ -481,9 +498,10 @@ func (t *table) haltDetached(detached map[string]targets.Factory) error {
 }
 
 // SubscribeToReminderTypeUpdates sends the reminder types (see ReminderTypes)
-// whenever SetReminderDelivery changes them. Changes made by registering or
-// unregistering types reach the scheduler with the placement round they
-// cause, so they are not sent here.
+// whenever SetReminderDelivery changes them, or registering types again
+// changes them without changing the types advertised to placement. Changes
+// made by registering or unregistering types reach the scheduler with the
+// placement round they cause, so they are not sent here.
 func (t *table) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan []string {
 	ch := make(chan []string)
 	t.reminderTypeUpdates.Subscribe(ctx, ch)

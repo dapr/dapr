@@ -50,30 +50,42 @@ func TestWatch(t *testing.T) {
 		none(t, ch)
 
 		hosted := map[string]bool{"a": false}
-		w.Update(func(at string) bool { return hosted[at] })
+		w.Update(func(at string) (bool, bool) { return hosted[at], true })
 		assert.False(t, recv(t, ch))
 
-		w.Update(func(at string) bool { return hosted[at] })
+		w.Update(func(at string) (bool, bool) { return hosted[at], true })
 		none(t, ch)
 
 		hosted["a"] = true
-		w.Update(func(at string) bool { return hosted[at] })
+		w.Update(func(at string) (bool, bool) { return hosted[at], true })
 		assert.True(t, recv(t, ch))
 	})
 
 	t.Run("a slow subscriber gets the latest answer only", func(t *testing.T) {
 		w := New()
 		ch := w.Subscribe(t.Context(), "a")
-		w.Update(func(string) bool { return true })
-		w.Update(func(string) bool { return false })
+		w.Update(func(string) (bool, bool) { return true, true })
+		w.Update(func(string) (bool, bool) { return false, true })
 		assert.False(t, recv(t, ch))
+		none(t, ch)
+	})
+
+	t.Run("a type without a settled answer keeps its last answer", func(t *testing.T) {
+		w := New()
+		ch := w.Subscribe(t.Context(), "a")
+		w.Update(func(string) (bool, bool) { return true, false })
+		none(t, ch)
+
+		w.Update(func(string) (bool, bool) { return false, true })
+		assert.False(t, recv(t, ch))
+		w.Update(func(string) (bool, bool) { return true, false })
 		none(t, ch)
 	})
 
 	t.Run("a late subscriber gets the known answer at once", func(t *testing.T) {
 		w := New()
 		first := w.Subscribe(t.Context(), "a")
-		w.Update(func(string) bool { return true })
+		w.Update(func(string) (bool, bool) { return true, true })
 		assert.True(t, recv(t, first))
 
 		late := w.Subscribe(t.Context(), "a")
@@ -98,7 +110,7 @@ func TestWatch(t *testing.T) {
 		}, 5*time.Second, time.Millisecond)
 
 		var asked bool
-		w.Update(func(string) bool { asked = true; return true })
+		w.Update(func(string) (bool, bool) { asked = true; return true, true })
 		assert.False(t, asked)
 	})
 }
