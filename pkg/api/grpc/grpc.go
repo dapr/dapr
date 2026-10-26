@@ -1290,6 +1290,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return router.Call(ctx, req)
 	})
 	if err != nil {
+		// A deadline (the caller's or the actor's resiliency timeout) is not an
+		// internal failure.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
 			return nil, err
@@ -1536,7 +1541,7 @@ func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, 
 
 // TODO: Remove this method when the alpha API is removed.
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
-	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
+	return a.SubscribeConfiguration(request, configurationServer)
 }
 
 // This method is deprecated and exists for backwards-compatibility only.

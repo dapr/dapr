@@ -42,7 +42,10 @@ func init() {
 // "<instanceID>::<taskID>::<generation>" ID with a non-zero generation, as a
 // 1.18 orchestrator writes, and checks the result reaches the parent and the
 // reminder is acked. The real dispatch is parked so only the planted delivery
-// can complete the workflow.
+// can complete the workflow, except in clustered mode: there the completion
+// rendezvous keeps one waiter per instance and task ID, so registering the
+// planted work item cancels the parked real execution, and its retry may
+// enter the body and complete the workflow instead.
 type legacyactivityid struct {
 	workflow *workflow.Workflow
 }
@@ -117,7 +120,9 @@ func (l *legacyactivityid) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.Equal(t, `"in-done"`, meta.GetOutput().GetValue())
-	assert.Equal(t, int32(2), entries.Load())
+	if !l.workflow.ClusteredDeployment() {
+		assert.Equal(t, int32(2), entries.Load())
+	}
 
 	// The parked real dispatch keeps its own reminder alive; only the legacy
 	// one must have been acked rather than left retrying.

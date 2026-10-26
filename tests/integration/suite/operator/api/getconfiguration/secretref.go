@@ -118,6 +118,7 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 			Items:    []corev1.Secret{otelSecret},
 		}),
 		kubernetes.WithSecretGet(t, &otelSecret),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"test-otel-secretref": "tracing-config"}), //nolint:gosec
 	)
 
 	s.operator = operator.New(t,
