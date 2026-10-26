@@ -232,3 +232,221 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.Equal(t, []string{"test1"}, tble.Types())
 	})
 }
+
+func Test_ReminderDelivery(t *testing.T) {
+	newTable := func(t *testing.T) table.Interface {
+		t.Helper()
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "plain", Factory: fake.NewFactory()}},
+		})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "quiet1", Factory: fake.NewFactory()},
+				{Type: "quiet2", Factory: fake.NewFactory()},
+			},
+			NoReminderDelivery: true,
+		})
+		return tble
+	}
+
+	recv := func(t *testing.T, ch <-chan []string) []string {
+		t.Helper()
+		select {
+		case got := <-ch:
+			return got
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "no reminder types update")
+			return nil
+		}
+	}
+	none := func(t *testing.T, ch <-chan []string) {
+		t.Helper()
+		select {
+		case got := <-ch:
+			require.Failf(t, "unexpected reminder types update", "%v", got)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	t.Run("types registered without reminder delivery are hosted but not reminder types", func(t *testing.T) {
+		tble := newTable(t)
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.Types())
+		assert.Equal(t, []string{"plain"}, tble.ReminderTypes())
+		assert.True(t, tble.IsActorTypeHosted("quiet1"))
+	})
+
+	t.Run("toggling reminder delivery keeps the types hosted and broadcasts the change", func(t *testing.T) {
+		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
+		typesCh, _ := tble.SubscribeToTypeUpdates(t.Context())
+
+		tble.SetReminderDelivery(true, "quiet1", "quiet2")
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.ReminderTypes())
+
+		// No change, no broadcast.
+		tble.SetReminderDelivery(true, "quiet1")
+		none(t, ch)
+
+		tble.SetReminderDelivery(false, "plain", "quiet1")
+		assert.Equal(t, []string{"quiet2"}, recv(t, ch))
+		assert.ElementsMatch(t, []string{"plain", "quiet1", "quiet2"}, tble.Types())
+
+		// The placement report is untouched: hosting did not change.
+		none(t, typesCh)
+	})
+
+	t.Run("an unregistered type is ignored", func(t *testing.T) {
+		tble := newTable(t)
+		ch := tble.SubscribeToReminderTypeUpdates(t.Context())
+		tble.SetReminderDelivery(false, "unknown")
+		none(t, ch)
+		assert.Equal(t, []string{"plain"}, tble.ReminderTypes())
+	})
+
+	t.Run("registering again with reminder delivery enables it", func(t *testing.T) {
+		tble := newTable(t)
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
+	})
+
+	t.Run("unregistering a type forgets it has no reminder delivery", func(t *testing.T) {
+		tble := newTable(t)
+		require.NoError(t, tble.UnRegisterActorTypes("quiet1"))
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "quiet1", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"plain", "quiet1"}, tble.ReminderTypes())
+	})
+
+	t.Run("suspended hosting advertises no reminder types", func(t *testing.T) {
+		tble := newTable(t)
+		require.NoError(t, tble.SuspendHosting(t.Context()))
+		assert.Empty(t, tble.ReminderTypes())
+	})
+}
+
+func Test_DrainActorTypes(t *testing.T) {
+	newTable := func(t *testing.T) (table.Interface, *atomic.Int32) {
+		t.Helper()
+		var halted atomic.Int32
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{Type: "kept", Factory: fake.NewFactory()},
+				{Type: "drained", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+					halted.Add(1)
+					return nil
+				})},
+			},
+		})
+		return tble, &halted
+	}
+
+	t.Run("a draining type leaves the report but keeps serving", func(t *testing.T) {
+		tble, halted := newTable(t)
+		typesCh, _ := tble.SubscribeToTypeUpdates(t.Context())
+
+		tble.DrainActorTypes("drained", "unknown")
+		select {
+		case got := <-typesCh:
+			assert.Equal(t, []string{"kept"}, got)
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "no types update")
+		}
+		assert.Equal(t, []string{"kept"}, tble.Types())
+		assert.Equal(t, []string{"kept"}, tble.ReminderTypes())
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+		_, err := tble.GetOrCreate(t.Context(), "drained", "1")
+		require.NoError(t, err)
+
+		// A round which still places the type here keeps it.
+		tble.CompleteDrains(func(actorType string) bool { return actorType == "drained" })
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+		assert.Zero(t, halted.Load())
+
+		// The round which moves it away unregisters it.
+		tble.CompleteDrains(func(string) bool { return false })
+		assert.False(t, tble.IsActorTypeHosted("drained"))
+		_, err = tble.GetOrCreate(t.Context(), "drained", "1")
+		require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
+		assert.Eventually(t, func() bool { return halted.Load() == 1 }, 5*time.Second, time.Millisecond)
+		assert.True(t, tble.IsActorTypeHosted("kept"))
+	})
+
+	t.Run("registering a draining type again halts its draining factory first", func(t *testing.T) {
+		tble, halted := newTable(t)
+		tble.DrainActorTypes("drained")
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+		})
+		assert.EqualValues(t, 1, halted.Load())
+		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
+
+		// No longer draining: a round does not unregister it.
+		tble.CompleteDrains(func(string) bool { return false })
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+	})
+
+	t.Run("registering a drained type again waits for the background halt of its old factory", func(t *testing.T) {
+		tble := table.New(table.Options{ReentrancyStore: reentrancystore.New()})
+		t.Cleanup(func() { require.NoError(t, tble.Close()) })
+
+		halting := make(chan struct{})
+		release := make(chan struct{})
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+				close(halting)
+				<-release
+				return nil
+			})}},
+		})
+		tble.DrainActorTypes("drained")
+		tble.CompleteDrains(func(string) bool { return false })
+		select {
+		case <-halting:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "the drained factory was not halted")
+		}
+
+		registered := make(chan struct{})
+		go func() {
+			tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+				Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+			})
+			close(registered)
+		}()
+		select {
+		case <-registered:
+			require.Fail(t, "registered while the old factory was still halting")
+		case <-time.After(100 * time.Millisecond):
+		}
+		assert.False(t, tble.IsActorTypeHosted("drained"))
+
+		close(release)
+		select {
+		case <-registered:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "registration did not complete after the halt")
+		}
+		assert.True(t, tble.IsActorTypeHosted("drained"))
+	})
+
+	t.Run("unregistering a draining type ends its drain", func(t *testing.T) {
+		tble, halted := newTable(t)
+		tble.DrainActorTypes("drained")
+		require.NoError(t, tble.UnRegisterActorTypes("drained"))
+		assert.EqualValues(t, 1, halted.Load())
+
+		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{{Type: "drained", Factory: fake.NewFactory()}},
+		})
+		assert.ElementsMatch(t, []string{"kept", "drained"}, tble.Types())
+	})
+}
