@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
 )
@@ -62,13 +63,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	md := make(map[string]*internalv1pb.ListStringValue, len(req.GetMetadata())+1)
 	for k, v := range req.GetMetadata() {
-		switch {
-		case strings.EqualFold(k, transport.ActivationIDHeader):
-		case strings.EqualFold(k, "Connection"):
-			if conn := withoutActivationID(v); conn != nil {
-				md[k] = conn
-			}
-		default:
+		if !strings.EqualFold(k, transport.ActivationIDHeader) {
 			md[k] = v
 		}
 	}
@@ -76,9 +71,28 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	return a.transport.Invoke(ctx, &internalv1pb.InternalInvokeRequest{
 		Ver:      req.GetVer(),
 		Actor:    req.GetActor(),
-		Message:  req.GetMessage(),
+		Message:  copyMessage(req.GetMessage()),
 		Metadata: md,
 	})
+}
+
+// copyMessage keeps the transport's in-place method rewrite off the caller's retry.
+func copyMessage(msg *commonv1pb.InvokeRequest) *commonv1pb.InvokeRequest {
+	if msg == nil {
+		return nil
+	}
+	cp := &commonv1pb.InvokeRequest{
+		Method:      msg.GetMethod(),
+		Data:        msg.GetData(),
+		ContentType: msg.GetContentType(),
+	}
+	if ext := msg.GetHttpExtension(); ext != nil {
+		cp.HttpExtension = &commonv1pb.HTTPExtension{
+			Verb:        ext.GetVerb(),
+			Querystring: ext.GetQuerystring(),
+		}
+	}
+	return cp
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
@@ -152,8 +166,7 @@ func (a *app) Deactivate(ctx context.Context) error {
 	a.lock.Close(ctx)
 	a.table.Delete(a.actorID)
 
-	md := map[string]*internalv1pb.ListStringValue{transport.ActivationIDHeader: a.activationMD}
-	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID, md); err != nil {
+	if err := a.transport.Deactivate(context.Background(), a.actorType, a.actorID); err != nil {
 		return err
 	}
 
@@ -195,28 +208,6 @@ func (a *app) setActivationID(req *internalv1pb.InternalInvokeRequest) {
 		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
 	}
 	req.GetMetadata()[transport.ActivationIDHeader] = a.activationMD
-}
-
-// withoutActivationID drops the activation id from a Connection header so a
-// caller can't strip it as a hop-by-hop header.
-func withoutActivationID(conn *internalv1pb.ListStringValue) *internalv1pb.ListStringValue {
-	var values []string
-	for _, v := range conn.GetValues() {
-		var tokens []string
-		for token := range strings.SplitSeq(v, ",") {
-			token = strings.TrimSpace(token)
-			if token != "" && !strings.EqualFold(token, transport.ActivationIDHeader) {
-				tokens = append(tokens, token)
-			}
-		}
-		if len(tokens) > 0 {
-			values = append(values, strings.Join(tokens, ", "))
-		}
-	}
-	if len(values) == 0 {
-		return nil
-	}
-	return &internalv1pb.ListStringValue{Values: values}
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler

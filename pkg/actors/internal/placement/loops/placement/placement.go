@@ -485,8 +485,17 @@ func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Trans
 	client, err := p.streamFactory(streamCtx, conn)
 	if err != nil {
 		streamCancel()
+		// The dial does not block, so it succeeds while placement is down and
+		// only the stream fails. Close the connection, else every retry
+		// leaves one more connection redialing placement.
+		conn.Close()
 		return nil, nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
-	return client, streamCancel, nil
+	// The connection serves only this stream: the next attempt dials a new
+	// one. Close it together with the stream.
+	return client, func() {
+		streamCancel()
+		conn.Close()
+	}, nil
 }

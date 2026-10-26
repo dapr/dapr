@@ -33,9 +33,7 @@ func init() {
 	suite.Register(new(reactivate))
 }
 
-// reactivate checks an actor gets a new activation id each time it activates,
-// not once per daprd process. It keeps one id across calls, idles out, and
-// gets a new id when it's next called.
+// reactivate checks the activation id is per activation, not per daprd process.
 type reactivate struct {
 	app *actors.Actors
 

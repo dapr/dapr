@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,12 +40,14 @@ func init() {
 type mcpserver struct {
 	daprd  *daprd.Daprd
 	resDir string
+	url    string
 }
 
 func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 	m.resDir = t.TempDir()
+	m.url = prochttp.NotFoundURL(t)
 
-	require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -52,8 +56,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/mcp
-`), 0o600))
+      url: %s/mcp
+`, m.url), 0o600))
 
 	m.daprd = daprd.New(t,
 		daprd.WithResourcesDir(m.resDir),
@@ -79,7 +83,7 @@ func (m *mcpserver) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("add second MCPServer via hot-reload", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp2.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -88,8 +92,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/tools
-`), 0o600))
+      url: %s/tools
+`, m.url), 0o600))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := m.daprd.GetMetaMCPServers(c, ctx)
@@ -110,7 +114,7 @@ spec:
 	})
 
 	t.Run("re-add MCPServer via hot-reload", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp3.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(m.resDir, "mcp3.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -119,8 +123,8 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/readded
-`), 0o600))
+      url: %s/readded
+`, m.url), 0o600))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := m.daprd.GetMetaMCPServers(c, ctx)

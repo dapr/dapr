@@ -27,6 +27,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -39,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel/fake"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -134,12 +137,6 @@ func Test_ActivationIDOnEveryCallback(t *testing.T) {
 		assert.Equal(t, got[0].ids, c.ids, c.call)
 	}
 
-	require.NoError(t, target.Deactivate(t.Context()))
-	deleted := calls.take()
-	require.Len(t, deleted, 1)
-	assert.Equal(t, "DELETE actors/abc/a", deleted[0].call)
-	assert.Equal(t, got[0].ids, deleted[0].ids)
-
 	invokeFoo(t, fact.GetOrCreate("b"))
 	assert.NotEqual(t, got[0].ids[0], activationID(t, calls))
 }
@@ -171,7 +168,6 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 			got := calls.take()
 			require.Len(t, got, 1)
 			assert.Equal(t, "DELETE actors/abc/a", got[0].call)
-			assert.Equal(t, []string{first}, got[0].ids)
 
 			invokeFoo(t, fact.GetOrCreate("a"))
 			assert.NotEqual(t, first, activationID(t, calls))
@@ -196,7 +192,7 @@ func Test_ActivationIDChangesPerActivation(t *testing.T) {
 				return c.call == "DELETE actors/abc/a"
 			})
 		}, 5*time.Second, 10*time.Millisecond)
-		assert.Equal(t, []callback{{call: "DELETE actors/abc/a", ids: []string{first}}}, calls.take())
+		calls.take()
 
 		invokeFoo(t, fact.GetOrCreate("a"))
 		assert.NotEqual(t, first, activationID(t, calls))
@@ -255,7 +251,14 @@ func Test_GetOrCreateRaceQueuesWinner(t *testing.T) {
 func Test_ActivationIDOverridesCaller(t *testing.T) {
 	t.Parallel()
 
-	fact, calls := newActivationFactory(t)
+	var other atomic.Pointer[[]string]
+	fact, calls := newActivationFactory(t, func(o *Options) {
+		inner := o.AppChannel
+		o.AppChannel = fake.New().WithInvokeMethod(func(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+			other.Store(new(req.Metadata()["other"].GetValues()))
+			return inner.InvokeMethod(ctx, req, appID)
+		})
+	})
 	target := fact.GetOrCreate("a")
 
 	invokeFoo(t, target)
@@ -269,45 +272,83 @@ func Test_ActivationIDOverridesCaller(t *testing.T) {
 	_, err := target.InvokeMethod(t.Context(), req)
 	require.NoError(t, err)
 	assert.Equal(t, want, activationID(t, calls))
+	assert.Equal(t, []string{"kept"}, *other.Load())
 	assert.Equal(t, []string{"DAPR-ACTOR-ACTIVATION-ID", "dapr-actor-activation-id", "other"}, slices.Sorted(maps.Keys(req.GetMetadata())))
 	assert.Equal(t, []string{"spoofed"}, req.GetMetadata()["dapr-actor-activation-id"].GetValues())
 }
 
-func Test_ActivationIDNotHopByHop(t *testing.T) {
+func Test_InvokeMethodCopiesMessage(t *testing.T) {
 	t.Parallel()
 
+	data := &anypb.Any{Value: []byte("data")}
 	tests := map[string]struct {
-		conn []string
-		want []string
+		ext  *commonv1pb.HTTPExtension
+		want *commonv1pb.HTTPExtension
 	}{
-		"only id":       {conn: []string{"Dapr-Actor-Activation-Id"}},
-		"id any case":   {conn: []string{"keep-alive, dapr-actor-activation-id"}, want: []string{"keep-alive"}},
-		"many values":   {conn: []string{"DAPR-ACTOR-ACTIVATION-ID", "x-a,Dapr-Actor-Activation-Id, x-b"}, want: []string{"x-a, x-b"}},
-		"no id":         {conn: []string{"keep-alive, x-a"}, want: []string{"keep-alive, x-a"}},
-		"empty entries": {conn: []string{" , ", "keep-alive,,"}, want: []string{"keep-alive"}},
+		"with http extension": {
+			ext:  &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST, Querystring: "a=b"},
+			want: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_PUT, Querystring: "a=b"},
+		},
+		"without http extension": {
+			want: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_PUT},
+		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var got *internalv1pb.ListStringValue
-			var gotOK bool
+			msg := &commonv1pb.InvokeRequest{
+				Method:        "foo",
+				Data:          data,
+				ContentType:   "text/plain",
+				HttpExtension: test.ext,
+			}
+			want := proto.Clone(msg)
+
+			var got *commonv1pb.InvokeRequest
 			fact, _ := newActivationFactory(t, func(o *Options) {
 				o.AppChannel = fake.New().WithInvokeMethod(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
-					got, gotOK = req.Metadata()["Connection"]
+					got = proto.Clone(req.Message()).(*commonv1pb.InvokeRequest)
+					assert.NotSame(t, msg, req.Message())
+					assert.Equal(t, "foo", msg.GetMethod())
+					assert.Equal(t, test.ext.GetVerb(), msg.GetHttpExtension().GetVerb())
+					assert.Same(t, data, req.Message().GetData())
 					return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
 				})
 			})
 
-			req := internalv1pb.NewInternalInvokeRequest("foo").WithActor("abc", "a").WithMetadata(map[string][]string{
-				"Connection": test.conn,
+			var changed atomic.Bool
+			done := make(chan struct{})
+			read := make(chan struct{})
+			go func() {
+				defer close(read)
+				for {
+					select {
+					case <-done:
+						return
+					default:
+						if msg.GetMethod() != "foo" || msg.GetHttpExtension().GetVerb() != test.ext.GetVerb() {
+							changed.Store(true)
+						}
+					}
+				}
+			}()
+
+			_, err := fact.GetOrCreate("a").InvokeMethod(t.Context(), &internalv1pb.InternalInvokeRequest{
+				Ver:     internalv1pb.APIVersion_V1,
+				Actor:   &internalv1pb.Actor{ActorType: "abc", ActorId: "a"},
+				Message: msg,
 			})
-			_, err := fact.GetOrCreate("a").InvokeMethod(t.Context(), req)
+			close(done)
+			<-read
 			require.NoError(t, err)
-			assert.Equal(t, test.want != nil, gotOK)
-			assert.Equal(t, test.want, got.GetValues())
-			assert.Equal(t, test.conn, req.GetMetadata()["Connection"].GetValues())
+			assert.False(t, changed.Load())
+
+			assert.Equal(t, "actors/abc/a/method/foo", got.GetMethod())
+			assert.Equal(t, "text/plain", got.GetContentType())
+			assert.True(t, proto.Equal(test.want, got.GetHttpExtension()), "%v", got.GetHttpExtension())
+			assert.True(t, proto.Equal(want, msg), "%v", msg)
 		})
 	}
 }
@@ -427,7 +468,7 @@ func Test_ActivationWaitsForPreviousDelete(t *testing.T) {
 				clock:       clock,
 				AppChannel: fake.New().WithInvokeMethod(func(_ context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 					if req.Message().GetHttpExtension().GetVerb().String() == http.MethodDelete {
-						record("DELETE start " + req.Metadata()[transport.ActivationIDHeader].GetValues()[0])
+						record("DELETE start")
 						once.Do(func() { close(deleting) })
 						<-release
 						record("DELETE done")
@@ -491,8 +532,8 @@ func Test_ActivationWaitsForPreviousDelete(t *testing.T) {
 
 			got := snapshot()
 			require.Len(t, got, 4, got)
+			assert.Equal(t, []string{"DELETE start", "DELETE done"}, got[1:3])
 			assert.True(t, strings.HasPrefix(got[0], "PUT "), got)
-			assert.Equal(t, []string{"DELETE start " + strings.TrimPrefix(got[0], "PUT "), "DELETE done"}, got[1:3])
 			assert.True(t, strings.HasPrefix(got[3], "PUT "), got)
 			assert.NotEqual(t, got[0], got[3])
 		})

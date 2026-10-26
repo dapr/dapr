@@ -42,13 +42,7 @@ func init() {
 	suite.Register(new(lostupdate))
 }
 
-// lostupdate reproduces a lost update after a daprd restart. An app that caches
-// actor state like the SDKs bumps 30 counters to 1, daprd restarts, host2 takes
-// some actors and bumps them to 2, then leaves. host1's app still caches the
-// stale 1, but drops it when the activation id changes like an updated SDK, so
-// the next increment must return 3 and the store must hold 3, not 2. Each
-// increment has a request id, so a retry that already landed isn't counted
-// twice.
+// lostupdate checks a stale SDK cache can't lose an update after a daprd restart.
 type lostupdate struct {
 	host1  *actors.Actors
 	cache1 *counterApp

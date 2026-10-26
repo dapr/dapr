@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -55,5 +56,42 @@ func TestUniqueEventTimestamp(t *testing.T) {
 			require.False(t, dup, "duplicate timestamp issued: %d", v)
 			seen[v] = struct{}{}
 		}
+	})
+}
+
+func TestSwapRegCancel(t *testing.T) {
+	t.Run("a new registration ends the previous one", func(t *testing.T) {
+		abe := &Actors{}
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		ctx2, cancel2 := context.WithCancel(t.Context())
+		abe.swapRegCancel(cancel1)
+		abe.swapRegCancel(cancel2)
+		require.Error(t, ctx1.Err())
+		require.NoError(t, ctx2.Err())
+		require.NoError(t, abe.Stop(t.Context()))
+		require.Error(t, ctx2.Err())
+	})
+
+	// A worker stream can still register the actor types after Stop has run.
+	// Nothing would cancel that registration, so its factories' background
+	// work would outlive the backend.
+	t.Run("a registration after Stop is ended at once", func(t *testing.T) {
+		abe := &Actors{}
+		require.NoError(t, abe.Stop(t.Context()))
+		ctx, cancel := context.WithCancel(t.Context())
+		abe.swapRegCancel(cancel)
+		require.Error(t, ctx.Err())
+		assert.Nil(t, abe.regCancel)
+	})
+
+	t.Run("a registration after a restart is kept", func(t *testing.T) {
+		abe := &Actors{}
+		require.NoError(t, abe.Stop(t.Context()))
+		require.NoError(t, abe.Start(t.Context()))
+		ctx, cancel := context.WithCancel(t.Context())
+		abe.swapRegCancel(cancel)
+		require.NoError(t, ctx.Err())
+		require.NoError(t, abe.Stop(t.Context()))
+		require.Error(t, ctx.Err())
 	})
 }

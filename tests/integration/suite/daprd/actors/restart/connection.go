@@ -33,8 +33,7 @@ func init() {
 	suite.Register(new(connection))
 }
 
-// connection checks a caller can't strip the activation id by naming it in a
-// Connection header, which HTTP treats as a hop-by-hop header list.
+// connection checks a Connection header can't strip the activation id.
 type connection struct {
 	app *actors.Actors
 

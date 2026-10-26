@@ -139,6 +139,12 @@ jobs:
         mkdir -p "$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" \
                  "$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}"
 
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.13.0
       with:
@@ -237,6 +243,10 @@ jobs:
     - name: Setup postgres
       run: |
         make setup-test-env-postgres
+
+    - name: Setup Meilisearch
+      run: |
+        make setup-test-env-meilisearch
 
     - name: Setup test components
       run: |

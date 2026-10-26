@@ -61,6 +61,8 @@ pluggable_kafka-bindings \
 tracingapp \
 configurationapp \
 workflowsapp \
+searchvector \
+operatorscopes \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp jobs
@@ -287,7 +289,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres setup-test-env-meilisearch
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -351,13 +353,15 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	command -v gotestsum || go install gotest.tools/gotestsum@v1.13.0
+	# Downloads retry, as a single connection reset otherwise fails the run.
+	command -v gotestsum || for i in 1 2 3 4 5; do go install gotest.tools/gotestsum@v1.13.0 && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done
+	# Pre-fetch modules so the test builds run offline.
+	for i in 1 2 3 4 5; do go mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done
 
 .PHONY: test-integration-deps
 test-integration-deps: test-deps
-	# Pre-fetch modules with retries so the integration binary builds run
-	# offline; a single connection reset mid-build otherwise fails the run.
-	for d in . $(wildcard tests/integration/framework/binary/helpers/*/); do \
+	# The integration binary builds also need the helper modules.
+	for d in $(wildcard tests/integration/framework/binary/helpers/*/); do \
 		for i in 1 2 3 4 5; do go -C $$d mod download && break; [ $$i -lt 5 ] || exit 1; sleep $$((i * 5)); done; \
 	done
 
@@ -621,8 +625,15 @@ setup-test-env-zipkin:
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
+# install meilisearch to the cluster
+setup-test-env-meilisearch:
+	$(KUBECTL) apply -f ./tests/config/meilisearch.yaml -n $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) rollout status deployment/dapr-meilisearch -n $(DAPR_TEST_NAMESPACE) --timeout=5m
+delete-test-env-meilisearch:
+	$(KUBECTL) delete -f ./tests/config/meilisearch.yaml -n $(DAPR_TEST_NAMESPACE)
+
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-meilisearch
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -667,6 +678,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_wfacl_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_wfacl_policy.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/operator_scopes.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)

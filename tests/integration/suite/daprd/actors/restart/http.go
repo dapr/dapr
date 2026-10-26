@@ -34,7 +34,7 @@ func init() {
 	suite.Register(new(httpcallbacks))
 }
 
-// httpcallbacks checks every callback of one activation, DELETE included, shares an id.
+// httpcallbacks checks the activation id header on HTTP callbacks.
 type httpcallbacks struct {
 	app *actors.Actors
 
@@ -46,8 +46,7 @@ func (h *httpcallbacks) Setup(t *testing.T) []framework.Option {
 	h.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorIdleTimeout(time.Second*2),
-		actors.WithHandler("/actors/abc/{id}", func(_ http.ResponseWriter, r *http.Request) {
-			h.rec.Record("deactivate", activation.FromHeader(r))
+		actors.WithHandler("/actors/abc/{id}", func(http.ResponseWriter, *http.Request) {
 			h.deactivated.Store(true)
 		}),
 		actors.WithHandler("/actors/abc/{id}/method/foo", func(_ http.ResponseWriter, r *http.Request) {
@@ -103,16 +102,10 @@ func (h *httpcallbacks) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, h.deactivated.Load())
 	}, time.Second*8, time.Millisecond*10)
-	assert.Equal(t, first, activation.FirstIDs(h.rec.Take())["deactivate"])
+	h.rec.Take()
 
-	h.deactivated.Store(false)
 	invoke()
 	next := activation.FirstIDs(h.rec.Take())["invoke"]
 	require.NotEmpty(t, next)
 	assert.NotEqual(t, first, next)
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, h.deactivated.Load())
-	}, time.Second*8, time.Millisecond*10)
-	assert.Equal(t, next, activation.FirstIDs(h.rec.Take())["deactivate"])
 }

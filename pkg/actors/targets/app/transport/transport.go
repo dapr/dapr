@@ -38,7 +38,7 @@ const (
 	// response to ask Dapr to stop firing the recurring callback.
 	ReminderCancelHeader = "X-Daprremindercancel"
 
-	// ActivationIDHeader changes each time daprd activates the actor.
+	// ActivationIDHeader is new each time daprd activates the actor.
 	ActivationIDHeader = "Dapr-Actor-Activation-Id"
 )
 
@@ -61,5 +61,5 @@ type Invoker interface {
 	// app with the same headers a method invocation carries.
 	InvokeReminder(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
 	InvokeTimer(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error
-	Deactivate(ctx context.Context, actorType, actorID string, md map[string]*internalv1pb.ListStringValue) error
+	Deactivate(ctx context.Context, actorType, actorID string) error
 }
