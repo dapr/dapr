@@ -406,11 +406,18 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 }
 
 // swapRegCancel installs the cancel func of the current registration and
-// ends the previous registration's context, if any.
+// ends the previous registration's context, if any. A registration that
+// lands after Stop is ended at once: nothing else would cancel it. Stop sets
+// stopped before it takes regLock, so checking it under the lock cannot miss
+// it.
 func (abe *Actors) swapRegCancel(cancel context.CancelFunc) {
 	abe.regLock.Lock()
 	prev := abe.regCancel
 	abe.regCancel = cancel
+	if cancel != nil && abe.stopped.Load() {
+		abe.regCancel = nil
+		defer cancel()
+	}
 	abe.regLock.Unlock()
 	if prev != nil {
 		prev()
