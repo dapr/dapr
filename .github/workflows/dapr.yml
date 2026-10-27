@@ -653,6 +653,27 @@ jobs:
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push-retry
           fi
         shell: bash
+  # Branch protection requires this job instead of each matrix leg, because
+  # leg names change whenever a matrix value does. always() makes it report
+  # failure, not skipped, when a needed job fails (skipped counts as passing).
+  required:
+    name: dapr CI passed
+    if: always()
+    needs:
+      - lint
+      - depcheck
+      - lint-slow
+      - unit-tests
+      - integration-tests
+      - integration-tests-workflow-modes
+      - integration-tests-workflow-upgrade
+      - integration-tests-scheduler-placement
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a needed job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
   publish:
     name: Publish binaries
     needs: build
