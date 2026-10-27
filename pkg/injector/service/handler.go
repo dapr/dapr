@@ -100,6 +100,12 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, errors.New("empty body")
 	}
+	// Reject early when the declared length is already over the limit, before
+	// buffering anything. ContentLength is -1 when unknown, so the limited
+	// reader below still enforces the bound for chunked bodies.
+	if r.ContentLength > maxAdmissionRequestBodySize {
+		return nil, streams.ErrStreamTooLarge
+	}
 	limited := streams.LimitReadCloser(r.Body, maxAdmissionRequestBodySize)
 	defer limited.Close()
 	body, err := io.ReadAll(limited)

@@ -638,6 +638,24 @@ func TestReadRequestBody(t *testing.T) {
 		require.ErrorIs(t, err, streams.ErrStreamTooLarge)
 		assert.Nil(t, body)
 	})
+
+	t.Run("declared Content-Length over the limit is rejected before reading", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader([]byte("small")))
+		req.ContentLength = maxAdmissionRequestBodySize + 1
+
+		body, err := readRequestBody(req)
+		require.ErrorIs(t, err, streams.ErrStreamTooLarge)
+		assert.Nil(t, body)
+	})
+
+	t.Run("unknown Content-Length still reads a body within the limit", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mutate", bytes.NewReader([]byte("small")))
+		req.ContentLength = -1
+
+		body, err := readRequestBody(req)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("small"), body)
+	})
 }
 
 func TestHandleRequestRejectsOversizedBody(t *testing.T) {
