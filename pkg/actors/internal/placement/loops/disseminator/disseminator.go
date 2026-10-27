@@ -66,12 +66,13 @@ type disseminator struct {
 	namespace string
 	id        string
 
-	loop         loop.Interface[loops.EventDiss]
-	inflight     *inflight.Inflight
-	actorTable   table.Interface
-	scheduler    schedclient.Reloader
-	healthTarget healthz.Target
-	ready        *atomic.Bool
+	loop          loop.Interface[loops.EventDiss]
+	placementLoop loop.Interface[loops.EventPlace]
+	inflight      *inflight.Inflight
+	actorTable    table.Interface
+	scheduler     schedclient.Reloader
+	healthTarget  healthz.Target
+	ready         *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
@@ -100,6 +101,11 @@ type disseminator struct {
 
 	// v2Completed are the seqs of rounds completed on this stream.
 	v2Completed map[uint64]struct{}
+
+	// roundCompleted is set once a dissemination round completed on this
+	// stream. Until then, a change of the reminder types in place waits for
+	// that round, which sends them.
+	roundCompleted bool
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -117,10 +123,12 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.schedulerPlacement = opts.SchedulerPlacement
 	diss.v2Rounds = make(map[uint64]*v2Round)
 	diss.v2Completed = make(map[uint64]struct{})
+	diss.roundCompleted = false
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
+	diss.placementLoop = opts.PlacementLoop
 	diss.inflight = opts.Inflight
 
 	diss.timeout = opts.DisseminationTimeout
@@ -153,6 +161,10 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		d.handleAcquireRequest(e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
+	case *loops.ReloadReminderTypes:
+		if d.roundCompleted {
+			d.reloadReminderTypes()
+		}
 	case *loops.StreamOrder:
 		if d.schedulerPlacement {
 			return d.handleOrderV2(ctx, e)

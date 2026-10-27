@@ -74,6 +74,7 @@ type options struct {
 	controlPlaneTrustDomain    *string
 	appBindingOptionsTimeout   *time.Duration
 	schedulerAddresses         []string
+	schedulerJobStreams        *uint
 	disableInitEndpoints       []string
 	maxBodySize                *string
 	allowedOrigins             *string
@@ -275,6 +276,14 @@ func WithSchedulerAddresses(addresses ...string) Option {
 	}
 }
 
+// WithSchedulerJobStreams sets how many job streams daprd opens to each
+// scheduler (the --scheduler-job-streams flag).
+func WithSchedulerJobStreams(n uint) Option {
+	return func(o *options) {
+		o.schedulerJobStreams = &n
+	}
+}
+
 // WithSchedulerAddressesReset replaces any previously configured scheduler
 // addresses with the supplied set. Use this when a later option layer needs
 // to redirect daprd away from a scheduler address an earlier layer already
@@ -462,6 +471,20 @@ func WithPlacement(placement *placement.Placement) Option {
 // period for this daprd.
 func WithWorkflowJanitorPeriod(t *testing.T, d time.Duration) Option {
 	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_JANITOR_PERIOD", d.String()))
+}
+
+// WithWorkflowFallbackDamping sets the damping period after which a fallback
+// host gives the workflow actor types up to a daprd with a worker, in place
+// of the default.
+func WithWorkflowFallbackDamping(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_FALLBACK_DAMPING", d.String()))
+}
+
+// WithWorkflowFallbackSettle sets the settle period for which no other daprd
+// of the app must have a worker before this daprd, hosting nothing, hosts the
+// workflow actor types as a fallback host, in place of the default.
+func WithWorkflowFallbackSettle(t *testing.T, d time.Duration) Option {
+	return WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_FALLBACK_SETTLE", d.String()))
 }
 
 // WithWorkflowHealthPingInterval sets how often this daprd sends HealthPings

@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 	// Create caller first so we know its appID for the ACL policy.
 	r.caller = procdaprd.New(t)
 	callerAppID := r.caller.AppID()
+	calleeAppID := uuid.New().String()
 
 	cnf := configapi.Configuration{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -112,6 +114,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 			"default",
 			sen.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{callerAppID: "acl-config", calleeAppID: "acl-config"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items:    []configapi.Configuration{cnf},
@@ -143,7 +146,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 		return opts
 	}
 
-	r.callee = procdaprd.New(t, daprdOpts(srv.Port())...)
+	r.callee = procdaprd.New(t, append(daprdOpts(srv.Port()), procdaprd.WithAppID(calleeAppID))...)
 	r.caller = procdaprd.New(t, append(daprdOpts(), procdaprd.WithAppID(callerAppID))...)
 
 	return []framework.Option{

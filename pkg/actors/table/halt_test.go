@@ -87,9 +87,9 @@ func TestHaltAfterClaimCheckRemovesCreatedActor(t *testing.T) {
 
 func waitHaltBlockedOrDone(t *testing.T, tbl *table, actorType string, haltDone chan error) {
 	t.Helper()
-	l, ok := tbl.createLocks.Load(actorType)
+	l, ok := tbl.typeLocks.Load(actorType)
 	require.True(t, ok)
-	lock := l.(*sync.RWMutex)
+	lock := &l.(*typeLocks).create
 	for {
 		select {
 		case err := <-haltDone:
