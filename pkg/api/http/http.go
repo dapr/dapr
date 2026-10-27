@@ -92,6 +92,8 @@ const (
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
 	storeNameParam           = "storeName"
+	indexParam               = "index"
+	collectionParam          = "collection"
 	stateKeyParam            = "key"
 	configurationKeyParam    = "key"
 	configurationSubscribeID = "configurationSubscribeID"
@@ -162,6 +164,8 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSearchEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructVectorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
@@ -1668,7 +1672,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		Metadata:   req.Metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(r.Context(), storeReq)
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 

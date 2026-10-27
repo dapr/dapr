@@ -51,9 +51,11 @@ const (
 	// (history/inbox/signature lengths + generation). Exported so other
 	// packages can refresh just this row to pick up the latest ETag without
 	// reloading the full workflow state.
-	MetadataKey          = "metadata"
+	MetadataKey = "metadata"
+	// ParentNotifyKey is the row whose presence records that a completed
+	// child still owes its parent the completion.
+	ParentNotifyKey      = "parent-notify"
 	propagatedHistoryKey = "propagated-history"
-	parentNotifyKey      = "parent-notify"
 	creationInputKey     = "creation-input"
 
 	// maxStateEntries is the upper bound for any metadata count field
@@ -661,12 +663,12 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		if s.ParentNotifyPending {
 			req.Operations = append(req.Operations, api.TransactionalOperation{
 				Operation: api.Upsert,
-				Request:   api.TransactionalUpsert{Key: parentNotifyKey, Value: []byte{1}},
+				Request:   api.TransactionalUpsert{Key: ParentNotifyKey, Value: []byte{1}},
 			})
 		} else if s.parentNotifyPersisted {
 			req.Operations = append(req.Operations, api.TransactionalOperation{
 				Operation: api.Delete,
-				Request:   api.TransactionalDelete{Key: parentNotifyKey},
+				Request:   api.TransactionalDelete{Key: ParentNotifyKey},
 			})
 		}
 	}
@@ -996,7 +998,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	n++
 	bulkReq.Keys[n] = propagatedHistoryKey
 	n++
-	bulkReq.Keys[n] = parentNotifyKey
+	bulkReq.Keys[n] = ParentNotifyKey
 	n++
 	bulkReq.Keys[n] = creationInputKey
 	n++
@@ -1184,7 +1186,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		}
 		wState.IncomingHistory = &ph
 	}
-	if pn := bulkRes[parentNotifyKey]; pn.ETag != nil || len(pn.Data) > 0 {
+	if pn := bulkRes[ParentNotifyKey]; pn.ETag != nil || len(pn.Data) > 0 {
 		wState.ParentNotifyPending = true
 		wState.parentNotifyPersisted = true
 	}
@@ -1493,7 +1495,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	if s.parentNotifyPersisted {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: parentNotifyKey},
+			Request:   api.TransactionalDelete{Key: ParentNotifyKey},
 		})
 	}
 	if s.creationInputPersisted {
@@ -1536,6 +1538,11 @@ func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 	// regardless of what the store row currently holds.
 	s.customStatusChanged = true
 	s.Generation = state.GetGeneration()
+}
+
+// HistoryKey is the row that holds history event i.
+func HistoryKey(i uint64) string {
+	return getMultiEntryKeyName(historyKeyPrefix, i)
 }
 
 func getMultiEntryKeyName(prefix string, i uint64) string {

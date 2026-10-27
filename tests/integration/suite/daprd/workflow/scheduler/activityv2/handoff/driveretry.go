@@ -24,13 +24,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -135,21 +133,11 @@ func (d *driveretry) Run(t *testing.T, ctx context.Context) {
 	running := []*daprd.Daprd{d.workflow.Dapr()}
 	join := func(j *daprd.Daprd) {
 		t.Helper()
-		version := d.workflow.PlacementVersion(t, ctx)
-		j.Run(t, ctx)
-		t.Cleanup(func() { j.Cleanup(t) })
-		j.WaitUntilRunning(t, ctx)
-		running = append(running, j)
-
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("DriveRetry", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(j.GRPCConn(t, ctx), logger.New(t))
-		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
-
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Greater(c, d.workflow.PlacementVersion(t, ctx), version)
-		}, time.Second*15, time.Millisecond*10)
+		d.workflow.Join(t, ctx, j, registry)
+		running = append(running, j)
 	}
 
 	for _, joiner := range d.joiners {

@@ -15,6 +15,7 @@ package lock
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -239,4 +240,141 @@ func Test_MaxStackDepthRejectedCallReleasesDepth(t *testing.T) {
 	_, rel, err := l.LockRequest(ctx, internalv1pb.NewInternalInvokeRequest("foo"))
 	require.NoError(t, err, "actor lock stuck after a rejected reentrant call")
 	rel()
+}
+
+func Test_CancelQueuedDoesNotReleaseRunning(t *testing.T) {
+	t.Parallel()
+
+	for _, reentrancy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reentrancy=%t", reentrancy), func(t *testing.T) {
+			t.Parallel()
+
+			store := reentrancystore.New()
+			store.Store("foobar", config.ReentrancyConfig{Enabled: reentrancy})
+			l := New(Options{ConfigStore: store, ActorType: "foobar"})
+
+			_, release1, err := l.LockRequest(t.Context(), internalv1pb.NewInternalInvokeRequest("foo"))
+			require.NoError(t, err)
+
+			acquired := make(chan error, 1)
+			go func() {
+				_, release, err := l.LockRequest(t.Context(), internalv1pb.NewInternalInvokeRequest("foo"))
+				acquired <- err
+				if err == nil {
+					release()
+				}
+			}()
+			waitLen(t, l, 2)
+
+			errCh := make(chan error, 3)
+			cancels := make([]context.CancelFunc, 3)
+			for i := range cancels {
+				ctx, cancel := context.WithCancel(t.Context())
+				cancels[i] = cancel
+				go func() {
+					_, _, err := l.LockRequest(ctx, internalv1pb.NewInternalInvokeRequest("foo"))
+					errCh <- err
+				}()
+			}
+			waitLen(t, l, 5)
+
+			for _, cancel := range cancels {
+				cancel()
+			}
+			for range cancels {
+				select {
+				case err := <-errCh:
+					require.ErrorIs(t, err, context.Canceled)
+				case <-time.After(time.Second):
+					require.Fail(t, "cancelled request did not return")
+				}
+			}
+
+			select {
+			case <-acquired:
+				require.Fail(t, "queued request acquired the lock while the running turn still holds it")
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			release1()
+			select {
+			case err := <-acquired:
+				require.NoError(t, err)
+			case <-time.After(time.Second):
+				require.Fail(t, "queued request did not acquire the lock after release")
+			}
+			waitLen(t, l, 0)
+		})
+	}
+}
+
+func Test_CancelQueuedReentrantRetrySameID(t *testing.T) {
+	t.Parallel()
+
+	store := reentrancystore.New()
+	store.Store("foobar", config.ReentrancyConfig{Enabled: true})
+	l := New(Options{ConfigStore: store, ActorType: "foobar"})
+
+	_, release1, err := l.LockRequest(t.Context(), internalv1pb.NewInternalInvokeRequest("foo"))
+	require.NoError(t, err)
+
+	req := internalv1pb.NewInternalInvokeRequest("foo")
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() {
+		_, _, err := l.LockRequest(ctx, req)
+		errCh <- err
+	}()
+	waitLen(t, l, 2)
+	cancel()
+	select {
+	case err := <-errCh:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		require.Fail(t, "cancelled request did not return")
+	}
+
+	acquired := make(chan error, 1)
+	go func() {
+		_, release, err := l.LockRequest(t.Context(), req)
+		acquired <- err
+		if err == nil {
+			release()
+		}
+	}()
+
+	select {
+	case <-acquired:
+		require.Fail(t, "retried request acquired the lock while the running turn still holds it")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock <- struct{}{}
+		var depths []int
+		l.inflights.Range(func(v *inflight) bool {
+			depths = append(depths, v.depth)
+			return true
+		})
+		<-l.lock
+		assert.Equal(c, []int{1, 1}, depths)
+	}, time.Second*5, time.Millisecond*10)
+
+	release1()
+	select {
+	case err := <-acquired:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		require.Fail(t, "retried request did not acquire the lock after release")
+	}
+	waitLen(t, l, 0)
+}
+
+func waitLen(t *testing.T, l *Lock, n int) {
+	t.Helper()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock <- struct{}{}
+		assert.Equal(c, n, l.inflights.Len())
+		<-l.lock
+	}, time.Second*5, time.Millisecond*10)
 }
