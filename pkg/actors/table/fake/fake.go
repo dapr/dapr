@@ -24,6 +24,11 @@ import (
 type Fake struct {
 	closeFn                  func() error
 	typesFn                  func() []string
+	reminderTypesFn          func() []string
+	setReminderDeliveryFn    func(bool, ...string)
+	subscribeReminderTypesFn func(context.Context) <-chan struct{}
+	drainActorTypesFn        func(...string)
+	completeDrainsFn         func(context.Context, func(string) bool)
 	isActorTypeHostedFn      func(string) bool
 	getOrCreateFn            func(context.Context, string, string) (targets.Interface, error)
 	actorExistsFn            func(string, string) bool
@@ -41,6 +46,11 @@ func New() *Fake {
 	return &Fake{
 		closeFn:                  func() error { return nil },
 		typesFn:                  func() []string { return nil },
+		reminderTypesFn:          func() []string { return nil },
+		setReminderDeliveryFn:    func(bool, ...string) {},
+		subscribeReminderTypesFn: func(context.Context) <-chan struct{} { return nil },
+		drainActorTypesFn:        func(...string) {},
+		completeDrainsFn:         func(context.Context, func(string) bool) {},
 		isActorTypeHostedFn:      func(string) bool { return false },
 		getOrCreateFn:            func(context.Context, string, string) (targets.Interface, error) { return nil, nil },
 		actorExistsFn:            func(string, string) bool { return false },
@@ -57,6 +67,29 @@ func New() *Fake {
 
 func (f *Fake) WithClose(fn func() error) *Fake    { f.closeFn = fn; return f }
 func (f *Fake) WithTypes(fn func() []string) *Fake { f.typesFn = fn; return f }
+
+func (f *Fake) WithReminderTypes(fn func() []string) *Fake { f.reminderTypesFn = fn; return f }
+
+func (f *Fake) WithSetReminderDelivery(fn func(bool, ...string)) *Fake {
+	f.setReminderDeliveryFn = fn
+	return f
+}
+
+func (f *Fake) WithDrainActorTypes(fn func(...string)) *Fake {
+	f.drainActorTypesFn = fn
+	return f
+}
+
+func (f *Fake) WithCompleteDrains(fn func(context.Context, func(string) bool)) *Fake {
+	f.completeDrainsFn = fn
+	return f
+}
+
+func (f *Fake) WithSubscribeToReminderTypeUpdates(fn func(context.Context) <-chan struct{}) *Fake {
+	f.subscribeReminderTypesFn = fn
+	return f
+}
+
 func (f *Fake) WithIsActorTypeHosted(fn func(string) bool) *Fake {
 	f.isActorTypeHostedFn = fn
 	return f
@@ -100,6 +133,7 @@ func (f *Fake) WithResumeHosting(fn func()) *Fake {
 
 func (f *Fake) Close() error                            { return f.closeFn() }
 func (f *Fake) Types() []string                         { return f.typesFn() }
+func (f *Fake) ReminderTypes() []string                 { return f.reminderTypesFn() }
 func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHostedFn(actorType) }
 func (f *Fake) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
 	return f.getOrCreateFn(ctx, actorType, actorID)
@@ -121,6 +155,19 @@ func (f *Fake) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReques
 	return f.haltNonHostedFn(ctx, fn)
 }
 func (f *Fake) Len() map[string]int { return f.lenFn() }
+
+func (f *Fake) SetReminderDelivery(enabled bool, actorTypes ...string) {
+	f.setReminderDeliveryFn(enabled, actorTypes...)
+}
+
+func (f *Fake) SubscribeToReminderTypeUpdates(ctx context.Context) <-chan struct{} {
+	return f.subscribeReminderTypesFn(ctx)
+}
+
+func (f *Fake) DrainActorTypes(actorTypes ...string) { f.drainActorTypesFn(actorTypes...) }
+func (f *Fake) CompleteDrains(ctx context.Context, placed func(string) bool) {
+	f.completeDrainsFn(ctx, placed)
+}
 
 func (f *Fake) SuspendHosting(ctx context.Context) error { return f.suspendHostingFn(ctx) }
 func (f *Fake) ResumeHosting()                           { f.resumeHostingFn() }
