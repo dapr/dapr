@@ -26,8 +26,10 @@ spec:
   # consumer configuration: topic and consumer group
   - name: topics
     value: resiliency-binding-grpc
+  # Not shared with the bindings tests: a shared group rebalances every
+  # member whenever either package starts a consumer.
   - name: consumerGroup
-    value: group1
+    value: resiliency
   - name: route
     value: /resiliencybindinggrpc
   # publisher configuration: topic
