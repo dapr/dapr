@@ -16,6 +16,8 @@ package workflow
 import (
 	"context"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +39,51 @@ func (w *Workflow) HostsActorType(c assert.TestingT, ctx context.Context, index 
 	_, hosted := w.DaprN(index).ActiveActorCount(c, ctx, actorType)
 	return hosted
 }
+
+// WatchActorTypeHosted polls, in the background, whether the daprd at index
+// hosts actorType, until the returned unhosted is called or the test ends.
+// unhosted stops the poll, waits for it, and reports whether any poll found
+// actorType not hosted. A poll whose metadata read failed, as one cut short
+// by the watch's own end, counts for nothing. Call unhosted once the window
+// to watch has passed; the test's cleanup stops a watch left running.
+func (w *Workflow) WatchActorTypeHosted(t *testing.T, ctx context.Context, index int, actorType string) (unhosted func() bool) {
+	t.Helper()
+
+	wctx, cancel := context.WithCancel(ctx)
+	var seen atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			var rerr readErrors
+			if !w.HostsActorType(&rerr, wctx, index, actorType) && !rerr.failed {
+				seen.Store(true)
+			}
+			select {
+			case <-wctx.Done():
+				return
+			case <-time.After(time.Millisecond * 10):
+			}
+		}
+	}()
+
+	stop := sync.OnceFunc(func() {
+		cancel()
+		<-done
+	})
+	t.Cleanup(stop)
+
+	return func() bool {
+		stop()
+		return seen.Load()
+	}
+}
+
+// readErrors records whether a read failed, for a background poll which
+// must not fail the test on a read cut short by its own end.
+type readErrors struct{ failed bool }
+
+func (r *readErrors) Errorf(string, ...any) { r.failed = true }
 
 // WaitForActorTypePlaced waits until the daprd at index hosts actorType, with
 // placed, or no longer does, and until the placement tables the daprds

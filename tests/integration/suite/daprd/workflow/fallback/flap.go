@@ -15,7 +15,6 @@ package fallback
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,19 +68,7 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	// Watch the daprd without a worker throughout the flapping.
-	var unhosted atomic.Bool
-	wctx, wcancel := context.WithCancel(ctx)
-	watched := make(chan struct{})
-	go func() {
-		defer close(watched)
-		for wctx.Err() == nil {
-			var rerr readErrors
-			if !f.workflow.HostsActorType(&rerr, wctx, 1, workflowType) && !rerr.failed {
-				unhosted.Store(true)
-			}
-			time.Sleep(time.Millisecond * 10)
-		}
-	}()
+	unhosted := f.workflow.WatchActorTypeHosted(t, ctx, 1, workflowType)
 
 	executorType := f.workflow.ExecutorActorType(0)
 	mgmt := f.workflow.ManagementClientN(t, ctx, 1)
@@ -114,9 +101,7 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 		f.waitUnlocked(t, ctx, unlocks)
 	}
 
-	wcancel()
-	<-watched
-	assert.False(t, unhosted.Load(), "the daprd without a worker gave the workflow actor types up while the worker flapped")
+	assert.False(t, unhosted(), "the daprd without a worker gave the workflow actor types up while the worker flapped")
 
 	// A worker which stays: the fallback host gives the types up, but not
 	// before the damping period.
@@ -155,9 +140,3 @@ func (f *flap) waitUnlocked(t *testing.T, ctx context.Context, from float64) {
 		assert.Greater(c, f.unlocks(c, ctx), from)
 	}, time.Second*10, time.Millisecond*10)
 }
-
-// readErrors records whether a read failed, for a background poll which
-// must not fail the test on a read cut short by its own end.
-type readErrors struct{ failed bool }
-
-func (r *readErrors) Errorf(string, ...any) { r.failed = true }

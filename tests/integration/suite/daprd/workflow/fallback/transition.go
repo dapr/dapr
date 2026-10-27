@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,9 +102,9 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		assert.True(c, hosts(c, 1))
 	}, time.Second*10, time.Millisecond*10)
 
-	// started counts the instances started and raised through each daprd.
-	var started [2]atomic.Int64
-	stop := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
+	// Goroutines 0 and 2 start instances through daprd 0, 1 and 3 through
+	// daprd 1.
+	load := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 		m := mgmt[g%2]
 
 		// A start time skips the executor's wait for the instance to
@@ -119,26 +118,15 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(t, err, "start %s", id) {
 			return "", false
 		}
-		if assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id) {
-			started[g%2].Add(1)
-		}
+		assert.NoError(t, m.RaiseEvent(octx, id, "go", api.WithEventPayload(string(id))), "raise %s", id)
 		return id, true
 	})
 
-	// waitStarted waits until a few more instances have been started and
-	// raised through each daprd, with cond holding at the end.
-	waitStarted := func(cond func(c assert.TestingT) bool) {
-		t.Helper()
-		from := [2]int64{started[0].Load(), started[1].Load()}
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.True(c, cond(c))
-			assert.GreaterOrEqual(c, started[0].Load(), from[0]+4)
-			assert.GreaterOrEqual(c, started[1].Load(), from[1]+4)
-		}, time.Second*20, time.Millisecond*10)
-	}
-
-	// No worker anywhere: both daprds are fallback hosts.
-	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && hosts(c, 1) })
+	// No worker anywhere: both daprds are fallback hosts while the load runs
+	// through each.
+	load.WaitStarted(t, 2)
+	assert.True(t, hosts(t, 0))
+	assert.True(t, hosts(t, 1))
 
 	// The first worker connects; the other daprd gives the types up after
 	// the damping period, and the load runs against the daprd with the
@@ -148,7 +136,9 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.False(c, hosts(c, 1))
 	}, time.Second*20, time.Millisecond*10)
-	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && !hosts(c, 1) })
+	load.WaitStarted(t, 2)
+	assert.True(t, hosts(t, 0))
+	assert.False(t, hosts(t, 1))
 
 	// The last worker leaves: both daprds are fallback hosts again, the one
 	// it left at once, the other after the settle period.
@@ -157,9 +147,11 @@ func (tr *transition) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, hosts(c, 1))
 	}, time.Second*10, time.Millisecond*10)
-	waitStarted(func(c assert.TestingT) bool { return hosts(c, 0) && hosts(c, 1) })
+	load.WaitStarted(t, 2)
+	assert.True(t, hosts(t, 0))
+	assert.True(t, hosts(t, 1))
 
-	ids := stop()
+	ids := load.Stop()
 	require.NotEmpty(t, ids)
 
 	tr.workflow.ConnectWorkerN(t, ctx, 0, tr.workflow.RegistryN(0))

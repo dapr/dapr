@@ -15,53 +15,94 @@ package workflow
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/durabletask-go/api"
 )
 
+// Load is a load of instance starts which StartConcurrently runs on several
+// goroutines.
+type Load struct {
+	done chan struct{}
+	once sync.Once
+	wg   sync.WaitGroup
+
+	lock sync.Mutex
+	ids  []api.InstanceID
+
+	// recorded counts the instances each goroutine has recorded.
+	recorded []atomic.Int64
+}
+
 // StartConcurrently runs body in a loop on each of n goroutines, with the
-// goroutine and the iteration numbers, until the returned stop is called.
-// When body returns true, the instance ID it returns is recorded; stop waits
-// for the goroutines and returns the recorded IDs. The goroutines are also
-// stopped and waited for in t's cleanup, so a failed assertion before stop
-// does not leave them running past the test.
-func StartConcurrently(t *testing.T, n int, body func(g, i int) (api.InstanceID, bool)) (stop func() []api.InstanceID) {
+// goroutine and the iteration numbers, until the returned load's Stop is
+// called. When body returns true, the instance ID it returns is recorded.
+// The goroutines are also stopped and waited for in t's cleanup, so a failed
+// assertion before Stop does not leave them running past the test.
+func StartConcurrently(t *testing.T, n int, body func(g, i int) (api.InstanceID, bool)) *Load {
 	t.Helper()
 
-	done := make(chan struct{})
-	var once sync.Once
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-	var ids []api.InstanceID
+	l := &Load{
+		done:     make(chan struct{}),
+		recorded: make([]atomic.Int64, n),
+	}
 	for g := range n {
-		wg.Go(func() {
+		l.wg.Go(func() {
 			for i := 0; ; i++ {
 				select {
-				case <-done:
+				case <-l.done:
 					return
 				default:
 				}
 
 				if id, ok := body(g, i); ok {
-					lock.Lock()
-					ids = append(ids, id)
-					lock.Unlock()
+					l.lock.Lock()
+					l.ids = append(l.ids, id)
+					l.lock.Unlock()
+					l.recorded[g].Add(1)
 				}
 			}
 		})
 	}
 
-	halt := func() {
-		once.Do(func() {
-			close(done)
-			wg.Wait()
-		})
-	}
-	t.Cleanup(halt)
+	t.Cleanup(l.halt)
 
-	return func() []api.InstanceID {
-		halt()
-		return ids
+	return l
+}
+
+// Stop stops the goroutines, waits for them, and returns the recorded
+// instance IDs.
+func (l *Load) Stop() []api.InstanceID {
+	l.halt()
+	return l.ids
+}
+
+// WaitStarted waits until each goroutine has recorded n more instances since
+// the call, so the load is seen to run on through every goroutine. The wait
+// allows a goroutine a call held up for several seconds, as by a drain.
+func (l *Load) WaitStarted(t *testing.T, n int) {
+	t.Helper()
+
+	from := make([]int64, len(l.recorded))
+	for g := range l.recorded {
+		from[g] = l.recorded[g].Load()
 	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for g := range l.recorded {
+			assert.GreaterOrEqual(c, l.recorded[g].Load(), from[g]+int64(n), "instances recorded by goroutine %d", g)
+		}
+	}, time.Second*20, time.Millisecond*10)
+}
+
+// halt stops the goroutines and waits for them, once.
+func (l *Load) halt() {
+	l.once.Do(func() {
+		close(l.done)
+		l.wg.Wait()
+	})
 }

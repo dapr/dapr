@@ -16,7 +16,6 @@ package fallback
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,8 +73,7 @@ func (r *reconnectdrain) Run(t *testing.T, ctx context.Context) {
 		r.workflow.ManagementClientN(t, ctx, 1),
 	}
 
-	var started atomic.Int64
-	stop := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
+	load := workflow.StartConcurrently(t, 4, func(g, n int) (api.InstanceID, bool) {
 		m := mgmt[g%2]
 		// A start time skips the executor's wait for the instance to
 		// start, as the worker may be gone before the instance starts.
@@ -86,29 +84,20 @@ func (r *reconnectdrain) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(t, err, "start %s", id) {
 			return "", false
 		}
-		if assert.NoError(t, m.RaiseEvent(octx, id, "go"), "raise %s", id) {
-			started.Add(1)
-		}
+		assert.NoError(t, m.RaiseEvent(octx, id, "go"), "raise %s", id)
 		return id, true
 	})
-	waitStarted := func() {
-		t.Helper()
-		from := started.Load()
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.GreaterOrEqual(c, started.Load(), from+4)
-		}, time.Second*10, time.Millisecond*10)
-	}
 
 	const rounds = 5
 	for range rounds {
-		waitStarted()
+		load.WaitStarted(t, 1)
 		worker.Disconnect(t)
 		r.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
 		worker = r.workflow.ConnectWorkerN(t, ctx, 0, r.workflow.RegistryN(0))
 		r.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 	}
-	waitStarted()
-	ids := stop()
+	load.WaitStarted(t, 1)
+	ids := load.Stop()
 	require.NotEmpty(t, ids)
 
 	// Both daprds host the types with their workers.

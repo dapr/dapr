@@ -15,7 +15,6 @@ package fallback
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,19 +92,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	// Watch the fallback host throughout the restart.
-	var unhosted atomic.Bool
-	wctx, wcancel := context.WithCancel(ctx)
-	watched := make(chan struct{})
-	go func() {
-		defer close(watched)
-		for wctx.Err() == nil {
-			var rerr readErrors
-			if !p.workflow.HostsActorType(&rerr, wctx, 0, workflowType) && !rerr.failed {
-				unhosted.Store(true)
-			}
-			time.Sleep(time.Millisecond * 10)
-		}
-	}()
+	unhosted := p.workflow.WatchActorTypeHosted(t, ctx, 0, workflowType)
 
 	placementIs := func(state string) {
 		t.Helper()
@@ -149,9 +136,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	afterID, err := mgmt.ScheduleNewWorkflow(sctx, "wf", api.WithInstanceID("fallback-placementrestart-after"), api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
-	wcancel()
-	<-watched
-	assert.False(t, unhosted.Load(), "the fallback host gave the workflow actor types up across the placement restart")
+	assert.False(t, unhosted(), "the fallback host gave the workflow actor types up across the placement restart")
 
 	p.workflow.ConnectWorker(t, ctx, p.workflow.Registry())
 	fworkflow.WaitForAllCompleted(t, ctx, mgmt, beforeID, afterID)
