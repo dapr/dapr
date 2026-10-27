@@ -116,6 +116,12 @@ func (t *Tracker) SetExecutorAvailable(available bool) {
 	wg.Wait()
 }
 
+// ExecutorAvailable returns the executor connectivity last set by
+// SetExecutorAvailable; true until it is first called.
+func (t *Tracker) ExecutorAvailable() bool {
+	return t.available.Load()
+}
+
 // OnWorkflowTaskCompletion implements Backend. Registrations made while no
 // executor is available are cancelled immediately: they can never be
 // completed, and leaving them parked recreates the unregister deadlock.
