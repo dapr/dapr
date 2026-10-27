@@ -14,15 +14,19 @@ limitations under the License.
 package placement
 
 import (
+	"context"
+
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	"github.com/dapr/kit/events/loop"
 )
 
 // remoteHosts tells WatchRemoteHosts subscribers whether a daprd other than
 // this one hosts an actor type, as the placement tables show it. Every daprd
 // receives the tables of its namespace whether or not it hosts actor types.
 // Owned by the placement loop, so it needs no lock, and it outlives stream
-// sessions: the last answer survives stream loss. The zero value is ready to
-// use.
+// sessions: the last answer survives stream loss. It owns the subscriber
+// channels: it creates them, is their only sender, and their only closer. The
+// zero value is ready to use.
 type remoteHosts struct {
 	// known is set once a dissemination round completed with an answer.
 	known bool
@@ -35,7 +39,7 @@ type remoteHosts struct {
 	// rounds still in progress covered them.
 	unsettled map[string]struct{}
 
-	watchers map[string]map[*loops.RemoteHostsCh]struct{}
+	watchers map[string]map[chan bool]struct{}
 }
 
 // answer returns whether a daprd other than this one hosts actorType, and
@@ -50,25 +54,34 @@ func (r *remoteHosts) answer(actorType string) (bool, bool) {
 	return r.remote[actorType], true
 }
 
-// watch subscribes ch to actorType, and sends it the answer at once if it is
-// known.
-func (r *remoteHosts) watch(actorType string, ch *loops.RemoteHostsCh) {
+// watch creates a subscriber channel for e.ActorType, sends it the answer at
+// once if it is known, and replies with it on e.Resp. Once e.Ctx is done, an
+// UnwatchRemoteHosts enqueued on placeLoop closes it. Should the loop have
+// stopped by then, the unwatch is never handled, and close has closed the
+// channel already.
+func (r *remoteHosts) watch(e *loops.WatchRemoteHosts, placeLoop loop.Interface[loops.EventPlace]) {
+	ch := make(chan bool, 1)
 	if r.watchers == nil {
-		r.watchers = make(map[string]map[*loops.RemoteHostsCh]struct{})
+		r.watchers = make(map[string]map[chan bool]struct{})
 	}
-	if r.watchers[actorType] == nil {
-		r.watchers[actorType] = make(map[*loops.RemoteHostsCh]struct{})
+	if r.watchers[e.ActorType] == nil {
+		r.watchers[e.ActorType] = make(map[chan bool]struct{})
 	}
-	r.watchers[actorType][ch] = struct{}{}
+	r.watchers[e.ActorType][ch] = struct{}{}
 
-	if remote, ok := r.answer(actorType); ok {
+	if remote, ok := r.answer(e.ActorType); ok {
 		send(ch, remote)
 	}
+
+	context.AfterFunc(e.Ctx, func() {
+		placeLoop.Enqueue(&loops.UnwatchRemoteHosts{ActorType: e.ActorType, Ch: ch})
+	})
+	e.Resp <- ch
 }
 
 // unwatch ends the subscription of ch and closes it. It is a no-op if ch was
 // already closed by close.
-func (r *remoteHosts) unwatch(actorType string, ch *loops.RemoteHostsCh) {
+func (r *remoteHosts) unwatch(actorType string, ch chan bool) {
 	chs, ok := r.watchers[actorType]
 	if !ok {
 		return
@@ -80,7 +93,7 @@ func (r *remoteHosts) unwatch(actorType string, ch *loops.RemoteHostsCh) {
 	if len(chs) == 0 {
 		delete(r.watchers, actorType)
 	}
-	ch.Close()
+	close(ch)
 }
 
 // roundCompleted records what a completed round showed, and sends the
@@ -127,7 +140,7 @@ func (r *remoteHosts) roundCompleted(e *loops.RoundCompleted) {
 func (r *remoteHosts) close() {
 	for _, chs := range r.watchers {
 		for ch := range chs {
-			ch.Close()
+			close(ch)
 		}
 	}
 	r.watchers = nil
@@ -135,11 +148,11 @@ func (r *remoteHosts) close() {
 
 // send replaces an answer the receiver has not taken yet, so a slow receiver
 // gets the latest answer only. The placement loop is the only sender on ch,
-// so the send cannot block.
-func send(ch *loops.RemoteHostsCh, remote bool) {
+// and ch is still open while it is in watchers, so the send cannot block.
+func send(ch chan bool, remote bool) {
 	select {
-	case <-ch.C:
+	case <-ch:
 	default:
 	}
-	ch.C <- remote
+	ch <- remote
 }

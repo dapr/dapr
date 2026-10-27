@@ -173,6 +173,16 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 }
 
 func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
+	err := p.handle(ctx, event)
+	if err != nil {
+		// The loop stops on an error, so Shutdown is never handled: close the
+		// WatchRemoteHosts channels here, as nothing else would.
+		p.remote.close()
+	}
+	return err
+}
+
+func (p *placement) handle(ctx context.Context, event loops.EventPlace) error {
 	switch e := event.(type) {
 	case *loops.StreamOrder:
 		p.handleOrder(e)
@@ -193,7 +203,7 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 			p.dissLoop.Enqueue(e)
 		}
 	case *loops.WatchRemoteHosts:
-		p.remote.watch(e.ActorType, e.Ch)
+		p.remote.watch(e, p.loop)
 	case *loops.UnwatchRemoteHosts:
 		p.remote.unwatch(e.ActorType, e.Ch)
 	case *loops.RoundCompleted:

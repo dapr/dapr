@@ -16,7 +16,6 @@ package loops
 import (
 	"context"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -150,46 +149,24 @@ type ReloadReminderTypes struct {
 	*dissbase
 }
 
-// WatchRemoteHosts subscribes Ch to whether a daprd other than this one
-// hosts ActorType. The placement loop is the only sender on Ch, and closes it
-// on the matching UnwatchRemoteHosts or at shutdown.
+// WatchRemoteHosts asks the placement loop for a channel which receives
+// whether a daprd other than this one hosts ActorType. The loop creates the
+// channel and replies with it on Resp, which must have room for the reply.
+// The loop is the only sender on the channel and its only closer: it closes
+// it once Ctx is done, or at shutdown.
 type WatchRemoteHosts struct {
 	*placebase
 	ActorType string
-	Ch        *RemoteHostsCh
+	Ctx       context.Context
+	Resp      chan<- chan bool
 }
 
-// UnwatchRemoteHosts ends the WatchRemoteHosts subscription of Ch.
+// UnwatchRemoteHosts ends the WatchRemoteHosts subscription of Ch and closes
+// Ch. The placement loop enqueues it itself once the Ctx of the watch is done.
 type UnwatchRemoteHosts struct {
 	*placebase
 	ActorType string
-	Ch        *RemoteHostsCh
-}
-
-// RemoteHostsCh is the channel of a WatchRemoteHosts subscription. Close is
-// idempotent, so the channel can also be closed once the placement loop no
-// longer runs, whether or not the loop closed it.
-type RemoteHostsCh struct {
-	C chan bool
-
-	once    sync.Once
-	onClose func()
-}
-
-// NewRemoteHostsCh returns an open RemoteHostsCh. onClose, if not nil, is
-// called once the channel is closed.
-func NewRemoteHostsCh(onClose func()) *RemoteHostsCh {
-	return &RemoteHostsCh{C: make(chan bool, 1), onClose: onClose}
-}
-
-// Close closes C, once.
-func (c *RemoteHostsCh) Close() {
-	c.once.Do(func() {
-		close(c.C)
-		if c.onClose != nil {
-			c.onClose()
-		}
-	})
+	Ch        chan bool
 }
 
 // RoundCompleted tells the placement loop what the installed tables show

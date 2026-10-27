@@ -22,24 +22,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
-	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/kit/events/loop"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
 
-func TestWatchRemoteHostsAfterRun(t *testing.T) {
-	// newPlacement returns a placement whose loop drops every event, as a
-	// closed loop does, but hands the watches to onWatch.
-	newPlacement := func(onWatch func(*loops.WatchRemoteHosts)) *placement {
-		return &placement{
-			table:   tablefake.New(),
-			watches: make(map[*loops.RemoteHostsCh]struct{}),
-			loop: loopfake.New[loops.EventPlace]().WithEnqueue(func(e loops.EventPlace) {
-				if w, ok := e.(*loops.WatchRemoteHosts); ok && onWatch != nil {
-					onWatch(w)
-				}
-			}),
-		}
-	}
+type nopHandler struct{}
+
+func (nopHandler) Handle(context.Context, loops.EventPlace) error { return nil }
+
+func TestWatchRemoteHosts(t *testing.T) {
 	closed := func(t *testing.T, ch <-chan bool) {
 		t.Helper()
 		select {
@@ -50,34 +41,45 @@ func TestWatchRemoteHostsAfterRun(t *testing.T) {
 		}
 	}
 
-	t.Run("a watch the loop never answered is closed once Run returns", func(t *testing.T) {
-		p := newPlacement(nil)
-		ch := p.WatchRemoteHosts(t.Context(), "a")
+	t.Run("a watch returns the channel the loop replies with", func(t *testing.T) {
+		want := make(chan bool, 1)
+		p := &placement{
+			loop: loopfake.New[loops.EventPlace]().WithEnqueue(func(e loops.EventPlace) {
+				w, ok := e.(*loops.WatchRemoteHosts)
+				require.True(t, ok)
+				assert.Equal(t, "a", w.ActorType)
+				w.Resp <- want
+			}),
+		}
+		assert.Equal(t, (<-chan bool)(want), p.WatchRemoteHosts(t.Context(), "a"))
+	})
+
+	t.Run("a watch after placement stopped returns a closed channel once ctx is done", func(t *testing.T) {
+		// A closed loop drops what is enqueued on it, so the watch is never
+		// handled.
+		l := loop.New[loops.EventPlace](1).NewLoop(nopHandler{})
+		errCh := make(chan error, 1)
+		go func() { errCh <- l.Run(t.Context()) }()
+		l.Close(&loops.Shutdown{})
+		require.NoError(t, <-errCh)
+
+		p := &placement{loop: l}
+		ctx, cancel := context.WithCancel(t.Context())
+		chCh := make(chan (<-chan bool), 1)
+		go func() { chCh <- p.WatchRemoteHosts(ctx, "a") }()
+
 		select {
-		case <-ch:
-			require.Fail(t, "channel closed before Run returned")
-		default:
+		case <-chCh:
+			require.Fail(t, "watch returned before ctx was done")
+		case <-time.After(100 * time.Millisecond):
 		}
 
-		require.NoError(t, p.Run(t.Context()))
-		closed(t, ch)
-		assert.Empty(t, p.watches)
-	})
-
-	t.Run("a watch after Run returned gets a closed channel", func(t *testing.T) {
-		p := newPlacement(nil)
-		require.NoError(t, p.Run(t.Context()))
-		closed(t, p.WatchRemoteHosts(t.Context(), "a"))
-		assert.Empty(t, p.watches)
-	})
-
-	t.Run("a channel the loop closed is not closed again", func(t *testing.T) {
-		p := newPlacement(func(w *loops.WatchRemoteHosts) { w.Ch.Close() })
-		ctx, cancel := context.WithCancel(t.Context())
-		ch := p.WatchRemoteHosts(ctx, "a")
-		closed(t, ch)
 		cancel()
-		assert.Empty(t, p.watches)
-		require.NoError(t, p.Run(t.Context()))
+		select {
+		case ch := <-chCh:
+			closed(t, ch)
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "watch did not return once ctx was done")
+		}
 	})
 }

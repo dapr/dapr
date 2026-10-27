@@ -20,7 +20,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -67,7 +66,10 @@ type Interface interface {
 	// of the next dissemination round, then whenever that changes. Every
 	// daprd receives the tables of its namespace whether or not it hosts
 	// actors. The last answer is kept while the placement stream is down.
-	// The channel is closed once ctx is done, or when placement stops.
+	// It blocks until the placement loop handles the watch, or ctx is done.
+	// The channel is closed once ctx is done, or when placement stops. A
+	// watch made after placement stopped is never handled: it returns a
+	// closed channel once ctx is done.
 	WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool
 }
 
@@ -111,13 +113,6 @@ type placement struct {
 	ready    *atomic.Bool
 
 	loop loop.Interface[loops.EventPlace]
-
-	// watches are the WatchRemoteHosts channels not closed yet. Once Run
-	// returned, the placement loop no longer runs to answer or close them,
-	// so stopped is set and they are closed.
-	watchLock sync.Mutex
-	watches   map[*loops.RemoteHostsCh]struct{}
-	stopped   bool
 }
 
 func New(opts Options) (Interface, error) {
@@ -242,7 +237,6 @@ func New(opts Options) (Interface, error) {
 		hostname: opts.Hostname,
 		port:     strconv.Itoa(opts.Port),
 		table:    opts.Table,
-		watches:  make(map[*loops.RemoteHostsCh]struct{}),
 		loop: loopsplacement.New(loopsplacement.Options{
 			Ready:      &ready,
 			ActorTable: opts.Table,
@@ -286,7 +280,6 @@ func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
 	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
-	defer p.closeWatches()
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -386,41 +379,23 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 }
 
 func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
-	var ch *loops.RemoteHostsCh
-	ch = loops.NewRemoteHostsCh(func() {
-		p.watchLock.Lock()
-		delete(p.watches, ch)
-		p.watchLock.Unlock()
+	resp := make(chan chan bool, 1)
+	p.loop.Enqueue(&loops.WatchRemoteHosts{
+		ActorType: actorType,
+		Ctx:       ctx,
+		Resp:      resp,
 	})
 
-	p.watchLock.Lock()
-	if p.stopped {
-		p.watchLock.Unlock()
-		ch.Close()
-		return ch.C
-	}
-	p.watches[ch] = struct{}{}
-	p.watchLock.Unlock()
-
-	p.loop.Enqueue(&loops.WatchRemoteHosts{ActorType: actorType, Ch: ch})
-	context.AfterFunc(ctx, func() {
-		p.loop.Enqueue(&loops.UnwatchRemoteHosts{ActorType: actorType, Ch: ch})
-	})
-	return ch.C
-}
-
-// closeWatches closes the WatchRemoteHosts channels once Run returned: the
-// placement loop no longer runs, so a watch or unwatch enqueued since was
-// dropped, and nothing else would close them.
-func (p *placement) closeWatches() {
-	p.watchLock.Lock()
-	p.stopped = true
-	watches := p.watches
-	p.watches = make(map[*loops.RemoteHostsCh]struct{})
-	p.watchLock.Unlock()
-
-	for ch := range watches {
-		ch.Close()
+	select {
+	case ch := <-resp:
+		return ch
+	case <-ctx.Done():
+		// The loop has not handled the watch, and may never: it has stopped.
+		// Should it handle it still, it closes the channel it replies with,
+		// as ctx is done.
+		ch := make(chan bool)
+		close(ch)
+		return ch
 	}
 }
 
