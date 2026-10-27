@@ -463,6 +463,12 @@ func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Met
 	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
+// ScalingMetrics returns the metrics scraped from the scaling metrics
+// endpoint.
+func (s *Scheduler) ScalingMetrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
+	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics/scaling", s.MetricsAddress()))
+}
+
 func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
 	return metrics.NewWithLabels(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
