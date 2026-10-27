@@ -16,7 +16,9 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
+	"github.com/dapr/dapr/pkg/messages"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -399,4 +402,35 @@ func Test_onCompletion(t *testing.T) {
 		}
 		assert.Equal(t, "genuine", (<-respCh).GetResult().GetValue())
 	})
+}
+
+// Test_cancelTaskWithNoExecutorHost covers a cancellation while no daprd
+// hosts the executor actor type: there is no executor actor to carry it, so
+// it settles at once instead of calling one through the router.
+func Test_cancelTaskWithNoExecutorHost(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	actorsFake := actorsfake.New().
+		WithRouter(func(context.Context) (router.Interface, error) {
+			return routerfake.New().
+				WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+					calls.Add(1)
+					return nil, errors.New("unexpected executor actor call")
+				}), nil
+		}).
+		WithPlacementLookupActor(func(_ context.Context, req *actorsapi.LookupActorRequest) (*actorsapi.LookupActorResponse, error) {
+			return nil, messages.ErrActorNoAddress.WithFormat(req.ActorKey())
+		})
+
+	be, err := NewClusterTasksBackend(ClusterTasksBackendOptions{
+		Actors:            actorsFake,
+		ExecutorActorType: "dapr.internal.default.test.executor",
+		Pending:           pending.New(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, be.CancelWorkflowTask(t.Context(), "unhosted"))
+	require.NoError(t, be.CancelActivityTask(t.Context(), "unhosted", 0))
+	assert.Zero(t, calls.Load())
 }

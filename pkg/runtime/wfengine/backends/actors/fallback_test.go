@@ -150,6 +150,30 @@ func TestFallbackHaltErrorTurningIntoFallbackHost(t *testing.T) {
 	}
 }
 
+// parkedDropRecorder records whether a factory was told to drop its parked
+// results.
+type parkedDropRecorder struct {
+	*fake.FakeFactory
+	dropped bool
+}
+
+func (r *parkedDropRecorder) DropParked() { r.dropped = true }
+
+// TestFallbackDropsParkedTurningIntoFallbackHost covers the executor actors of
+// a daprd turning into a fallback host: no daprd of the app has an executor
+// then, so they are told to drop what they hold rather than hand it off.
+func TestFallbackDropsParkedTurningIntoFallbackHost(t *testing.T) {
+	abe, _ := newFallbackTestBackend(t, true, true)
+	require.NoError(t, abe.RegisterHostedActors(t.Context(), t.Context(), true))
+	require.NotNil(t, abe.executorTarget)
+
+	rec := &parkedDropRecorder{FakeFactory: fake.NewFactory()}
+	abe.executorTarget = rec
+	require.NoError(t, abe.SetLocalExecutor(t.Context(), t.Context(), false))
+	assert.True(t, rec.dropped)
+	assert.Nil(t, abe.executorTarget)
+}
+
 // liveContexts is a factory context which tells which of the contexts made
 // from it with context.WithCancel are not cancelled yet: WithCancel registers
 // with the AfterFunc of a parent which has one, and stops that registration

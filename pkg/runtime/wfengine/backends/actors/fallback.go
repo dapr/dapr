@@ -144,6 +144,7 @@ func (abe *Actors) newExecutorFactory(factoryCtx context.Context) (table.ActorTy
 		cancel()
 		return table.ActorTypeFactory{}, nil, err
 	}
+	abe.executorTarget = ef.Factory
 	factories := []table.ActorTypeFactory{ef}
 	retireTogether(factories, cancel)
 	return factories[0], cancel, nil
@@ -214,6 +215,7 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 
 	// Stop the reminders first: nothing on this daprd can run them any more.
 	atable.SetReminderDelivery(false, types...)
+	abe.dropParked()
 	// A halt error comes after the executor actor type left the table: the
 	// switch is made all the same, so it is not reported as a failed one,
 	// which would make the engine give up the types it must keep hosting.
@@ -222,6 +224,17 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 	}
 	replaceCancel(&abe.executorCancel, nil)
 	return nil
+}
+
+// dropParked has the executor actors drop what they still hold once the
+// executor actor type is unregistered. The engine turns a daprd into a
+// fallback host only when no daprd of the app has an executor, so that has no
+// owner to be handed off to; see executor's DropParked.
+func (abe *Actors) dropParked() {
+	if d, ok := abe.executorTarget.(executor.ParkedDropper); ok {
+		d.DropParked()
+	}
+	abe.executorTarget = nil
 }
 
 // DrainActors gives up the workflow, activity, retention and executor actor

@@ -460,6 +460,40 @@ func Test_haltAllHandOffRetriesUntilKeyMoves(t *testing.T) {
 	assert.GreaterOrEqual(t, attempts.Load(), int32(4))
 }
 
+// Test_haltAllDropsParkedWhenTold covers a daprd turning into a fallback host:
+// no daprd of the app hosts the executor actor type any more, so a parked
+// completion or cancellation is dropped rather than handed off to an owner
+// that cannot exist.
+func Test_haltAllDropsParkedWhenTold(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	routerFake := routerfake.New().
+		WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			calls.Add(1)
+			return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, haltTestActorType)
+		})
+	f := &factory{
+		actorType: haltTestActorType,
+		actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+			return routerFake, nil
+		}),
+		deactivateCh: make(chan *executor, 10),
+		pending:      pending.New(),
+	}
+
+	_, err := f.GetOrCreate("wf9").InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("genuine")))
+	require.NoError(t, err)
+	_, err = f.GetOrCreate("wf10").InvokeMethod(t.Context(), cancelReq(TaskTypeWorkflow))
+	require.NoError(t, err)
+
+	f.DropParked()
+	require.NoError(t, f.HaltAll(t.Context()))
+
+	assert.Never(t, func() bool { return calls.Load() > 0 }, time.Second, 50*time.Millisecond,
+		"a parked result was handed off")
+}
+
 // Test_cancelAfterRetirementIsRetried covers a cancellation that reaches an
 // actor after a retirement closed it and took its snapshot. It must not be
 // recorded on the closed actor, where nothing hands it off: the caller gets a

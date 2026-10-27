@@ -38,6 +38,7 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
@@ -191,6 +192,11 @@ type Actors struct {
 	// Guarded by the engine's actor registration lock.
 	hostedCancel   context.CancelFunc
 	executorCancel context.CancelFunc
+
+	// executorTarget is the executor actor type's factory registered last
+	// under WorkflowsStagedOperations, unwrapped. Guarded by the engine's
+	// actor registration lock.
+	executorTarget targets.Factory
 }
 
 var _ backend.Backend = (*Actors)(nil)

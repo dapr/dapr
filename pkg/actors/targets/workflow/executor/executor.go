@@ -475,13 +475,18 @@ func (e *executor) halt(ctx context.Context) {
 }
 
 // retire closes the actor and hands off what was still parked on it. Every
-// retirement does: a completion that this actor accepted must not be dropped
-// with it.
+// retirement does, unless the factory drops parked results (see DropParked):
+// a completion that this actor accepted must not be dropped with it.
 func (e *executor) retire(ctx context.Context) {
 	parked, canc := e.deactivate()
-	if len(parked) > 0 || canc.taskType != "" {
-		e.handOff(ctx, parked, canc)
+	if len(parked) == 0 && canc.taskType == "" {
+		return
 	}
+	if e.dropParked.Load() {
+		log.Debugf("Executor actor '%s': dropping its parked result(s): no daprd of the app hosts the executor actor type", e.actorID)
+		return
+	}
+	e.handOff(ctx, parked, canc)
 }
 
 // deactivate closes the actor and returns what was still parked on it: the
