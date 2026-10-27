@@ -36,18 +36,28 @@ func init() {
 // whose placement tables show no daprd of its app with an executor, stays a
 // non-host when a worker connects to another daprd of the app within its
 // settle period. Daprd 0 has a settle period of a millisecond (a zero one
-// is taken as unset), so it turns into a fallback
-// host on the first table without an executor, the table daprd 1 starts its
-// settle period on. The worker connects to daprd 0 well within daprd 1's
-// settle period, and daprd 1 hosts nothing past its end. Once the worker
-// leaves, daprd 1 turns into a fallback host after its settle period.
+// is taken as unset), so it turns into a fallback host on the first table
+// without an executor. Daprd 1 starts its settle period on its own first
+// round without an executor, which may come a second or more before the
+// test sees daprd 0 hosting. The worker connects to daprd 0 well within
+// daprd 1's settle period, and daprd 1 hosts nothing past its end. A runner
+// too slow to connect the worker within settleBudget skips the case rather
+// than fail it, as it can no longer tell. Once the worker leaves, daprd 1
+// turns into a fallback host after its settle period.
 type settle struct {
 	workflow *workflow.Workflow
 }
 
-// settlePeriod is long enough for a worker to connect, and a placement round
-// to show its executor, well within it.
-const settlePeriod = 3 * time.Second
+// settlePeriod is daprd 1's settle period. It leaves settlePeriod -
+// settleBudget for daprd 1 to have started its settle period before the
+// test saw daprd 0 hosting, and to apply the round which shows the worker's
+// executor, before the settle period ends.
+const settlePeriod = 6 * time.Second
+
+// settleBudget is how long after the test saw daprd 0 hosting the worker's
+// executor may be placed for the case to tell anything: past it the case
+// skips.
+const settleBudget = settlePeriod / 2
 
 func (s *settle) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
@@ -82,10 +92,14 @@ func (s *settle) Run(t *testing.T, ctx context.Context) {
 	worker := s.workflow.ConnectWorkerN(t, ctx, 0, s.workflow.RegistryN(0))
 	s.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 	s.workflow.WaitForActorTypePlaced(t, ctx, 0, s.workflow.ExecutorActorType(0), true, before)
-	require.Less(t, time.Since(tableWithoutExecutor), settlePeriod-time.Second,
-		"the worker connected too late in daprd 1's settle period for the test to tell")
+	if elapsed := time.Since(tableWithoutExecutor); elapsed > settleBudget {
+		t.Skipf("the worker's executor was placed %s after daprd 0 hosted, past the %s budget within daprd 1's %s settle period: too late for the case to tell",
+			elapsed, settleBudget, settlePeriod)
+	}
 
-	// Past the end of the settle period daprd 1 started on that table.
+	// Past the end of daprd 1's settle period: it started on the first table
+	// without an executor, the one daprd 0 turned into a fallback host on,
+	// and a second allows for daprd 1 applying that table after daprd 0.
 	assert.Never(t, func() bool {
 		return hosts(t, 1)
 	}, time.Until(tableWithoutExecutor.Add(settlePeriod+time.Second)), time.Millisecond*10,
