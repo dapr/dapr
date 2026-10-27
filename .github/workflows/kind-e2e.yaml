@@ -282,3 +282,16 @@ jobs:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
         # Also matches the _e2e_serial.json/.xml reports from the serial pass
         path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
+
+  # Branch protection requires this job instead of each matrix leg, because
+  # leg names change whenever a matrix value does. always() makes it report
+  # failure, not skipped, when a needed job fails (skipped counts as passing).
+  required:
+    name: e2e passed
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fail if a needed job failed or was cancelled
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: exit 1
