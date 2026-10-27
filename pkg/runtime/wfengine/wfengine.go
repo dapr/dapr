@@ -339,6 +339,55 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 }
 
 func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
+	ctx, settled := wfe.countWorkItemDisconnection(ctx)
+	if settled == nil {
+		return nil
+	}
+
+	// The sweep is waited for without actorRegLock: it cancels the waiters
+	// on other daprds with calls to the executor actor, which take seconds
+	// while no daprd hosts its type, and a worker reconnecting meanwhile
+	// would wait on the lock for all of them.
+	settled()
+
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+
+	if wfe.localExecutor() {
+		// An executor connected during the sweep, and keeps the types.
+		return nil
+	}
+
+	if wfe.fallback != nil {
+		return wfe.releaseLocalExecutor(ctx)
+	}
+
+	if wfe.actorsRegistered {
+		log.Debug("Unregistering workflow actors")
+		// Reset unconditionally. A HaltAll error comes after the types left
+		// the table, so they are gone. A Table error means they are not:
+		// with ctx made non-cancellable above and a ready runtime winning
+		// in actors.waitForReady, that is only ErrActorRuntimeClosed at
+		// shutdown.
+		err := wfe.backend.UnRegisterActors(ctx)
+		wfe.actorsRegistered = false
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// countWorkItemDisconnection counts a worker leaving. When it was the last
+// executor of this daprd, it marks the executor unavailable, which starts
+// cancelling every parked work-item completion, and returns the function
+// that waits for those cancellations; nil otherwise. They are cancelled
+// BEFORE the types are unregistered: UnRegisterActors' HaltAll waits on the
+// actor turn locks those completions hold, and with no executor connected
+// nothing can ever deliver them. A turn racing in after the sweep is
+// cancelled at registration by the tracker.
+func (wfe *engine) countWorkItemDisconnection(ctx context.Context) (context.Context, func()) {
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
@@ -355,38 +404,10 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	// advertising the workflow actor types with no worker to run them.
 	ctx = context.WithoutCancel(ctx)
 
-	last := wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0
-	if last {
-		// Cancel parked work-item completions BEFORE unregistering:
-		// UnRegisterActors' HaltAll waits on the actor turn locks
-		// those completions hold, and with no executor connected
-		// nothing can ever deliver them. A turn racing in after the
-		// sweep is cancelled at registration by the tracker.
-		wfe.syncExecutorAvailable()
+	if wfe.getWorkItemsCount.Add(-1) != 0 || wfe.mcpRegistrationCount.Load() != 0 {
+		return ctx, nil
 	}
-
-	if wfe.fallback != nil {
-		if !last {
-			return nil
-		}
-		return wfe.releaseLocalExecutor(ctx)
-	}
-
-	if last && wfe.actorsRegistered {
-		log.Debug("Unregistering workflow actors")
-		// Reset unconditionally. A HaltAll error comes after the types left
-		// the table, so they are gone. A Table error means they are not:
-		// with ctx made non-cancellable above and a ready runtime winning
-		// in actors.waitForReady, that is only ErrActorRuntimeClosed at
-		// shutdown.
-		err := wfe.backend.UnRegisterActors(ctx)
-		wfe.actorsRegistered = false
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return ctx, wfe.backend.SetExecutorAvailableAsync(false)
 }
 
 // testCloseDisconnectContext is a test-only fault injection: the first N

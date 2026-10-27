@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/durabletask-go/api"
@@ -165,17 +164,6 @@ func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key s
 
 func (be *ClusterTasksBackend) cancelTask(ctx context.Context, taskType, key string) error {
 	if be.pending.Cancel(executor.PendingKey(taskType, key)) {
-		return nil
-	}
-
-	// With no daprd hosting the executor actor type, there is no executor
-	// actor to record the cancellation on, and no watch stream attached to
-	// one: a watcher's stream fails once the router gives up on the lookup,
-	// which settles its wait. The call would only fail the same way, after
-	// the router's actor-not-found retries: seconds for every task the
-	// pending tracker cancels once the last executor left, which the engine
-	// waits on with its actor registration lock held.
-	if be.executorUnhosted(ctx, key) {
 		return nil
 	}
 
@@ -365,25 +353,6 @@ func (be *ClusterTasksBackend) executorLocal(ctx context.Context, key string) bo
 	}
 
 	return err == nil && lar.Local
-}
-
-// executorUnhosted reports whether the placement tables have no daprd
-// hosting the executor actor type.
-func (be *ClusterTasksBackend) executorUnhosted(ctx context.Context, key string) bool {
-	placement, err := be.actors.Placement(ctx)
-	if err != nil {
-		return false
-	}
-
-	_, _, cancel, err := placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
-		ActorType: be.executorActorType,
-		ActorID:   key,
-	})
-	if cancel != nil {
-		cancel(nil)
-	}
-
-	return errors.Is(err, messages.ErrActorNoAddress)
 }
 
 // watchCompletion is the fallback rendezvous: a watch stream on the executor

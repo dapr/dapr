@@ -22,8 +22,10 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -278,11 +280,32 @@ func (e *executor) handOff(ctx context.Context, parked []*internalsv1pb.Internal
 // here until the type change is disseminated, which happens only after every
 // HaltAll returns. The call then fails with ErrCreatingActor, so it is retried
 // until the key resolves elsewhere.
+//
+// Each attempt first looks the key up in placement. While no daprd of the app
+// hosts the type, as when the last executor of the app left, it waits there,
+// with no router call: the router would only retry its own actor-not-found
+// lookups for seconds per attempt. A result still unhanded when forwardTimeout
+// ends is lost; for a completion, the durable reminder retry runs its task
+// again.
 func (e *executor) handOffOne(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, what string) {
 	hctx, cancel := context.WithTimeout(ctx, forwardTimeout)
 	defer cancel()
 
 	err := backoff.Retry(func() error {
+		_, _, release, err := e.placement.LookupActor(hctx, &api.LookupActorRequest{
+			ActorType: e.actorType,
+			ActorID:   e.actorID,
+		})
+		if release != nil {
+			release(nil)
+		}
+		if err != nil {
+			if errors.Is(err, messages.ErrActorNoAddress) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+
 		router, err := e.actors.Router(hctx)
 		if err != nil {
 			return backoff.Permanent(err)

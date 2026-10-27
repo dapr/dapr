@@ -16,7 +16,6 @@ package executor
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -54,26 +53,6 @@ type factory struct {
 
 	table sync.Map
 	lock  sync.Mutex
-
-	// dropParked has a retiring actor drop what it still holds instead of
-	// handing it off; see DropParked.
-	dropParked atomic.Bool
-}
-
-// ParkedDropper is implemented by the executor actor factory; see DropParked.
-type ParkedDropper interface {
-	DropParked()
-}
-
-// DropParked has the actors of this factory drop the completions and
-// cancellations still parked on them when they retire, instead of handing
-// them off to the owner of their key. A daprd turning into a fallback host
-// calls it before it unregisters the type: it does so only when no daprd of
-// the app has an executor, so no daprd hosts the type and a handoff could
-// only fail, after retrying for its whole forwardTimeout. A dropped
-// completion is redelivered by the durable reminder retry.
-func (f *factory) DropParked() {
-	f.dropParked.Store(true)
 }
 
 func New(ctx context.Context, opts Options) (targets.Factory, error) {

@@ -38,7 +38,6 @@ import (
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
@@ -192,11 +191,6 @@ type Actors struct {
 	// Guarded by the engine's actor registration lock.
 	hostedCancel   context.CancelFunc
 	executorCancel context.CancelFunc
-
-	// executorTarget is the executor actor type's factory registered last
-	// under WorkflowsStagedOperations, unwrapped. Guarded by the engine's
-	// actor registration lock.
-	executorTarget targets.Factory
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -1207,6 +1201,13 @@ func (abe *Actors) WorkflowActorType() string {
 
 func (abe *Actors) SetExecutorAvailable(available bool) {
 	abe.pendingTasksBackend.SetExecutorAvailable(available)
+}
+
+// SetExecutorAvailableAsync is SetExecutorAvailable, except that the sweep a
+// flip to unavailable makes is waited for by the returned function; see the
+// pendingtracker package.
+func (abe *Actors) SetExecutorAvailableAsync(available bool) (settled func()) {
+	return abe.pendingTasksBackend.SetExecutorAvailableAsync(available)
 }
 
 // CancelActivityTask implements backend.Backend.

@@ -27,11 +27,14 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -52,6 +55,9 @@ func newHaltTestFactory(t *testing.T, p *pending.Pending) targets.Factory {
 	actorsFake := actorsfake.New().
 		WithRouter(func(context.Context) (router.Interface, error) {
 			return routerFake, nil
+		}).
+		WithPlacement(func(context.Context) (placement.Interface, error) {
+			return placementfake.New(), nil
 		})
 
 	var err error
@@ -181,6 +187,7 @@ func newQueuedDeactivationHaltFactory(p *pending.Pending) *factory {
 		actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
 			return routerFake, nil
 		}),
+		placement:    placementfake.New(),
 		deactivateCh: make(chan *executor, 10),
 		pending:      p,
 	}
@@ -446,6 +453,7 @@ func Test_haltAllHandOffRetriesUntilKeyMoves(t *testing.T) {
 		actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
 			return routerFake, nil
 		}),
+		placement:    placementfake.New(),
 		deactivateCh: make(chan *executor, 10),
 		pending:      pending.New(),
 	}
@@ -460,38 +468,54 @@ func Test_haltAllHandOffRetriesUntilKeyMoves(t *testing.T) {
 	assert.GreaterOrEqual(t, attempts.Load(), int32(4))
 }
 
-// Test_haltAllDropsParkedWhenTold covers a daprd turning into a fallback host:
-// no daprd of the app hosts the executor actor type any more, so a parked
-// completion or cancellation is dropped rather than handed off to an owner
-// that cannot exist.
-func Test_haltAllDropsParkedWhenTold(t *testing.T) {
+// Test_haltAllHandOffWaitsWhileTypeUnhosted covers the last executor of an
+// app leaving: no daprd hosts the type, so placement has no address for the
+// key. The handoff waits on placement without calling the router, and goes
+// through once a host shows up within forwardTimeout, as when a worker
+// reconnects.
+func Test_haltAllHandOffWaitsWhileTypeUnhosted(t *testing.T) {
 	t.Parallel()
 
-	var calls atomic.Int32
+	var (
+		f       *factory
+		hosted  atomic.Bool
+		lookups atomic.Int32
+		calls   atomic.Int32
+	)
 	routerFake := routerfake.New().
-		WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		WithCallFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 			calls.Add(1)
-			return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, haltTestActorType)
+			return f.GetOrCreate(req.GetActor().GetActorId()).InvokeMethod(ctx, req)
 		})
-	f := &factory{
+	f = &factory{
 		actorType: haltTestActorType,
 		actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
 			return routerFake, nil
 		}),
+		placement: placementfake.New().
+			WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+				lookups.Add(1)
+				if !hosted.Load() {
+					return nil, nil, nil, messages.ErrActorNoAddress.WithFormat(req.ActorKey())
+				}
+				return &api.LookupActorResponse{Local: true}, ctx, func(error) {}, nil
+			}),
 		deactivateCh: make(chan *executor, 10),
 		pending:      pending.New(),
 	}
+	const key = "wf9"
 
-	_, err := f.GetOrCreate("wf9").InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("genuine")))
-	require.NoError(t, err)
-	_, err = f.GetOrCreate("wf10").InvokeMethod(t.Context(), cancelReq(TaskTypeWorkflow))
+	_, err := f.GetOrCreate(key).InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("genuine")))
 	require.NoError(t, err)
 
-	f.DropParked()
 	require.NoError(t, f.HaltAll(t.Context()))
+	require.Eventually(t, func() bool { return lookups.Load() >= 3 }, 5*time.Second, 10*time.Millisecond)
+	assert.Zero(t, calls.Load(), "the handoff called the router with no host for the type")
 
-	assert.Never(t, func() bool { return calls.Load() > 0 }, time.Second, 50*time.Millisecond,
-		"a parked result was handed off")
+	hosted.Store(true)
+	require.Eventually(t, func() bool { return parkedOn(f, key) }, 5*time.Second, 10*time.Millisecond,
+		"the handoff did not go through once a host showed up")
+	assert.Equal(t, int32(1), calls.Load())
 }
 
 // Test_cancelAfterRetirementIsRetried covers a cancellation that reaches an

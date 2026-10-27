@@ -86,9 +86,17 @@ func New(inner Backend) *Tracker {
 // caller's subsequent unregister HaltAll does not wait on a turn whose
 // cancellation is still in flight.
 func (t *Tracker) SetExecutorAvailable(available bool) {
+	t.SetExecutorAvailableAsync(available)()
+}
+
+// SetExecutorAvailableAsync is SetExecutorAvailable, except that it returns
+// once the flip is made and the sweep it makes is started: the returned
+// function waits for the sweep to settle. A caller holding a lock while it
+// flips can wait for the sweep without the lock.
+func (t *Tracker) SetExecutorAvailableAsync(available bool) (settled func()) {
 	t.available.Store(available)
 	if available {
-		return
+		return func() {}
 	}
 
 	t.lock.Lock()
@@ -113,7 +121,7 @@ func (t *Tracker) SetExecutorAvailable(available bool) {
 			t.cancelActivity(ak)
 		})
 	}
-	wg.Wait()
+	return wg.Wait
 }
 
 // ExecutorAvailable returns the executor connectivity last set by
