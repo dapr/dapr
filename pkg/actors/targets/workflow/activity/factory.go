@@ -65,6 +65,13 @@ type Options struct {
 	// their run-activity reminder (WorkflowsFastPath preview feature).
 	FastPath bool
 
+	// Fallback, if set, reports whether this daprd hosts the activity actor
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
+	// local executor. A fallback host creates the durable run-activity
+	// reminder in place of a local drive, which would run the activity
+	// here. Nil when the feature is off.
+	Fallback func() bool
+
 	// Detached runs the work that must outlive a placement churn (the
 	// drive-failure escalations and the handed-off result publishes) on the
 	// runtime lifetime rather than this registration's. Nil creates one
@@ -124,6 +131,7 @@ type factory struct {
 	// fastPath enables the detached local activity drives (see drive.go) in
 	// place of the run-activity reminder fire.
 	fastPath bool
+	fallback func() bool
 
 	// drives is the churn-scoped runner carrying those local drives: HaltAll
 	// (which also fires on placement disconnection) aborts and drains it, then
@@ -214,6 +222,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorType:        opts.ActivityActorType,
 		inflight:         inflightFor(opts.ActivityActorType),
 		fastPath:         opts.FastPath,
+		fallback:         opts.Fallback,
 		executionHeld:    opts.ExecutionHeld,
 		registerResolver: opts.RegisterResolver,
 		staleClaimAfter:  2 * common.JanitorPeriod(),

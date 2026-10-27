@@ -718,9 +718,14 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 }
 
 // ActiveActorCount returns the number of live actors of actorType reported by
-// the actor runtime, and whether the type is hosted at all.
+// the actor runtime, and whether the type is hosted at all. A failed metadata
+// read fails t and reports the type as not hosted.
 func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
-	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return 0, false
+	}
+	for _, a := range rt.ActiveActors {
 		if a.Type == actorType {
 			return a.Count, true
 		}
