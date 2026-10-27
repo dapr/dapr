@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -94,7 +95,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return in + "!", nil
 	})
 
-	client := dworkflow.NewClient(a.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(a.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "attest-activity")

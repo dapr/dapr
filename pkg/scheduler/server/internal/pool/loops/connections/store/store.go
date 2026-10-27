@@ -25,6 +25,11 @@ type Options struct {
 	Loop       loop.Interface[loops.EventStream]
 	AppID      *string
 	ActorTypes []string
+
+	// ActorAddress is the daprd internal gRPC host:port reported by the
+	// stream, enabling actor reminder triggers to be routed to the placement
+	// owner host. Nil for old daprds, which fall back to round robin.
+	ActorAddress *string
 }
 
 type Store struct {
@@ -45,11 +50,11 @@ func (s *Store) Add(opts Options) context.CancelFunc {
 	var fns []context.CancelFunc
 
 	if opts.AppID != nil {
-		fns = append(fns, s.appIDs.add(*opts.AppID, opts.Loop))
+		fns = append(fns, s.appIDs.add(*opts.AppID, opts.Loop, nil))
 	}
 
 	for _, actorType := range opts.ActorTypes {
-		fns = append(fns, s.actorTypes.add(actorType, opts.Loop))
+		fns = append(fns, s.actorTypes.add(actorType, opts.Loop, opts.ActorAddress))
 	}
 
 	monitoring.RecordSidecarsConnectedCount(1)
@@ -69,4 +74,11 @@ func (s *Store) AppID(id string) (loop.Interface[loops.EventStream], bool) {
 
 func (s *Store) ActorType(actorType string) (loop.Interface[loops.EventStream], bool) {
 	return s.actorTypes.get(actorType)
+}
+
+// ActorHost returns a stream of the host owning the given actor ID per the
+// rendezvous hash over the actor type's reported host addresses. Falls back
+// to round robin when any host did not report an address.
+func (s *Store) ActorHost(actorType, actorID string) (loop.Interface[loops.EventStream], bool) {
+	return s.actorTypes.getByKey(actorType, actorID)
 }

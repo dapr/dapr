@@ -76,7 +76,7 @@ type grpcConnectionCloser interface {
 
 // serviceDiscovery returns all available discovered pluggable components services.
 // uses gRPC reflection package to list implemented services.
-func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, func(), error)) ([]service, error) {
+func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, func(), error), dialOpts ...grpc.DialOption) ([]service, error) {
 	services := []service{}
 	componentsSocketPath := GetSocketFolderPath()
 	_, err := os.Stat(componentsSocketPath)
@@ -122,7 +122,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 			return nil, fmt.Errorf("unable to list services: %w", err)
 		}
 		//nolint:staticcheck
-		dialer := socketDialer(socket, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
+		dialer := socketDialer(socket, append([]grpc.DialOption{grpc.WithBlock(), grpc.FailOnNonTempDialError(true)}, dialOpts...)...)
 
 		componentName := removeExt(f.Name())
 		for _, svc := range serviceList {
@@ -158,7 +158,7 @@ func reflectServiceConnectionCloser(conn grpcConnectionCloser, client reflectSer
 }
 
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
-func Discover(ctx context.Context) error {
+func Discover(ctx context.Context, maxRecvMsgSize int) error {
 	services, err := serviceDiscovery(func(socket string) (reflectServiceClient, func(), error) {
 		conn, err := SocketDial(
 			ctx,
@@ -170,7 +170,7 @@ func Discover(ctx context.Context) error {
 		}
 		client := grpcreflect.NewClientV1Alpha(ctx, reflectpb.NewServerReflectionClient(conn))
 		return client, reflectServiceConnectionCloser(conn, client), nil
-	})
+	}, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxRecvMsgSize)))
 	if err != nil {
 		return err
 	}

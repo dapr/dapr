@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -35,13 +36,20 @@ type Options struct {
 	Actors actors.Interface
 
 	ActorType string
+
+	// Pending is the process-local completion rendezvous shared with the
+	// cluster tasks backend. Completions arriving at this actor are
+	// delivered into it when the waiter is registered on this host.
+	Pending *pending.Pending
 }
 
 type factory struct {
 	actorType string
 
+	actors       actors.Interface
 	placement    placement.Interface
 	deactivateCh chan *executor
+	pending      *pending.Pending
 
 	table sync.Map
 	lock  sync.Mutex
@@ -53,17 +61,27 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	// The worker exits with ctx: a factory is built on every registration of
+	// the workflow actor types. Actors still queued stay in the table until
+	// HaltAll or HaltNonHosted reaps them.
 	deactivateCh := make(chan *executor, 100)
 	go func() {
-		for executor := range deactivateCh {
-			executor.Deactivate(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case executor := <-deactivateCh:
+				executor.Deactivate(ctx)
+			}
 		}
 	}()
 
 	return &factory{
 		actorType:    opts.ActorType,
+		actors:       opts.Actors,
 		placement:    placement,
 		deactivateCh: deactivateCh,
+		pending:      opts.Pending,
 	}, nil
 }
 
@@ -84,7 +102,9 @@ func (f *factory) initExecutor(a any, actorID string) *executor {
 	act.actorID = actorID
 
 	act.closed.Store(false)
+	act.cancelClosed.Store(false)
 	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
+	act.slotFreed = make(chan struct{})
 	act.cancelCh = make(chan struct{})
 	act.closeCh = make(chan struct{})
 	act.watchLock = make(chan struct{}, 1)
@@ -97,7 +117,7 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	defer f.lock.Unlock()
 
 	f.table.Range(func(key, val any) bool {
-		val.(*executor).Deactivate(ctx)
+		val.(*executor).halt(ctx)
 		return true
 	})
 	f.table.Clear()
@@ -113,8 +133,10 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 			ActorType: f.actorType,
 			ActorID:   key.(string),
 		}) {
-			val.(*executor).Deactivate(ctx)
-			f.table.Delete(key)
+			val.(*executor).halt(ctx)
+			// Only this actor: the halt's forward can already have created
+			// a fresh actor for the key when the key resolves back here.
+			f.table.CompareAndDelete(key, val)
 		}
 		return true
 	})

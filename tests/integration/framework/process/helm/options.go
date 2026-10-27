@@ -37,6 +37,8 @@ type options struct {
 	showOnly []string
 
 	namespace *string
+
+	expectFailure bool
 }
 
 func WithValues(values ...string) OptionFunc {
@@ -116,5 +118,13 @@ func WithSetJSON(values ...string) OptionFunc {
 func WithNamespace(namespace string) OptionFunc {
 	return func(o *options) {
 		o.namespace = &namespace
+	}
+}
+
+// WithExpectFailure expects the chart to fail rendering, for asserting
+// rejected value combinations on Stderr.
+func WithExpectFailure() OptionFunc {
+	return func(o *options) {
+		o.expectFailure = true
 	}
 }
