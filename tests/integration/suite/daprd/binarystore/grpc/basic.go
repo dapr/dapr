@@ -134,20 +134,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				}))
-				// The server may reject the name and end the stream before the
-				// payload is sent, so Send can fail with io.EOF; the status
-				// comes from CloseAndRecv.
-				if err = stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+				payload := &rtv1.SetBinaryFileRequestAlpha1{
 					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 						Payload: &commonv1pb.StreamPayload{
 							Data: []byte("payload"),
 							Seq:  0,
 						},
 					},
-				}); err != nil {
-					require.ErrorIs(t, err, io.EOF)
 				}
-				_, err = stream.CloseAndRecv()
+				if test.code == codes.OK {
+					require.NoError(t, stream.Send(payload))
+					_, err = stream.CloseAndRecv()
+				} else {
+					// The server rejects the name from the initial request alone:
+					// the status arrives before any payload is sent or the client
+					// closes its side. The call is then over, so the payload Send
+					// finds the stream done.
+					err = stream.RecvMsg(new(rtv1.SetBinaryFileResponseAlpha1))
+					require.ErrorIs(t, stream.Send(payload), io.EOF)
+				}
 				assert.Equal(t, test.code, status.Code(err))
 			})
 		}
