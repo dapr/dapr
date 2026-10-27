@@ -624,6 +624,66 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 }
 
+func Test_isOperationAllowedByAccessControlPolicyEncoded(t *testing.T) {
+	td := spiffeid.RequireTrustDomainFromString("public")
+	spiffeID, err := spiffe.FromStrings(td, "ns1", app1)
+	require.NoError(t, err)
+
+	parse := func(t *testing.T, isHTTP bool) *config.AccessControlList {
+		t.Helper()
+		deny := func(op string) config.AppOperation {
+			return config.AppOperation{Action: config.DenyAccess, HTTPVerb: []string{"*"}, Operation: op}
+		}
+		acl, err := ParseAccessControlSpec(&config.AccessControlSpec{
+			DefaultAction: config.AllowAccess,
+			TrustDomain:   "public",
+			AppPolicies: []config.AppPolicySpec{{
+				AppName:             app1,
+				DefaultAction:       config.AllowAccess,
+				TrustDomain:         "public",
+				Namespace:           "ns1",
+				AppOperationActions: []config.AppOperation{deny("/admin"), deny("/admin/**"), deny("/foo%20bar")},
+			}},
+		}, isHTTP)
+		require.NoError(t, err)
+		return acl
+	}
+
+	t.Run("http matches the decoded path without parameters", func(t *testing.T) {
+		acl := parse(t, true)
+		for op, allowed := range map[string]bool{
+			"/public":         true,
+			"/admin%zz":       false,
+			"/public%zz":      false,
+			"/%61dmin":        false,
+			"/%41dmin":        false,
+			"/admin;x":        false,
+			"/admin%3Bx":      false,
+			"/%61dmin/secret": false,
+			"/admin;x/secret": false,
+			"foo%20bar":       false,
+			"foo bar":         false,
+		} {
+			got, _ := isOperationAllowedByAccessControlPolicy(spiffeID, op, common.HTTPExtension_GET, true, acl)
+			assert.Equalf(t, allowed, got, "operation %q", op)
+		}
+	})
+
+	t.Run("grpc matches the operation literally", func(t *testing.T) {
+		acl := parse(t, false)
+		for op, allowed := range map[string]bool{
+			"/admin":    false,
+			"/%61dmin":  true,
+			"/admin;x":  true,
+			"foo%20bar": false,
+			"foo bar":   true,
+		} {
+			got, _ := isOperationAllowedByAccessControlPolicy(spiffeID, op, common.HTTPExtension_NONE, false, acl)
+			assert.Equalf(t, allowed, got, "operation %q", op)
+		}
+	})
+}
+
 // normalizeOperation was removed — the ACL no longer normalizes at
 // runtime. Normalization is the responsibility of the service invocation
 // entry points (NormalizeMethod). The behavior previously tested here is

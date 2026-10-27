@@ -17,6 +17,7 @@ package acl
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/dapr/kit/logger"
@@ -97,7 +98,7 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 			}
 
 			if isHTTP {
-				operationName = strings.ToLower(operationName)
+				operationName, _ = canonicalHTTPOperation(operationName)
 			}
 
 			operationActions := config.AccessControlListOperationAction{
@@ -153,8 +154,9 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	}
 
 	// The operation is expected to be already normalized by the caller
-	// (NormalizeMethod at the service invocation entry point). The ACL is a pure
-	// policy evaluation layer- it does not mutate its input.
+	// (NormalizeMethod at the service invocation entry point). For HTTP apps the
+	// ACL matches on canonicalHTTPOperation(operation), the path the app routes
+	// on, but the operation sent to the app is not modified.
 	action, actionPolicy := isOperationAllowedByAccessControlPolicy(spiffeID, operation, httpVerb, isHTTP, acl)
 	emitACLMetrics(spiffeID, actionPolicy, action)
 
@@ -232,9 +234,11 @@ func isOperationAllowedByAccessControlPolicy(spiffeID *spiffe.Parsed, inputOpera
 		inputOperation = "/" + inputOperation
 	}
 
-	// If HTTP, make case-insensitive
 	if isHTTP {
-		inputOperation = strings.ToLower(inputOperation)
+		var ok bool
+		if inputOperation, ok = canonicalHTTPOperation(inputOperation); !ok {
+			return false, actionPolicy
+		}
 	}
 
 	operationPolicy := appPolicy.AppOperationActions.Search(inputOperation)
@@ -265,6 +269,25 @@ func isOperationAllowedByAccessControlPolicy(spiffeID *spiffe.Parsed, inputOpera
 	}
 
 	return isActionAllowed(action), actionPolicy
+}
+
+// canonicalHTTPOperation returns the form of an HTTP operation that policies
+// are matched on: percent-escapes decoded once and ";" path parameters dropped
+// from each segment, as an HTTP app decodes and routes it, then lowercased.
+// ok is false, and op is not decoded, if op has an invalid escape or an
+// escaped "/". The app would not route such an operation as the canonical
+// path, so requests with it are denied.
+func canonicalHTTPOperation(op string) (string, bool) {
+	decoded, err := url.PathUnescape(op)
+	ok := err == nil && strings.Count(decoded, "/") == strings.Count(op, "/")
+	if ok {
+		op = decoded
+	}
+	segs := strings.Split(op, "/")
+	for i, seg := range segs {
+		segs[i], _, _ = strings.Cut(seg, ";")
+	}
+	return strings.ToLower(strings.Join(segs, "/")), ok
 }
 
 func isActionAllowed(action string) bool {
