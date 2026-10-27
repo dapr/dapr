@@ -86,6 +86,7 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 		}
 
 		operationPolicy := config.NewTrie()
+		operations := make(map[string]*config.AccessControlListOperationAction)
 
 		// Iterate over all the operations and create a map for fast lookup
 		for _, appPolicy := range appPolicySpec.AppOperationActions {
@@ -98,23 +99,27 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 			}
 
 			if isHTTP {
-				operationName, _ = canonicalHTTPOperation(operationName)
+				_, operationName, _ = canonicalHTTPOperation(operationName)
 			}
 
-			operationActions := config.AccessControlListOperationAction{
-				OperationName: operationName,
-				VerbAction:    make(map[string]string),
+			// Operations that resolve to the same name share one entry.
+			operationActions, ok := operations[operationName]
+			if !ok {
+				operationActions = &config.AccessControlListOperationAction{
+					OperationName: operationName,
+					VerbAction:    make(map[string]string),
+				}
+				operations[operationName] = operationActions
+				operationPolicy.PutOperationAction(operationName, operationActions)
 			}
 
 			// Iterate over all the http verbs and create a map and set the action for fast lookup
 			for _, verb := range appPolicy.HTTPVerb {
-				operationActions.VerbAction[verb] = appPolicy.Action
+				operationActions.VerbAction[verb] = mergeAction(operationActions.VerbAction[verb], appPolicy.Action)
 			}
 
 			// Store the operation action for grpc invocations where no http verb is specified
-			operationActions.OperationAction = appPolicy.Action
-
-			operationPolicy.PutOperationAction(operationName, &operationActions)
+			operationActions.OperationAction = mergeAction(operationActions.OperationAction, appPolicy.Action)
 		}
 		aclPolicySpec := config.AccessControlListPolicySpec{
 			AppName:             appPolicySpec.AppName,
@@ -234,14 +239,30 @@ func isOperationAllowedByAccessControlPolicy(spiffeID *spiffe.Parsed, inputOpera
 		inputOperation = "/" + inputOperation
 	}
 
+	operations := []string{inputOperation}
 	if isHTTP {
-		var ok bool
-		if inputOperation, ok = canonicalHTTPOperation(inputOperation); !ok {
+		decoded, stripped, ok := canonicalHTTPOperation(inputOperation)
+		if !ok {
+			return false, actionPolicy
+		}
+		// An app may or may not drop ";" path parameters before routing, so
+		// the operation must be allowed both without and with them.
+		operations = []string{stripped, decoded}
+	}
+
+	for _, operation := range operations {
+		if !isActionAllowed(operationAction(appPolicy, operation, httpVerb, isHTTP, action)) {
 			return false, actionPolicy
 		}
 	}
 
-	operationPolicy := appPolicy.AppOperationActions.Search(inputOperation)
+	return true, actionPolicy
+}
+
+// operationAction returns the action of the rule in appPolicy that matches
+// operation, or action if no rule matches.
+func operationAction(appPolicy config.AccessControlListPolicySpec, operation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, action string) string {
+	operationPolicy := appPolicy.AppOperationActions.Search(operation)
 
 	if operationPolicy != nil {
 		// Operation prefix and postfix match. Now check the operation specific policy
@@ -268,26 +289,48 @@ func isOperationAllowedByAccessControlPolicy(spiffeID *spiffe.Parsed, inputOpera
 		}
 	}
 
-	return isActionAllowed(action), actionPolicy
+	return action
 }
 
-// canonicalHTTPOperation returns the form of an HTTP operation that policies
-// are matched on: percent-escapes decoded once and ";" path parameters dropped
-// from each segment, as an HTTP app decodes and routes it, then lowercased.
-// ok is false, and op is not decoded, if op has an invalid escape or an
-// escaped "/". The app would not route such an operation as the canonical
-// path, so requests with it are denied.
-func canonicalHTTPOperation(op string) (string, bool) {
-	decoded, err := url.PathUnescape(op)
-	ok := err == nil && strings.Count(decoded, "/") == strings.Count(op, "/")
-	if ok {
-		op = decoded
+// mergeAction returns the action for two rules on the same operation and
+// verb: deny wins.
+func mergeAction(current, next string) string {
+	if current != "" && !isActionAllowed(current) {
+		return current
 	}
-	segs := strings.Split(op, "/")
+	return next
+}
+
+// canonicalHTTPOperation returns an HTTP operation as an app may route it,
+// lowercased: decoded has percent-escapes decoded once, and stripped is
+// decoded with ";" path parameters dropped from each segment. An escaped "*"
+// stays escaped, so it cannot become a wildcard. ok is false, and op is not
+// decoded, if op has an invalid escape or an escaped "/", or if dropping
+// parameters leaves an empty, "." or ".." segment. The app would not route
+// such an operation as checked, so requests with it are denied.
+func canonicalHTTPOperation(op string) (decoded, stripped string, ok bool) {
+	parts := strings.Split(strings.ReplaceAll(op, "%2A", "%2a"), "%2a")
+	ok = true
+	for i, part := range parts {
+		var err error
+		if parts[i], err = url.PathUnescape(part); err != nil {
+			ok = false
+		}
+	}
+	decoded = strings.Join(parts, "%2a")
+	if !ok || strings.Count(decoded, "/") != strings.Count(op, "/") {
+		decoded, ok = op, false
+	}
+
+	segs := strings.Split(decoded, "/")
 	for i, seg := range segs {
-		segs[i], _, _ = strings.Cut(seg, ";")
+		var cut bool
+		segs[i], _, cut = strings.Cut(seg, ";")
+		if segs[i] == "." || segs[i] == ".." || (cut && segs[i] == "") {
+			ok = false
+		}
 	}
-	return strings.ToLower(strings.Join(segs, "/")), ok
+	return strings.ToLower(decoded), strings.ToLower(strings.Join(segs, "/")), ok
 }
 
 func isActionAllowed(action string) bool {

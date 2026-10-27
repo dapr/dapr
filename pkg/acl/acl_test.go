@@ -629,30 +629,37 @@ func Test_isOperationAllowedByAccessControlPolicyEncoded(t *testing.T) {
 	spiffeID, err := spiffe.FromStrings(td, "ns1", app1)
 	require.NoError(t, err)
 
-	parse := func(t *testing.T, isHTTP bool) *config.AccessControlList {
+	rule := func(action, op string, verbs ...string) config.AppOperation {
+		return config.AppOperation{Action: action, HTTPVerb: verbs, Operation: op}
+	}
+	parse := func(t *testing.T, isHTTP bool, defaultAction string, ops ...config.AppOperation) *config.AccessControlList {
 		t.Helper()
-		deny := func(op string) config.AppOperation {
-			return config.AppOperation{Action: config.DenyAccess, HTTPVerb: []string{"*"}, Operation: op}
-		}
 		acl, err := ParseAccessControlSpec(&config.AccessControlSpec{
-			DefaultAction: config.AllowAccess,
+			DefaultAction: defaultAction,
 			TrustDomain:   "public",
 			AppPolicies: []config.AppPolicySpec{{
 				AppName:             app1,
-				DefaultAction:       config.AllowAccess,
+				DefaultAction:       defaultAction,
 				TrustDomain:         "public",
 				Namespace:           "ns1",
-				AppOperationActions: []config.AppOperation{deny("/admin"), deny("/admin/**"), deny("/foo%20bar")},
+				AppOperationActions: ops,
 			}},
 		}, isHTTP)
 		require.NoError(t, err)
 		return acl
 	}
+	denyList := []config.AppOperation{
+		rule(config.DenyAccess, "/admin", "*"),
+		rule(config.DenyAccess, "/admin/**", "*"),
+		rule(config.DenyAccess, "/foo%20bar", "*"),
+	}
 
 	t.Run("http matches the decoded path without parameters", func(t *testing.T) {
-		acl := parse(t, true)
+		acl := parse(t, true, config.AllowAccess, denyList...)
 		for op, allowed := range map[string]bool{
 			"/public":         true,
+			"/public;x":       true,
+			"/files/%2A":      true,
 			"/admin%zz":       false,
 			"/public%zz":      false,
 			"/%61dmin":        false,
@@ -663,14 +670,56 @@ func Test_isOperationAllowedByAccessControlPolicyEncoded(t *testing.T) {
 			"/admin;x/secret": false,
 			"foo%20bar":       false,
 			"foo bar":         false,
+			// Dropping the parameters leaves a dot or empty segment.
+			"/public/..;x/admin": false,
+			"/public/.;x/admin":  false,
+			"/;x/admin":          false,
 		} {
 			got, _ := isOperationAllowedByAccessControlPolicy(spiffeID, op, common.HTTPExtension_GET, true, acl)
 			assert.Equalf(t, allowed, got, "operation %q", op)
 		}
 	})
 
+	t.Run("http allows only what is allowed with and without parameters", func(t *testing.T) {
+		acl := parse(t, true, config.DenyAccess,
+			rule(config.AllowAccess, "/public", "*"),
+			rule(config.AllowAccess, "/docs/**", "*"),
+			rule(config.AllowAccess, "/files/%2A", "*"),
+		)
+		for op, allowed := range map[string]bool{
+			"/public":       true,
+			"/%70ublic":     true,
+			"/public;admin": false,
+			"/docs/a;v=1":   true,
+			"/files/%2A":    true,
+			"/files/%2a":    true,
+			"/files/*":      false,
+			"/files/secret": false,
+		} {
+			got, _ := isOperationAllowedByAccessControlPolicy(spiffeID, op, common.HTTPExtension_GET, true, acl)
+			assert.Equalf(t, allowed, got, "operation %q", op)
+		}
+	})
+
+	t.Run("http merges rules that resolve to the same operation, deny wins", func(t *testing.T) {
+		acl := parse(t, true, config.AllowAccess,
+			rule(config.DenyAccess, "/admin", "GET"),
+			rule(config.DenyAccess, "/%61dmin", "POST"),
+			rule(config.AllowAccess, "/%41DMIN", "GET", "DELETE"),
+		)
+		for verb, allowed := range map[common.HTTPExtension_Verb]bool{
+			common.HTTPExtension_GET:    false,
+			common.HTTPExtension_POST:   false,
+			common.HTTPExtension_DELETE: true,
+			common.HTTPExtension_PUT:    true,
+		} {
+			got, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/admin", verb, true, acl)
+			assert.Equalf(t, allowed, got, "verb %s", verb)
+		}
+	})
+
 	t.Run("grpc matches the operation literally", func(t *testing.T) {
-		acl := parse(t, false)
+		acl := parse(t, false, config.AllowAccess, denyList...)
 		for op, allowed := range map[string]bool{
 			"/admin":    false,
 			"/%61dmin":  true,

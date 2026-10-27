@@ -212,6 +212,8 @@ func (a *aclencoded) Run(t *testing.T, ctx context.Context) {
 		{name: "deny-list: path parameter", target: a.denyList, method: "admin;x/secret"},
 		{name: "deny-list: double-encoded path parameter", target: a.denyList, method: "admin%253Bx/secret"},
 		{name: "deny-list: double-encoded invalid escape", target: a.denyList, method: "%2561dmin/secret%25zz"},
+		{name: "deny-list: dot segment with path parameter", target: a.denyList, method: "public/..;x/admin"},
+		{name: "allow-list: path parameter", target: a.allowList, method: "public;x/admin"},
 		{name: "allow-list: denied method", target: a.allowList, method: "admin/secret"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
