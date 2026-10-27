@@ -196,11 +196,26 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 	}
 
-	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+	var actErr error
+	switch {
+	case len(activities) == 0:
+	case o.isFallback():
+		// No local executor can run the activities, and a fallback host
+		// does not advertise the activity actor type to the scheduler. Arm
+		// the janitor due at once instead: it fires on a daprd with an
+		// executor, which forwards it to the instance's owner until the
+		// instance moves to such a daprd, where its re-dispatch of the
+		// unresolved tasks sends the activities.
+		actErr = o.createJanitor(ctx, newState, time.Now())
+	default:
 		// Rerun always dispatches with durable reminders: the new instance
 		// has no janitor yet, so the elision cannot be certified here.
-		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err,
+		actErr = o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err
+	}
+
+	if err = errors.Join(
+		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+		actErr,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
