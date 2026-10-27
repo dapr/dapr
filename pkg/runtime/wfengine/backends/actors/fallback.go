@@ -18,15 +18,11 @@ import (
 	"errors"
 	"sync/atomic"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/marker"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
-	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 // Fallback hosts (the WorkflowsStagedOperations preview): a daprd hosts the
@@ -115,7 +111,7 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 
 	// The factories these replace are halted by now: released before this
 	// call, and halted and retired by RegisterActorTypes if they were still
-	// draining.
+	// registered.
 	replaceCancel(&abe.hostedCancel, hostedCancel)
 	if executor {
 		replaceCancel(&abe.executorCancel, execCancel)
@@ -270,7 +266,7 @@ func (abe *Actors) executorFactory(ctx context.Context) (table.ActorTypeFactory,
 
 	return table.ActorTypeFactory{
 		Type:    abe.executorActorType,
-		Factory: presenceFactory{actorType: abe.executorActorType},
+		Factory: marker.New(abe.executorActorType),
 	}, nil
 }
 
@@ -289,51 +285,3 @@ func (abe *Actors) WatchExecutorPresence(ctx context.Context) (<-chan bool, erro
 func (abe *Actors) ExecutorActorType() string {
 	return abe.executorActorType
 }
-
-// presenceFactory is the executor actor type's factory without
-// WorkflowsClusteredDeployment: the type only marks this daprd as one with
-// an executor. Nothing calls its actors, which hold no state.
-type presenceFactory struct {
-	actorType string
-}
-
-func (f presenceFactory) GetOrCreate(actorID string) targets.Interface {
-	return presenceActor{actorType: f.actorType, id: actorID}
-}
-func (presenceFactory) Exists(string) bool            { return false }
-func (presenceFactory) HaltAll(context.Context) error { return nil }
-func (presenceFactory) Len() int                      { return 0 }
-func (presenceFactory) HaltNonHosted(context.Context, func(*actorsapi.LookupActorRequest) bool) error {
-	return nil
-}
-
-type presenceActor struct {
-	actorType string
-	id        string
-}
-
-func (a presenceActor) unimplemented() error {
-	return status.Errorf(codes.Unimplemented, "actor '%s' only marks a daprd with a workflow executor", a.Key())
-}
-
-func (a presenceActor) Key() string  { return a.actorType + actorsapi.DaprSeparator + a.id }
-func (a presenceActor) Type() string { return a.actorType }
-func (a presenceActor) ID() string   { return a.id }
-
-func (a presenceActor) InvokeMethod(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	return nil, a.unimplemented()
-}
-
-func (a presenceActor) InvokeReminder(context.Context, *actorsapi.Reminder) error {
-	return a.unimplemented()
-}
-
-func (a presenceActor) InvokeTimer(context.Context, *actorsapi.Reminder) error {
-	return a.unimplemented()
-}
-
-func (a presenceActor) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRequest, func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
-	return a.unimplemented()
-}
-
-func (presenceActor) Deactivate(context.Context) error { return nil }
