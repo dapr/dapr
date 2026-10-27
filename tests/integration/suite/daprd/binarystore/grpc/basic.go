@@ -134,14 +134,19 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				}))
-				require.NoError(t, stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
+				// The server may reject the name and end the stream before the
+				// payload is sent, so Send can fail with io.EOF; the status
+				// comes from CloseAndRecv.
+				if err = stream.Send(&rtv1.SetBinaryFileRequestAlpha1{
 					SetBinaryFileRequestType: &rtv1.SetBinaryFileRequestAlpha1_Payload{
 						Payload: &commonv1pb.StreamPayload{
 							Data: []byte("payload"),
 							Seq:  0,
 						},
 					},
-				}))
+				}); err != nil {
+					require.ErrorIs(t, err, io.EOF)
+				}
 				_, err = stream.CloseAndRecv()
 				assert.Equal(t, test.code, status.Code(err))
 			})
