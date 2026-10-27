@@ -14,7 +14,6 @@ limitations under the License.
 package fallback
 
 import (
-	"bytes"
 	"context"
 	"sync/atomic"
 	"testing"
@@ -24,9 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -46,7 +42,6 @@ func init() {
 // the damping period, it gives them up.
 type flap struct {
 	workflow *workflow.Workflow
-	logline  *logline.LogLine
 }
 
 // flapDamping is well above a flap cycle's connected time, a few placement
@@ -54,21 +49,10 @@ type flap struct {
 const flapDamping = 5 * time.Second
 
 func (f *flap) Setup(t *testing.T) []framework.Option {
-	// The fallback host's log tells when it has applied a placement round.
-	// The scheduler's rounds are logged at debug level.
-	f.logline = logline.New(t, logline.WithCaptureAll())
-	f.workflow = newPair(t, flapDamping, fallbackSettle,
-		workflow.WithDaprdOptions(1,
-			daprd.WithLogLevel("debug"),
-			daprd.WithExecOptions(
-				exec.WithStdout(f.logline.Stdout()),
-				exec.WithStderr(f.logline.Stderr()),
-			),
-		),
-	)
+	f.workflow = newPair(t, flapDamping, fallbackSettle)
 
 	return []framework.Option{
-		framework.WithProcesses(f.logline, f.workflow),
+		framework.WithProcesses(f.workflow),
 	}
 }
 
@@ -103,12 +87,13 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	mgmt := f.workflow.ManagementClientN(t, ctx, 1)
 	const rounds = 5
 	ids := make([]api.InstanceID, 0, rounds)
-	for round := range rounds {
+	for range rounds {
 		before := f.workflow.PlacementVersion(t, ctx)
+		unlocks := f.unlocks(t, ctx)
 		worker := f.workflow.ConnectWorkerN(t, ctx, 0, f.workflow.RegistryN(0))
 		f.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
 		f.workflow.WaitForActorTypePlaced(t, ctx, 0, executorType, true, before)
-		f.waitApplied(t, executorType, 2*round+1)
+		f.waitUnlocked(t, ctx, unlocks)
 
 		// Calls through the fallback host keep working.
 		sctx, cancel := context.WithTimeout(ctx, time.Second*10)
@@ -118,14 +103,15 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 		ids = append(ids, id)
 
 		before = f.workflow.PlacementVersion(t, ctx)
+		unlocks = f.unlocks(t, ctx)
 		worker.Disconnect(t)
 		f.workflow.WaitForNoConnectedWorkersN(t, ctx, 0)
 		f.workflow.WaitForActorTypePlaced(t, ctx, 0, executorType, false, before)
-		// The fallback host has applied the round without the executor
+		// The fallback host has received the round without the executor
 		// before the next connect: a round which merged the leave with the
 		// connect would leave its damping period running from one cycle
 		// into the next.
-		f.waitApplied(t, executorType, 2*round+2)
+		f.waitUnlocked(t, ctx, unlocks)
 	}
 
 	wcancel()
@@ -144,25 +130,29 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	fworkflow.WaitForAllCompleted(t, ctx, mgmt, ids...)
 }
 
-// waitApplied waits until the fallback host, daprd 1, has completed n
-// placement rounds which changed actorType, as its log shows: one when the
-// worker's daprd registers the executor actor type, and one when it
-// unregisters it. The fallback host learns from these rounds whether
-// another daprd has an executor; the placement authority may show a change
-// the fallback host has not applied yet.
-func (f *flap) waitApplied(t *testing.T, actorType string, n int) {
+// unlocks returns how many unlock orders, which end a placement round, the
+// fallback host, daprd 1, has received, as its
+// runtime/actor/table_operation_recv_total metric counts them. A failed
+// read fails c.
+func (f *flap) unlocks(c assert.TestingT, ctx context.Context) float64 {
+	return f.workflow.DaprN(1).Metrics(c, ctx).SumWithLabels(
+		"dapr_runtime_actor_table_operation_recv_total", "operation:unlock")
+}
+
+// waitUnlocked waits until the fallback host, daprd 1, has received an
+// unlock order past from, an unlocks count read before a change of daprd 0:
+// the unlock which ends the placement round of the change, or that of a
+// later round, as under either placement protocol each round ends with an
+// unlock to every daprd. The placement authority may show a change the
+// fallback host has not received yet. Daprd counts an order as it receives
+// it, before handling it, and handles its orders one at a time, so it
+// handles the lock of the round of the next change only after this unlock:
+// the next change reaches it in a round of its own.
+func (f *flap) waitUnlocked(t *testing.T, ctx context.Context, from float64) {
 	t.Helper()
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var applied int
-		for line := range bytes.SplitSeq(f.logline.StdoutBuffer(), []byte("\n")) {
-			if bytes.Contains(line, []byte("Dissemination")) &&
-				bytes.Contains(line, []byte(" complete ")) &&
-				bytes.Contains(line, []byte(actorType)) {
-				applied++
-			}
-		}
-		assert.GreaterOrEqual(c, applied, n)
+		assert.Greater(c, f.unlocks(c, ctx), from)
 	}, time.Second*10, time.Millisecond*10)
 }
 
