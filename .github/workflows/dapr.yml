@@ -236,7 +236,9 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-            test_parallel: 8
+            # Process startup is slow enough on Windows that 8 at once starves
+            # the timing-sensitive cases.
+            test_parallel: 4
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
