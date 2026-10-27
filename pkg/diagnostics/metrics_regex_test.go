@@ -46,7 +46,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		meter.Start()
 
 		meter.Register(
-			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution()),
 		)
 		t.Cleanup(func() {
 			meter.Unregister(meter.Find(statName))
@@ -74,7 +74,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		meter.Register(
-			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution()),
 		)
 		t.Cleanup(func() {
 			meter.Unregister(meter.Find(statName))
@@ -104,7 +104,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		meter.Register(
-			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution()),
 		)
 		t.Cleanup(func() {
 			meter.Unregister(meter.Find(statName))

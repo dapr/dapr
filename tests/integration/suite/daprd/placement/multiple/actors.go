@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -87,7 +88,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	var version1 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
@@ -96,7 +97,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		version1 = tables.Tables["default"].Version
 	}, time.Second*10, time.Millisecond*10)
 
-	client := dworkflow.NewClient(a.actors[0].Daprd().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(a.actors[0].Daprd().GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
@@ -110,7 +111,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	}
 	var version2 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
@@ -125,7 +126,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		"def",
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		tables := a.actors[0].PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}

@@ -68,26 +68,12 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
-	for method, test := range map[string]struct {
-		body string
-		err  string
-	}{
-		http.MethodPost: {
-			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: scheduler clients are disabled"}`,
-		},
-		http.MethodGet: {
-			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: api error: code = Internal desc = failed to get job due to: scheduler clients are disabled"}`,
-		},
-		http.MethodDelete: {
-			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: scheduler clients are disabled"}`,
-		},
-	} {
+	// Without an actor state store the app's actor types are not hosted, so
+	// all reminder operations fail as non-hosted.
+	for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
 		var bodyReader io.Reader
-		if test.body != "" {
-			bodyReader = strings.NewReader(test.body)
+		if method != http.MethodGet {
+			bodyReader = strings.NewReader(`{"dueTime": "100s"}`)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, method,
@@ -97,10 +83,10 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		assert.JSONEq(t, test.err, string(body))
+		assert.JSONEq(t, `{"errorCode":"ERR_ACTOR_REMINDER_NON_HOSTED","message":"operations on actor reminders are only possible on hosted actor types"}`, string(body))
 	}
 }

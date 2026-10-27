@@ -15,9 +15,12 @@ package messages
 
 import (
 	"errors"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/durabletask-go/api"
 )
 
 const (
@@ -32,6 +35,19 @@ func IsPermissionDenied(err error) bool {
 
 func IsAlreadyExists(err error) bool {
 	return hasGRPCStatusCode(err, codes.AlreadyExists)
+}
+
+// IsInstanceNotFound reports api.ErrInstanceNotFound, including when actor
+// invocation flattened it to a wire string (suffix match, as recursive purge
+// does).
+func IsInstanceNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, api.ErrInstanceNotFound) {
+		return true
+	}
+	return strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error())
 }
 
 // hasGRPCStatusCode checks whether the error (possibly wrapped) contains the

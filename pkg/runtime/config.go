@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -58,6 +59,9 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints.
 	DefaultMetricsPort = 9090
+	// internalGRPCStablePortStart is the lowest stable port picked for the
+	// internal gRPC server when no port is configured.
+	internalGRPCStablePortStart = 47300
 	// DefaultMaxRequestBodySize is the default option for the maximum body size in bytes for Dapr HTTP servers.
 	// Equal to 4MB
 	DefaultMaxRequestBodySize = 4 << 20
@@ -74,6 +78,8 @@ const (
 	// daprd does not reset the stream before placement can finish a
 	// legitimately slow round.
 	DefaultActorsDisseminationTimeout = time.Second * 30
+
+	DefaultActorsPlacementStartupTimeout = time.Second * 30
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
@@ -115,6 +121,7 @@ type Config struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	ActorsDisseminationTimeout    time.Duration
+	ActorsPlacementStartupTimeout time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
 	SchedulerStreams              uint
@@ -136,6 +143,9 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// DaprInternalGRPCListener, when set, returns a listener on the internal
+	// gRPC port held by the process (see ReserveInternalGRPCPort).
+	DaprInternalGRPCListener func() (net.Listener, error)
 	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
 	// period. Zero uses the reconciler default (60s).
 	HotReloadReconcileInterval time.Duration
@@ -146,48 +156,64 @@ type Config struct {
 }
 
 type internalConfig struct {
-	id                           string
-	httpPort                     int
-	publicPort                   *int
-	publicListenAddress          string
-	profilePort                  int
-	enableProfiling              bool
-	apiGRPCPort                  int
-	internalGRPCPort             int
-	internalGRPCListenAddress    string
-	apiListenAddresses           []string
-	appConnectionConfig          config.AppConnectionConfig
-	mode                         modes.DaprMode
-	actorsService                string
-	actorsDisseminationTimeout   time.Duration
-	remindersService             string
-	schedulerAddress             []string
-	schedulerStreams             uint
-	allowedOrigins               string
-	standalone                   configmodes.StandaloneConfig
-	kubernetes                   configmodes.KubernetesConfig
-	mTLSEnabled                  bool
-	sentryServiceAddress         string
-	unixDomainSocket             string
-	maxRequestBodySize           int // In bytes
-	readBufferSize               int // In bytes
-	gracefulShutdownDuration     time.Duration
-	blockShutdownDuration        *time.Duration
-	enableAPILogging             *bool
-	disableBuiltinK8sSecretStore bool
-	config                       []string
-	registry                     *registry.Registry
-	metricsExporter              metrics.Exporter
-	healthz                      healthz.Healthz
-	outboundHealthz              healthz.Healthz
-	workflowEventSink            orchestrator.EventSink
-	disableInitEndpoints         []string
-	hotReloadReconcileInterval   time.Duration
-	appBindingOptionsTimeout     time.Duration
+	id                            string
+	httpPort                      int
+	publicPort                    *int
+	publicListenAddress           string
+	profilePort                   int
+	enableProfiling               bool
+	apiGRPCPort                   int
+	internalGRPCPort              int
+	internalGRPCListenAddress     string
+	internalGRPCListener          func() (net.Listener, error)
+	apiListenAddresses            []string
+	appConnectionConfig           config.AppConnectionConfig
+	mode                          modes.DaprMode
+	actorsService                 string
+	actorsDisseminationTimeout    time.Duration
+	actorsPlacementStartupTimeout time.Duration
+	remindersService              string
+	schedulerAddress              []string
+	schedulerStreams              uint
+	allowedOrigins                string
+	standalone                    configmodes.StandaloneConfig
+	kubernetes                    configmodes.KubernetesConfig
+	mTLSEnabled                   bool
+	sentryServiceAddress          string
+	unixDomainSocket              string
+	maxRequestBodySize            int // In bytes
+	readBufferSize                int // In bytes
+	gracefulShutdownDuration      time.Duration
+	blockShutdownDuration         *time.Duration
+	enableAPILogging              *bool
+	disableBuiltinK8sSecretStore  bool
+	config                        []string
+	registry                      *registry.Registry
+	metricsExporter               metrics.Exporter
+	healthz                       healthz.Healthz
+	outboundHealthz               healthz.Healthz
+	workflowEventSink             orchestrator.EventSink
+	disableInitEndpoints          []string
+	hotReloadReconcileInterval    time.Duration
+	appBindingOptionsTimeout      time.Duration
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
-	return len(i.schedulerAddress) > 0
+	for _, addr := range i.schedulerAddress {
+		if len(strings.TrimSpace(strings.Trim(addr, `"'`))) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// SchedulerPlacementEnabled reports whether the scheduler may serve this
+// sidecar's actor placement. In Kubernetes the injector clears the actors
+// service when actors are disabled, so a scheduler address alone must not
+// enable actors there. Self hosted opts in with a scheduler address.
+func (i internalConfig) SchedulerPlacementEnabled() bool {
+	return i.SchedulerEnabled() &&
+		(len(i.actorsService) > 0 || i.mode == modes.StandaloneMode)
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -288,7 +314,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		// using the default meter which relies on
 		// global state which can be problematic in tests
 		// or when decoupling the runtimes lifecycle from
-		// the proccesses lifecycle.
+		// the processes lifecycle.
 		var meter view.Meter
 
 		if cfg.Metrics.Meter == nil {
@@ -377,21 +403,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                   registry.New(c.Registry),
-		metricsExporter:            metrics.New(c.Metrics),
-		blockShutdownDuration:      c.DaprBlockShutdownDuration,
-		actorsService:              c.ActorsService,
-		actorsDisseminationTimeout: c.ActorsDisseminationTimeout,
-		hotReloadReconcileInterval: c.HotReloadReconcileInterval,
-		appBindingOptionsTimeout:   c.AppBindingOptionsTimeout,
-		remindersService:           c.RemindersService,
-		schedulerAddress:           c.SchedulerAddress,
-		schedulerStreams:           c.SchedulerStreams,
-		publicListenAddress:        c.DaprPublicListenAddress,
-		internalGRPCListenAddress:  c.DaprInternalGRPCListenAddress,
-		healthz:                    c.Healthz,
-		outboundHealthz:            healthz.New(),
-		workflowEventSink:          c.WorkflowEventSink,
+		registry:                      registry.New(c.Registry),
+		metricsExporter:               metrics.New(c.Metrics),
+		blockShutdownDuration:         c.DaprBlockShutdownDuration,
+		actorsService:                 c.ActorsService,
+		actorsDisseminationTimeout:    c.ActorsDisseminationTimeout,
+		actorsPlacementStartupTimeout: c.ActorsPlacementStartupTimeout,
+		hotReloadReconcileInterval:    c.HotReloadReconcileInterval,
+		appBindingOptionsTimeout:      c.AppBindingOptionsTimeout,
+		remindersService:              c.RemindersService,
+		schedulerAddress:              c.SchedulerAddress,
+		schedulerStreams:              c.SchedulerStreams,
+		publicListenAddress:           c.DaprPublicListenAddress,
+		internalGRPCListenAddress:     c.DaprInternalGRPCListenAddress,
+		internalGRPCListener:          c.DaprInternalGRPCListener,
+		healthz:                       c.Healthz,
+		outboundHealthz:               healthz.New(),
+		workflowEventSink:             c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -422,20 +450,9 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %w", err)
 	}
 
-	if c.DaprInternalGRPCPort != "" && c.DaprInternalGRPCPort != "0" {
-		intc.internalGRPCPort, err = strconv.Atoi(c.DaprInternalGRPCPort)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
-		}
-	} else {
-		// Get a "stable random" port in the range 47300-49,347 if it can be
-		// acquired using a deterministic algorithm that returns the same value if
-		// the same app is restarted
-		// Otherwise, the port will be random.
-		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
-		}
+	intc.internalGRPCPort, err = resolveInternalGRPCPort(c.DaprInternalGRPCPort, intc.id)
+	if err != nil {
+		return nil, err
 	}
 
 	if c.DaprPublicPort != "" {
@@ -480,6 +497,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if intc.actorsDisseminationTimeout <= 0 {
 		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout
+	}
+
+	if intc.actorsPlacementStartupTimeout <= 0 {
+		intc.actorsPlacementStartupTimeout = DefaultActorsPlacementStartupTimeout
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {
@@ -574,4 +595,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	return intc, nil
+}
+
+// resolveInternalGRPCPort returns the configured internal gRPC port. An empty
+// or "0" port gets a "stable random" port, the same each time the same app
+// starts if it is free, otherwise a random one.
+func resolveInternalGRPCPort(port, appID string) (int, error) {
+	if port == "" || port == "0" {
+		p, err := ports.GetStablePort(internalGRPCStablePortStart, appID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
+		}
+		return p, nil
+	}
+
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
+	}
+	return p, nil
 }

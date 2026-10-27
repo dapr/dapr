@@ -22,6 +22,7 @@ import (
 	apierrors "github.com/diagridio/go-etcd-cron/api/errors"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -67,6 +68,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		monitoring.RecordJobsCreatedFailedCount(req.GetMetadata())
 		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
+		}
+		// The etcd client's NOSPACE error does not implement GRPCStatus, so
+		// returning it as-is crosses the wire as Unknown, indistinguishable
+		// from transient failures like cron shutdown. Restore the code etcd
+		// itself uses so clients can classify quota exhaustion as permanent.
+		if errors.Is(err, rpctypes.ErrNoSpace) || errors.Is(err, rpctypes.ErrGRPCNoSpace) {
+			return nil, status.Errorf(codes.ResourceExhausted, "%s", err.Error())
 		}
 
 		return nil, err
@@ -158,10 +166,10 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		}
 
 		// Recover the reminder/job name by trimming the known key prefix built
-		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>";
-		// names cannot contain '/', so the segment after the final '/' is the
-		// composed name. Trimming the metadata prefix off it then yields the
-		// reminder/job name unambiguously, even when the name or actor id
+		// from the metadata. The cron key is "<etcdNamespace>/jobs/<composed>"
+		// and names cannot contain '/', so the segment after the final '/' is
+		// the composed name. Trimming the metadata prefix off it then yields
+		// the reminder/job name unambiguously, even when the name or actor id
 		// contains "||".
 		prefix, err := serialize.PrefixFromMetadata(&meta)
 		if err != nil {
@@ -218,6 +226,13 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 // updates the sidecars upon changes.
 func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return s.cron.HostsWatch(stream)
+}
+
+// ReportActorTypes serves per-actor-type placement orders to sidecars. Only
+// available when this scheduler serves placement and is the current placement
+// leader.
+func (s *Server) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
+	return s.placement.ReportActorTypes(stream)
 }
 
 // DeleteByMetadata deletes all jobs matching the provided metadata.

@@ -68,6 +68,48 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
+
+	// WorkflowsFastPath enables the workflow scheduler fast-path stack:
+	// wake-ups drive eagerly on the arming host instead of creating a
+	// per-event scheduler reminder (durability moves to a per-instance
+	// repeating janitor backstop plus on-failure escalation to the durable
+	// per-event reminder; delayed starts keep their scheduler due time);
+	// activities certified by that janitor run locally without their
+	// run-activity reminder, with crash recovery via janitor re-dispatch;
+	// and sender-retried completion events fold straight into the next
+	// turn's single state commit, acked only after that commit, with the
+	// sender's retry as the durability (external raised events keep the
+	// durable inbox path). Each leg removes scheduler job commits and
+	// trigger round trips from the workflow hot path. At-least-once
+	// execution is unchanged throughout. With scheduler-enforced workflow
+	// concurrency limits configured the fast path disables itself: the
+	// limits gate per job delivery, which local drives bypass. Preview
+	// feature; disabled by default.
+	WorkflowsFastPath Feature = "WorkflowsFastPath"
+
+	// WorkflowsStagedOperations accepts workflow operations while no daprd of
+	// the app has a workflow worker connected (or an in-process executor).
+	// Starts, raised events, terminate, suspend, resume and rerun are staged:
+	// daprd saves them, with their usual synchronous errors, and they run
+	// once a worker connects. Status queries and purges complete at once.
+	// Without it they block or fail with no address. To stage them, a daprd
+	// with an executor registers the executor actor type as well, which
+	// tells the app's other daprds that one exists; once none has for a few
+	// seconds, every daprd of the app hosts the workflow actor types itself,
+	// as a fallback host, and a daprd whose last worker leaves keeps hosting
+	// them as one. A fallback host runs no workflow code: it
+	// does not advertise the types to the scheduler for reminder delivery,
+	// so the reminders its actors arm fire once a daprd with an executor
+	// exists, and it gives the types up once one has existed for a short
+	// while. No control plane change is needed. Enable it only once every
+	// daprd of the app runs a version which knows it: an older daprd with a
+	// worker does not register the executor actor type, so a daprd with the
+	// flag and no worker would take a share of the app's instances it cannot
+	// run. Every daprd with the flag and an actor runtime hosts the types
+	// while no worker exists, so set it in the Configuration of the apps
+	// which run workflows rather than of every app. Preview feature;
+	// disabled by default.
+	WorkflowsStagedOperations Feature = "WorkflowsStagedOperations"
 )
 
 // end feature flags section
@@ -260,6 +302,30 @@ func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return w.GlobalMaxConcurrentActivityInvocations
+}
+
+// HasSchedulerConcurrencyLimits reports whether any scheduler-enforced
+// concurrency limit is configured (global caps or per-name lists); the
+// worker-enforced per-host caps are excluded.
+func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
+	if w == nil {
+		return false
+	}
+	if w.GetGlobalMaxConcurrentWorkflowInvocations() != nil ||
+		w.GetGlobalMaxConcurrentActivityInvocations() != nil {
+		return true
+	}
+	// Only entries the scheduler actually enforces count (mirrors
+	// cluster.buildConcurrencyLimits).
+	enforced := func(ls []NamedConcurrencyLimit) bool {
+		for _, l := range ls {
+			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
 }
 
 type SecretsSpec struct {
@@ -465,7 +531,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
-// GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
+// GetLatencyDistribution returns a *view.Aggregation to be used for latency histograms
 func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 	metricSpecBytes, err := json.Marshal(m)

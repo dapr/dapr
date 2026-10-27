@@ -15,16 +15,21 @@ package universal
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -104,6 +109,49 @@ func TestStartWorkflowAPI(t *testing.T) {
 			} else {
 				require.ErrorIs(t, err, tt.expectedError)
 			}
+		})
+	}
+}
+
+func TestStartWorkflowRetries(t *testing.T) {
+	tests := map[string]struct {
+		err          error
+		wantAttempts int32
+	}{
+		"already exists is not retried": {err: status.Error(codes.AlreadyExists, "create failed"), wantAttempts: 1},
+		"unavailable is retried":        {err: status.Error(codes.Unavailable, "create failed"), wantAttempts: 4},
+		"no worker connected is not retried": {
+			err:          fmt.Errorf("%w for app 'x': failed to lookup actor: %w", wferrors.ErrNoWorkerConnected, messages.ErrActorNoAddress.WithFormat("x")),
+			wantAttempts: 1,
+		},
+		"no worker connected on a remote host is not retried": {
+			err:          fmt.Errorf("%w for app 'x': %w", wferrors.ErrNoWorkerConnected, status.Error(codes.FailedPrecondition, "failed to lookup actor: did not find address for actor 'x'")),
+			wantAttempts: 1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var attempts atomic.Int32
+			fakeAPI := &Universal{
+				logger:     logger.NewLogger("test"),
+				resiliency: resiliency.FromConfigurations(logger.NewLogger("test")),
+				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+					return fake.NewClient().WithScheduleNewWorkflow(func(context.Context, any, ...api.NewWorkflowOptions) (api.InstanceID, error) {
+						attempts.Add(1)
+						return "", fmt.Errorf("failed to start workflow: %w", tc.err)
+					})
+				}),
+				actors: actorsfake.New(),
+			}
+
+			_, err := fakeAPI.StartWorkflow(t.Context(), &runtimev1pb.StartWorkflowRequest{
+				WorkflowComponent: fakeComponentName,
+				InstanceId:        fakeInstanceID,
+				WorkflowName:      "fakeWorkflow",
+			})
+			require.ErrorIs(t, err, messages.ErrStartWorkflow)
+			assert.Equal(t, tc.wantAttempts, attempts.Load())
 		})
 	}
 }
@@ -401,7 +449,7 @@ func newGetWorkflowAPI(metadata *backend.WorkflowMetadata, metadataErr error) *U
 		logger:     logger.NewLogger("test"),
 		resiliency: resiliency.New(nil),
 		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
-			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID) (*backend.WorkflowMetadata, error) {
+			return fake.NewClient().WithFetchWorkflowMetadata(func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error) {
 				return metadata, metadataErr
 			})
 		}),

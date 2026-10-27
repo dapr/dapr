@@ -21,8 +21,9 @@ import (
 )
 
 // handleSubscriptionAdd processes a declarative subscription resource. It
-// filters by app scope, materialises the subscription spec, writes it to
-// compstore and reloads the matching pubsub via the subscriber.
+// filters by app scope, materialises the subscription spec and hands it to the
+// subscriber, which writes it to compstore only after starting its consumer
+// when app subscriptions are active (a failed start is not written).
 func (c *Category) handleSubscriptionAdd(ev *loops.SubscriptionAdd) {
 	comp := ev.Subscription
 	if len(comp.Scopes) > 0 && !slices.Contains(comp.Scopes, c.appID) {
@@ -54,13 +55,7 @@ func (c *Category) handleSubscriptionAdd(ev *loops.SubscriptionAdd) {
 		sub.Rules = append(sub.Rules, &rtpubsub.Rule{Path: comp.Spec.Routes.Default})
 	}
 
-	c.compStore.AddDeclarativeSubscription(&comp, sub)
-	if err := c.subscriber.ReloadDeclaredAppSubscription(comp.Name, comp.Spec.Pubsubname); err != nil {
-		c.compStore.DeleteDeclarativeSubscription(comp.Name)
-		sendResult(ev.Result, err)
-		return
-	}
-	sendResult(ev.Result, nil)
+	sendResult(ev.Result, c.subscriber.AddDeclaredAppSubscription(&comp, sub))
 }
 
 // handleSubscriptionClose removes a declarative subscription resource and

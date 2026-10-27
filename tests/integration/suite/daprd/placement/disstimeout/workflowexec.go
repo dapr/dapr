@@ -29,13 +29,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -97,7 +97,7 @@ func (w *workflowexec) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
-	backendClient := dtclient.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+	backendClient := dtclient.NewTaskHubGrpcClient(conn, logger.New(t))
 
 	r := task.NewTaskRegistry()
 	r.AddWorkflowN("TimeoutWorkflow", func(ctx *task.WorkflowContext) (any, error) {

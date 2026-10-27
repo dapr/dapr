@@ -48,7 +48,7 @@ type workerlb struct {
 }
 
 func (w *workerlb) Setup(t *testing.T) []framework.Option {
-	w.workflow = newClusteredDeployment(t, 2)
+	w.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(w.workflow),

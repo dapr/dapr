@@ -143,6 +143,20 @@ func (w *wrapper) WatchHosts(ctx context.Context, req *v1pb.WatchHostsRequest, o
 	return resp, err
 }
 
+func (w *wrapper) ReportActorTypes(ctx context.Context, opts ...grpc.CallOption) (v1pb.Scheduler_ReportActorTypesClient, error) {
+	var resp v1pb.Scheduler_ReportActorTypesClient
+
+	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
+		var err error
+
+		resp, err = client.ReportActorTypes(ctx, opts...)
+
+		return err
+	})
+
+	return resp, err
+}
+
 func (w *wrapper) DeleteByNamePrefix(ctx context.Context, req *v1pb.DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*v1pb.DeleteByNamePrefixResponse, error) {
 	var resp *v1pb.DeleteByNamePrefixResponse
 
@@ -170,7 +184,7 @@ func (w *wrapper) call(ctx context.Context, fn apiFn) error {
 
 		done()
 
-		// A scheduler shutting down cancels in-flight RPCs; retry against the
+		// A scheduler shutting down cancels in-flight RPCs. Retry against the
 		// next client, with backoff so a cluster-wide restart does not turn
 		// this loop into a hot spin.
 		status, ok := status.FromError(err)
