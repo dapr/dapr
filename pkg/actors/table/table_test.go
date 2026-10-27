@@ -516,12 +516,14 @@ func Test_RetireFactory(t *testing.T) {
 		assert.Zero(t, next.retired.Load())
 	})
 
-	t.Run("registering a type which is not draining again does not retire its factory", func(t *testing.T) {
+	t.Run("registering a type which is not draining again retires its factory", func(t *testing.T) {
 		tble, f := newTable(t)
+		next := &retirerFactory{FakeFactory: fake.NewFactory()}
 		tble.RegisterActorTypes(table.RegisterActorTypeOptions{
-			Factories: []table.ActorTypeFactory{{Type: "retired", Factory: fake.NewFactory()}},
+			Factories: []table.ActorTypeFactory{{Type: "retired", Factory: next}},
 		})
-		assert.Zero(t, f.retired.Load())
+		assert.EqualValues(t, 1, f.retired.Load())
+		assert.Zero(t, next.retired.Load())
 	})
 }
 
@@ -639,6 +641,32 @@ func Test_DrainedFactoryHalt(t *testing.T) {
 		wait(t, completed)
 		wait(t, registered)
 		assert.Equal(t, "new", created(t, tble, "held"))
+	})
+
+	t.Run("a halt which leaves an actor re-created during it halts again", func(t *testing.T) {
+		// A call routed to the draining factory re-creates the actor its
+		// halt just deactivated: the halt makes no progress, and must go on
+		// until the factory is empty rather than retire it with the actor.
+		var (
+			halts atomic.Int32
+			left  atomic.Int32
+		)
+		left.Store(1)
+		retired := &retirerFactory{
+			FakeFactory: fake.NewFactory().
+				WithLen(func() int { return int(left.Load()) }).
+				WithHaltAll(func(context.Context) error {
+					if halts.Add(1) > 1 {
+						left.Store(0)
+					}
+					return nil
+				}),
+		}
+		tble := newTable(t, retired)
+
+		wait(t, register(tble, newFactory()))
+		assert.EqualValues(t, 2, halts.Load())
+		assert.EqualValues(t, 1, retired.retired.Load())
 	})
 
 	t.Run("a halt waiting on a turn which creates an actor of the same type completes", func(t *testing.T) {

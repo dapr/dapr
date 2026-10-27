@@ -42,11 +42,10 @@ type Factory interface {
 
 // Retirer is implemented by a Factory with background work of its own which
 // serves its actors. The actor table calls Retire once it has removed the
-// factory for good (unregistered, drained, or replaced while draining) and
-// its halt has ended, so that work ends with the actors it served. It is not
-// called when the table halts the actors of a factory it keeps (HaltAll,
-// SuspendHosting), nor when a registration replaces a factory which was not
-// draining.
+// factory for good (unregistered, drained, or replaced by a registration)
+// and its halt has ended, so that work ends with the actors it served. It is
+// not called when the table halts the actors of a factory it keeps (HaltAll,
+// SuspendHosting).
 type Retirer interface {
 	Retire()
 }
