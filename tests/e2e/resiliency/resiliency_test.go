@@ -154,6 +154,42 @@ func TestInputBindingResiliency(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
+	// callCounts returns the calls the app recorded per message ID for binding.
+	callCounts := func(binding string) (map[string][]CallRecord, error) {
+		getCallsURL := "tests/getCallCount"
+		if strings.Contains(binding, "grpc") {
+			getCallsURL = "tests/getCallCountGRPC"
+		}
+		resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
+		if err != nil {
+			return nil, err
+		}
+		var callCount map[string][]CallRecord
+		return callCount, json.Unmarshal(resp, &callCount)
+	}
+
+	// The binding topics are created on first use. On a Kafka broker that has
+	// only just started, the consumers can take longer than a case's 5s window
+	// to join. Both bindings share a consumer group, so send through both
+	// before waiting: their joins then settle together, before any case.
+	warmup := map[string]string{}
+	for _, binding := range []string{"dapr-resiliency-binding", "dapr-resiliency-binding-grpc"} {
+		message := createFailureMessage(nil, nil, nil)
+		b, _ := json.Marshal(message)
+		_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeBinding/%s", externalURL, binding), b)
+		require.NoError(t, err)
+		require.Equal(t, 200, code)
+		warmup[binding] = message.ID
+	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for binding, id := range warmup {
+			callCount, err := callCounts(binding)
+			if assert.NoError(c, err) {
+				assert.NotEmpty(c, callCount[id], "binding %s has not delivered", binding)
+			}
+		}
+	}, time.Minute, time.Second)
+
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			message := createFailureMessage(tc.FailureCount, tc.Timeout, tc.responseStatusCode)
@@ -165,17 +201,7 @@ func TestInputBindingResiliency(t *testing.T) {
 			// Let the binding propagate and give time for retries/timeout.
 			time.Sleep(time.Second * 5)
 
-			var callCount map[string][]CallRecord
-			var getCallsURL string
-			if strings.Contains(tc.binding, "grpc") {
-				getCallsURL = "tests/getCallCountGRPC"
-			} else {
-				getCallsURL = "tests/getCallCount"
-			}
-			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
-			require.NoError(t, err)
-
-			err = json.Unmarshal(resp, &callCount)
+			callCount, err := callCounts(tc.binding)
 			require.NoError(t, err)
 			if tc.shouldFail {
 				// First call + 5 retries and no more.
