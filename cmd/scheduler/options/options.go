@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,11 +44,14 @@ type Options struct {
 	TrustDomain      string
 	TrustAnchorsFile *string
 	SentryAddress    string
-	PlacementAddress string
 	Mode             string
 	KubeConfig       *string
 
 	ID string
+
+	PlacementEnabled                   bool
+	PlacementDisseminateTimeout        time.Duration
+	PlacementDisseminateCoalesceWindow time.Duration
 
 	EtcdEmbed                      bool
 	EtcdInitialCluster             []string
@@ -110,6 +114,10 @@ func New(origArgs []string) (*Options, error) {
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 
+	fs.BoolVar(&opts.PlacementEnabled, "placement-enabled", false, "When enabled, this scheduler serves actor placement to daprd sidecars, replacing the standalone placement service. All scheduler replicas in the cluster must set the same value.")
+	fs.DurationVar(&opts.PlacementDisseminateTimeout, "placement-disseminate-timeout", time.Second*8, "The timeout for a placement dissemination round to daprd sidecars. Sidecars which fail to acknowledge within the timeout have their placement stream closed.")
+	fs.DurationVar(&opts.PlacementDisseminateCoalesceWindow, "placement-disseminate-coalesce-window", 0, "The window in which placement membership changes are coalesced into a single dissemination round. 0 disseminates immediately.")
+
 	fs.BoolVar(&opts.EtcdEmbed, "etcd-embed", true, "When enabled, the Etcd database will be embedded in the scheduler server. If false, the scheduler will connect to an external Etcd cluster using the --etcd-client-endpoints flag.")
 
 	fs.StringSliceVar(&opts.EtcdInitialCluster, "etcd-initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
@@ -118,7 +126,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdClientListenAddress, "etcd-client-listen-address", "localhost", "Listen address for etcd client communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "revision", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
-	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "1000000", "Compaction retention for etcd. Can express time or number of revisions, depending on the value of 'etcd-compaction-mode'")
+	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10000", "Compaction retention for etcd. Can express time or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 100000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 10, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 10, "Maximum number of write-ahead logs to retain (0 is unlimited).")

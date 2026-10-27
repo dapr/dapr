@@ -40,7 +40,7 @@ type timer struct {
 }
 
 func (i *timer) Setup(t *testing.T) []framework.Option {
-	i.workflow = newClusteredDeployment(t, 2)
+	i.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(i.workflow),

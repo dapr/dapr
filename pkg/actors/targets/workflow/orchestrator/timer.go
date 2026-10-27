@@ -25,11 +25,9 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -121,15 +119,9 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      name,
-		// One shot, retry forever, every second.
-		FailurePolicy: &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		},
+		// One shot, retry forever, jittered interval. The timer's due time
+		// is untouched; only the post-failure retry interval is jittered.
+		FailurePolicy: common.RetryForeverPolicy(),
 	})
 }
 

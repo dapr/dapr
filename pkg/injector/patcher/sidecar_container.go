@@ -143,6 +143,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
+	if c.AppBindingOptionsTimeout != nil {
+		args = append(args, "--app-binding-options-timeout", *c.AppBindingOptionsTimeout)
+	}
+
 	if c.LogAsJSON {
 		args = append(args, "--log-as-json")
 	}
@@ -193,6 +197,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	if c.ActorsDisseminateTimeout != nil {
 		args = append(args, "--actors-disseminate-timeout", *c.ActorsDisseminateTimeout)
+	}
+
+	if c.ActorsPlacementStartupTimeout != nil {
+		args = append(args, "--actors-placement-startup-timeout", *c.ActorsPlacementStartupTimeout)
 	}
 
 	if c.SchedulerAddress != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -84,7 +85,7 @@ func (r *retentionstuckstalled) Run(t *testing.T, ctx context.Context) {
 		return chunk, nil
 	}))
 
-	client := dworkflow.NewClient(r.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(r.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	const instanceID = "retentionstuckstalled-claim-eval"
@@ -103,7 +104,9 @@ func (r *retentionstuckstalled) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.Len(t, r.workflow.Scheduler().ListAllKeys(t, ctx, retentionPrefix), 1)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, r.workflow.Scheduler().ListAllKeys(t, ctx, retentionPrefix), 1)
+	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.ScheduleWorkflow(ctx, "stall", dworkflow.WithInstanceID(instanceID))
 	require.NoError(t, err)

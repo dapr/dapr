@@ -29,6 +29,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
@@ -48,6 +49,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor/binarystore"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
@@ -62,9 +64,11 @@ import (
 	loopstatestore "github.com/dapr/dapr/pkg/runtime/processor/loops/statestore"
 	"github.com/dapr/dapr/pkg/runtime/processor/middleware"
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/processor/search"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
+	"github.com/dapr/dapr/pkg/runtime/processor/vector"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
@@ -95,6 +99,7 @@ type Options struct {
 	AdapterStreamer                 rtpubsub.AdapterStreamer
 	Reporter                        registry.Reporter
 	ProgrammaticSubscriptionEnabled bool
+	AppBindingOptionsTimeout        time.Duration
 }
 
 // Processor manages the lifecycle of all components, HTTP endpoints, MCP
@@ -113,6 +118,10 @@ type Processor struct {
 	compStore *compstore.ComponentStore
 	security  security.Handler
 	reporter  registry.Reporter
+
+	// actors is notified of actor state store changes by the hot reload
+	// reconciler. May be nil in tests.
+	actors actors.Interface
 
 	// Accessor interfaces used by the State/Secret/Binding/Subscriber
 	// methods. Backed by the concrete sub-processor instances constructed in
@@ -149,9 +158,12 @@ type Processor struct {
 	lockCat   *category.Category
 	midCat    *category.Category
 	convCat   *category.Category
+	searchCat *category.Category
+	vectorCat *category.Category
+	binCat    *category.Category
 
-	// inlineManagers is used by Init/Close when Process is not running
-	// (test-only path). The loop path never reads this map.
+	// inlineManagers is used by Init/Close when Process is not running and by
+	// Close after shutdown. The loop path never reads this map.
 	inlineManagers map[components.Category]inlineManager
 
 	running atomic.Bool
@@ -190,6 +202,7 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
+		Actors:         opts.Actors,
 	})
 
 	secretProc := secret.New(secret.Options{
@@ -197,17 +210,19 @@ func New(opts Options) *Processor {
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
 		OperatorClient: opts.OperatorClient,
+		Security:       opts.Security,
 	})
 
 	bindingProc := binding.New(binding.Options{
-		Registry:       opts.Registry.Bindings(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		IsHTTP:         opts.IsHTTP,
-		Resiliency:     opts.Resiliency,
-		GRPC:           opts.GRPC,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		Channels:       opts.Channels,
+		Registry:                 opts.Registry.Bindings(),
+		ComponentStore:           opts.ComponentStore,
+		Meta:                     opts.Meta,
+		IsHTTP:                   opts.IsHTTP,
+		Resiliency:               opts.Resiliency,
+		GRPC:                     opts.GRPC,
+		TracingSpec:              opts.GlobalConfig.Spec.TracingSpec,
+		Channels:                 opts.Channels,
+		AppBindingOptionsTimeout: opts.AppBindingOptionsTimeout,
 	})
 
 	pubsubProc := pubsub.New(pubsub.Options{
@@ -243,6 +258,21 @@ func New(opts Options) *Processor {
 		Registry: opts.Registry.Conversations(),
 		Store:    opts.ComponentStore,
 	})
+	searchProc := search.New(search.Options{
+		Meta:     opts.Meta,
+		Registry: opts.Registry.Searches(),
+		Store:    opts.ComponentStore,
+	})
+	vectorProc := vector.New(vector.Options{
+		Meta:     opts.Meta,
+		Registry: opts.Registry.Vectors(),
+		Store:    opts.ComponentStore,
+	})
+	binStoreProc := binarystore.New(binarystore.Options{
+		Meta:     opts.Meta,
+		Registry: opts.Registry.BinaryStores(),
+		Store:    opts.ComponentStore,
+	})
 
 	reporter := DefaultReporter
 	if opts.Reporter != nil {
@@ -255,6 +285,7 @@ func New(opts Options) *Processor {
 		compStore:      opts.ComponentStore,
 		security:       opts.Security,
 		reporter:       reporter,
+		actors:         opts.Actors,
 		state:          stateProc,
 		secret:         secretProc,
 		binding:        bindingProc,
@@ -269,6 +300,9 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:    secretProc,
 			components.CategoryStateStore:     stateProc,
 			components.CategoryConversation:   convProc,
+			components.CategorySearch:         searchProc,
+			components.CategoryVector:         vectorProc,
+			components.CategoryBinaryStore:    binStoreProc,
 		},
 	}
 
@@ -334,6 +368,27 @@ func New(opts Options) *Processor {
 		Reporter:  reporter,
 		Security:  opts.Security,
 	})
+	p.searchCat = category.New(category.Options{
+		Name:      string(components.CategorySearch),
+		Manager:   searchProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.vectorCat = category.New(category.Options{
+		Name:      string(components.CategoryVector),
+		Manager:   vectorProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
+	p.binCat = category.New(category.Options{
+		Name:      string(components.CategoryBinaryStore),
+		Manager:   binStoreProc,
+		CompStore: opts.ComponentStore,
+		Reporter:  reporter,
+		Security:  opts.Security,
+	})
 
 	// Root loop ----------------------------------------------------------
 	cats := map[components.Category]loop.Interface[loops.EventCategory]{
@@ -346,6 +401,9 @@ func New(opts Options) *Processor {
 		components.CategorySecretStore:    p.secCat.Loop(),
 		components.CategoryStateStore:     p.stateCat.Loop(),
 		components.CategoryConversation:   p.convCat.Loop(),
+		components.CategorySearch:         p.searchCat.Loop(),
+		components.CategoryVector:         p.vectorCat.Loop(),
+		components.CategoryBinaryStore:    p.binCat.Loop(),
 	}
 	p.rootLoop = root.New(root.Options{
 		CompStore:      opts.ComponentStore,
@@ -358,7 +416,13 @@ func New(opts Options) *Processor {
 			if reg == nil {
 				return nil
 			}
-			return reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			policyRunner := resiliency.NewRunner[any](ctx,
+				opts.Resiliency.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
+			)
+			_, err := policyRunner(func(ctx context.Context) (any, error) {
+				return nil, reg.RegisterMCPServer(ctx, s, opts.ComponentStore, opts.Security)
+			})
+			return err
 		},
 		UnregisterMCPServer: func(name string) {
 			reg := p.getInProcessWorkflows()
@@ -399,6 +463,9 @@ func (p *Processor) Process(ctx context.Context) error {
 		p.lockCat.Run,
 		p.midCat.Run,
 		p.convCat.Run,
+		p.searchCat.Run,
+		p.vectorCat.Run,
+		p.binCat.Run,
 		p.subscriber.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()

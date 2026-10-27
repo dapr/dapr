@@ -24,11 +24,14 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	cl "k8s.io/client-go/kubernetes"
 	clauthv1 "k8s.io/client-go/kubernetes/typed/authentication/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,8 +39,10 @@ import (
 	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
 	"github.com/dapr/kit/logger"
@@ -68,6 +73,7 @@ type Options struct {
 type kubernetes struct {
 	auth           clauthv1.AuthenticationV1Interface
 	client         client.Reader
+	pods           corev1client.CoreV1Interface
 	ready          func(context.Context) bool
 	sentryAudience string
 	controlPlaneNS string
@@ -93,7 +99,19 @@ func New(opts Options) (validator.Validator, error) {
 	opts.RestConfig.RateLimiter = nil
 	opts.RestConfig.QPS = math.MaxFloat32
 	opts.RestConfig.Burst = math.MaxInt
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	podSelector, err := labels.Parse(injectorConsts.SidecarInjectedLabel)
+	if err != nil {
+		return nil, err
+	}
+	cache, err := cache.New(opts.RestConfig, cache.Options{
+		Scheme: scheme,
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {
+				Label:     podSelector,
+				Transform: cache.TransformStripManagedFields(),
+			},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +119,7 @@ func New(opts Options) (validator.Validator, error) {
 	return &kubernetes{
 		auth:           kubeClient.AuthenticationV1(),
 		client:         cache,
+		pods:           kubeClient.CoreV1(),
 		ready:          cache.WaitForCacheSync,
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
@@ -114,7 +133,7 @@ func (k *kubernetes) Start(ctx context.Context) error {
 
 	cache := k.client.(cache.Cache)
 	for _, obj := range []client.Object{
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"}},
+		&corev1.Pod{},
 		&configv1alpha1.Configuration{},
 	} {
 		if _, err := cache.GetInformer(ctx, obj); err != nil {
@@ -171,8 +190,18 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, errMissingPodClaim
 	}
 
+	key := types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
+	err = k.client.Get(ctx, key, &pod)
+	if apierrors.IsNotFound(err) {
+		// Control-plane Pods, manually injected sidecars, and Pods admitted by
+		// an older injector may not carry the label required by the cache.
+		log.Debugf("Pod %s not in cache, reading it from the API server", key)
+		var p *corev1.Pod
+		if p, err = k.pods.Pods(saNamespace).Get(ctx, claims.Pod.Name, metav1.GetOptions{}); err == nil {
+			pod = *p
+		}
+	}
 	if err != nil {
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
 		return validator.ValidateResult{}, errors.New("failed to get pod of identity")
@@ -197,9 +226,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.GetId())
 	}
 
+	imgs := containerImages(&pod)
+
 	if isControlPlane {
 		return validator.ValidateResult{
-			TrustDomain: k.controlPlaneTD,
+			TrustDomain:     k.controlPlaneTD,
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -207,7 +239,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	if !ok {
 		// Return early with default trust domain if no config annotation is found.
 		return validator.ValidateResult{
-			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+			TrustDomain:     spiffeid.RequireTrustDomainFromString("public"),
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -220,7 +253,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	if config.Spec.AccessControlSpec == nil || len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
 		return validator.ValidateResult{
-			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+			TrustDomain:     spiffeid.RequireTrustDomainFromString("public"),
+			ContainerImages: imgs,
 		}, nil
 	}
 
@@ -229,8 +263,62 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return validator.ValidateResult{}, fmt.Errorf("failed to parse trust domain %q: %w", config.Spec.AccessControlSpec.TrustDomain, err)
 	}
 	return validator.ValidateResult{
-		TrustDomain: td,
+		TrustDomain:     td,
+		ContainerImages: imgs,
 	}, nil
+}
+
+// containerImages extracts the image references of the pod's containers.
+// Regular containers are always included; init containers only when they are
+// native sidecars (restartPolicy Always), since daprd runs as one when native
+// sidecar mode is enabled. Digest is best effort and left empty for
+// containers which have not started at issuance time.
+func containerImages(pod *corev1.Pod) []images.ContainerImage {
+	imgs := make([]images.ContainerImage, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
+
+	for i := range pod.Spec.InitContainers {
+		ctr := &pod.Spec.InitContainers[i]
+		if ctr.RestartPolicy == nil || *ctr.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+			continue
+		}
+		imgs = append(imgs, containerImage(ctr, pod.Status.InitContainerStatuses))
+	}
+
+	for i := range pod.Spec.Containers {
+		imgs = append(imgs, containerImage(&pod.Spec.Containers[i], pod.Status.ContainerStatuses))
+	}
+
+	if len(imgs) == 0 {
+		return nil
+	}
+	return imgs
+}
+
+func containerImage(ctr *corev1.Container, statuses []corev1.ContainerStatus) images.ContainerImage {
+	role := images.RoleApp
+	if ctr.Name == injectorConsts.SidecarContainerName {
+		role = images.RoleDaprd
+	}
+
+	img := images.ContainerImage{
+		Role:          role,
+		ContainerName: ctr.Name,
+		Image:         ctr.Image,
+	}
+
+	for _, status := range statuses {
+		if status.Name != ctr.Name {
+			continue
+		}
+		if di := strings.LastIndex(status.ImageID, "@"); di >= 0 {
+			img.Digest = status.ImageID[di+1:]
+		} else if strings.HasPrefix(status.ImageID, "sha256:") {
+			img.Digest = status.ImageID
+		}
+		break
+	}
+
+	return img
 }
 
 // expectedID returns the expected ID for the pod. If the pod is a control

@@ -52,10 +52,13 @@ const (
 	DaprAPIHTTPSpanAttrValue = "http"
 	DaprAPIGRPCSpanAttrValue = "grpc"
 
-	StateBuildingBlockType   = "state"
-	SecretBuildingBlockType  = "secrets"
-	BindingBuildingBlockType = "bindings"
-	PubsubBuildingBlockType  = "pubsub"
+	StateBuildingBlockType       = "state"
+	SecretBuildingBlockType      = "secrets"
+	BindingBuildingBlockType     = "bindings"
+	PubsubBuildingBlockType      = "pubsub"
+	BinaryStoreBuildingBlockType = "binarystore"
+	SearchBuildingBlockType      = "search"
+	VectorBuildingBlockType      = "vector"
 
 	DaprGRPCServiceInvocationService = "ServiceInvocation"
 	DaprGRPCDaprService              = "Dapr"

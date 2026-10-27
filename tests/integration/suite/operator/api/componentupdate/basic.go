@@ -152,7 +152,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			var gotComp compapi.Component
 			require.NoError(t, json.Unmarshal(event.GetComponent(), &gotComp))
-			assert.Equal(t, comp, &gotComp)
+			assert.Equal(c, comp, &gotComp)
 			assert.JSONEq(c, string(b), string(event.GetComponent()))
 			assert.Equal(c, operatorv1.ResourceEventType_DELETED, event.GetType())
 			assert.Equal(c, "DELETED", event.GetType().String())

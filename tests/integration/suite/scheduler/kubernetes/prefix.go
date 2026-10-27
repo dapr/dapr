@@ -56,6 +56,7 @@ func (p *prefix) Setup(t *testing.T) []framework.Option {
 	)
 
 	p.kubeapi = kubernetes.New(t,
+		kubernetes.WithNamespacedPodList(t, "default", &corev1.PodList{TypeMeta: metav1.TypeMeta{Kind: "PodList", APIVersion: "v1"}}),
 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
 			Items: []corev1.Namespace{{
 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},

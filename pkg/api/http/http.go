@@ -92,15 +92,19 @@ const (
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
 	storeNameParam           = "storeName"
+	indexParam               = "index"
+	collectionParam          = "collection"
 	stateKeyParam            = "key"
 	configurationKeyParam    = "key"
 	configurationSubscribeID = "configurationSubscribeID"
 	secretStoreNameParam     = "secretStoreName"
 	secretNameParam          = "key"
 	nameParam                = "name"
+	binaryStoreFileNameParam = "fileName"
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
+	workflowAppID            = "appID"
 	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
@@ -160,6 +164,9 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSearchEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructVectorEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -1137,6 +1144,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if !rawPayload {
 		span := diagUtils.SpanFromContext(r.Context())
 		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		baggage := baggageFromRequest(r)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID(),
 			Topic:           topic,
@@ -1144,6 +1152,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			Data:            body,
 			TraceID:         traceID,
 			TraceState:      traceState,
+			Baggage:         baggage,
 			Pubsub:          pubsubName,
 		}, metadata)
 		if err != nil {
@@ -1168,6 +1177,8 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			log.Debug(nerr)
 			return
 		}
+	} else if baggage := baggageFromRequest(r); baggage != "" {
+		metadata[diagConsts.BaggageHeader] = baggage
 	}
 
 	req := pubsub.PublishRequest{
@@ -1207,6 +1218,24 @@ type bulkPublishMessageEntry struct {
 	Event       any               `json:"event"`
 	ContentType string            `json:"contentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+func baggageFromRequest(r *nethttp.Request) string {
+	baggage := otelBaggage.FromContext(r.Context())
+	if baggage.Len() > 0 {
+		return baggage.String()
+	}
+
+	baggageValues := r.Header.Values(diagConsts.BaggageHeader)
+	if len(baggageValues) == 0 {
+		return ""
+	}
+
+	baggageString := strings.Join(baggageValues, ",")
+	if _, err := otelBaggage.Parse(baggageString); err != nil {
+		return ""
+	}
+	return baggageString
 }
 
 func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -1286,6 +1315,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 	}
 	features := thepubsub.Features()
+	baggage := baggageFromRequest(r)
 	if !rawPayload {
 		for i := range entries {
 			childSpan := diag.StartProducerSpanChildFromParent(r, span)
@@ -1302,6 +1332,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				Data:            entries[i].Event,
 				TraceID:         traceID,
 				TraceState:      traceState,
+				Baggage:         baggage,
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
@@ -1333,6 +1364,8 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				return
 			}
 		}
+	} else if baggage != "" {
+		metadata[diagConsts.BaggageHeader] = baggage
 	}
 
 	req := pubsub.BulkPublishRequest{
@@ -1639,7 +1672,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		Metadata:   req.Metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(r.Context(), storeReq)
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
