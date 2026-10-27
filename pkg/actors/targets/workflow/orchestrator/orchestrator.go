@@ -48,6 +48,12 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// settled lets a wake-up of a completed instance ack after one read of
+	// its metadata, parent-notify and first history rows (see
+	// settledTerminal). Any save rewrites the metadata row and fails that
+	// check, including the paths that bypass executeMethod (fold submits,
+	// activity-result reminders). Only touched under the turn lock.
+	settled *settledTerminal
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
@@ -67,6 +73,8 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
+	// lockWaiters counts invocations blocked on the turn lock.
+	lockWaiters atomic.Int32
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,
@@ -130,7 +138,7 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 	// The completions fold manages its own lock lifecycle (early release
 	// before waiting on the folding turn's commit; see fold.go).
-	if o.fastPath && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
+	if o.localFastPath() && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
 		return o.invokeAddEventFold(ctx, req)
 	}
 
@@ -166,6 +174,8 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
 	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+	o.lockWaiters.Add(1)
+	defer o.lockWaiters.Add(-1)
 
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)

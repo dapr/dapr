@@ -16,7 +16,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 
 	"go.uber.org/automaxprocs/maxprocs"
 
@@ -25,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/cmd/daprd/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
+	binarystoreLoader "github.com/dapr/dapr/pkg/components/binarystore"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	conversationLoader "github.com/dapr/dapr/pkg/components/conversation"
@@ -33,8 +36,10 @@ import (
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	searchLoader "github.com/dapr/dapr/pkg/components/search"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	vectorLoader "github.com/dapr/dapr/pkg/components/vector"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -95,13 +100,28 @@ func Run() {
 	configurationLoader.DefaultRegistry.Logger = logContrib
 	lockLoader.DefaultRegistry.Logger = logContrib
 	pubsubLoader.DefaultRegistry.Logger = logContrib
+	searchLoader.DefaultRegistry.Logger = logContrib
+	vectorLoader.DefaultRegistry.Logger = logContrib
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	conversationLoader.DefaultRegistry.Logger = logContrib
+	binarystoreLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	ctx := signals.Context()
 	ctxhupCh := signals.OnHUP(ctx)
+
+	// Hold the internal gRPC port across SIGHUP restarts; see
+	// runtime.ReserveInternalGRPCPort. Released when shutdown starts, so the
+	// port frees as soon as the runtime closes its server.
+	heldInternalGRPC, internalGRPCPort, err := runtime.ReserveInternalGRPCPort(ctx, opts.DaprInternalGRPCListenAddress, opts.DaprInternalGRPCPort, opts.AppID)
+	if err != nil {
+		log.Warnf("Could not hold the internal gRPC port across restarts; each runtime start will bind it: %v", err)
+	} else {
+		opts.DaprInternalGRPCPort = strconv.Itoa(internalGRPCPort)
+		context.AfterFunc(ctx, func() { heldInternalGRPC.Close() })
+		defer heldInternalGRPC.Close()
+	}
 
 	defer log.Info("Daprd shutdown gracefully")
 	for {
@@ -115,7 +135,11 @@ func Run() {
 				return
 			}
 
-			if err := runWithContext(hctx, opts); err != nil {
+			var internalGRPCListener func() (net.Listener, error)
+			if heldInternalGRPC != nil {
+				internalGRPCListener = func() (net.Listener, error) { return heldInternalGRPC.Listener(hctx) }
+			}
+			if err := runWithContext(hctx, opts, internalGRPCListener); err != nil {
 				log.Fatalf("Fatal error from runtime: %s", err)
 			}
 
@@ -129,18 +153,21 @@ func Run() {
 	}
 }
 
-func runWithContext(ctx context.Context, opts *options.Options) error {
+func runWithContext(ctx context.Context, opts *options.Options, internalGRPCListener func() (net.Listener, error)) error {
 	reg := registry.NewOptions().
 		WithSecretStores(secretstoresLoader.DefaultRegistry).
 		WithStateStores(stateLoader.DefaultRegistry).
 		WithConfigurations(configurationLoader.DefaultRegistry).
 		WithLocks(lockLoader.DefaultRegistry).
 		WithPubSubs(pubsubLoader.DefaultRegistry).
+		WithSearches(searchLoader.DefaultRegistry).
+		WithVectors(vectorLoader.DefaultRegistry).
 		WithNameResolutions(nrLoader.DefaultRegistry).
 		WithBindings(bindingsLoader.DefaultRegistry).
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
-		WithConversations(conversationLoader.DefaultRegistry)
+		WithConversations(conversationLoader.DefaultRegistry).
+		WithBinaryStores(binarystoreLoader.DefaultRegistry)
 
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
@@ -186,6 +213,7 @@ func runWithContext(ctx context.Context, opts *options.Options) error {
 				DaprHTTPPort:                  opts.DaprHTTPPort,
 				DaprInternalGRPCPort:          opts.DaprInternalGRPCPort,
 				DaprInternalGRPCListenAddress: opts.DaprInternalGRPCListenAddress,
+				DaprInternalGRPCListener:      internalGRPCListener,
 				DaprAPIGRPCPort:               opts.DaprAPIGRPCPort,
 				DaprAPIListenAddresses:        opts.DaprAPIListenAddresses,
 				DaprPublicPort:                opts.DaprPublicPort,

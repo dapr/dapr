@@ -460,7 +460,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.9; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.26.10; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -509,12 +509,20 @@ init-proto:
 GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
+# Well-known googleapis protos (e.g. google/rpc/status.proto) are not bundled
+# with protoc; take them from a pinned grpc-gateway release, downloaded on
+# demand so that they do not depend on the module cache or the module graph.
+# The path is resolved once, and only by a target that generates protos.
+GOOGLEAPIS_MODULE ?= github.com/grpc-ecosystem/grpc-gateway@v1.16.0
+GOOGLEAPIS_PROTO_PATH ?= $(eval GOOGLEAPIS_PROTO_PATH := $$(shell go mod download $(GOOGLEAPIS_MODULE) && go list -m -f '{{.Dir}}' $(GOOGLEAPIS_MODULE))/third_party/googleapis)$(GOOGLEAPIS_PROTO_PATH)
+
 # Generate archive files for each binary
 # $(1): the binary name to be archived
 define genProtoc
 .PHONY: gen-proto-$(1)
 gen-proto-$(1):
-	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) --connect-go_out=. --connect-go_opt=module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
+	@test -f "$$(GOOGLEAPIS_PROTO_PATH)/google/rpc/status.proto" || { echo "google/rpc/status.proto not found under $$(GOOGLEAPIS_PROTO_PATH)"; exit 1; }
+	$(PROTOC) -I. -I"$$(GOOGLEAPIS_PROTO_PATH)" --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) --connect-go_out=. --connect-go_opt=module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
 endef
 
 $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))

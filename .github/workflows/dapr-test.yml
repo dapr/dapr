@@ -532,6 +532,7 @@ jobs:
           make setup-test-env-kafka
           make setup-test-env-zipkin
           make setup-test-env-postgres
+          make setup-test-env-meilisearch
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
         shell: bash
       - name: Deploy dapr to AKS cluster
