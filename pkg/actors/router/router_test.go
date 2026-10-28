@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -242,6 +243,22 @@ func TestCallCancelledClaimDoesNotCreateActor(t *testing.T) {
 			assert.Equal(t, 1, r.invokes)
 		})
 	}
+}
+
+// TestCallWithoutRetriesReturnsLookupError covers the handoff's use of the
+// router: with no address for the actor, the call makes one lookup and returns
+// its error, instead of retrying it as Call does.
+func TestCallWithoutRetriesReturnsLookupError(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, func(context.Context, int) (context.Context, error) {
+		return nil, messages.ErrActorNoAddress.WithFormat("abc||foo")
+	}, nil)
+	_, err := r.CallWithoutRetries(t.Context(), internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo"))
+	require.ErrorIs(t, err, messages.ErrActorNoAddress)
+	assert.Equal(t, 1, r.lookups, "the call retried its lookup")
+	assert.Equal(t, 0, r.creates)
+	assert.Equal(t, 0, r.invokes)
 }
 
 func TestCallReminderNonLocalTimerDropped(t *testing.T) {
