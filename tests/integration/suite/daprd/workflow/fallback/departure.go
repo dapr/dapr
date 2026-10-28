@@ -64,9 +64,10 @@ type departure struct {
 // on it after the reconnect.
 const departureWatchDelay = 4 * time.Second
 
-// notFoundRetry starts the warning the router's actor-not-found retries log,
-// once for every call they retry.
-const notFoundRetry = "Error processing operation DaprBuiltInActorNotFoundRetries"
+// notFoundRetry starts the debug line the router's actor-not-found retries log
+// for a call whose lookup found no host. Their warning has a second cause, a
+// call landing on a closing executor actor, which this test can also see.
+const notFoundRetry = "Error for operation DaprBuiltInActorNotFoundRetries was: failed to lookup actor"
 
 func (d *departure) Setup(t *testing.T) []framework.Option {
 	env := exec.WithEnvVars(t,
@@ -142,10 +143,11 @@ func (d *departure) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, d.logline.Count("parked result(s) to the owner of its key"), instances)
 	}, time.Second*10, time.Millisecond*10)
 
-	// With no host for the type, the handoffs wait on placement. A handoff
-	// that called the router instead would sit in its actor-not-found
-	// retries, 5 x 1s, and log a warning for each parked completion within
-	// the first second.
+	// With no host for the type, the handoffs back off on the lookup error
+	// of their router calls, made without the router's own retries. A
+	// handoff that called the router with them would sit in its
+	// actor-not-found retries, 5 x 1s, and log one for each parked
+	// completion within the first second.
 	assert.Never(t, func() bool {
 		return d.logline.Count(notFoundRetry) > retries
 	}, time.Second, time.Millisecond*10, "a handoff called the router while no daprd hosted the executor actor type")

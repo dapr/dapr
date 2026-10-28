@@ -22,8 +22,9 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
-	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/router"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -278,46 +279,41 @@ func (e *executor) handOff(ctx context.Context, parked []*internalsv1pb.Internal
 // handOffOne makes one handoff call within its own forwardTimeout. HaltAll
 // runs after the type left this host's table, but placement resolves the key
 // here until the type change is disseminated, which happens only after every
-// HaltAll returns. The call then fails with ErrCreatingActor, so it is retried
-// until the key resolves elsewhere.
+// HaltAll returns. The call then fails with ErrCreatingActor, or with a closed
+// target, so it is retried until the key resolves elsewhere.
 //
-// Each attempt first looks the key up in placement. While no daprd of the app
-// hosts the type, as when the last executor of the app left, it waits there,
-// with no router call: the router would only retry its own actor-not-found
-// lookups for seconds per attempt. A result still unhanded when forwardTimeout
-// ends is lost; for a completion, the durable reminder retry runs its task
-// again.
+// Each attempt is one router call without the router's own actor-not-found
+// retries, so the decision to wait is made from the lookup that call makes.
+// While no daprd of the app hosts the type, as when the last executor of the
+// app left, that lookup has no address, and the handoff backs off until a host
+// shows up: the router would retry its own lookups for seconds per attempt,
+// logging each one. A result still unhanded when forwardTimeout ends is lost;
+// for a completion, the durable reminder retry runs its task again.
 func (e *executor) handOffOne(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, what string) {
 	hctx, cancel := context.WithTimeout(ctx, forwardTimeout)
 	defer cancel()
 
-	err := backoff.Retry(func() error {
-		_, _, release, err := e.placement.LookupActor(hctx, &api.LookupActorRequest{
-			ActorType: e.actorType,
-			ActorID:   e.actorID,
-		})
-		if release != nil {
-			release(nil)
-		}
-		if err != nil {
-			if errors.Is(err, messages.ErrActorNoAddress) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = handOffRetryInterval
+	bo.MaxInterval = handOffMaxRetryInterval
+	bo.MaxElapsedTime = 0 // hctx bounds the attempts
 
-		router, err := e.actors.Router(hctx)
+	err := backoff.Retry(func() error {
+		r, err := e.actors.Router(hctx)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
-		if _, err = router.Call(hctx, req); err != nil {
-			if errors.Is(err, actorerrors.ErrCreatingActor) {
+		if _, err = r.CallWithoutRetries(hctx, req); err != nil {
+			if errors.Is(err, actorerrors.ErrCreatingActor) ||
+				errors.Is(err, messages.ErrActorNoAddress) ||
+				targeterrors.IsClosed(err) ||
+				router.IsRetryableRemoteError(err) {
 				return err
 			}
 			return backoff.Permanent(err)
 		}
 		return nil
-	}, backoff.WithContext(backoff.NewConstantBackOff(handOffRetryInterval), hctx))
+	}, backoff.WithContext(bo, hctx))
 	if err != nil {
 		log.Debugf("Executor actor '%s': failed to hand off a parked %s: %s", e.actorID, what, err)
 		return
@@ -325,9 +321,13 @@ func (e *executor) handOffOne(ctx context.Context, req *internalsv1pb.InternalIn
 	log.Debugf("Executor actor '%s': handed off a parked %s to the owner of its key", e.actorID, what)
 }
 
-// handOffRetryInterval is the pause between handoff attempts while the key
-// still resolves to a host that no longer registers the type.
-const handOffRetryInterval = 100 * time.Millisecond
+// handOffRetryInterval and handOffMaxRetryInterval bound the pause between
+// handoff attempts while the key still resolves to a host that no longer
+// registers the type, or to no host at all.
+const (
+	handOffRetryInterval    = 100 * time.Millisecond
+	handOffMaxRetryInterval = time.Second
+)
 
 // nextHandoff returns the handoff count for the next move of a parked result
 // with the given headers, and whether it may move at all.

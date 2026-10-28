@@ -284,11 +284,11 @@ func (b *blockingBackend) CancelWorkflowTask(ctx context.Context, id api.Instanc
 	return b.Backend.CancelWorkflowTask(ctx, id)
 }
 
-// Test_SetExecutorAvailableAsyncReturnsBeforeSweepSettles covers the engine's
+// Test_StartSweepReturnsBeforeSweepSettles covers the engine's
 // disconnect callback, which flips under its lock and waits for the sweep
 // without it: the flip returns at once, and the returned function waits for
 // every cancel to settle.
-func Test_SetExecutorAvailableAsyncReturnsBeforeSweepSettles(t *testing.T) {
+func Test_StartSweepReturnsBeforeSweepSettles(t *testing.T) {
 	t.Parallel()
 
 	bb := &blockingBackend{Backend: local.NewTasksBackend(), release: make(chan struct{})}
@@ -299,7 +299,7 @@ func Test_SetExecutorAvailableAsyncReturnsBeforeSweepSettles(t *testing.T) {
 		cancelled.Store(errors.Is(err, api.ErrTaskCancelled))
 	})
 
-	settled := tr.SetExecutorAvailableAsync(false)
+	settled := tr.StartSweep()
 	assert.False(t, tr.ExecutorAvailable())
 
 	done := make(chan struct{})

@@ -86,18 +86,19 @@ func New(inner Backend) *Tracker {
 // caller's subsequent unregister HaltAll does not wait on a turn whose
 // cancellation is still in flight.
 func (t *Tracker) SetExecutorAvailable(available bool) {
-	t.SetExecutorAvailableAsync(available)()
+	if available {
+		t.available.Store(true)
+		return
+	}
+	t.StartSweep()()
 }
 
-// SetExecutorAvailableAsync is SetExecutorAvailable, except that it returns
-// once the flip is made and the sweep it makes is started: the returned
-// function waits for the sweep to settle. A caller holding a lock while it
-// flips can wait for the sweep without the lock.
-func (t *Tracker) SetExecutorAvailableAsync(available bool) (settled func()) {
-	t.available.Store(available)
-	if available {
-		return func() {}
-	}
+// StartSweep flips executor connectivity to false and starts the sweep that
+// flip makes, returning once it is started: settled waits for every cancel to
+// settle. A caller holding a lock while it flips can wait for the sweep
+// without the lock.
+func (t *Tracker) StartSweep() (settled func()) {
+	t.available.Store(false)
 
 	t.lock.Lock()
 	workflows := make([]string, 0, len(t.workflows))

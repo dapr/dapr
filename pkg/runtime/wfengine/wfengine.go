@@ -339,7 +339,23 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 }
 
 func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
-	ctx, settled := wfe.countWorkItemDisconnection(ctx)
+	if wfe.closeDisconnectContextForTest() {
+		log.Warn("TEST INJECTION: closing the work-item stream context during the disconnect callback")
+		done := make(chan struct{})
+		close(done)
+		ctx = closingContext{Context: context.WithoutCancel(ctx), done: done}
+	}
+
+	// The stream's transport can cancel ctx at any point during this call.
+	// A cancelled ctx fails UnRegisterActors before any type is removed,
+	// while actorsRegistered is still reset below: the host would keep
+	// advertising the workflow actor types with no worker to run them.
+	ctx = context.WithoutCancel(ctx)
+
+	wfe.actorRegLock.Lock()
+	wfe.getWorkItemsCount.Add(-1)
+	settled := wfe.startSweep()
+	wfe.actorRegLock.Unlock()
 	if settled == nil {
 		return nil
 	}
@@ -379,35 +395,20 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	return nil
 }
 
-// countWorkItemDisconnection counts a worker leaving. When it was the last
-// executor of this daprd, it marks the executor unavailable, which starts
-// cancelling every parked work-item completion, and returns the function
-// that waits for those cancellations; nil otherwise. They are cancelled
-// BEFORE the types are unregistered: UnRegisterActors' HaltAll waits on the
-// actor turn locks those completions hold, and with no executor connected
-// nothing can ever deliver them. A turn racing in after the sweep is
-// cancelled at registration by the tracker.
-func (wfe *engine) countWorkItemDisconnection(ctx context.Context) (context.Context, func()) {
-	wfe.actorRegLock.Lock()
-	defer wfe.actorRegLock.Unlock()
-
-	if wfe.closeDisconnectContextForTest() {
-		log.Warn("TEST INJECTION: closing the work-item stream context during the disconnect callback")
-		done := make(chan struct{})
-		close(done)
-		ctx = closingContext{Context: context.WithoutCancel(ctx), done: done}
+// startSweep starts cancelling every parked work-item completion when this
+// daprd has no executor left, by marking the executor unavailable, and
+// returns the function that waits for those cancellations; nil otherwise.
+// They are cancelled BEFORE the types are unregistered: UnRegisterActors'
+// HaltAll waits on the actor turn locks those completions hold, and with no
+// executor connected nothing can ever deliver them. A turn racing in after
+// the sweep is cancelled at registration by the tracker. A connection during
+// the sweep marks the executor available again, which ends its retries. Must
+// be called with actorRegLock held.
+func (wfe *engine) startSweep() (settled func()) {
+	if wfe.localExecutor() {
+		return nil
 	}
-
-	// The stream's transport can cancel ctx at any point during this call.
-	// A cancelled ctx fails UnRegisterActors before any type is removed,
-	// while actorsRegistered is still reset below: the host would keep
-	// advertising the workflow actor types with no worker to run them.
-	ctx = context.WithoutCancel(ctx)
-
-	if wfe.getWorkItemsCount.Add(-1) != 0 || wfe.mcpRegistrationCount.Load() != 0 {
-		return ctx, nil
-	}
-	return ctx, wfe.backend.SetExecutorAvailableAsync(false)
+	return wfe.backend.StartSweep()
 }
 
 // testCloseDisconnectContext is a test-only fault injection: the first N
@@ -470,23 +471,39 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 	}
 
 	wfe.actorRegLock.Lock()
+	wfe.mcpRegistrationCount.Add(-1)
+	var settled func()
+	if wfe.actorsRegistered {
+		settled = wfe.startSweep()
+	}
+	wfe.actorRegLock.Unlock()
+	if settled == nil {
+		return
+	}
+
+	// Sweep parked completions before HaltAll, waiting for them without
+	// actorRegLock; see the disconnect callback.
+	settled()
+
+	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
-	if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
-		// Sweep parked completions before HaltAll; see the disconnect callback.
-		wfe.syncExecutorAvailable()
-		if wfe.fallback != nil {
-			if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
-				log.Warnf("Failed to unregister workflow actors: %s", err)
-			}
-			return
-		}
-		log.Debug("Unregistering workflow actors")
-		err := wfe.backend.UnRegisterActors(context.Background())
-		wfe.actorsRegistered = false
-		if err != nil {
+	if wfe.localExecutor() || !wfe.actorsRegistered {
+		// An executor connected during the sweep and keeps the types, or
+		// another release already gave them up.
+		return
+	}
+	if wfe.fallback != nil {
+		if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
 			log.Warnf("Failed to unregister workflow actors: %s", err)
 		}
+		return
+	}
+	log.Debug("Unregistering workflow actors")
+	err := wfe.backend.UnRegisterActors(context.Background())
+	wfe.actorsRegistered = false
+	if err != nil {
+		log.Warnf("Failed to unregister workflow actors: %s", err)
 	}
 }
 

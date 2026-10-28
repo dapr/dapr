@@ -1203,11 +1203,10 @@ func (abe *Actors) SetExecutorAvailable(available bool) {
 	abe.pendingTasksBackend.SetExecutorAvailable(available)
 }
 
-// SetExecutorAvailableAsync is SetExecutorAvailable, except that the sweep a
-// flip to unavailable makes is waited for by the returned function; see the
-// pendingtracker package.
-func (abe *Actors) SetExecutorAvailableAsync(available bool) (settled func()) {
-	return abe.pendingTasksBackend.SetExecutorAvailableAsync(available)
+// StartSweep flips executor connectivity to false and starts the sweep of
+// the pending tasks, which settled waits for; see the pendingtracker package.
+func (abe *Actors) StartSweep() (settled func()) {
+	return abe.pendingTasksBackend.StartSweep()
 }
 
 // CancelActivityTask implements backend.Backend.
