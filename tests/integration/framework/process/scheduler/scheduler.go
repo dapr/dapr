@@ -469,6 +469,24 @@ func (s *Scheduler) ScalingMetrics(t assert.TestingT, ctx context.Context) *metr
 	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics/scaling", s.MetricsAddress()))
 }
 
+// ScalingGauges returns the in-flight and undeliverable job gauges for an
+// app from the scaling metrics endpoint, and fails if the endpoint serves
+// anything else.
+func (s *Scheduler) ScalingGauges(t assert.TestingT, ctx context.Context, namespace, appID string) (inFlight, undeliverable float64) {
+	const (
+		inFlightMetric      = "dapr_scheduler_inflight_jobs"
+		undeliverableMetric = "dapr_scheduler_undeliverable_jobs"
+	)
+
+	all := s.ScalingMetrics(t, ctx).All()
+	for name := range all {
+		metric, _, _ := strings.Cut(name, "|")
+		assert.Contains(t, []string{inFlightMetric, undeliverableMetric}, metric)
+	}
+	labels := "|app_id:" + appID + "|namespace:" + namespace
+	return all[inFlightMetric+labels], all[undeliverableMetric+labels]
+}
+
 func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
 	return metrics.NewWithLabels(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
