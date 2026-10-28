@@ -225,6 +225,14 @@ func (wfe *engine) releaseLocalExecutor(ctx context.Context) error {
 func (wfe *engine) reconcileFallback(ctx context.Context, want, held bool) (bool, error) {
 	fb := wfe.fallback
 
+	if wfe.sweeping > 0 {
+		// A disconnect or an MCP unregister is cancelling the parked
+		// completions with the lock released, and releases the types once
+		// they are cancelled, kicking runFallback then. A halt before that
+		// would wait on turns whose cancellation it took away.
+		return false, nil
+	}
+
 	if wfe.localExecutor() {
 		// The connection callbacks registered it.
 		return false, nil
@@ -406,12 +414,13 @@ func (wfe *engine) runFallback(ctx context.Context) {
 // stopFallback ends the fallback hosting once runFallback's context is done:
 // a daprd without a local executor gives the types up, so the app's other
 // daprds take its instances over while it shuts down. A daprd with an
-// executor unregisters when its executors leave, as without the feature.
+// executor unregisters when its executors leave, as without the feature. A
+// sweep in flight releases on its own path once it settled.
 func (wfe *engine) stopFallback() {
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
 
-	if !wfe.actorsRegistered || wfe.localExecutor() {
+	if !wfe.actorsRegistered || wfe.localExecutor() || wfe.sweeping > 0 {
 		return
 	}
 

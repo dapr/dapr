@@ -119,6 +119,11 @@ type engine struct {
 	// or unregister while another path believes actors are still live.
 	actorRegLock     sync.Mutex
 	actorsRegistered bool
+	// sweeping counts the sweeps started by startSweep which have not
+	// settled. The caller which started one releases the types once it has;
+	// until then runFallback and stopFallback leave them alone, so no halt
+	// gets ahead of the cancels it would wait on. Guarded by actorRegLock.
+	sweeping int
 
 	// fallback is the WorkflowsStagedOperations preview; nil when it is off.
 	// Its registration state is guarded by actorRegLock.
@@ -365,9 +370,13 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	// while no daprd hosts its type, and a worker reconnecting meanwhile
 	// would wait on the lock for all of them.
 	settled()
+	if hold := testSweepHold(); hold > 0 {
+		time.Sleep(hold)
+	}
 
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
+	wfe.sweeping--
 
 	if wfe.localExecutor() {
 		// An executor connected during the sweep, and keeps the types.
@@ -402,12 +411,15 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 // HaltAll waits on the actor turn locks those completions hold, and with no
 // executor connected nothing can ever deliver them. A turn racing in after
 // the sweep is cancelled at registration by the tracker. A connection during
-// the sweep marks the executor available again, which ends its retries. Must
-// be called with actorRegLock held.
+// the sweep marks the executor available again, which ends its retries. The
+// sweep counts in sweeping until the caller, which waits for it without the
+// lock, takes the lock again and counts it out. Must be called with
+// actorRegLock held.
 func (wfe *engine) startSweep() (settled func()) {
 	if wfe.localExecutor() {
 		return nil
 	}
+	wfe.sweeping++
 	return wfe.backend.StartSweep()
 }
 
@@ -418,6 +430,14 @@ func (wfe *engine) startSweep() (settled func()) {
 // supported production knob.
 var testCloseDisconnectContext = sync.OnceValue(func() int64 {
 	return common.EnvInt64Or("DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT", 0)
+})
+
+// testSweepHold is a test-only fault injection: the disconnect of the last
+// executor keeps actorRegLock released for this long after its sweep settled,
+// as a sweep whose cancellations reach executor actors on other daprds can
+// take seconds. Not a supported production knob.
+var testSweepHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_SWEEP_HOLD", 0)
 })
 
 // closeDisconnectContextForTest reports whether this disconnect callback runs
@@ -487,6 +507,7 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 
 	wfe.actorRegLock.Lock()
 	defer wfe.actorRegLock.Unlock()
+	wfe.sweeping--
 
 	if wfe.localExecutor() || !wfe.actorsRegistered {
 		// An executor connected during the sweep and keeps the types, or
