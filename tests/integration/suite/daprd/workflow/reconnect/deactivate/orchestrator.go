@@ -97,5 +97,8 @@ func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
-	assert.Equal(t, int64(3), a.called.Load())
+	// The first run, the replay after the reconnect, and the replay after the
+	// activity. A turn cancelled by a dissemination round runs again, so
+	// there can be more.
+	assert.GreaterOrEqual(t, a.called.Load(), int64(3))
 }
