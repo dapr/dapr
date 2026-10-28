@@ -124,3 +124,64 @@ type reqAdapter struct {
 
 func (r reqAdapter) GetName() string                         { return r.name }
 func (r reqAdapter) GetMetadata() *schedulerv1pb.JobMetadata { return r.meta }
+
+func Test_QueueStateKey(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		jobName string
+		ns      string
+		appID   string
+		ok      bool
+	}{
+		"jobs API job counts under its app": {
+			jobName: "app||ns1||app1||myjob",
+			ns:      "ns1", appID: "app1", ok: true,
+		},
+		"jobs API job whose name contains the delimiter": {
+			jobName: "app||ns2||app1||my||job",
+			ns:      "ns2", appID: "app1", ok: true,
+		},
+		"workflow reminder counts under the app in the actor type": {
+			jobName: "actorreminder||ns3||dapr.internal.ns3.wfapp.workflow||inst1||start-123",
+			ns:      "ns3", appID: "wfapp", ok: true,
+		},
+		"activity reminder counts under the app in the actor type": {
+			jobName: "actorreminder||ns4||dapr.internal.ns4.actapp.activity||inst1::0::1||run-activity",
+			ns:      "ns4", appID: "actapp", ok: true,
+		},
+		"app ID containing dots": {
+			jobName: "actorreminder||ns5||dapr.internal.ns5.my.app.workflow||inst1||timer",
+			ns:      "ns5", appID: "my.app", ok: true,
+		},
+		"user actor reminder is not counted": {
+			jobName: "actorreminder||ns1||myactortype||id1||reminder",
+		},
+		"internal actor type for another namespace is not counted": {
+			jobName: "actorreminder||ns1||dapr.internal.ns2.app1.workflow||inst1||timer",
+		},
+		"internal actor type that is neither workflow nor activity is not counted": {
+			jobName: "actorreminder||ns1||dapr.internal.ns1.app1.other||inst1||timer",
+		},
+		"internal actor type with no app is not counted": {
+			jobName: "actorreminder||ns1||dapr.internal.ns1..workflow||inst1||timer",
+		},
+		"unknown job type is not counted": {
+			jobName: "other||ns1||app1||job",
+		},
+		"malformed name is not counted": {
+			jobName: "app||ns1||app1",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ns, appID, ok := QueueStateKey(test.jobName)
+			assert.Equal(t, test.ok, ok)
+			assert.Equal(t, test.ns, ns)
+			assert.Equal(t, test.appID, appID)
+		})
+	}
+}
