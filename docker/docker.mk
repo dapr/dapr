@@ -36,7 +36,10 @@ DAPR_SCHEDULER_IMAGE_NAME?=scheduler
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 
 # Important to avoid using oci images on local dev.
-DOCKER_OUTPUT_TYPE?=--output type=docker
+# --provenance=false keeps the pushed image a single manifest; with the containerd
+# image store (default since Docker 29) it would otherwise be pushed as an index,
+# which `docker manifest create` rejects.
+DOCKER_OUTPUT_TYPE?=--output type=docker --provenance=false
 ifeq ($(TARGET_OS), windows)
   # Docker CLI on Windows does not support "--output"
   DOCKER_OUTPUT_TYPE=
