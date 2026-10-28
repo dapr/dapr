@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring/scaling"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
@@ -69,6 +70,10 @@ type Options struct {
 	Mode                      modes.DaprMode
 	KubeConfig                *string
 	Controller                *controller.Controller
+
+	// Scaling, when non-nil, is pointed at this server's cron so it reports
+	// its queue state.
+	Scaling *scaling.Collector
 
 	Workers uint32
 
@@ -212,6 +217,10 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Placement:     place,
 		Handoff:       hoff,
 	})
+
+	if opts.Scaling != nil {
+		opts.Scaling.SetSource(cron)
+	}
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
