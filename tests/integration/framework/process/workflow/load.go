@@ -37,7 +37,21 @@ type Load struct {
 
 	// recorded counts the instances each goroutine has recorded.
 	recorded []atomic.Int64
+
+	// phase holds what each goroutine had recorded when the last
+	// WaitStarted returned, the point maxPerPhase is counted from.
+	phase []atomic.Int64
 }
+
+// maxPerPhase bounds the instances one goroutine starts between the load's
+// waits. The body runs without pause, so a step a test takes between two
+// waits which lasts seconds, such as a metadata poll against a busy daprd,
+// otherwise starts thousands of instances. None of them can run while no
+// worker is connected, and the test must then wait for all of them to
+// complete inside its deadline. The waits ask for a handful each, so the
+// bound is well clear of what a test needs of a phase, and a goroutine which
+// reaches it idles until the next wait starts.
+const maxPerPhase = 16
 
 // StartConcurrently runs body in a loop on each of n goroutines, with the
 // goroutine and the iteration numbers, until the returned load's Stop is
@@ -50,6 +64,7 @@ func StartConcurrently(t *testing.T, n int, body func(g, i int) (api.InstanceID,
 	l := &Load{
 		done:     make(chan struct{}),
 		recorded: make([]atomic.Int64, n),
+		phase:    make([]atomic.Int64, n),
 	}
 	for g := range n {
 		l.wg.Go(func() {
@@ -58,6 +73,15 @@ func StartConcurrently(t *testing.T, n int, body func(g, i int) (api.InstanceID,
 				case <-l.done:
 					return
 				default:
+				}
+
+				if l.recorded[g].Load()-l.phase[g].Load() >= maxPerPhase {
+					select {
+					case <-l.done:
+						return
+					case <-time.After(time.Millisecond * 10):
+					}
+					continue
 				}
 
 				if id, ok := body(g, i); ok {
@@ -88,9 +112,12 @@ func (l *Load) Stop() []api.InstanceID {
 func (l *Load) WaitStarted(t *testing.T, n int) {
 	t.Helper()
 
+	// The reset also releases the goroutines held at maxPerPhase, so they
+	// can record the instances this wait asks for.
 	from := make([]int64, len(l.recorded))
 	for g := range l.recorded {
 		from[g] = l.recorded[g].Load()
+		l.phase[g].Store(from[g])
 	}
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		for g := range l.recorded {
