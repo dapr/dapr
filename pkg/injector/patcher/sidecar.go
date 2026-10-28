@@ -68,6 +68,8 @@ type SidecarConfig struct {
 	AppID                               string  `annotation:"dapr.io/app-id"`
 	EnableProfiling                     bool    `annotation:"dapr.io/enable-profiling"`
 	LogLevel                            string  `annotation:"dapr.io/log-level" default:"info"`
+	LogFile                             string  `annotation:"dapr.io/log-file"`
+	LogOutputs                          string  `annotation:"dapr.io/log-outputs"`
 	APITokenSecret                      string  `annotation:"dapr.io/api-token-secret"`
 	AppTokenSecret                      string  `annotation:"dapr.io/app-token-secret"`
 	LogAsJSON                           bool    `annotation:"dapr.io/log-as-json"`

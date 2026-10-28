@@ -15,6 +15,7 @@ package patcher
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1391,6 +1392,42 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.Contains(t, args, "--app-health-threshold 2")
 			},
 		},
+	}))
+
+	t.Run("log destinations", testSuiteGenerator([]testCase{
+		{name: "defaults", annotations: map[string]string{}, assertFn: func(t *testing.T, container *corev1.Container) {
+			assert.NotContains(t, container.Args, "--log-file")
+			assert.NotContains(t, container.Args, "--log-outputs")
+		}},
+		{name: "empty values", annotations: map[string]string{annotations.KeyLogFile: "", annotations.KeyLogOutputs: ""}, assertFn: func(t *testing.T, container *corev1.Container) {
+			assert.NotContains(t, container.Args, "--log-file")
+			assert.NotContains(t, container.Args, "--log-outputs")
+		}},
+		{name: "file destination", annotations: map[string]string{annotations.KeyLogFile: "/var/log/dapr/app log.json"}, assertFn: func(t *testing.T, container *corev1.Container) {
+			index := slices.Index(container.Args, "--log-file")
+			require.NotEqual(t, -1, index)
+			require.Greater(t, len(container.Args), index+1)
+			assert.Equal(t, "/var/log/dapr/app log.json", container.Args[index+1])
+			assert.NotContains(t, container.Args, "--log-outputs")
+		}},
+		{name: "multiple destinations", annotations: map[string]string{annotations.KeyLogOutputs: "stdout,/var/log/dapr/app.log"}, assertFn: func(t *testing.T, container *corev1.Container) {
+			index := slices.Index(container.Args, "--log-outputs")
+			require.NotEqual(t, -1, index)
+			require.Greater(t, len(container.Args), index+1)
+			assert.Equal(t, "stdout,/var/log/dapr/app.log", container.Args[index+1])
+			assert.NotContains(t, container.Args, "--log-file")
+		}},
+		{name: "combined with JSON logging", annotations: map[string]string{annotations.KeyLogFile: "/var/log/dapr/app.log", annotations.KeyLogOutputs: "stderr", annotations.KeyLogAsJSON: "true"}, assertFn: func(t *testing.T, container *corev1.Container) {
+			fileIndex := slices.Index(container.Args, "--log-file")
+			outputIndex := slices.Index(container.Args, "--log-outputs")
+			require.NotEqual(t, -1, fileIndex)
+			require.NotEqual(t, -1, outputIndex)
+			require.Greater(t, len(container.Args), fileIndex+1)
+			require.Greater(t, len(container.Args), outputIndex+1)
+			assert.Equal(t, "/var/log/dapr/app.log", container.Args[fileIndex+1])
+			assert.Equal(t, "stderr", container.Args[outputIndex+1])
+			assert.Contains(t, container.Args, "--log-as-json")
+		}},
 	}))
 
 	t.Run("sidecar container should have args injected", testCaseFn(testCase{
