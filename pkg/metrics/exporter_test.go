@@ -15,6 +15,7 @@ package metrics
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -120,5 +121,61 @@ func TestMetricsExporter(t *testing.T) {
 			assert.Equal(t, http.StatusMethodNotAllowed, status, method)
 			assert.Equal(t, "GET, HEAD", allow, method)
 		}
+	})
+
+	t.Run("serves extra handlers on their own paths", func(t *testing.T) {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		port := ln.Addr().(*net.TCPAddr).Port
+		require.NoError(t, ln.Close())
+
+		e := New(Options{
+			Enabled:       true,
+			Port:          strconv.Itoa(port),
+			ListenAddress: "127.0.0.1",
+			Log:           logger,
+			Healthz:       healthz.New(),
+			Handlers: map[string]http.Handler{
+				"/metrics/extra": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("extra"))
+				}),
+			},
+		})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		errCh := make(chan error)
+		go func() {
+			errCh <- e.Start(ctx)
+		}()
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+
+		client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+		get := func(path string) (int, string, error) {
+			req, rerr := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(port)+path, nil)
+			require.NoError(t, rerr)
+			resp, rerr := client.Do(req)
+			if rerr != nil {
+				return 0, "", rerr
+			}
+			defer resp.Body.Close()
+			body, rerr := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(body), rerr
+		}
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			status, body, gerr := get("/metrics/extra")
+			if assert.NoError(c, gerr) {
+				assert.Equal(c, http.StatusOK, status)
+				assert.Equal(c, "extra", body)
+			}
+		}, 5*time.Second, 10*time.Millisecond)
+
+		status, body, err := get("/")
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, status)
+		assert.NotEqual(t, "extra", body)
 	})
 }
