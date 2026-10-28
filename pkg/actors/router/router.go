@@ -49,6 +49,7 @@ var log = logger.NewLogger("dapr.runtime.actors.router")
 type Interface interface {
 	Run(ctx context.Context) error
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	CallWithoutRetries(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallReminder(ctx context.Context, reminder *api.Reminder) error
 	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, fn func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 }
@@ -119,13 +120,25 @@ func (r *router) Run(ctx context.Context) error {
 }
 
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	return r.call(ctx, req, true)
+}
+
+// CallWithoutRetries is Call without the built-in actor-not-found retries, as
+// CallReminder is with SkipRetries: the call makes one attempt, and returns
+// its error, such as a lookup with no address for the actor, to a caller that
+// retries on its own terms.
+func (r *router) CallWithoutRetries(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	return r.call(ctx, req, false)
+}
+
+func (r *router) call(ctx context.Context, req *internalv1pb.InternalInvokeRequest, retries bool) (*internalv1pb.InternalInvokeResponse, error) {
 	ctx, cancel := r.withContext(ctx)
 	defer cancel()
 
 	var res *internalv1pb.InternalInvokeResponse
 	var err error
 
-	if r.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
+	if !retries || r.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = r.callActor(ctx, req)
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
