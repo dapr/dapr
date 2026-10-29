@@ -82,7 +82,10 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 		case ev.GetExecutionResumed() != nil:
 			return diag.ResumeWorkflow
 		default:
-			return diag.AddEvent
+			// The other events come from a workflow's own progress, such as
+			// a completion from a child or an activity on another app, not
+			// from an operation a user made.
+			return ""
 		}
 	default:
 		return ""
@@ -93,12 +96,7 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 // as a status query, are not operations on the instance, and a purge
 // completes at once, so neither is recorded.
 func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
-	operation := fallbackOperation(method, ev)
-	if operation == "" {
-		return
-	}
-	diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
-	if f.onFallback != nil {
-		f.onFallback()
+	if operation := fallbackOperation(method, ev); operation != "" {
+		diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
 	}
 }

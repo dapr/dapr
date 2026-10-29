@@ -87,10 +87,6 @@ type Options struct {
 	// is off.
 	Fallback func() bool
 
-	// FallbackServed, if set, is called for each operation a fallback host
-	// served.
-	FallbackServed func()
-
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
@@ -130,7 +126,6 @@ type factory struct {
 	// the Wait.
 	fastPath   bool
 	fallback   func() bool
-	onFallback func()
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc
@@ -219,7 +214,6 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
 		fallback:               opts.Fallback,
-		onFallback:             opts.FallbackServed,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,

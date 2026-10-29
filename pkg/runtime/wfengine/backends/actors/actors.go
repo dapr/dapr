@@ -185,13 +185,6 @@ type Actors struct {
 
 	stopped atomic.Bool
 
-	// fallbackWaiting counts the operations served while this daprd is a
-	// fallback host; nil while it is not. See SetFallbackHost.
-	fallbackWaiting atomic.Pointer[fallbackWaiting]
-	// fallbackStagedEarly counts the operations served as a fallback host
-	// before SetFallbackHost made this daprd one; see fallbackServed.
-	fallbackStagedEarly atomic.Int64
-
 	// hostedCancel and executorCancel end the background work of the
 	// workflow and executor factories registered last under
 	// WorkflowsStagedOperations; see replaceCancel and retireTogether.
@@ -350,7 +343,6 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
 		Fallback:               abe.fallbackFunc(),
-		FallbackServed:         abe.fallbackServed,
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)

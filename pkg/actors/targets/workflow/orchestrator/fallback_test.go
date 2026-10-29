@@ -125,30 +125,15 @@ func TestFallbackOperation(t *testing.T) {
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}), diag.TerminateWorkflow},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}}), diag.SuspendWorkflow},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionResumed{ExecutionResumed: &protos.ExecutionResumedEvent{}}}), diag.ResumeWorkflow},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_TimerFired{TimerFired: &protos.TimerFiredEvent{}}}), diag.AddEvent},
+		// An event from the workflow's own progress is not an operation a
+		// user made.
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{}}}), ""},
+		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{}}}), ""},
 		// A read is not an operation on the instance.
 		{todo.WaitForRuntimeStatus, nil, ""},
 	} {
 		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.ev), tc.method)
 	}
-
-	t.Run("served operations reach the backend, reads do not", func(t *testing.T) {
-		var served int
-		fact, err := New(t.Context(), Options{
-			AppID:             "appID",
-			ActivityActorType: "activity",
-			WorkflowActorType: "workflow",
-			Scheduler:         func(context.Context, *backend.WorkflowWorkItem) error { return nil },
-			Actors:            fake.New(),
-			Fallback:          func() bool { return true },
-			FallbackServed:    func() { served++ },
-		})
-		require.NoError(t, err)
-		f := fact.(*factory)
-		f.fallbackServed(t.Context(), todo.CreateWorkflowInstanceMethod, nil)
-		f.fallbackServed(t.Context(), todo.WaitForRuntimeStatus, nil)
-		assert.Equal(t, 1, served)
-	})
 }
 
 // A worker that connects while a fallback host serves a call does not change
@@ -304,8 +289,6 @@ func TestFallbackForkFollowsNewInstance(t *testing.T) {
 			h := newWakeHarness(t, instanceID, true)
 			h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
 			h.fact.fallback = func() bool { return tc.source }
-			var served int
-			h.fact.onFallback = func() { served++ }
 			h.fact.router = routerfake.New().WithCallFn(func(_ context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 				assert.Equal(t, todo.RerunWorkflowInstance, req.GetMessage().GetMethod())
 				res := &internalsv1pb.InternalInvokeResponse{Status: &internalsv1pb.Status{Code: 200}}
@@ -337,7 +320,6 @@ func TestFallbackForkFollowsNewInstance(t *testing.T) {
 			res, err := h.orch.handleInvoke(t.Context(), req)
 			require.NoError(t, err)
 			assert.Equal(t, tc.destination, common.IsFallback(res))
-			assert.Zero(t, served, "the fork is counted as the rerun on the new instance")
 		})
 	}
 }
