@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,37 @@ func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 				validateResponse(t, m.proc.AppID(), m.app.Port(), resp.Body)
 			})
 		}
+	})
+
+	t.Run("public port is read-only", func(t *testing.T) {
+		put := func(port int, key string) int {
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata/%s", port, key)
+			req, err := http.NewRequestWithContext(parentCtx, http.MethodPut, reqURL, strings.NewReader("value"))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			return resp.StatusCode
+		}
+		extended := func() map[string]string {
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.HTTPPort())
+			req, err := http.NewRequestWithContext(parentCtx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			var body struct {
+				Extended map[string]string `json:"extended"`
+			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+			return body.Extended
+		}
+
+		require.Equal(t, http.StatusNotFound, put(m.proc.PublicPort(), "publickey"))
+		require.NotContains(t, extended(), "publickey")
+
+		require.Equal(t, http.StatusNoContent, put(m.proc.HTTPPort(), "apikey"))
+		require.Equal(t, "value", extended()["apikey"])
 	})
 }
 

@@ -50,6 +50,7 @@ type exporter struct {
 	listenAddress string
 	logger        logger.Logger
 	htarget       healthz.Target
+	handlers      map[string]http.Handler
 }
 
 // New creates new metrics Exporter instance with given options.
@@ -62,6 +63,7 @@ func New(opts Options) Exporter {
 		enabled:       opts.Enabled,
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
+		handlers:      opts.Handlers,
 	}
 }
 
@@ -117,6 +119,9 @@ func (e *exporter) Start(ctx context.Context) error {
 			ErrorLog:      promErrorLogger{e.logger},
 		},
 	))
+	for path, handler := range e.handlers {
+		mux.Handle(http.MethodGet+" "+path, handler)
+	}
 
 	server := &http.Server{
 		Handler:     mux,
