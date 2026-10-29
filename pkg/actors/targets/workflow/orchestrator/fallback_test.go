@@ -99,7 +99,8 @@ func TestFallbackOperation(t *testing.T) {
 		{todo.PurgeWorkflowStateMethod, nil, ""},
 		{todo.RecursivePurgeWorkflowStateMethod, nil, ""},
 		{todo.RerunWorkflowInstance, nil, diag.RerunWorkflow},
-		{todo.ForkWorkflowHistory, nil, diag.ForkWorkflow},
+		// Counted once, as the rerun on the new instance.
+		{todo.ForkWorkflowHistory, nil, ""},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}), diag.RaiseEvent},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}), diag.TerminateWorkflow},
 		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}}), diag.SuspendWorkflow},
@@ -112,7 +113,7 @@ func TestFallbackOperation(t *testing.T) {
 	}
 
 	t.Run("served operations reach the backend, reads do not", func(t *testing.T) {
-		var served []string
+		var served int
 		fact, err := New(t.Context(), Options{
 			AppID:             "appID",
 			ActivityActorType: "activity",
@@ -120,13 +121,13 @@ func TestFallbackOperation(t *testing.T) {
 			Scheduler:         func(context.Context, *backend.WorkflowWorkItem) error { return nil },
 			Actors:            fake.New(),
 			Fallback:          func() bool { return true },
-			FallbackServed:    func(op string) { served = append(served, op) },
+			FallbackServed:    func() { served++ },
 		})
 		require.NoError(t, err)
 		f := fact.(*factory)
 		f.fallbackServed(t.Context(), todo.CreateWorkflowInstanceMethod, nil)
 		f.fallbackServed(t.Context(), todo.WaitForRuntimeStatus, nil)
-		assert.Equal(t, []string{diag.CreateWorkflow}, served)
+		assert.Equal(t, 1, served)
 	})
 }
 

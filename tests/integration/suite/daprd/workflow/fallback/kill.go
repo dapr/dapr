@@ -27,7 +27,6 @@ import (
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -96,16 +95,7 @@ func (k *kill) Run(t *testing.T, ctx context.Context) {
 
 	// The survivor serves every instance once placement dropped the killed
 	// daprd, still pending.
-	for _, id := range ids {
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			fctx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			meta, err := mgmt[1].FetchWorkflowMetadata(fctx, id)
-			if assert.NoError(c, err) {
-				assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
-			}
-		}, time.Second*20, time.Millisecond*100, id)
-	}
+	waitPending(t, ctx, mgmt[1], time.Second*20, ids...)
 
 	k.workflow.ConnectWorkerN(t, ctx, 1, k.workflow.RegistryN(1))
 

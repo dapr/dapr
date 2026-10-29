@@ -27,7 +27,6 @@ import (
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -93,16 +92,7 @@ func (r *reboot) Run(t *testing.T, ctx context.Context) {
 		assert.True(c, r.workflow.HostsActorType(c, ctx, 0, r.workflow.WorkflowActorType(0)))
 	}, time.Second*10, time.Millisecond*50)
 	mgmt = r.workflow.ManagementClient(t, ctx)
-	for _, id := range ids {
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			fctx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			meta, err := mgmt.FetchWorkflowMetadata(fctx, id)
-			if assert.NoError(c, err) {
-				assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
-			}
-		}, time.Second*10, time.Millisecond*100, id)
-	}
+	waitPending(t, ctx, mgmt, time.Second*10, ids...)
 
 	r.workflow.ConnectWorker(t, ctx, r.workflow.Registry())
 

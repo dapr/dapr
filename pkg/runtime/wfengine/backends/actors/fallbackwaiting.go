@@ -53,17 +53,16 @@ func (abe *Actors) SetFallbackHost(ctx context.Context, fallback bool) {
 
 // fallbackServed counts an operation served by this daprd as a fallback
 // host; see SetFallbackHost.
-func (abe *Actors) fallbackServed(string) {
+func (abe *Actors) fallbackServed() {
 	if w := abe.fallbackWaiting.Load(); w != nil {
-		w.served()
+		w.staged.Add(1)
 	}
 }
 
 // fallbackWaiting warns on a fallback host while no daprd of the app has a
-// workflow worker and the host has staged operations: a start, event, rerun
-// or fork does not advance until one exists.
+// workflow worker and the host has staged operations: a start, event or
+// rerun does not advance until one exists.
 type fallbackWaiting struct {
-	appID string
 	clock clock.Clock
 	// staged counts the operations staged since the daprd became a fallback
 	// host. It is not decremented: a staged instance purged or terminated
@@ -71,23 +70,17 @@ type fallbackWaiting struct {
 	staged atomic.Int64
 	cancel context.CancelFunc
 	// warn logs the warning; a field so unit tests can capture it.
-	warn func(appID string, staged int64, since time.Duration)
+	warn func(staged int64, since time.Duration)
 }
 
 func newFallbackWaiting(appID string) *fallbackWaiting {
 	return &fallbackWaiting{
-		appID: appID,
 		clock: clock.RealClock{},
-		warn: func(appID string, staged int64, since time.Duration) {
-			log.Warnf("No daprd of app '%s' has had a workflow worker for %s; %d workflow operations staged on this daprd since then run only once one connects",
+		warn: func(staged int64, since time.Duration) {
+			log.Warnf("This daprd has been a fallback host of app '%s' for %s, with no daprd of the app having a workflow worker; %d workflow operations it staged since run only once one connects",
 				appID, since, staged)
 		},
 	}
-}
-
-// served counts a staged operation.
-func (w *fallbackWaiting) served() {
-	w.staged.Add(1)
 }
 
 // run warns at fallbackWaitingWarnAfter and at doubling intervals after it,
@@ -105,7 +98,7 @@ func (w *fallbackWaiting) run(ctx context.Context) {
 		}
 
 		if n := w.staged.Load(); n > 0 {
-			w.warn(w.appID, n, next)
+			w.warn(n, next)
 		}
 		next += min(next, fallbackWaitingWarnMaxInterval)
 	}

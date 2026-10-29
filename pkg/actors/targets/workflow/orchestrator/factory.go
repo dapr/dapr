@@ -87,9 +87,9 @@ type Options struct {
 	// is off.
 	Fallback func() bool
 
-	// FallbackServed, if set, is told of each operation a fallback host
-	// served, by its diagnostics operation name.
-	FallbackServed func(operation string)
+	// FallbackServed, if set, is called for each operation a fallback host
+	// served.
+	FallbackServed func()
 
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
@@ -130,7 +130,7 @@ type factory struct {
 	// the Wait.
 	fastPath   bool
 	fallback   func() bool
-	onFallback func(operation string)
+	onFallback func()
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc

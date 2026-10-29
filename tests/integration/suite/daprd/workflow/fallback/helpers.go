@@ -20,10 +20,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/client"
 )
 
 // fallbackSettle is the settle period the tests give their daprds in place
@@ -108,8 +112,25 @@ func reminderDeliveries(c assert.TestingT, ctx context.Context, wf *workflow.Wor
 	return wf.DaprN(index).Metrics(c, ctx).SumWithLabels("dapr_runtime_actor_reminders_fired_total")
 }
 
-// readErrors records whether a read failed, for a background poll which
-// must not fail the test on a read cut short by its own end.
-type readErrors struct{ failed bool }
+// stagedStarts returns how many workflow starts the daprd at index staged as
+// a fallback host. A failed metrics read fails c.
+func stagedStarts(c assert.TestingT, ctx context.Context, wf *workflow.Workflow, index int) float64 {
+	return wf.DaprN(index).Metrics(c, ctx).SumWithLabels("dapr_runtime_workflow_staged_operation_count", "operation:create_workflow")
+}
 
-func (r *readErrors) Errorf(string, ...any) { r.failed = true }
+// waitPending waits, up to timeout for each, until mgmt reads every one of
+// ids as PENDING. Each read gets its own short deadline, so a read routed to
+// a daprd that is going away is retried rather than blocking the wait.
+func waitPending(t *testing.T, ctx context.Context, mgmt *client.TaskHubGrpcClient, timeout time.Duration, ids ...api.InstanceID) {
+	t.Helper()
+	for _, id := range ids {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			fctx, cancel := context.WithTimeout(ctx, time.Second*3)
+			defer cancel()
+			meta, err := mgmt.FetchWorkflowMetadata(fctx, id)
+			if assert.NoError(c, err) {
+				assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
+			}
+		}, timeout, time.Millisecond*100, id)
+	}
+}

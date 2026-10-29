@@ -65,7 +65,7 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 	require.NoError(t, r.workflow.Registry().AddActivityN("act", func(task.ActivityContext) (any, error) {
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	worker := r.workflow.ConnectWorker(t, ctx, r.workflow.Registry())
@@ -104,5 +104,5 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	meta, err = mgmt.WaitForWorkflowCompletion(ctx, dst)
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.Equal(t, `"done"`, meta.GetOutput().GetValue())
+	assert.Equal(t, `"`+doneOutput+`"`, meta.GetOutput().GetValue())
 }

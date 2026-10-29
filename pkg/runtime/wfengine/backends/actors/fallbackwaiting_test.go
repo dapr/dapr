@@ -21,15 +21,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 func TestSetFallbackHost(t *testing.T) {
 	abe, _ := newFallbackTestBackend(t, true, false)
 
 	// Not a fallback host: nothing is counted.
-	abe.fallbackServed(diag.CreateWorkflow)
+	abe.fallbackServed()
 	assert.Nil(t, abe.fallbackWaiting.Load())
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -37,7 +35,7 @@ func TestSetFallbackHost(t *testing.T) {
 	abe.SetFallbackHost(ctx, true)
 	w := abe.fallbackWaiting.Load()
 	require.NotNil(t, w)
-	abe.fallbackServed(diag.CreateWorkflow)
+	abe.fallbackServed()
 	assert.EqualValues(t, 1, w.staged.Load())
 
 	// Idempotent: the count carries on.
@@ -65,7 +63,6 @@ func TestSetFallbackHost(t *testing.T) {
 
 func TestFallbackWaiting(t *testing.T) {
 	type warning struct {
-		appID  string
 		staged int64
 		since  time.Duration
 	}
@@ -74,8 +71,8 @@ func TestFallbackWaiting(t *testing.T) {
 	warnings := make(chan warning, 10)
 	w := newFallbackWaiting("myapp")
 	w.clock = clock
-	w.warn = func(appID string, staged int64, since time.Duration) {
-		warnings <- warning{appID, staged, since}
+	w.warn = func(staged int64, since time.Duration) {
+		warnings <- warning{staged, since}
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -110,8 +107,8 @@ func TestFallbackWaiting(t *testing.T) {
 	step(2 * fallbackWaitingWarnAfter)
 	noWarning()
 
-	w.served()
-	w.served()
+	w.staged.Add(1)
+	w.staged.Add(1)
 
 	// Warnings come at doubling intervals since the start, capped at
 	// fallbackWaitingWarnMaxInterval: 5m and 10m (passed above), 20m, 40m,
@@ -122,7 +119,7 @@ func TestFallbackWaiting(t *testing.T) {
 		step(at)
 		select {
 		case got := <-warnings:
-			assert.Equal(t, warning{"myapp", 2, at}, got)
+			assert.Equal(t, warning{2, at}, got)
 		case <-time.After(10 * time.Second):
 			require.Failf(t, "no warning", "at %s", at)
 		}

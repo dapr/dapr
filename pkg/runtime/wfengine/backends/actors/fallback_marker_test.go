@@ -35,21 +35,29 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// newMarkerTestBackend returns a backend whose actor calls all get a
-// response with the fallback header set as given.
-func newMarkerTestBackend(t *testing.T, fallback bool) *Actors {
-	t.Helper()
+type markerCallFn = func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error)
 
-	cs := compstore.New()
-	require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
-
-	r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+// servedBy returns a markerCallFn whose responses all carry the fallback
+// header as given.
+func servedBy(fallback bool) markerCallFn {
+	return func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 		res := new(internalsv1pb.InternalInvokeResponse)
 		if fallback {
 			common.SetFallback(res)
 		}
 		return res, nil
-	})
+	}
+}
+
+// newMarkerTestBackend returns a backend whose actor calls are answered by
+// call.
+func newMarkerTestBackend(t *testing.T, call markerCallFn) *Actors {
+	t.Helper()
+
+	cs := compstore.New()
+	require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
+
+	r := routerfake.New().WithCallFn(call)
 
 	return &Actors{
 		appID:             "myapp",
@@ -74,7 +82,7 @@ func TestFallbackMarker(t *testing.T) {
 
 	t.Run("a rerun served by a fallback host marks the ctx", func(t *testing.T) {
 		t.Parallel()
-		abe := newMarkerTestBackend(t, true)
+		abe := newMarkerTestBackend(t, servedBy(true))
 
 		ctx := WithFallbackMarker(t.Context())
 		id, err := abe.RerunWorkflowFromEvent(ctx, rerun())
@@ -88,7 +96,7 @@ func TestFallbackMarker(t *testing.T) {
 
 	t.Run("an event served by a fallback host marks the ctx", func(t *testing.T) {
 		t.Parallel()
-		abe := newMarkerTestBackend(t, true)
+		abe := newMarkerTestBackend(t, servedBy(true))
 
 		ctx := WithFallbackMarker(t.Context())
 		require.NoError(t, abe.AddNewWorkflowEvent(ctx, "wf1", &backend.HistoryEvent{
@@ -99,7 +107,7 @@ func TestFallbackMarker(t *testing.T) {
 
 	t.Run("an operation served by a host with an executor leaves the ctx unmarked", func(t *testing.T) {
 		t.Parallel()
-		abe := newMarkerTestBackend(t, false)
+		abe := newMarkerTestBackend(t, servedBy(false))
 
 		ctx := WithFallbackMarker(t.Context())
 		_, err := abe.RerunWorkflowFromEvent(ctx, rerun())
@@ -109,19 +117,14 @@ func TestFallbackMarker(t *testing.T) {
 
 	t.Run("a create a fallback host refused and a host with an executor served leaves the ctx unmarked", func(t *testing.T) {
 		t.Parallel()
-		abe := newMarkerTestBackend(t, false)
-
 		var calls atomic.Int32
-		r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		abe := newMarkerTestBackend(t, func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 			res := new(internalsv1pb.InternalInvokeResponse)
 			if calls.Add(1) == 1 {
 				common.SetFallback(res)
 				return res, status.Error(codes.Aborted, "refused")
 			}
 			return res, nil
-		})
-		abe.actors = actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
-			return r, nil
 		})
 
 		ctx := WithFallbackMarker(t.Context())
@@ -138,7 +141,7 @@ func TestFallbackMarker(t *testing.T) {
 
 	t.Run("a ctx without a marker is never marked", func(t *testing.T) {
 		t.Parallel()
-		abe := newMarkerTestBackend(t, true)
+		abe := newMarkerTestBackend(t, servedBy(true))
 		_, err := abe.RerunWorkflowFromEvent(t.Context(), rerun())
 		require.NoError(t, err)
 		assert.False(t, servedByFallback(t.Context()))

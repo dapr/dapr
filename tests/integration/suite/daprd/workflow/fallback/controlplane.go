@@ -28,7 +28,6 @@ import (
 	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -105,20 +104,6 @@ func (c *controlplane) Run(t *testing.T, ctx context.Context) {
 		ids = append(ids, id)
 	}
 
-	assertPending := func() {
-		t.Helper()
-		for _, id := range ids {
-			require.EventuallyWithT(t, func(col *assert.CollectT) {
-				fctx, cancel := context.WithTimeout(ctx, time.Second*3)
-				defer cancel()
-				meta, err := mgmt.FetchWorkflowMetadata(fctx, id)
-				if assert.NoError(col, err) {
-					assert.Equal(col, protos.OrchestrationStatus_ORCHESTRATION_STATUS_PENDING, meta.GetRuntimeStatus())
-				}
-			}, time.Second*20, time.Millisecond*100, id)
-		}
-	}
-
 	c.workflow.Scheduler().RestartGraceful(t, ctx)
 	c.workflow.Scheduler().WaitUntilRunning(t, ctx)
 
@@ -132,7 +117,7 @@ func (c *controlplane) Run(t *testing.T, ctx context.Context) {
 			assert.NoError(col, mgmt.RaiseEvent(rctx, id, "go", api.WithEventPayload(fmt.Sprintf("ev-%d", i))))
 		}, time.Second*20, time.Millisecond*100, id)
 	}
-	assertPending()
+	waitPending(t, ctx, mgmt, time.Second*20, ids...)
 	assert.True(t, c.workflow.HostsActorType(t, ctx, 0, c.workflow.WorkflowActorType(0)))
 
 	c.workflow.Placement().Cleanup(t)
@@ -146,7 +131,7 @@ func (c *controlplane) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(col, "placement: connected", placementStatus(col, ctx, c.workflow, 0))
 		assert.True(col, c.workflow.HostsActorType(col, ctx, 0, c.workflow.WorkflowActorType(0)))
 	}, time.Second*20, time.Millisecond*50)
-	assertPending()
+	waitPending(t, ctx, mgmt, time.Second*20, ids...)
 
 	c.workflow.ConnectWorker(t, ctx, c.workflow.Registry())
 

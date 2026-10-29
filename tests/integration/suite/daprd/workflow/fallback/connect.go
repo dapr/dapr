@@ -57,7 +57,7 @@ func (c *connect) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, c.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return "done", nil
+		return doneOutput, nil
 	}))
 
 	mgmt := c.workflow.ManagementClient(t, ctx)

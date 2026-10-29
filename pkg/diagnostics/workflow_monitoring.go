@@ -115,7 +115,6 @@ const (
 	SuspendWorkflow   = "suspend_workflow"
 	ResumeWorkflow    = "resume_workflow"
 	RerunWorkflow     = "rerun_workflow"
-	ForkWorkflow      = "fork_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"

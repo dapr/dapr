@@ -129,9 +129,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	meta, err = mgmt.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED, meta.GetRuntimeStatus())
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, jobs())
-	}, time.Second*10, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, string(id), func(n int) bool { return n == 0 })
 
 	worker.Disconnect(t)
 	r.workflow.WaitForNoConnectedWorkers(t, ctx)
@@ -167,7 +165,5 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.Equal(t, `"second"`, meta.GetOutput().GetValue())
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, jobs())
-	}, time.Second*10, time.Millisecond*10)
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, string(id), func(n int) bool { return n == 0 })
 }

@@ -102,8 +102,8 @@ func (p *placementdown) Run(t *testing.T, ctx context.Context) {
 	// hostedB reports whether the daprd without a worker hosts the workflow
 	// actor type; a failed metadata read reports it does not.
 	hostedB := func() bool {
-		var rerr readErrors
-		return p.workflow.HostsActorType(&rerr, ctx, 1, p.workflow.WorkflowActorType(1)) && !rerr.failed
+		var rerr workflow.ReadErrors
+		return p.workflow.HostsActorType(&rerr, ctx, 1, p.workflow.WorkflowActorType(1)) && !rerr.Failed
 	}
 
 	// The daprd without a worker learns of the other's executor only once
@@ -171,6 +171,5 @@ func (p *placementdown) Run(t *testing.T, ctx context.Context) {
 	// Every instance ran on the daprd with the worker: the other served
 	// nothing as a fallback host.
 	assert.False(t, p.workflow.HostsActorType(t, ctx, 1, p.workflow.WorkflowActorType(1)))
-	key := "dapr_runtime_workflow_staged_operation_count|app_id:" + p.workflow.DaprN(1).AppID() + "|namespace:|operation:create_workflow"
-	assert.Zero(t, p.workflow.DaprN(1).Metrics(t, ctx).All()[key])
+	assert.Zero(t, stagedStarts(t, ctx, p.workflow, 1))
 }

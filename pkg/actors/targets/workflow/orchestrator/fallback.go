@@ -48,25 +48,25 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 	case todo.CreateWorkflowInstanceMethod:
 		return diag.CreateWorkflow
 	case todo.RerunWorkflowInstance:
+		// A rerun forks the source instance's history (ForkWorkflowHistory,
+		// not counted) into a RerunWorkflowInstance on the new instance:
+		// counting both would count one rerun twice.
 		return diag.RerunWorkflow
-	case todo.ForkWorkflowHistory:
-		return diag.ForkWorkflow
 	case todo.AddWorkflowEventMethod:
+		switch {
+		case ev.GetEventRaised() != nil:
+			return diag.RaiseEvent
+		case ev.GetExecutionTerminated() != nil:
+			return diag.TerminateWorkflow
+		case ev.GetExecutionSuspended() != nil:
+			return diag.SuspendWorkflow
+		case ev.GetExecutionResumed() != nil:
+			return diag.ResumeWorkflow
+		default:
+			return diag.AddEvent
+		}
 	default:
 		return ""
-	}
-
-	switch {
-	case ev.GetEventRaised() != nil:
-		return diag.RaiseEvent
-	case ev.GetExecutionTerminated() != nil:
-		return diag.TerminateWorkflow
-	case ev.GetExecutionSuspended() != nil:
-		return diag.SuspendWorkflow
-	case ev.GetExecutionResumed() != nil:
-		return diag.ResumeWorkflow
-	default:
-		return diag.AddEvent
 	}
 }
 
@@ -80,6 +80,6 @@ func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend
 	}
 	diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
 	if f.onFallback != nil {
-		f.onFallback(operation)
+		f.onFallback()
 	}
 }

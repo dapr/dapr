@@ -140,12 +140,7 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	// Each daprd counts the starts it served as a fallback host; the
 	// duplicate failed, so it is not counted.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		key := "dapr_runtime_workflow_staged_operation_count|app_id:" + s.workflow.Dapr().AppID() + "|namespace:|operation:create_workflow"
-		var served float64
-		for i := range 2 {
-			served += s.workflow.DaprN(i).Metrics(c, ctx).All()[key]
-		}
-		assert.InDelta(c, 2.0, served, 0)
+		assert.InDelta(c, 2.0, stagedStarts(c, ctx, s.workflow, 0)+stagedStarts(c, ctx, s.workflow, 1), 0)
 	}, time.Second*10, time.Millisecond*50)
 
 	s.workflow.ConnectWorkerN(t, ctx, 1, s.workflow.RegistryN(1))
