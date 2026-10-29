@@ -237,6 +237,69 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.JSONEq(t, expectedResponse, string(respBody))
 	})
 
+	t.Run("reasoning round trip", func(t *testing.T) {
+		body := `{
+			"name": "test-alpha2-echo",
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofUser": {
+								"content": [
+									{
+										"text": "one"
+									}
+								]
+							}
+						},
+						{
+							"ofAssistant": {
+								"content": [
+									{
+										"text": "two"
+									}
+								],
+								"reasoning": "earlier thought"
+							}
+						}
+					]
+				}
+			],
+			"reasoningEffort": "high"
+		}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		expectedResponse := `{
+			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "one\ntwo",
+								"reasoning": "reasoning effort: high\nearlier thought"
+							}
+						}
+					],
+					"usage": {
+						"completionTokens": "2",
+						"promptTokens": "2",
+						"totalTokens": "4"
+					}
+				}
+			]
+		}`
+		require.JSONEq(t, expectedResponse, string(respBody))
+	})
+
 	t.Run("invalid json", func(t *testing.T) {
 		body := `{"inputs":[{"messages":[{"invalidField":{"content":"invalid"}}]}]}`
 
