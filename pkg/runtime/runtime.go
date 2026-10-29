@@ -433,7 +433,10 @@ func newDaprRuntime(ctx context.Context,
 	close(rt.isAppHealthy)
 
 	var gracePeriod *time.Duration
-	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
+	// A zero graceful shutdown duration means no grace period limit. Closing may
+	// be given longer than the graceful shutdown duration, never shorter.
+	if runtimeConfig.gracefulShutdownDuration > 0 {
+		duration := max(runtimeConfig.gracefulShutdownDuration, runtimeConfig.closeGracefulShutdownDuration)
 		gracePeriod = &duration
 	}
 

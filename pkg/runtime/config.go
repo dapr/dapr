@@ -118,7 +118,12 @@ type Config struct {
 	DaprPublicListenAddress       string
 	ApplicationPort               string
 	DaprGracefulShutdownSeconds   int
-	DaprBlockShutdownDuration     *time.Duration
+	// CloseGracefulShutdownSeconds extends only the time the runtime is
+	// given to close its resources, such as draining pub/sub subscriptions,
+	// when it is greater than DaprGracefulShutdownSeconds. Everything else,
+	// like the workflow engine, keeps using DaprGracefulShutdownSeconds.
+	CloseGracefulShutdownSeconds int
+	DaprBlockShutdownDuration    *time.Duration
 	// OnShutdownStart is called when the runtime begins closing its resources.
 	OnShutdownStart               func()
 	ActorsService                 string
@@ -186,6 +191,7 @@ type internalConfig struct {
 	maxRequestBodySize            int // In bytes
 	readBufferSize                int // In bytes
 	gracefulShutdownDuration      time.Duration
+	closeGracefulShutdownDuration time.Duration
 	blockShutdownDuration         *time.Duration
 	onShutdownStart               func()
 	enableAPILogging              *bool
@@ -498,6 +504,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	} else {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
 	}
+	intc.closeGracefulShutdownDuration = max(
+		intc.gracefulShutdownDuration,
+		time.Duration(c.CloseGracefulShutdownSeconds)*time.Second,
+	)
 
 	if intc.actorsDisseminationTimeout <= 0 {
 		intc.actorsDisseminationTimeout = DefaultActorsDisseminationTimeout

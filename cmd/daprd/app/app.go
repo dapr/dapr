@@ -165,13 +165,15 @@ func runWithContext(ctx, shutdownCtx context.Context, opts *options.Options, int
 	}
 	normalGrace := time.Duration(normalSeconds) * time.Second
 	shutdownStarted := make(chan struct{})
+	var closeSeconds int
 	if normalGrace > 0 {
-		restartOpts := *opts
-		restartOpts.DaprGracefulShutdownSeconds = max(
+		// Only closing the runtime's resources gets the longer limit. Components
+		// that act on the graceful shutdown duration while stopping, like the
+		// workflow engine, keep the configured one.
+		closeSeconds = max(
 			normalSeconds,
 			int((subscription.DefaultDrainMaxDuration+10*time.Second)/time.Second),
 		)
-		opts = &restartOpts
 
 		shutdownDone := make(chan struct{})
 		defer close(shutdownDone)
@@ -276,6 +278,7 @@ func runWithContext(ctx, shutdownCtx context.Context, opts *options.Options, int
 				ReadBufferSize:                opts.ReadBufferSize,
 				UnixDomainSocket:              opts.UnixDomainSocket,
 				DaprGracefulShutdownSeconds:   opts.DaprGracefulShutdownSeconds,
+				CloseGracefulShutdownSeconds:  closeSeconds,
 				OnShutdownStart:               func() { close(shutdownStarted) },
 				DaprBlockShutdownDuration:     opts.DaprBlockShutdownDuration,
 				DisableBuiltinK8sSecretStore:  opts.DisableBuiltinK8sSecretStore,
