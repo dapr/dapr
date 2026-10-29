@@ -16,11 +16,13 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -30,6 +32,22 @@ import (
 )
 
 const reminderNameParentNotify = "parent-notify"
+
+// defaultParentNotifyTimeout bounds one delivery of the completion to the
+// parent. The child sends it holding its own turn lock, so a parent turn
+// blocked dispatching into this child (a replayed child creation) waits for
+// the child while the child waits for the parent; this bound is what breaks
+// that cycle, and both workflows stall for its full length. A parent that is
+// merely slow loses nothing: the failed send arms the parent-notify reminder,
+// which re-sends.
+const defaultParentNotifyTimeout = 5 * time.Second
+
+// parentNotifyTimeout is defaultParentNotifyTimeout unless overridden. The env
+// override exists for integration tests; it is not a supported production
+// knob.
+var parentNotifyTimeout = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PARENT_NOTIFY_TIMEOUT", defaultParentNotifyTimeout)
+})
 
 // parentNotify is a completion notification ready to deliver. It is built
 // under the turn lock so a detached delivery holds no reference to the state,
@@ -61,7 +79,7 @@ func (o *orchestrator) deliverParentNotify(ctx context.Context, state *wfengines
 	if len(pn.msgs) == 0 {
 		return nil
 	}
-	cctx, cancel := context.WithTimeout(ctx, detachedReminderTimeout)
+	cctx, cancel := context.WithTimeout(ctx, parentNotifyTimeout())
 	defer cancel()
 	res := o.messages.CallAddEventStateMessage(cctx, pn.msgs, pn.md)
 	if res.Err == nil {

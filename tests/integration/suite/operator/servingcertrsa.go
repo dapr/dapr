@@ -22,7 +22,9 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/cert"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -36,6 +38,7 @@ type servingcertrsa struct {
 	sentry   *procsentry.Sentry
 	kubeapi  *kubernetes.Kubernetes
 	operator *procoperator.Operator
+	logline  *logline.LogLine
 }
 
 func (s *servingcertrsa) Setup(t *testing.T) []framework.Option {
@@ -49,19 +52,25 @@ func (s *servingcertrsa) Setup(t *testing.T) []framework.Option {
 		),
 	)
 
+	s.logline = logline.New(t,
+		logline.WithStdoutLineContains("metrics server started on 127.0.0.1:"),
+	)
+
 	s.operator = procoperator.New(t,
 		procoperator.WithNamespace("default"),
 		procoperator.WithKubeconfigPath(s.kubeapi.KubeconfigPath(t)),
 		procoperator.WithTrustAnchorsFile(s.sentry.TrustAnchorsFile(t)),
+		procoperator.WithExecOptions(exec.WithStdout(s.logline.Stdout())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.kubeapi, s.sentry, s.operator),
+		framework.WithProcesses(s.logline, s.kubeapi, s.sentry, s.operator),
 	}
 }
 
 func (s *servingcertrsa) Run(t *testing.T, ctx context.Context) {
 	s.sentry.WaitUntilRunning(t, ctx)
 	s.operator.WaitUntilRunning(t, ctx)
+	s.logline.EventuallyFoundAll(t)
 	cert.AssertRSAServingCert(t, ctx, "localhost:"+strconv.Itoa(s.operator.WebhookPort()))
 }

@@ -54,6 +54,7 @@ func TestResetSessionReleasesAbortedRoundScope(t *testing.T) {
 	case resp := <-respCh:
 		require.NotNil(t, resp)
 		require.Error(t, resp.Error)
+		require.Nil(t, resp.Cancel)
 	case <-time.After(time.Second * 5):
 		require.Fail(t, "the parked lookup must resolve after the session reset")
 	}

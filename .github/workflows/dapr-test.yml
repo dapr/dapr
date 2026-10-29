@@ -67,8 +67,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.18.4"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.17.14"
 
 jobs:
   deploy-infrastructure:
@@ -277,6 +277,17 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           rm.exe "C:/WINDOWS/system32/bash.EXE"
+      # Docker on GitHub Windows runners sometimes fails to start at boot and
+      # stays stopped (actions/runner-images#13729). Start it before any step
+      # that needs the daemon.
+      - name: Start Docker service
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dockerState = Get-Service -Name "docker"
+          if ($dockerState.Status -ne "Running") {
+            Start-Service -Name "docker"
+          }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v6
@@ -521,6 +532,7 @@ jobs:
           make setup-test-env-kafka
           make setup-test-env-zipkin
           make setup-test-env-postgres
+          make setup-test-env-meilisearch
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
         shell: bash
       - name: Deploy dapr to AKS cluster

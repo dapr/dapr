@@ -88,6 +88,13 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 	unlockOnce := sync.OnceFunc(unlock)
 	defer unlockOnce()
 
+	// InvokeMethod chose this path before the lock: the last worker may have
+	// disconnected while this call waited for it. A fallback host serves the
+	// event on the durable path, as it cannot fold it into a local turn.
+	if o.isFallback() {
+		return o.handleInvoke(ctx, req)
+	}
+
 	// Under the lock, like the normal handleInvoke path: the policy check
 	// reads mutable cached workflow state, and authorizing before the lock
 	// could approve a completion against an execution that a concurrent
@@ -246,35 +253,6 @@ func foldedEvents(entries []*foldEntry) []*backend.HistoryEvent {
 		events[i] = p.event
 	}
 	return events
-}
-
-// foldExecutionMatches reports whether a completion's TaskExecutionId agrees
-// with the scheduling event at its task id; empty ids on either side are
-// tolerated (older SDKs, synthetic events).
-func (o *orchestrator) foldExecutionMatches(e *backend.HistoryEvent, state *wfenginestate.State) bool {
-	var taskID int32
-	var execID string
-	switch {
-	case e.GetTaskCompleted() != nil:
-		taskID = e.GetTaskCompleted().GetTaskScheduledId()
-		execID = e.GetTaskCompleted().GetTaskExecutionId()
-	case e.GetTaskFailed() != nil:
-		taskID = e.GetTaskFailed().GetTaskScheduledId()
-		execID = e.GetTaskFailed().GetTaskExecutionId()
-	default:
-		return true
-	}
-	if execID == "" {
-		return true
-	}
-	scheduled := state.FindHistoryEventByID(taskID).GetTaskScheduled()
-	if scheduled == nil {
-		return false
-	}
-	if scheduled.GetTaskExecutionId() == "" {
-		return true
-	}
-	return scheduled.GetTaskExecutionId() == execID
 }
 
 // foldAck signals the taken entries' senders that the commit containing

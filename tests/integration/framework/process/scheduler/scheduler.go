@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,6 +77,7 @@ type Scheduler struct {
 	userpass bool
 
 	runOnce sync.Once
+	fopts   []Option
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -207,7 +209,23 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		namespace:          opts.namespace,
 		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
 		embed:              opts.embed == nil || *opts.embed,
+		fopts:              fopts,
 	}
+}
+
+// Clone returns a new, not yet running, Scheduler with the same options,
+// identity, ports, initial cluster and data dir, with opts applied on top.
+func (s *Scheduler) Clone(t *testing.T, opts ...Option) *Scheduler {
+	t.Helper()
+	return New(t, slices.Concat(s.fopts, []Option{
+		WithID(s.id),
+		WithPort(s.port),
+		WithHealthzPort(s.healthzPort),
+		WithMetricsPort(s.metricsPort),
+		WithEtcdClientPort(s.etcdClientPort),
+		WithInitialCluster(s.etcdInitialCluster),
+		WithDataDir(s.dataDir),
+	}, opts)...)
 }
 
 func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
@@ -258,9 +276,9 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			return
 		}
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+		assert.NoError(c, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
 
 	if s.embed && !s.userpass {
@@ -443,6 +461,30 @@ func (s *Scheduler) MetricsAddress() string {
 // Metrics returns a subset of metrics scraped from the metrics endpoint
 func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
+}
+
+// ScalingMetrics returns the metrics scraped from the scaling metrics
+// endpoint.
+func (s *Scheduler) ScalingMetrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
+	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics/scaling", s.MetricsAddress()))
+}
+
+// ScalingGauges returns the in-flight and undeliverable job gauges for an
+// app from the scaling metrics endpoint, and fails if the endpoint serves
+// anything else.
+func (s *Scheduler) ScalingGauges(t assert.TestingT, ctx context.Context, namespace, appID string) (inFlight, undeliverable float64) {
+	const (
+		inFlightMetric      = "dapr_scheduler_inflight_jobs"
+		undeliverableMetric = "dapr_scheduler_undeliverable_jobs"
+	)
+
+	all := s.ScalingMetrics(t, ctx).All()
+	for name := range all {
+		metric, _, _ := strings.Cut(name, "|")
+		assert.Contains(t, []string{inFlightMetric, undeliverableMetric}, metric)
+	}
+	labels := "|app_id:" + appID + "|namespace:" + namespace
+	return all[inFlightMetric+labels], all[undeliverableMetric+labels]
 }
 
 func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
@@ -632,7 +674,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 		DialTimeout: 5 * time.Second,
 		Context:     ctx,
 	}).ListAllKeys(ctx, prefix)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return resp
 }

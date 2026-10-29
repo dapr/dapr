@@ -37,12 +37,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 )
 
 type Daprd struct {
@@ -187,6 +192,9 @@ spec:
 	}
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
+	}
+	if opts.schedulerJobStreams != nil {
+		args = append(args, "--scheduler-job-streams="+strconv.FormatUint(uint64(*opts.schedulerJobStreams), 10))
 	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
@@ -352,6 +360,47 @@ func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 
 func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
+}
+
+// InternalGRPCClient returns a client for the daprd internal gRPC API, the
+// one peer daprds use for actor calls. With sen set, the connection is mTLS
+// with a Sentry-issued identity for appID in namespace, otherwise plaintext.
+func (d *Daprd) InternalGRPCClient(t *testing.T, ctx context.Context, sen *sentry.Sentry, appID, namespace string) internalv1pb.ServiceInvocationClient {
+	t.Helper()
+
+	dialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
+	if sen != nil {
+		sctx, cancel := context.WithCancel(ctx)
+		sec, err := security.New(sctx, security.Options{
+			SentryAddress:            sen.Address(),
+			ControlPlaneTrustDomain:  sen.TrustDomain(t),
+			ControlPlaneNamespace:    sen.Namespace(),
+			TrustAnchors:             sen.CABundle().X509.TrustAnchors,
+			AppID:                    appID,
+			Mode:                     modes.StandaloneMode,
+			MTLSEnabled:              true,
+			Healthz:                  healthz.New(),
+			OverrideRequestNamespace: &namespace,
+		})
+		require.NoError(t, err)
+
+		errCh := make(chan error, 1)
+		go func() { errCh <- sec.Run(sctx) }()
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+
+		sech, err := sec.Handler(sctx)
+		require.NoError(t, err)
+		dialOpt = sech.GRPCDialOptionMTLSUnknownTrustDomain(d.Namespace(), d.AppID())
+	}
+
+	conn, err := grpc.NewClient(d.InternalGRPCAddress(), dialOpt)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return internalv1pb.NewServiceInvocationClient(conn)
 }
 
 func (d *Daprd) AppID() string {
@@ -599,6 +648,34 @@ func (d *Daprd) ActorTimerURL(actorType, actorID, name string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers/%s", d.HTTPAddress(), actorType, actorID, name)
 }
 
+// ActorStateGet returns the value stored under an actor state key. A key
+// which is not set returns an empty string.
+func (d *Daprd) ActorStateGet(t assert.TestingT, ctx context.Context, actorType, actorID, key string) string {
+	url := fmt.Sprintf("http://%s/v1.0/actors/%s/%s/state/%s", d.HTTPAddress(), actorType, actorID, key)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return ""
+	}
+
+	resp, err := d.httpClient.Do(req)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return ""
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.NoError(t, resp.Body.Close())
+
+	if resp.StatusCode == http.StatusNoContent {
+		return ""
+	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, string(b))
+
+	return string(b)
+}
+
 func (d *Daprd) ActorTimersURL(actorType, actorID string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/timers", d.HTTPAddress(), actorType, actorID)
 }
@@ -641,9 +718,14 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 }
 
 // ActiveActorCount returns the number of live actors of actorType reported by
-// the actor runtime, and whether the type is hosted at all.
+// the actor runtime, and whether the type is hosted at all. A failed metadata
+// read fails t and reports the type as not hosted.
 func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
-	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return 0, false
+	}
+	for _, a := range rt.ActiveActors {
 		if a.Type == actorType {
 			return a.Count, true
 		}

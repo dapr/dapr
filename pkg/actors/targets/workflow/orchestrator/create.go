@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -109,6 +110,14 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 			return nil
 		}
 
+		if o.isSameExecutionRetry(state, startEvent.GetExecutionStarted()) {
+			log.Debugf("Workflow actor '%s': ignoring create retry with matching execution ID", o.actorID)
+			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
+				return o.assertStartReminder(ctx, pending)
+			}
+			return nil
+		}
+
 		// A saved-but-never-run instance whose start reminder was never armed
 		// (the save-first create failed) would otherwise be permanently
 		// stranded: clients retrying the create would only ever see
@@ -134,6 +143,13 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		}
 
 		return status.Errorf(codes.AlreadyExists, "an active workflow with ID '%s' already exists", o.actorID)
+	}
+
+	// Child retries fall through to arrange the owed parent notification.
+	if startEvent.GetExecutionStarted().GetParentInstance() == nil &&
+		o.isSameExecutionRetry(state, startEvent.GetExecutionStarted()) {
+		log.Debugf("Workflow actor '%s': ignoring create retry with matching execution ID for a completed workflow", o.actorID)
+		return nil
 	}
 
 	// The create asked for instance ID uniqueness: a completed instance blocks
@@ -167,11 +183,16 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		}
 		return o.assertParentNotifyReminder(o.getExecutionStartedEvent(state).GetName())
 	}
-	if state.ParentNotifyPending {
-		// Unavailable rather than AlreadyExists: a parent that continued as
-		// new and reuses the id retries, and its current execution acks the
-		// pending completion as a straggler, which then frees the id.
-		return status.Errorf(codes.Unavailable, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
+	// A later execution of the parent the completion is owed to (it continued
+	// as new) drops that completion as a straggler, so its create is the
+	// acknowledgement: the reset below clears the marker. Waiting for the
+	// delivery instead livelocks: it holds this child's lock while it waits
+	// on the parent's, which the creating turn holds.
+	if state.ParentNotifyPending && !o.isLaterParentExecution(state, startEvent) {
+		// Retryable, not AlreadyExists: the parent's ack frees the id.
+		// Aborted, not Unavailable: the actor router retries Unavailable from
+		// a remote actor inside the caller's turn, holding the caller's lock.
+		return status.Errorf(codes.Aborted, "a workflow with ID '%s' has completed but its parent has not acknowledged the completion yet", o.actorID)
 	}
 
 	// An ID is reusable only once the previous execution's entire child
@@ -337,6 +358,19 @@ func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEve
 	return true, false
 }
 
+// isLaterParentExecution reports whether the create comes from another
+// execution of the parent this workflow's completion is owed to.
+func (o *orchestrator) isLaterParentExecution(state *wfenginestate.State, startEvent *backend.HistoryEvent) bool {
+	incoming := startEvent.GetExecutionStarted().GetParentInstance()
+	owed := o.getExecutionStartedEvent(state).GetParentInstance()
+	if incoming == nil || owed == nil ||
+		incoming.GetWorkflowInstance().GetInstanceId() != owed.GetWorkflowInstance().GetInstanceId() ||
+		cmp.Or(incoming.GetAppID(), o.appID) != cmp.Or(owed.GetAppID(), o.appID) {
+		return false
+	}
+	return !sameParentExecution(owed, incoming)
+}
+
 // sameParentExecution reports whether two parent references could belong to
 // the same parent execution. A nil ExecutionId on EITHER side (older
 // persisted state, rerun-path creations that omit it) conservatively returns
@@ -346,4 +380,11 @@ func sameParentExecution(existing, incoming *protos.ParentInstanceInfo) bool {
 	a := existing.GetWorkflowInstance().GetExecutionId()
 	b := incoming.GetWorkflowInstance().GetExecutionId()
 	return a == nil || b == nil || a.GetValue() == b.GetValue()
+}
+
+// isSameExecutionRetry reports whether the incoming create is a retry of the
+// committed create, since retries re-send the same ExecutionId.
+func (o *orchestrator) isSameExecutionRetry(state *wfenginestate.State, incoming *protos.ExecutionStartedEvent) bool {
+	saved := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue()
+	return saved != "" && saved == incoming.GetWorkflowInstance().GetExecutionId().GetValue()
 }

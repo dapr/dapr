@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -98,6 +99,8 @@ type Workflow struct {
 	signing      bool
 
 	schedulerPlacement bool
+
+	stagedOperations bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -216,7 +219,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// features replaces every earlier feature list. All harness-driven
 	// features must therefore land in a single manifest per daprd; it is
 	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath)
+	baseFeatures := baseFeatureList(clustered, fastPath, opts.stagedOperations)
 
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
@@ -287,6 +290,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		signing:      signing,
 
 		schedulerPlacement: schedulerPlacement,
+
+		stagedOperations: opts.stagedOperations,
 	}
 
 	for i := range workflow.taskregistry {
@@ -347,19 +352,35 @@ func (w *Workflow) WaitForNoConnectedWorkers(t *testing.T, ctx context.Context) 
 
 func (w *Workflow) WaitForNoConnectedWorkersN(t *testing.T, ctx context.Context, index int) {
 	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, index, 0)
+}
+
+// WaitForExactlyConnectedWorkers waits until daprd index 0 reports exactly
+// count connected workers. See WaitForExactlyConnectedWorkersN.
+func (w *Workflow) WaitForExactlyConnectedWorkers(t *testing.T, ctx context.Context, count int) {
+	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, 0, count)
+}
+
+// WaitForExactlyConnectedWorkersN waits until the daprd at the given index
+// reports exactly count connected workers, for example after one of several
+// workers disconnected.
+func (w *Workflow) WaitForExactlyConnectedWorkersN(t *testing.T, ctx context.Context, index, count int) {
+	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md := w.DaprN(index).GetMetadata(c, ctx)
 		if !assert.NotNil(c, md) {
 			return
 		}
 		// The workflows metadata field is omitted when there are no connected
 		// workers, so a nil value means zero workers (drained).
-		if md.Workflows == nil {
-			return
+		var connected int
+		if md.Workflows != nil {
+			connected = md.Workflows.ConnectedWorkers
 		}
-		assert.Zero(c, md.Workflows.ConnectedWorkers)
+		assert.Equal(c, count, connected)
 	}, time.Second*30, time.Millisecond*10)
 }
 
@@ -429,6 +450,16 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 	return w.daprds[0].GRPCClient(t, ctx)
 }
 
+// InternalGRPCClient returns a client for the internal gRPC API of the first
+// daprd, authenticated as that daprd's own app when mTLS is enabled. Tests
+// use it to drive the reserved workflow actors directly, as a peer daprd of
+// the same app would.
+func (w *Workflow) InternalGRPCClient(t *testing.T, ctx context.Context) internalv1pb.ServiceInvocationClient {
+	t.Helper()
+	d := w.daprds[0]
+	return d.InternalGRPCClient(t, ctx, w.sentry, d.AppID(), d.Namespace())
+}
+
 // GRPCClientForApp returns a GRPC client for the specified app index
 func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
 	t.Helper()
@@ -436,13 +467,16 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-func baseFeatureList(clustered, fastPath bool) []string {
-	features := make([]string, 0, 2)
+func baseFeatureList(clustered, fastPath, stagedOperations bool) []string {
+	features := make([]string, 0, 3)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
 	}
 	if fastPath {
 		features = append(features, "WorkflowsFastPath")
+	}
+	if stagedOperations {
+		features = append(features, "WorkflowsStagedOperations")
 	}
 	return features
 }
@@ -452,7 +486,7 @@ func baseFeatureList(clustered, fastPath bool) []string {
 // the Sentry wiring.
 func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	t.Helper()
-	features := baseFeatureList(w.clustered, w.fastPath)
+	features := baseFeatureList(w.clustered, w.fastPath, w.stagedOperations)
 	var opts []daprd.Option
 	if w.sentry != nil {
 		opts = append(opts, daprd.WithSentry(t, w.sentry))

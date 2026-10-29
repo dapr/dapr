@@ -112,6 +112,11 @@ type placement struct {
 	actorTable table.Interface
 	scheduler  schedclient.Reloader
 
+	// remote is what the last completed dissemination round showed of the
+	// actor types other daprds host, kept across stream loss. See
+	// remotehosts.go.
+	remote remoteHosts
+
 	inflight  *inflight.Inflight
 	connector connector.Interface
 	loop      loop.Interface[loops.EventPlace]
@@ -168,6 +173,16 @@ func New(opts Options) loop.Interface[loops.EventPlace] {
 }
 
 func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
+	err := p.handle(ctx, event)
+	if err != nil {
+		// The loop stops on an error, so Shutdown is never handled: close the
+		// WatchRemoteHosts channels here, as nothing else would.
+		p.remote.close()
+	}
+	return err
+}
+
+func (p *placement) handle(ctx context.Context, event loops.EventPlace) error {
 	switch e := event.(type) {
 	case *loops.StreamOrder:
 		p.handleOrder(e)
@@ -181,6 +196,18 @@ func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 		return p.handleCloseStream(ctx, e)
 	case *loops.UpdateTypes:
 		p.handleUpdateTypes(e)
+	case *loops.ReloadReminderTypes:
+		// No stream yet: the first dissemination round sends the reminder
+		// types to the scheduler.
+		if p.dissLoop != nil {
+			p.dissLoop.Enqueue(e)
+		}
+	case *loops.WatchRemoteHosts:
+		p.remote.watch(e, p.loop)
+	case *loops.UnwatchRemoteHosts:
+		p.remote.unwatch(e.ActorType, e.Ch)
+	case *loops.RoundCompleted:
+		p.remote.roundCompleted(e)
 	case *loops.SetDrainOngoingCallTimeout:
 		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.SetEntityDrainOngoingCallTimeouts:
@@ -233,6 +260,7 @@ func (p *placement) handleLockRequest(req *loops.LockRequest) {
 
 func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementReconnect) error {
 	var client transport.Transport
+	var streamCancel context.CancelFunc
 	var err error
 	var unavailableLogged bool
 	adoptFallback := func() {
@@ -255,7 +283,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 			cctx, ccancel = context.WithCancelCause(ctx)
 			timer = time.AfterFunc(p.startupWait, func() { ccancel(errStartupTimeout) })
 		}
-		client, err = p.tryConnect(ctx, cctx)
+		client, streamCancel, err = p.tryConnect(ctx, cctx)
 		if timer != nil {
 			timer.Stop()
 		}
@@ -351,10 +379,14 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.fallback = nil
 	}
 
+	connected := "Connected to placement service: %s"
+	if p.schedulerPlacement {
+		connected = "Connected to scheduler placement leader %s"
+	}
 	if recon.TransientPrior {
-		log.Debugf("Connected to placement service: %s", p.connector.Address())
+		log.Debugf(connected, p.connector.Address())
 	} else {
-		log.Infof("Connected to placement service: %s", p.connector.Address())
+		log.Infof(connected, p.connector.Address())
 	}
 
 	p.idx++
@@ -364,6 +396,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Namespace:            p.namespace,
 		Inflight:             p.inflight,
 		Channel:              client,
+		StreamCancel:         streamCancel,
 		PlacementLoop:        p.loop,
 		IDx:                  p.idx,
 		ActorTable:           p.actorTable,
@@ -458,6 +491,8 @@ func (p *placement) handleCloseStream(ctx context.Context, closeStream *loops.Co
 func (p *placement) handleShutdown(shutdown *loops.Shutdown) {
 	defer p.wg.Wait()
 
+	p.remote.close()
+
 	if p.dissLoop == nil {
 		return
 	}
@@ -469,16 +504,27 @@ func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoin
 	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
-func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, error) {
+func (p *placement) tryConnect(ctx, connectCtx context.Context) (transport.Transport, context.CancelFunc, error) {
 	conn, err := p.connector.Connect(connectCtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to placement service: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to placement service: %w", err)
 	}
 
-	client, err := p.streamFactory(ctx, conn)
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	client, err := p.streamFactory(streamCtx, conn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open stream to placement service: %w", err)
+		streamCancel()
+		// The dial does not block, so it succeeds while placement is down and
+		// only the stream fails. Close the connection, else every retry
+		// leaves one more connection redialing placement.
+		conn.Close()
+		return nil, nil, fmt.Errorf("failed to open stream to placement service: %w", err)
 	}
 
-	return client, nil
+	// The connection serves only this stream: the next attempt dials a new
+	// one. Close it together with the stream.
+	return client, func() {
+		streamCancel()
+		conn.Close()
+	}, nil
 }

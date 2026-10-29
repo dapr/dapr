@@ -35,6 +35,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/ptr"
 )
 
 // createWorkflowReminder schedules a wake-up reminder on the workflow actor.
@@ -100,7 +101,7 @@ func (o *orchestrator) assertStartReminder(ctx context.Context, startEvent *back
 	reminderName := events.EventReminderName(reminderPrefixStart, startEvent)
 
 	due := start
-	if o.fastPath && !start.After(time.Now()) {
+	if o.localFastPath() && !start.After(time.Now()) {
 		due = time.Now().Add(pendingstart.RedriveGrace())
 	}
 	if err := o.createWorkflowReminder(ctx, reminderName, nil, due, o.appID, &workflowName); err != nil {
@@ -141,7 +142,7 @@ const detachedReminderTimeout = 30 * time.Second
 // Durability first: if the janitor cannot be ensured, fall back to the
 // durable per-event reminder path.
 func (o *orchestrator) driveNewEvent(ctx context.Context, e *backend.HistoryEvent, state *wfenginestate.State) error {
-	if !o.fastPath {
+	if !o.localFastPath() {
 		return o.assertNewEventReminder(ctx, e, state)
 	}
 
@@ -173,12 +174,24 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 		return nil
 	}
 
+	err := o.createJanitor(ctx, state, time.Now().Add(janitorPeriod()))
+	if err != nil {
+		return err
+	}
+
+	o.janitorAsserted.Store(true)
+	return nil
+}
+
+// createJanitor creates (or overwrites by name) the janitor reminder, first
+// due at due.
+func (o *orchestrator) createJanitor(ctx context.Context, state *wfenginestate.State, due time.Time) error {
 	wfName := o.getExecutionStartedEvent(state).GetName()
-	err := common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
 		ActorType: o.actorTypeBuilder.Workflow(o.appID),
 		ActorID:   o.actorID,
 		Name:      janitorReminderName,
-		DueTime:   time.Now().Add(janitorPeriod()).UTC().Format(time.RFC3339Nano),
+		DueTime:   due.UTC().Format(time.RFC3339Nano),
 		Period:    janitorPeriod().String(),
 		FailurePolicy: &commonv1pb.JobFailurePolicy{
 			Policy: &commonv1pb.JobFailurePolicy_Drop{
@@ -187,12 +200,6 @@ func (o *orchestrator) ensureJanitor(ctx context.Context, state *wfenginestate.S
 		},
 		ConcurrencyKey: &wfName,
 	})
-	if err != nil {
-		return err
-	}
-
-	o.janitorAsserted.Store(true)
-	return nil
 }
 
 // deleteReminderTolerant deletes a reminder and reports whether the delete
@@ -275,7 +282,14 @@ func (o *orchestrator) failTaskViaReminder(ctx context.Context, failedEvent *pro
 	if err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
-	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
+	req, err := o.buildReminderRequest(reminderName, failedEvent, time.Now(), o.actorTypeBuilder.Workflow(o.appID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	// Create only, as the activity host does for this name family: the name
+	// is random, so AlreadyExists means a retry of an unacked create.
+	req.Overwrite = ptr.Of(false)
+	if err := common.CreateReminderWithRetry(ctx, o.reminders, req); err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
 	}
 
@@ -337,7 +351,7 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 
 	log.Debugf("Workflow actor '%s': deleting all reminders for completed workflow", o.actorID)
 
-	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+	if err := common.DeleteRemindersWithRetry(ctx, o.reminders, &actorapi.DeleteRemindersByActorIDRequest{
 		ActorType:       actorType,
 		ActorID:         o.actorID,
 		MatchIDAsPrefix: false,
@@ -345,7 +359,7 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 		return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
 	}
 
-	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+	if err := common.DeleteRemindersWithRetry(ctx, o.reminders, &actorapi.DeleteRemindersByActorIDRequest{
 		ActorType:       o.activityActorType,
 		ActorID:         o.actorID + "::",
 		MatchIDAsPrefix: true,

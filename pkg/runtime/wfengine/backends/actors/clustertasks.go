@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -60,6 +61,22 @@ type ClusterTasksBackend struct {
 	actors            actors.Interface
 	executorActorType string
 	pending           *pending.Pending
+
+	// forcedWatchFallbacks counts DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK
+	// injections.
+	forcedWatchFallbacks atomic.Int64
+}
+
+// errWrongTaskType reports a watch delivery for the colliding other task type
+// (a workflow instance ID equal to an activity actor ID). It is not for this
+// waiter, whose own completion can still come.
+var errWrongTaskType = errors.New("completion for another task type")
+
+// forceWatchFallbackForTest reports whether this completion wait must use the
+// watch-stream fallback under DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK.
+func (be *ClusterTasksBackend) forceWatchFallbackForTest() bool {
+	budget := testForceWatchFallback()
+	return budget != 0 && be.forcedWatchFallbacks.Add(1) <= budget
 }
 
 func NewClusterTasksBackend(opts ClusterTasksBackendOptions) (*ClusterTasksBackend, error) {
@@ -203,6 +220,15 @@ func (be *ClusterTasksBackend) OnWorkflowTaskCompletion(req *protos.WorkflowRequ
 // abandoned; the durable retry converges.
 const onCompletionClaimTimeout = 30 * time.Second
 
+// watchRewatchDelay is the pause before a waiter on the watch-stream fallback
+// opens another stream after a delivery that did not settle it. The executor
+// actor that served the previous stream deactivates once the stream ends. A
+// stream that attaches to it before it closes gets a closed error, which the
+// router retries on a fresh actor, so the pause is not needed for
+// correctness: it avoids most of those retries. It also gives a settlement
+// that raced the registration time to cancel the watch.
+const watchRewatchDelay = 100 * time.Millisecond
+
 func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() proto.Message, cb func(proto.Message, error)) func() {
 	deliver := func(res pending.Result) {
 		if res.Cancelled {
@@ -218,7 +244,9 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 	ctx, cancel := context.WithTimeout(context.Background(), onCompletionClaimTimeout)
 	defer cancel()
 
-	if be.executorLocal(ctx, key) {
+	if be.forceWatchFallbackForTest() {
+		log.Warnf("TEST INJECTION: using the watch-stream fallback for %s task '%s'", taskType, key)
+	} else if be.executorLocal(ctx, key) {
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteWaitLocal)
 
 		// Drain a parked stale payload WITHOUT consuming the registration:
@@ -242,8 +270,31 @@ func (be *ClusterTasksBackend) onCompletion(taskType, key string, newMsg func() 
 	wctx, wcancel := context.WithCancel(context.Background())
 	go func() {
 		defer wcancel()
-		m := newMsg()
-		cb(m, be.watchCompletion(wctx, taskType, key, m))
+		for {
+			m := newMsg()
+			err := be.watchCompletion(wctx, taskType, key, m)
+			if wctx.Err() != nil {
+				return
+			}
+			if errors.Is(err, errWrongTaskType) {
+				log.Debugf("Watch stream for %s task '%s' served a completion of the other task type; watching again", taskType, key)
+			} else {
+				cb(m, err)
+				if err != nil {
+					return
+				}
+			}
+			// A watch stream serves one completion. If it was a superseded
+			// attempt's, durabletask discards it by completion token and
+			// keeps the registration armed, so watch again: the genuine
+			// completion parks on the executor actor with nothing else to
+			// consume it. Settlement deregisters, which cancels wctx.
+			select {
+			case <-wctx.Done():
+				return
+			case <-time.After(watchRewatchDelay):
+			}
+		}
 	}()
 	return wcancel
 }
@@ -313,6 +364,15 @@ func (be *ClusterTasksBackend) executorLocal(ctx context.Context, key string) bo
 // reminder retry converges), while completions parked by pre-upgrade daprds
 // carry no header and are accepted as before.
 func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, key string, resp proto.Message) error {
+	if d := testActivityWatchDelay(); d > 0 && taskType == executor.TaskTypeActivity {
+		log.Warnf("TEST INJECTION: holding the watch stream for activity task '%s' back for %s", key, d)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(d):
+		}
+	}
+
 	router, err := be.actors.Router(ctx)
 	if err != nil {
 		return err
@@ -337,7 +397,7 @@ func (be *ClusterTasksBackend) watchCompletion(ctx context.Context, taskType, ke
 		}
 
 		if v, ok := res.GetHeaders()[executor.MetadataTaskType]; ok && len(v.GetValues()) > 0 && v.GetValues()[0] != taskType {
-			return false, fmt.Errorf("received completion for task type %q while watching %q", v.GetValues()[0], taskType)
+			return false, fmt.Errorf("%w: received completion for task type %q while watching %q", errWrongTaskType, v.GetValues()[0], taskType)
 		}
 
 		if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), resp); err != nil {

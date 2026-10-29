@@ -54,6 +54,11 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode activity invocation: %w", err)
 	}
+	// Carried on the invocation so it persists with the activity reminder
+	// and is sent back with the result, however late that is.
+	if v := req.GetMetadata()[todo.MetadataParentExecutionID].GetValues(); len(v) > 0 && v[0] != "" {
+		invocation.ParentExecutionId = &v[0]
+	}
 
 	// A janitor re-dispatch may race a body still live on the previous
 	// placement owner, so it is gated on the durable execution-claim record
@@ -85,13 +90,19 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// Delayed executions keep the scheduler path so the delay is honoured; a
 	// drive that cannot be armed (factory halting) falls through to the
 	// durable reminder.
-	if a.fastPath && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
+	if a.localFastPath() && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
 		if a.localDrive(invocation, activityName) {
 			return nil, nil
 		}
 	}
 
 	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
+}
+
+// localFastPath reports whether an activity may be driven locally: never on
+// a fallback host (factory.fallback), which has no local executor to run it.
+func (a *activity) localFastPath() bool {
+	return a.fastPath && (a.fallback == nil || !a.fallback())
 }
 
 // metaFlagged reports whether the orchestrator set key to "true" on this

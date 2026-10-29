@@ -267,6 +267,47 @@ func (i *Inflight) HasTables(types []string) bool {
 	return true
 }
 
+// HasLocalHost returns whether the installed placement table of actorType
+// places it on this host.
+func (i *Inflight) HasLocalHost(actorType string) bool {
+	return i.hasHost(actorType, true)
+}
+
+// RemoteHostTypes returns the actor types whose installed placement table has
+// a host other than this one.
+func (i *Inflight) RemoteHostTypes() map[string]bool {
+	remote := make(map[string]bool)
+	for actorType := range i.hashTable.Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	for actorType := range i.v2Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	return remote
+}
+
+// hasHost returns whether the installed placement table of actorType has a
+// host which is this one (local) or another one (!local).
+func (i *Inflight) hasHost(actorType string, local bool) bool {
+	var hosts []string
+	if entry, ok := i.v2Entries[actorType]; ok {
+		hosts = entry.table.Hosts()
+	} else if table, ok := i.hashTable.Entries[actorType]; ok {
+		hosts = table.Hosts()
+	}
+
+	for _, host := range hosts {
+		if loops.IsActorLocal(host, i.hostname, i.port) == local {
+			return true
+		}
+	}
+	return false
+}
+
 // ResetSession clears the tables and versions of both protocols on stream
 // loss: a new session starts from its authoritative snapshot, which carries
 // no tombstones for types deleted while disconnected, and a session under
@@ -397,6 +438,17 @@ func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 }
 
 func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupResponse {
+	// A failed lookup takes no claim: the caller gets no claim to release. A
+	// held claim would keep the next drain of this actor type waiting until
+	// the request ends, while the retry of that same request queues behind
+	// the round that runs the drain. Tables change only while no lookup is
+	// being resolved (on this loop, or in ResetSession after this loop has
+	// stopped), so resolving before the claim gives the same result.
+	resp, err := i.resolve(lu.Request)
+	if err != nil {
+		return &loops.LookupResponse{Error: err}
+	}
+
 	aq := aquireCache.Get().(*lock.Acquire)
 	aq.ActorType = lu.Request.ActorType
 	aq.Context = lu.Context
@@ -405,12 +457,10 @@ func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupRespo
 	claim := <-aq.RespCh
 	aquireCache.Put(aq)
 
-	resp, err := i.resolve(lu.Request)
 	return &loops.LookupResponse{
 		Context:  claim.Context,
 		Cancel:   claim.Cancel,
 		Response: resp,
-		Error:    err,
 	}
 }
 

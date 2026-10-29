@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
@@ -56,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
@@ -103,6 +103,15 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
+	// see fallback.go.
+	WorkflowsStagedOperations bool
+
+	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
+	// It bounds how long an activity result publish in flight at shutdown
+	// keeps its context.
+	GracefulShutdownDuration time.Duration
+
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
 
@@ -137,6 +146,8 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	fallbackHosts                   bool
+	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
@@ -165,7 +176,21 @@ type Actors struct {
 	detachedLock         sync.Mutex
 	detached             *detached.Runner
 
+	// regCancel ends the context the actor factories of the current
+	// registration were built with. UnRegisterActors calls it once the types
+	// are unregistered, and Stop calls it so that their background work never
+	// outlives the backend.
+	regLock   sync.Mutex
+	regCancel context.CancelFunc
+
 	stopped atomic.Bool
+
+	// hostedCancel and executorCancel end the background work of the
+	// workflow and executor factories registered last under
+	// WorkflowsStagedOperations; see replaceCancel and retireTogether.
+	// Guarded by the engine's actor registration lock.
+	hostedCancel   context.CancelFunc
+	executorCancel context.CancelFunc
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -230,6 +255,11 @@ func New(opts Options) (*Actors, error) {
 	// Wrapped so pending completions can be cancelled while no executor is
 	// connected; see the pendingtracker package.
 	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+	if opts.WorkflowsStagedOperations {
+		// The engine reports every executor count change under the
+		// feature, and a fallback host registers with none.
+		trackedPendingTasksBackend.SetExecutorAvailable(false)
+	}
 
 	return &Actors{
 		appID:                     opts.AppID,
@@ -254,6 +284,8 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		fallbackHosts:                   opts.WorkflowsStagedOperations,
+		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
 }
@@ -264,6 +296,38 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	// The factories' background work lives as long as this registration, not
+	// as long as the worker stream or call that triggered it: the types stay
+	// registered while any other worker is connected. It takes no values from
+	// ctx, which can be that stream's. The runtime is ready once Table has
+	// returned, so the factories do not wait on the uncancelled context.
+	regCtx, regCancel := context.WithCancel(context.Background())
+	factories, err := workflow.Factories(regCtx, abe.factoryOptions())
+	if err != nil {
+		regCancel()
+		return err
+	}
+
+	if abe.enableClusteredDeployment {
+		ef, eerr := abe.executorFactory(regCtx)
+		if eerr != nil {
+			regCancel()
+			return eerr
+		}
+		factories = append(factories, ef)
+	}
+	abe.swapRegCancel(regCancel)
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
+
+	return nil
+}
+
+// factoryOptions returns the options of the workflow actor factories. The
+// executor actor's factory is built apart, by executorFactory.
+func (abe *Actors) factoryOptions() workflow.Options {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:                  abe.appID,
@@ -278,9 +342,14 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
@@ -306,6 +375,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
 
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
+
 			select {
 			case <-ctx.Done(): // engine is shutting down
 				return ctx.Err()
@@ -319,11 +392,13 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		Fallback:                        abe.fallbackFunc(),
+		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
-	opts := workflow.Options{
+	return workflow.Options{
 		Orchestrator: oopts,
 		Activity:     aopts,
 		Retentioner: retentioner.Options{
@@ -334,45 +409,52 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowActorType:  abe.workflowActorType,
 		ActivityActorType:  abe.activityActorType,
 		RetentionActorType: abe.retentionerActorType,
-		ExecutorActorType:  abe.executorActorType,
 	}
-
-	if abe.enableClusteredDeployment {
-		opts.Executor = &executor.Options{
-			ActorType: abe.executorActorType,
-			Actors:    abe.actors,
-			Pending:   abe.pendingCompletions,
-		}
-	}
-
-	factories, err := workflow.Factories(ctx, opts)
-	if err != nil {
-		return err
-	}
-
-	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
-		Factories: factories,
-	})
-
-	return nil
 }
 
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	table, err := abe.actors.Table(ctx)
 	if err != nil {
+		// The types are still registered: keep their background work, Stop
+		// or the next registration ends it.
 		return err
 	}
+
+	// Stop the factories' background work once the types are unregistered,
+	// so it still serves the turns HaltAll waits on.
+	defer abe.swapRegCancel(nil)
 
 	actorTypes := []string{
 		abe.workflowActorType,
 		abe.activityActorType,
 		abe.retentionerActorType,
 	}
-	if abe.enableClusteredDeployment {
+	// Under WorkflowsStagedOperations the executor actor type is registered
+	// apart from the others; the table ignores it if it is not registered.
+	if abe.enableClusteredDeployment || abe.fallbackHosts {
 		actorTypes = append(actorTypes, abe.executorActorType)
 	}
 
 	return table.UnRegisterActorTypes(actorTypes...)
+}
+
+// swapRegCancel installs the cancel func of the current registration and
+// ends the previous registration's context, if any. A registration that
+// lands after Stop is ended at once: nothing else would cancel it. Stop sets
+// stopped before it takes regLock, so checking it under the lock cannot miss
+// it.
+func (abe *Actors) swapRegCancel(cancel context.CancelFunc) {
+	abe.regLock.Lock()
+	prev := abe.regCancel
+	abe.regCancel = cancel
+	if cancel != nil && abe.stopped.Load() {
+		abe.regCancel = nil
+		defer cancel()
+	}
+	abe.regLock.Unlock()
+	if prev != nil {
+		prev()
+	}
 }
 
 // requireActorStateStore gates the externally driven workflow operations
@@ -386,6 +468,42 @@ func (abe *Actors) requireActorStateStore() error {
 		return messages.ErrActorRuntimeNotFound
 	}
 	return nil
+}
+
+// noWorkerError rewrites the actor routing failures a workflow operation hits
+// while no workflow worker is connected for the target app. The workflow actor
+// types are hosted only while a worker holds an open work item stream (or an
+// MCP server is registered): placement then has no host for them, or a host
+// still named by a stale placement table has already unregistered them.
+func (abe *Actors) noWorkerError(err error, targetAppID string) error {
+	if err == nil {
+		return nil
+	}
+	actorType, terr := abe.targetWorkflowActorType(targetAppID)
+	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType)) {
+		return err
+	}
+	if serr := abe.requireActorStateStore(); serr != nil {
+		return serr
+	}
+	if targetAppID == "" {
+		targetAppID = abe.appID
+	}
+	return fmt.Errorf("%w for app '%s' (the app must be running with its workflow worker registered with its Dapr sidecar before workflows can be started, raised, terminated, purged or waited on; retry once it has connected): %w", wferrors.ErrNoWorkerConnected, targetAppID, err)
+}
+
+// isActorNotRegisteredError reports whether the host that placement routed to
+// does not register actorType. The two predicates below match on the actor
+// type, rather than the error type, because remote hosts return these errors
+// as wire strings, and so an error a remote workflow actor propagated from
+// another app (such as a child purge) is not attributed to the target.
+func isActorNotRegisteredError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "actor type "+actorType+" not registered")
+}
+
+// isActorNoAddressError reports whether placement has no host for actorType.
+func isActorNoAddressError(err error, actorType string) bool {
+	return err != nil && strings.Contains(err.Error(), "did not find address for actor '"+actorType+"/")
 }
 
 // targetWorkflowActorType resolves the workflow actor type for a router
@@ -455,7 +573,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 
 	_, err = engine.Call(ctx, areq)
 	if err != nil {
-		return "", err
+		return "", abe.noWorkerError(err, req.GetRouter().GetTargetAppID())
 	}
 
 	return api.InstanceID(req.GetNewInstanceID()), nil
@@ -521,13 +639,24 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, ireq)
 
-		status, ok := status.FromError(eerr)
-		if ok && (status.Code() == codes.FailedPrecondition ||
-			status.Code() == codes.Unavailable) {
+		// A host named by a stale placement table no longer registers the
+		// type: placement is about to drop it, so retry.
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) || isActorNotRegisteredError(eerr, actorType) {
 			return eerr
 		}
 
-		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
+		// No host serves the workflow actor type, so no worker is connected
+		// for the app. The router already spent its not-found retry budget.
+		if isActorNoAddressError(eerr, actorType) {
+			return backoff.Permanent(eerr)
+		}
+
+		// Aborted: a completed child refuses reuse of its ID until its
+		// parent acknowledges the completion.
+		status, ok := status.FromError(eerr)
+		if ok && (status.Code() == codes.FailedPrecondition ||
+			status.Code() == codes.Unavailable ||
+			status.Code() == codes.Aborted) {
 			return eerr
 		}
 
@@ -538,7 +667,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusFailed, elapsed)
-		return err
+		return abe.noWorkerError(err, e.GetRouter().GetTargetAppID())
 	}
 	// successful request to CREATE workflow, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
@@ -644,7 +773,7 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			return nil, api.ErrInstanceNotFound
 		}
-		return nil, err
+		return nil, abe.noWorkerError(err, targetAppID)
 	}
 	if meta == nil {
 		return nil, api.ErrInstanceNotFound
@@ -731,7 +860,7 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusFailed, elapsed)
-		return err
+		return abe.noWorkerError(err, e.GetRouter().GetTargetAppID())
 	}
 	// successful request to ADD EVENT, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
@@ -839,7 +968,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 		case strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()):
 			return api.ErrInstanceNotFound
 		case !targeterrors.IsStalled(err):
-			return err
+			return abe.noWorkerError(err, taskRouter.GetTargetAppID())
 		}
 
 		// A stalled actor rejects stream registrations while the stall turn
@@ -940,7 +1069,7 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 			if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 				return 0, api.ErrInstanceNotFound
 			}
-			return 0, err
+			return 0, abe.noWorkerError(err, targetAppID)
 		}
 		return 1, nil
 	}
@@ -963,7 +1092,7 @@ func (abe *Actors) purgeWorkflowRemote(ctx context.Context, id api.InstanceID, t
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			return 0, api.ErrInstanceNotFound
 		}
-		return 0, err
+		return 0, abe.noWorkerError(err, targetAppID)
 	}
 
 	respProto := new(protos.PurgeInstancesResponse)
@@ -985,6 +1114,7 @@ func (abe *Actors) Start(ctx context.Context) error {
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.swapRegCancel(nil)
 	abe.detachedLock.Lock()
 	runner := abe.detached
 	abe.detached = nil
@@ -1073,6 +1203,12 @@ func (abe *Actors) SetExecutorAvailable(available bool) {
 	abe.pendingTasksBackend.SetExecutorAvailable(available)
 }
 
+// StartSweep flips executor connectivity to false and starts the sweep of
+// the pending tasks, which settled waits for; see the pendingtracker package.
+func (abe *Actors) StartSweep() (settled func()) {
+	return abe.pendingTasksBackend.StartSweep()
+}
+
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
 	return abe.callWithBackoff(ctx, func() error {
@@ -1116,6 +1252,9 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		case api.IsUnknownTaskIDError(err), api.IsUnknownInstanceIDError(err):
 			log.Warnf("Ignoring complete task which no longer exists: %s", err)
 			return nil
+
+		case errors.Is(err, local.ErrAmbiguousCompletion):
+			return backoff.Permanent(err)
 
 		case abe.stopped.Load():
 			return backoff.Permanent(err)
@@ -1277,7 +1416,7 @@ func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 
 	_, err = router.Call(ctx, req)
 	if err != nil {
-		return err
+		return abe.noWorkerError(err, "")
 	}
 
 	return nil
@@ -1321,11 +1460,6 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
 	}
 
-	req, err := s.GetPurgeRequest(id.String())
-	if err != nil {
-		return err
-	}
-
 	reminders, err := abe.actors.Reminders(ctx)
 	if err != nil {
 		return err
@@ -1336,32 +1470,49 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	return concurrency.Join(ctx,
+	deleteReminders := []concurrency.Runner{
 		func(ctx context.Context) error {
-			return astate.TransactionalStateOperation(ctx, true, req, false)
-		},
-		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.workflowActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.activityActorType,
 				ActorID:         id.String() + "::",
 				MatchIDAsPrefix: true,
 			})
 		},
 		func(ctx context.Context) error {
-			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			return common.DeleteRemindersWithRetry(ctx, sched, &actorsapi.DeleteRemindersByActorIDRequest{
 				ActorType:       abe.retentionerActorType,
 				ActorID:         id.String(),
 				MatchIDAsPrefix: false,
 			})
 		},
-	)
+	}
+
+	// No rows: the instance never existed, or an earlier purge deleted its
+	// rows but failed to delete its reminders. Remove whatever is left in the
+	// scheduler, so force purge stays the escape hatch for that state, and
+	// report the instance as not found.
+	if s == nil {
+		if err = concurrency.Join(ctx, deleteReminders...); err != nil {
+			return err
+		}
+		return api.ErrInstanceNotFound
+	}
+
+	req, err := s.GetPurgeRequest(id.String())
+	if err != nil {
+		return err
+	}
+
+	return concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
+		return astate.TransactionalStateOperation(ctx, true, req, false)
+	})...)
 }
 
 // haltPurgedActors evicts this instance's workflow actor from this host,
@@ -1379,7 +1530,7 @@ func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
 	if !atable.ActorExists(abe.workflowActorType, id.String()) {
 		return
 	}
-	target, err := atable.GetOrCreate(abe.workflowActorType, id.String())
+	target, err := atable.GetOrCreate(ctx, abe.workflowActorType, id.String())
 	if err != nil {
 		log.Warnf("Force purge of '%s': cannot resolve the workflow actor to evict: %v", id, err)
 		return

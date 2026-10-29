@@ -20,7 +20,10 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -29,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/durabletask-go/api"
 )
 
@@ -179,7 +183,17 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	workflowID, err := policyRunner(func(ctx context.Context) (api.InstanceID, error) {
 		id, serr := a.workflowEngine.Client().ScheduleNewWorkflow(ctx, in.GetWorkflowName(), opts...)
 		if serr != nil {
-			return id, fmt.Errorf("unable to start workflow: %w", serr)
+			werr := fmt.Errorf("unable to start workflow: %w", serr)
+			// A retry mints a new ExecutionId that recreates a completed instance.
+			if status.Code(serr) == codes.AlreadyExists {
+				return id, backoff.Permanent(werr)
+			}
+			// No workflow worker is connected: the backend has already waited
+			// out the actor not found retries.
+			if errors.Is(serr, wferrors.ErrNoWorkerConnected) {
+				return id, backoff.Permanent(werr)
+			}
+			return id, werr
 		}
 		return id, nil
 	})

@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -42,7 +42,10 @@ func init() {
 // "<instanceID>::<taskID>::<generation>" ID with a non-zero generation, as a
 // 1.18 orchestrator writes, and checks the result reaches the parent and the
 // reminder is acked. The real dispatch is parked so only the planted delivery
-// can complete the workflow.
+// can complete the workflow, except in clustered mode: there the completion
+// rendezvous keeps one waiter per instance and task ID, so registering the
+// planted work item cancels the parked real execution, and its retry may
+// enter the body and complete the workflow instead.
 type legacyactivityid struct {
 	workflow *workflow.Workflow
 }
@@ -106,19 +109,20 @@ func (l *legacyactivityid) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	legacyActorID := fmt.Sprintf("%s::%d::3", wfID, scheduled.GetEventId())
-	_, err = l.workflow.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: l.workflow.ActivityActorType(0),
-		ActorId:   legacyActorID,
-		Method:    "Execute",
-		Data:      data,
-	})
+	_, err = l.workflow.InternalGRPCClient(t, ctx).CallActor(ctx,
+		internalv1pb.NewInternalInvokeRequest("Execute").
+			WithActor(l.workflow.ActivityActorType(0), legacyActorID).
+			WithData(data),
+	)
 	require.NoError(t, err)
 
 	meta, err := cl.WaitForWorkflowCompletion(ctx, wfID)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.Equal(t, `"in-done"`, meta.GetOutput().GetValue())
-	assert.Equal(t, int32(2), entries.Load())
+	if !l.workflow.ClusteredDeployment() {
+		assert.Equal(t, int32(2), entries.Load())
+	}
 
 	// The parked real dispatch keeps its own reminder alive; only the legacy
 	// one must have been acked rather than left retrying.

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -58,6 +59,9 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints.
 	DefaultMetricsPort = 9090
+	// internalGRPCStablePortStart is the lowest stable port picked for the
+	// internal gRPC server when no port is configured.
+	internalGRPCStablePortStart = 47300
 	// DefaultMaxRequestBodySize is the default option for the maximum body size in bytes for Dapr HTTP servers.
 	// Equal to 4MB
 	DefaultMaxRequestBodySize = 4 << 20
@@ -141,6 +145,9 @@ type Config struct {
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
 	DisableInitEndpoints          []string
+	// DaprInternalGRPCListener, when set, returns a listener on the internal
+	// gRPC port held by the process (see ReserveInternalGRPCPort).
+	DaprInternalGRPCListener func() (net.Listener, error)
 	// HotReloadReconcileInterval overrides the hot-reload backup reconcile
 	// period. Zero uses the reconciler default (60s).
 	HotReloadReconcileInterval time.Duration
@@ -160,6 +167,7 @@ type internalConfig struct {
 	apiGRPCPort                   int
 	internalGRPCPort              int
 	internalGRPCListenAddress     string
+	internalGRPCListener          func() (net.Listener, error)
 	apiListenAddresses            []string
 	appConnectionConfig           config.AppConnectionConfig
 	mode                          modes.DaprMode
@@ -412,6 +420,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		schedulerStreams:              c.SchedulerStreams,
 		publicListenAddress:           c.DaprPublicListenAddress,
 		internalGRPCListenAddress:     c.DaprInternalGRPCListenAddress,
+		internalGRPCListener:          c.DaprInternalGRPCListener,
 		healthz:                       c.Healthz,
 		outboundHealthz:               healthz.New(),
 		workflowEventSink:             c.WorkflowEventSink,
@@ -445,20 +454,9 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %w", err)
 	}
 
-	if c.DaprInternalGRPCPort != "" && c.DaprInternalGRPCPort != "0" {
-		intc.internalGRPCPort, err = strconv.Atoi(c.DaprInternalGRPCPort)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
-		}
-	} else {
-		// Get a "stable random" port in the range 47300-49,347 if it can be
-		// acquired using a deterministic algorithm that returns the same value if
-		// the same app is restarted
-		// Otherwise, the port will be random.
-		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
-		}
+	intc.internalGRPCPort, err = resolveInternalGRPCPort(c.DaprInternalGRPCPort, intc.id)
+	if err != nil {
+		return nil, err
 	}
 
 	if c.DaprPublicPort != "" {
@@ -601,4 +599,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	return intc, nil
+}
+
+// resolveInternalGRPCPort returns the configured internal gRPC port. An empty
+// or "0" port gets a "stable random" port, the same each time the same app
+// starts if it is free, otherwise a random one.
+func resolveInternalGRPCPort(port, appID string) (int, error) {
+	if port == "" || port == "0" {
+		p, err := ports.GetStablePort(internalGRPCStablePortStart, appID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
+		}
+		return p, nil
+	}
+
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing dapr-internal-grpc-port: %w", err)
+	}
+	return p, nil
 }

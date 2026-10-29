@@ -37,6 +37,10 @@ func init() {
 	suite.Register(new(basic))
 }
 
+// janitorPeriod is the fast-path janitor period; a claim heartbeat that
+// stalls for two of them is reclaimed.
+const janitorPeriod = time.Millisecond * 200
+
 // basic verifies the durable run-activity reminder armed by a janitor
 // escalation is reaped once its task resolves. The escalation can only land
 // during a handoff window (the dissemination cancels the in-flight execution's
@@ -54,7 +58,7 @@ type basic struct {
 func (e *basic) Setup(t *testing.T) []framework.Option {
 	fp := []daprd.Option{
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
-		daprd.WithWorkflowJanitorPeriod(t, time.Millisecond*200),
+		daprd.WithWorkflowJanitorPeriod(t, janitorPeriod),
 	}
 	e.workflow = workflow.New(t, workflow.WithDaprdOptions(0, fp...))
 
@@ -178,6 +182,14 @@ func (e *basic) Run(t *testing.T, ctx context.Context) {
 			"no run-activity reminder may outlive its workflow")
 	}, time.Second*30, time.Millisecond*50)
 
-	assert.Equal(t, int64(len(ids)), executions.Load(),
-		"every activity body must run exactly once; a reaped reminder cannot fire")
+	// Activities are at-least-once across a handoff: a claim whose heartbeat
+	// stalls past the grace is reclaimed and its body re-runs, the duplicate
+	// completion deduped. Only a body starting after its workflow completed
+	// and the reminders were reaped would be a fire from a reaped reminder.
+	executed := executions.Load()
+	assert.GreaterOrEqual(t, executed, int64(len(ids)),
+		"every activity body must run at least once")
+	time.Sleep(janitorPeriod * 2)
+	assert.Equal(t, executed, executions.Load(),
+		"no activity body may start after its workflow completed and its reminders were reaped")
 }
