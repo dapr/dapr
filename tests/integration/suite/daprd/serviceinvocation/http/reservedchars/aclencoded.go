@@ -51,6 +51,8 @@ func init() {
 // '/', '\' or '.' after the caller daprd decodes the URL once is rejected.
 // The callee ACL treats such a sequence as a literal character, but the
 // callee's HTTP app decodes it, so it would see a path the ACL never checked.
+// Other escapes and ";" path parameters reach the app, so a deny rule must
+// match them in the form the app decodes and routes on.
 type aclencoded struct {
 	caller    *procdaprd.Daprd
 	denyList  *procdaprd.Daprd
@@ -206,6 +208,12 @@ func (a *aclencoded) Run(t *testing.T, ctx context.Context) {
 	}{
 		{name: "deny-list: denied method", target: a.denyList, method: "admin/secret"},
 		{name: "deny-list: single-encoded slash", target: a.denyList, method: "admin%2Fsecret"},
+		{name: "deny-list: double-encoded letter", target: a.denyList, method: "%2561dmin/secret"},
+		{name: "deny-list: path parameter", target: a.denyList, method: "admin;x/secret"},
+		{name: "deny-list: double-encoded path parameter", target: a.denyList, method: "admin%253Bx/secret"},
+		{name: "deny-list: double-encoded invalid escape", target: a.denyList, method: "%2561dmin/secret%25zz"},
+		{name: "deny-list: dot segment with path parameter", target: a.denyList, method: "public/..;x/admin"},
+		{name: "allow-list: path parameter", target: a.allowList, method: "public;x/admin"},
 		{name: "allow-list: denied method", target: a.allowList, method: "admin/secret"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
