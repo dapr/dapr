@@ -552,3 +552,6 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+// TODO: temporary, until dapr/components-contrib#4713 merges; replace with a components-contrib bump.
+replace github.com/dapr/components-contrib => github.com/arturotrenard/components-contrib v0.0.0-20261029085522-a08181a15739
