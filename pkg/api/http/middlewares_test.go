@@ -613,6 +613,37 @@ func TestAPITokenAuthMiddleware(t *testing.T) {
 
 			assertFail(t, w)
 		})
+
+		t.Run("percent-encoded paths fail", func(t *testing.T) {
+			for _, p := range []string{"/v1.0/healt%68z", "/v1.0%2Fhealthz"} {
+				r := httptest.NewRequest(http.MethodGet, p, nil)
+				w := httptest.NewRecorder()
+				h.ServeHTTP(w, r)
+
+				assertFail(t, w)
+			}
+		})
+
+		t.Run("percent-encoded paths fail behind router", func(t *testing.T) {
+			router := chi.NewRouter()
+			router.Use(CleanPathMiddleware, StripSlashesMiddleware, mw)
+			router.Get("/v1.0/healthz", handler)
+			router.NotFound(handler)
+
+			for _, p := range []string{"/v1.0/healt%68z", "/v1.0%2Fhealthz"} {
+				r := httptest.NewRequest(http.MethodGet, p, nil)
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, r)
+
+				assertFail(t, w)
+			}
+
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, r)
+
+			assertPass(t, w)
+		})
 	})
 }
 
