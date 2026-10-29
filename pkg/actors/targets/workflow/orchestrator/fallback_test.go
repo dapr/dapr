@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/fake"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -33,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/logger"
 )
 
@@ -245,6 +247,97 @@ func TestFallbackAfterLockWait(t *testing.T) {
 			for _, op := range ops {
 				assert.NotContains(t, op, "callReminder:", "a fallback host must not drive a local turn")
 			}
+		})
+	}
+}
+
+// A call on the fast path whose last worker disconnects while it admits the
+// event keeps the path it started on, as an invoked method does: the event
+// is driven locally, not left behind a durable reminder with an unmarked
+// response, which the caller would wait on until a worker connects.
+func TestFallbackWorkerDisconnectsMidFold(t *testing.T) {
+	const instanceID = "wf1"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
+	// InvokeMethod reads the state to choose the fold path, and the fold
+	// path again under the lock: the last worker disconnects right after.
+	var reads atomic.Int32
+	h.fact.fallback = func() bool { return reads.Add(1) > 2 }
+	h.primeRunning(t, instanceID, 7)
+
+	data, err := proto.Marshal(&backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}},
+	})
+	require.NoError(t, err)
+	req := internalsv1pb.NewInternalInvokeRequest(todo.AddWorkflowEventMethod).WithData(data)
+
+	res, err := h.orch.InvokeMethod(t.Context(), req)
+	require.NoError(t, err)
+	assert.False(t, common.IsFallback(res), "a call that found a worker must not be marked")
+	assert.Nil(t, h.orch.pinnedFallback.Load(), "the state must be released once the event is admitted")
+
+	ops := h.snapshotOps()
+	assert.Contains(t, ops, "save")
+	for _, op := range ops {
+		// The janitor shares the prefix, and backs the local path.
+		durable := strings.HasPrefix(op, "create:new-event-") && op != "create:"+janitorReminderName
+		assert.False(t, durable, "the event must keep the local path it started on: %v", ops)
+	}
+	require.NoError(t, h.orch.Deactivate(t.Context()))
+}
+
+// A rerun's response is marked by whether the new instance's daprd is a
+// fallback host, not the source's: the caller waits on the new instance.
+func TestFallbackForkFollowsNewInstance(t *testing.T) {
+	const instanceID = "wf1"
+
+	for name, tc := range map[string]struct {
+		source, destination bool
+	}{
+		"source has a worker, new instance staged": {false, true},
+		"source staged, new instance has a worker": {true, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, true)
+			h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
+			h.fact.fallback = func() bool { return tc.source }
+			var served int
+			h.fact.onFallback = func() { served++ }
+			h.fact.router = routerfake.New().WithCallFn(func(_ context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+				assert.Equal(t, todo.RerunWorkflowInstance, req.GetMessage().GetMethod())
+				res := &internalsv1pb.InternalInvokeResponse{Status: &internalsv1pb.Status{Code: 200}}
+				if tc.destination {
+					common.SetFallback(res)
+				}
+				return res, nil
+			})
+			h.primeRunning(t, instanceID, 0)
+			h.orch.state.AddToHistory(taskCompletedEvent(0))
+			h.orch.state.AddToHistory(&protos.HistoryEvent{
+				EventId:   -1,
+				Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_ExecutionCompleted{ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED,
+				}},
+			})
+			h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, h.orch.state.History)
+			h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, h.orch.state.History[0].GetExecutionStarted())
+
+			data, err := proto.Marshal(&backend.RerunWorkflowFromEventRequest{
+				SourceInstanceID: instanceID,
+				NewInstanceID:    new("wf2"),
+				EventID:          0,
+			})
+			require.NoError(t, err)
+			req := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).WithData(data)
+
+			res, err := h.orch.handleInvoke(t.Context(), req)
+			require.NoError(t, err)
+			assert.Equal(t, tc.destination, common.IsFallback(res))
+			assert.Zero(t, served, "the fork is counted as the rerun on the new instance")
 		})
 	}
 }

@@ -37,11 +37,18 @@ const (
 // once it is done or the daprd stops being a fallback host. Called by the
 // engine under its actor registration lock.
 func (abe *Actors) SetFallbackHost(ctx context.Context, fallback bool) {
+	if !fallback {
+		// The operations staged since the last executor left run here, as
+		// one connected, or on the daprd the instances move to.
+		abe.fallbackStagedEarly.Store(0)
+	}
+
 	current := abe.fallbackWaiting.Load()
 	switch {
 	case fallback && current == nil && ctx != nil && ctx.Err() == nil:
 		wctx, cancel := context.WithCancel(ctx)
 		w := newFallbackWaiting(abe.appID)
+		w.staged.Store(abe.fallbackStagedEarly.Swap(0))
 		w.cancel = cancel
 		abe.fallbackWaiting.Store(w)
 		go w.run(wctx)
@@ -56,7 +63,12 @@ func (abe *Actors) SetFallbackHost(ctx context.Context, fallback bool) {
 func (abe *Actors) fallbackServed() {
 	if w := abe.fallbackWaiting.Load(); w != nil {
 		w.staged.Add(1)
+		return
 	}
+	// The last executor left and its disconnect is still cancelling the
+	// parked completions: the engine makes this daprd a fallback host only
+	// after that, so the count waits for it.
+	abe.fallbackStagedEarly.Add(1)
 }
 
 // fallbackWaiting warns on a fallback host while no daprd of the app has a

@@ -81,20 +81,12 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	_, err = mgmt.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
-	jobs := func() []string {
-		var keys []string
-		for _, key := range r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
-			if strings.Contains(key, string(id)) {
-				keys = append(keys, key)
-			}
-		}
-		return keys
-	}
+	jobs := schedulerJobs(t, ctx, r.workflow)
 
 	// The first run's event timeout is a timer reminder.
 	const firstTimer = "||timer-0"
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys := jobs()
+		keys := jobs(c, id)
 		if assert.Len(c, keys, 1) {
 			assert.True(c, strings.HasSuffix(keys[0], firstTimer), keys[0])
 		}
@@ -151,7 +143,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	// The new run's start and event reminders are staged; no timer of the
 	// first run is.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys := jobs()
+		keys := jobs(c, id)
 		assert.Len(c, keys, 2)
 		for _, key := range keys {
 			assert.False(c, strings.HasSuffix(key, firstTimer), key)

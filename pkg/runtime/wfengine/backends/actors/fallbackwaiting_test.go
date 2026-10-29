@@ -26,7 +26,8 @@ import (
 func TestSetFallbackHost(t *testing.T) {
 	abe, _ := newFallbackTestBackend(t, true, false)
 
-	// Not a fallback host: nothing is counted.
+	// Served while the last executor's disconnect is still sweeping, before
+	// the engine makes this daprd a fallback host: counted once it does.
 	abe.fallbackServed()
 	assert.Nil(t, abe.fallbackWaiting.Load())
 
@@ -35,8 +36,9 @@ func TestSetFallbackHost(t *testing.T) {
 	abe.SetFallbackHost(ctx, true)
 	w := abe.fallbackWaiting.Load()
 	require.NotNil(t, w)
-	abe.fallbackServed()
 	assert.EqualValues(t, 1, w.staged.Load())
+	abe.fallbackServed()
+	assert.EqualValues(t, 2, w.staged.Load())
 
 	// Idempotent: the count carries on.
 	abe.SetFallbackHost(ctx, true)
@@ -46,6 +48,10 @@ func TestSetFallbackHost(t *testing.T) {
 	// a fallback host again starts afresh.
 	abe.SetFallbackHost(ctx, false)
 	assert.Nil(t, abe.fallbackWaiting.Load())
+	// An executor connects during a disconnect's sweep: what was served
+	// meanwhile runs here, and is not counted later.
+	abe.fallbackServed()
+	abe.SetFallbackHost(ctx, false)
 	abe.SetFallbackHost(ctx, true)
 	require.NotNil(t, abe.fallbackWaiting.Load())
 	assert.NotSame(t, w, abe.fallbackWaiting.Load())

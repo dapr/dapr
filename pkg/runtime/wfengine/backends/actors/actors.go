@@ -188,6 +188,9 @@ type Actors struct {
 	// fallbackWaiting counts the operations served while this daprd is a
 	// fallback host; nil while it is not. See SetFallbackHost.
 	fallbackWaiting atomic.Pointer[fallbackWaiting]
+	// fallbackStagedEarly counts the operations served as a fallback host
+	// before SetFallbackHost made this daprd one; see fallbackServed.
+	fallbackStagedEarly atomic.Int64
 
 	// hostedCancel and executorCancel end the background work of the
 	// workflow and executor factories registered last under

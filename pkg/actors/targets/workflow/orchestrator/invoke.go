@@ -49,7 +49,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	// A worker may connect or disconnect while the method runs: every check
 	// in this call sees the same value, so the response's fallback header
 	// describes the path the method took.
-	fallback, unpin := o.pinFallback()
+	_, unpin := o.pinFallback()
 	defer unpin()
 
 	method := req.GetMessage().GetMethod()
@@ -83,7 +83,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue(), parsedAddEvent)
+		resData, fallback, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue(), parsedAddEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -110,37 +110,44 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	})
 }
 
-func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent) ([]byte, error) {
+// executeMethod runs an invoked method, and reports whether a fallback host
+// served it: this daprd, or for a fork the daprd of the rerun's new instance.
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent) ([]byte, bool, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
 	if o.actorState == nil {
-		return nil, messages.ErrActorRuntimeNotFound
+		return nil, false, messages.ErrActorRuntimeNotFound
 	}
 
 	// A create or purge can leave a row the settled record would match.
 	o.settled = nil
 
+	fallback := o.isFallback()
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
-		return nil, o.createWorkflowInstance(ctx, request)
+		return nil, fallback, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
+		return nil, fallback, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
-		return nil, o.purgeWorkflowState(ctx, meta)
+		return nil, fallback, o.purgeWorkflowState(ctx, meta)
 
 	case todo.RecursivePurgeWorkflowStateMethod:
-		return o.recursivePurgeWorkflowState(ctx, meta)
+		data, err := o.recursivePurgeWorkflowState(ctx, meta)
+		return data, fallback, err
 
 	case todo.ForkWorkflowHistory:
-		return nil, backoff.Permanent(o.forkWorkflowHistory(ctx, request))
+		// The caller waits on the new instance, which may be hosted by
+		// another daprd.
+		served, err := o.forkWorkflowHistory(ctx, request)
+		return nil, served, backoff.Permanent(err)
 
 	case todo.RerunWorkflowInstance:
-		return nil, backoff.Permanent(o.rerunWorkflowInstanceRequest(ctx, request))
+		return nil, fallback, backoff.Permanent(o.rerunWorkflowInstanceRequest(ctx, request))
 
 	default:
-		return nil, fmt.Errorf("no such method: %s", methodName)
+		return nil, false, fmt.Errorf("no such method: %s", methodName)
 	}
 }
 

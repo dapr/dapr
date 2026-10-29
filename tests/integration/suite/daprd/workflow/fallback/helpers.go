@@ -15,13 +15,17 @@ package fallback
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -37,6 +41,31 @@ const fallbackSettle = time.Second
 
 // doneOutput is what the tests' workflows return once they complete.
 const doneOutput = "done"
+
+// schedulerJobs returns a lookup of the Scheduler job keys of an instance,
+// for polls. It dials etcd once, here on the test goroutine, and a poll
+// reports a failed lookup to its collector, which retries it.
+func schedulerJobs(t *testing.T, ctx context.Context, wf *workflow.Workflow) func(c *assert.CollectT, id api.InstanceID) []string {
+	t.Helper()
+	etcd := fclient.Etcd(t, clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(wf.Scheduler().EtcdClientPort())},
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
+	})
+	return func(c *assert.CollectT, id api.InstanceID) []string {
+		all, err := etcd.ListAllKeys(ctx, "dapr/jobs")
+		if !assert.NoError(c, err) {
+			return nil
+		}
+		var keys []string
+		for _, key := range all {
+			if strings.Contains(key, string(id)) {
+				keys = append(keys, key)
+			}
+		}
+		return keys
+	}
+}
 
 // withSettle gives the daprd at index the tests' settle period.
 func withSettle(t *testing.T, index int) workflow.Option {
