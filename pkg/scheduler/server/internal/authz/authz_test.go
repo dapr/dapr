@@ -179,6 +179,56 @@ func Test_Initial(t *testing.T) {
 			expCode:     nil,
 			nonMTlSCode: nil,
 		},
+		"own internal actor types are allowed": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:     "app1",
+				Namespace: "ns1",
+				ActorTypes: []string{
+					"dapr.internal.ns1.app1.workflow",
+					"dapr.internal.ns1.app1.activity",
+					"dapr.internal.ns1.app1.executor",
+				},
+			},
+		},
+		"user actor types are allowed": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"myactor"},
+			},
+		},
+		"other app internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns1.app1.workflow", "dapr.internal.ns1.app2.workflow"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
+		"other namespace internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns2.app1.activity"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
+		"malformed internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns1"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
 	}
 
 	for name, test := range tests {
