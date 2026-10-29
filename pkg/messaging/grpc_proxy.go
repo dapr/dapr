@@ -104,7 +104,7 @@ func (p *proxy) handler(fromApp bool) grpc.StreamHandler {
 	},
 		func(ctx context.Context, appID, methodName string) *resiliency.PolicyDefinition {
 			_, isLocal, err := p.isLocal(ctx, appID)
-			if err == nil && !isLocal {
+			if err == nil && !isLocal && fromApp {
 				return p.resiliency.EndpointPolicy(appID, appID+":"+methodName)
 			}
 
@@ -140,6 +140,13 @@ func (p *proxy) intercept(ctx context.Context, fullName string, fromApp bool) (c
 	target, isLocal, err := p.isLocal(ctx, appID)
 	if err != nil {
 		return ctx, nil, nil, nopTeardown, err
+	}
+
+	// The internal server only serves calls for the local app. Relaying would
+	// send the call on with this daprd's own identity.
+	if !fromApp && !isLocal {
+		log.Debugf("Refusing to relay gRPC proxy request on the internal server to app %s in namespace %s", target.id, target.namespace)
+		return ctx, nil, nil, nopTeardown, status.Error(codes.PermissionDenied, "gRPC proxy request on the internal server is not for the local app")
 	}
 
 	if isLocal {
@@ -248,5 +255,5 @@ func (p *proxy) isLocal(ctx context.Context, appID string) (remoteApp, bool, err
 	if err != nil {
 		return remoteApp{}, false, err
 	}
-	return target, target.id == p.appID, nil
+	return target, target.id == p.appID && target.namespace == p.namespace, nil
 }
