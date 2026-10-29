@@ -412,12 +412,17 @@ func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, 
 }
 
 func (s *server) printAPILog(ctx context.Context, method string, duration time.Duration, code grpcCodes.Code) {
-	fields := make(map[string]any, 4)
+	fields := make(map[string]any, 6)
 	fields["method"] = method
 	if meta, ok := metadata.FromIncomingContext(ctx); ok {
 		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
 			fields["useragent"] = val[0]
 		}
+	}
+	// Include the trace and span IDs so the log line can be correlated with the exported trace
+	if sc := diagUtils.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
+		fields["trace_id"] = sc.TraceID().String()
+		fields["span_id"] = sc.SpanID().String()
 	}
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
