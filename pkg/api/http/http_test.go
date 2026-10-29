@@ -2146,6 +2146,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	})
 }
 
+func TestPublicEndpointsReadOnly(t *testing.T) {
+	eps := NewAPI(APIOpts{}).PublicEndpoints()
+	routes := make([]string, 0, len(eps))
+	for _, e := range eps {
+		assert.Equal(t, []string{nethttp.MethodGet}, e.Methods, e.Route)
+		routes = append(routes, e.Route)
+	}
+	assert.ElementsMatch(t, []string{"metadata", "healthz", "healthz/outbound"}, routes)
+}
+
 func createExporters(buffer *string) {
 	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
 	exporter.Register("fakeID")
