@@ -137,7 +137,7 @@ func Test_KeyFromMetadata(t *testing.T) {
 		"actor without id":           {meta: actorMeta("type", ""), exp: "actorreminder||ns||type||"},
 		"actor without id as prefix": {meta: actorMeta("type", ""), asPrefix: true, exp: "actorreminder||ns||type||"},
 		"job":                        {meta: jobMeta, exp: "app||ns||app||"},
-		"job as prefix":              {meta: jobMeta, asPrefix: true, exp: "app||ns||app"},
+		"job as prefix":              {meta: jobMeta, asPrefix: true, exp: "app||ns||app||"},
 		"internal type without id":   {meta: actorMeta("dapr.internal.ns.app.workflow", ""), asPrefix: true, exp: "actorreminder||ns||dapr.internal.ns.app.workflow||"},
 	}
 
