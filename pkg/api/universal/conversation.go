@@ -314,6 +314,15 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			case *runtimev1pb.ConversationMessage_OfAssistant:
 				var parts []llms.ContentPart
+				if reasoning := msg.OfAssistant.GetReasoning(); reasoning != "" {
+					reasoning, err = scrubText(scrubber, input.GetScrubPii(), reasoning)
+					if err != nil {
+						err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+						a.logger.Debug(err)
+						return &runtimev1pb.ConversationResponseAlpha2{}, err
+					}
+					parts = append(parts, conversation.ReasoningContent{Text: reasoning})
+				}
 				for _, content := range msg.OfAssistant.GetContent() {
 					text := content.GetText()
 
@@ -431,6 +440,15 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		maxTokens := req.GetMaxTokens()
 		request.MaxTokens = &maxTokens
 	}
+	if req.ReasoningEffort != nil {
+		if req.GetReasoningEffort() == "" {
+			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "reasoning_effort must not be empty when set")
+			a.logger.Debug(err)
+			return nil, err
+		}
+		reasoningEffort := req.GetReasoningEffort()
+		request.ReasoningEffort = &reasoningEffort
+	}
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
 	if req.GetPromptCacheRetention() != nil {
@@ -546,6 +564,17 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					resultMessage.Content = content
 				}
 
+				if choice.Message.Reasoning != "" {
+					var reasoning string
+					reasoning, err = scrubText(scrubber, req.GetScrubPii(), choice.Message.Reasoning)
+					if err != nil {
+						err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+						a.logger.Debug(err)
+						return &runtimev1pb.ConversationResponseAlpha2{}, err
+					}
+					resultMessage.Reasoning = &reasoning
+				}
+
 				// handle tool call results for user to then execute locally
 				if choice.Message.ToolCallRequest != nil {
 					for _, toolCall := range *choice.Message.ToolCallRequest {
@@ -585,6 +614,18 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	return response, nil
+}
+
+// scrubText returns text with PII scrubbed when enabled, and unchanged otherwise.
+func scrubText(scrubber piiscrubber.Scrubber, enabled bool, text string) (string, error) {
+	if !enabled {
+		return text, nil
+	}
+	scrubbed, err := scrubber.ScrubTexts([]string{text})
+	if err != nil {
+		return "", err
+	}
+	return scrubbed[0], nil
 }
 
 func convertUsageForResponse(usage *conversation.Usage) *runtimev1pb.ConversationResultAlpha2CompletionUsage {
