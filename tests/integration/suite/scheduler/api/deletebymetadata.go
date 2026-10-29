@@ -132,6 +132,24 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.Len(t, resp.GetJobs(), 10)
 
+		for i := range 10 {
+			req := &schedulerv1.ScheduleJobRequest{
+				Name: strconv.Itoa(i),
+				Job: &schedulerv1.Job{
+					Schedule: new("@every 20s"),
+				},
+				Metadata: &schedulerv1.JobMetadata{
+					AppId:     "appid",
+					Namespace: "namespace",
+					Target: &schedulerv1.JobTargetMetadata{
+						Type: new(schedulerv1.JobTargetMetadata_Job),
+					},
+				},
+			}
+			_, err = client.ScheduleJob(ctx, req)
+			require.NoError(t, err)
+		}
+
 		_, err = client.DeleteByMetadata(ctx, &schedulerv1.DeleteByMetadataRequest{
 			IdPrefixMatch: ptr.Of(true),
 			Metadata: &schedulerv1.JobMetadata{
@@ -145,7 +163,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err = client.ListJobs(ctx, &schedulerv1.ListJobsRequest{
 			Metadata: &schedulerv1.JobMetadata{
-				AppId:     "appid2",
+				AppId:     "appid",
 				Namespace: "namespace",
 				Target: &schedulerv1.JobTargetMetadata{
 					Type: new(schedulerv1.JobTargetMetadata_Job),
@@ -154,6 +172,20 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, resp.GetJobs())
+
+		// id_prefix_match only applies to actor IDs, so another app whose ID
+		// starts with "appid" keeps its jobs.
+		resp, err = client.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+			Metadata: &schedulerv1.JobMetadata{
+				AppId:     "appid2",
+				Namespace: "namespace",
+				Target: &schedulerv1.JobTargetMetadata{
+					Type: new(schedulerv1.JobTargetMetadata_Job),
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Len(t, resp.GetJobs(), 10)
 	})
 
 	t.Run("actors", func(t *testing.T) {
