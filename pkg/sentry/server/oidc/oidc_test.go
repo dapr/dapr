@@ -35,7 +35,10 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 )
 
-const testHost = "example.com:8443"
+const (
+	testHost        = "example.com:8443"
+	testAllowedHost = "allowed.host"
+)
 
 // TestHandleJWKS tests the JWKS endpoint handler.
 func TestHandleJWKS(t *testing.T) {
@@ -111,7 +114,7 @@ func TestHandleDiscovery(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, rr.Code)
 		require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-		require.Equal(t, "public, max-age=3600", rr.Header().Get("Cache-Control"))
+		require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 
 		// Parse the response to ensure it's valid discovery document
 		var discovery discoveryDocument
@@ -173,6 +176,55 @@ func TestHandleDiscovery(t *testing.T) {
 
 		// The custom URI should be used directly
 		require.Equal(t, customJWKSURI, discovery.JwksURI)
+	})
+
+	t.Run("with custom issuer and JWKS URI is publicly cacheable", func(t *testing.T) {
+		s := createTestServer(t, WithJWKS(jwks), WithIssuer("https://auth.example.org"), WithJWKSURI("https://keys.example.org/keys"))
+
+		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
+		require.NoError(t, err)
+		req.Host = testHost
+
+		rr := httptest.NewRecorder()
+		s.handleDiscovery(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "public, max-age=3600", rr.Header().Get("Cache-Control"))
+	})
+
+	t.Run("allowed X-Forwarded-Host builds issuer", func(t *testing.T) {
+		s := createTestServer(t, WithJWKS(jwks), WithAllowedHosts([]string{testAllowedHost}))
+
+		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
+		require.NoError(t, err)
+		req.Host = testHost
+		req.Header.Set("X-Forwarded-Host", "allowed.host:443")
+
+		rr := httptest.NewRecorder()
+		s.handleDiscovery(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
+
+		var discovery discoveryDocument
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &discovery))
+		require.Equal(t, "http://allowed.host:443", discovery.Issuer)
+		require.Equal(t, "http://allowed.host:443/jwks.json", discovery.JwksURI)
+	})
+
+	t.Run("X-Forwarded-Host with userinfo is rejected", func(t *testing.T) {
+		s := createTestServer(t, WithJWKS(jwks), WithAllowedHosts([]string{testAllowedHost}))
+
+		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
+		require.NoError(t, err)
+		req.Host = testHost
+		req.Header.Set("X-Forwarded-Host", "allowed.host:80@evil.com")
+
+		rr := httptest.NewRecorder()
+		s.handleDiscovery(rr, req)
+
+		require.Equal(t, http.StatusForbidden, rr.Code)
+		require.NotContains(t, rr.Body.String(), "evil.com")
 	})
 
 	t.Run("with path prefix", func(t *testing.T) {
@@ -344,6 +396,34 @@ func TestAllowedHostsValidationHandler(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, rr.Code)
 		require.Equal(t, "success", rr.Body.String())
+	})
+
+	t.Run("X-Forwarded-Host must be a bare allowed host with optional numeric port", func(t *testing.T) {
+		s := createTestServer(t, WithJWKS(jwks), WithAllowedHosts([]string{testAllowedHost}))
+
+		for host, want := range map[string]int{
+			testAllowedHost:            http.StatusOK,
+			"allowed.host:443":         http.StatusOK,
+			"allowed.host:80@evil.com": http.StatusForbidden,
+			"allowed.host@evil.com":    http.StatusForbidden,
+			"allowed.host/x":           http.StatusForbidden,
+			"allowed.host?x":           http.StatusForbidden,
+			"allowed.host#x":           http.StatusForbidden,
+			"allowed.host:abc":         http.StatusForbidden,
+			"evil.com":                 http.StatusForbidden,
+		} {
+			t.Run(host, func(t *testing.T) {
+				req, err := http.NewRequest(http.MethodGet, "/", nil)
+				require.NoError(t, err)
+				req.Host = testAllowedHost
+				req.Header.Set("X-Forwarded-Host", host)
+
+				rr := httptest.NewRecorder()
+				s.allowedHostsValidationHandler(handler)(rr, req)
+
+				require.Equal(t, want, rr.Code)
+			})
+		}
 	})
 
 	t.Run("wildcard hostname allows any hostname", func(t *testing.T) {
