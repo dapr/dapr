@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ import (
 )
 
 func TestFallback(t *testing.T) {
-	newFactory := func(t *testing.T, fastPath bool, fallback func() bool) *factory {
+	newOrchestrator := func(t *testing.T, fastPath bool, fallback func() bool) *orchestrator {
 		t.Helper()
 		fact, err := New(t.Context(), Options{
 			AppID:             "appID",
@@ -50,41 +51,58 @@ func TestFallback(t *testing.T) {
 			Fallback: fallback,
 		})
 		require.NoError(t, err)
-		return fact.(*factory)
+		return &orchestrator{factory: fact.(*factory)}
 	}
 
 	t.Run("with the feature off nothing is a fallback host", func(t *testing.T) {
-		f := newFactory(t, true, nil)
-		assert.False(t, f.isFallback())
-		assert.True(t, f.localFastPath())
+		o := newOrchestrator(t, true, nil)
+		assert.False(t, o.isFallback())
+		assert.True(t, o.localFastPath())
 	})
 
 	t.Run("a fallback host takes no local fast path, and regains it in place", func(t *testing.T) {
 		var fallback atomic.Bool
 		fallback.Store(true)
-		f := newFactory(t, true, fallback.Load)
-		assert.True(t, f.isFallback())
-		assert.False(t, f.localFastPath())
+		o := newOrchestrator(t, true, fallback.Load)
+		assert.True(t, o.isFallback())
+		assert.False(t, o.localFastPath())
 		// Turns run only with a local executor, and keep the configured
 		// fast path.
-		assert.True(t, f.fastPath)
+		assert.True(t, o.fastPath)
 
 		fallback.Store(false)
-		assert.False(t, f.isFallback())
-		assert.True(t, f.localFastPath())
+		assert.False(t, o.isFallback())
+		assert.True(t, o.localFastPath())
 	})
 
 	t.Run("without the fast path a fallback host changes nothing for it", func(t *testing.T) {
-		f := newFactory(t, false, func() bool { return true })
-		assert.False(t, f.localFastPath())
+		o := newOrchestrator(t, false, func() bool { return true })
+		assert.False(t, o.localFastPath())
 	})
 
 	t.Run("a local wake is not armed on a fallback host", func(t *testing.T) {
-		f := newFactory(t, true, func() bool { return true })
-		o := f.GetOrCreate("wf1").(*orchestrator)
+		o := newOrchestrator(t, true, func() bool { return true })
+		o = o.GetOrCreate("wf1").(*orchestrator)
 		o.localDrive("start-1", time.Now())
 		assert.False(t, o.driveRunning.Load())
 		require.NoError(t, o.Deactivate(t.Context()))
+	})
+
+	t.Run("an invoked method sees the fallback state read at its start", func(t *testing.T) {
+		var fallback atomic.Bool
+		fallback.Store(true)
+		o := newOrchestrator(t, true, fallback.Load)
+		pinned, unpin := o.pinFallback()
+		assert.True(t, pinned)
+
+		// A worker connects while the method runs.
+		fallback.Store(false)
+		assert.True(t, o.isFallback())
+		assert.False(t, o.localFastPath())
+
+		unpin()
+		assert.False(t, o.isFallback())
+		assert.True(t, o.localFastPath())
 	})
 }
 
@@ -129,6 +147,45 @@ func TestFallbackOperation(t *testing.T) {
 		f.fallbackServed(t.Context(), todo.WaitForRuntimeStatus, nil)
 		assert.Equal(t, 1, served)
 	})
+}
+
+// A worker that connects while a fallback host serves a call does not change
+// the call's path half way: the event is saved with a durable reminder and no
+// local drive, and the response is marked so the caller does not wait for a
+// state change that comes only once the reminder fires.
+func TestFallbackWorkerConnectsMidCall(t *testing.T) {
+	const instanceID = "wf1"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
+	// Only the first read sees a fallback host: the worker connects right
+	// after it.
+	var reads atomic.Int32
+	h.fact.fallback = func() bool { return reads.Add(1) == 1 }
+	h.primeRunning(t, instanceID, 7)
+
+	data, err := proto.Marshal(&backend.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}},
+	})
+	require.NoError(t, err)
+	req := internalsv1pb.NewInternalInvokeRequest(todo.AddWorkflowEventMethod).WithData(data)
+
+	res, err := h.orch.handleInvoke(t.Context(), req)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), reads.Load(), "the call must read the fallback state once")
+	assert.True(t, common.IsFallback(res), "the response must be marked as served by a fallback host")
+	assert.False(t, h.orch.driveRunning.Load(), "a call served as a fallback host must not drive a local turn")
+
+	ops := h.snapshotOps()
+	assert.Contains(t, ops, "save")
+	var reminder bool
+	for _, op := range ops {
+		reminder = reminder || strings.HasPrefix(op, "create:new-event-")
+	}
+	assert.True(t, reminder, "the event must get a durable wake-up reminder: %v", ops)
+	require.NoError(t, h.orch.Deactivate(t.Context()))
 }
 
 // A call that took the fast path before the turn lock, and got the lock only

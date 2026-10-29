@@ -46,6 +46,12 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		return nil, errors.New("message is nil in request")
 	}
 
+	// A worker may connect or disconnect while the method runs: every check
+	// in this call sees the same value, so the response's fallback header
+	// describes the path the method took.
+	fallback, unpin := o.pinFallback()
+	defer unpin()
+
 	method := req.GetMessage().GetMethod()
 	data := req.GetMessage().GetData().GetValue()
 
@@ -95,7 +101,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 
 		// Tell the caller the instance does not advance until it moves to a
 		// daprd with an executor, so it does not wait for a state change.
-		if o.isFallback() {
+		if fallback {
 			common.SetFallback(res)
 			o.fallbackServed(ctx, method, parsedAddEvent)
 		}
