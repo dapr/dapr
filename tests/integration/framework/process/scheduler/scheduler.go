@@ -684,20 +684,16 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 // reports a failed lookup to its collector, which retries it.
 func (s *Scheduler) JobKeysLookup(t *testing.T, ctx context.Context) func(c *assert.CollectT, substr string) []string {
 	t.Helper()
-	etcd := client.Etcd(t, clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
-		DialTimeout: 5 * time.Second,
-		Context:     ctx,
-	})
+	etcd := s.ETCDClient(t, ctx)
 	return func(c *assert.CollectT, substr string) []string {
-		all, err := etcd.ListAllKeys(ctx, "dapr/jobs")
+		resp, err := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix(), clientv3.WithKeysOnly())
 		if !assert.NoError(c, err) {
 			return nil
 		}
 		var keys []string
-		for _, key := range all {
-			if strings.Contains(key, substr) {
-				keys = append(keys, key)
+		for _, kv := range resp.Kvs {
+			if strings.Contains(string(kv.Key), substr) {
+				keys = append(keys, string(kv.Key))
 			}
 		}
 		return keys

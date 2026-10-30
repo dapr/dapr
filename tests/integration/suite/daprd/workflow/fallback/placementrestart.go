@@ -54,17 +54,7 @@ func (p *placementrestart) Setup(t *testing.T) []framework.Option {
 		withSettle(t, 0),
 	)
 
-	place := p.workflow.Placement()
-	opts := []placement.Option{
-		placement.WithID(place.ID()),
-		placement.WithPort(place.Port()),
-		placement.WithInitialCluster(place.InitialCluster()),
-		placement.WithInitialClusterPorts(place.InitialClusterPorts()...),
-	}
-	if sen := p.workflow.Sentry(); sen != nil {
-		opts = append(opts, placement.WithSentry(t, sen))
-	}
-	p.placeBack = placement.New(t, opts...)
+	p.placeBack = p.workflow.PlacementBack(t)
 
 	return []framework.Option{
 		framework.WithProcesses(p.workflow),
@@ -107,9 +97,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	p.workflow.Placement().Cleanup(t)
 	placementIs("disconnected")
 
-	p.placeBack.Run(t, ctx)
-	t.Cleanup(func() { p.placeBack.Cleanup(t) })
-	p.placeBack.WaitUntilRunning(t, ctx)
+	workflow.RunPlacementBack(t, ctx, p.placeBack)
 	placementIs("connected")
 
 	// The daprd reports its types to the new placement service, the
