@@ -65,11 +65,10 @@ func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
 	// extract the decryption key that should be appended to the value
 	ind := bytes.LastIndex(value, []byte(separator))
-	keyName := string(value[ind+len(separator):])
-
-	if len(keyName) == 0 {
+	if ind < 0 || ind+len(separator) == len(value) {
 		return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
 	}
+	keyName := string(value[ind+len(separator):])
 
 	var key Key
 
@@ -77,6 +76,10 @@ func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 		key = keys.Primary
 	} else if keys.Secondary.Name == keyName {
 		key = keys.Secondary
+	}
+
+	if key.cipherObj == nil {
+		return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name on record does not match a configured key", storeName)
 	}
 
 	return decrypt(value[:ind], key)
