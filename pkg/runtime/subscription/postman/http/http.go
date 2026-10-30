@@ -148,9 +148,9 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appResponse appResponse
+		var response appResponse
 
-		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&response)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				log.Debugf("skipping status check due to empty response body from pub/sub event %v", cloudEvent[contribpubsub.IDField])
@@ -163,7 +163,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 			return nil
 		}
 
-		switch appResponse.Status {
+		switch response.Status {
 		case "":
 			// Consider empty status field as success
 			fallthrough
@@ -173,18 +173,18 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		case contribpubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField],
-				rterrors.NewRetriable(pubsub.NewMessageError(nil, appResponse.Message)))
+				rterrors.NewRetriable(pubsub.NewMessageError(nil, response.Message)))
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
 
-			return pubsub.NewMessageDroppedError(appResponse.Message)
+			return pubsub.NewMessageDroppedError(response.Message)
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], appResponse.Status,
-			rterrors.NewRetriable(pubsub.NewMessageError(nil, appResponse.Message)))
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], response.Status,
+			rterrors.NewRetriable(pubsub.NewMessageError(nil, response.Message)))
 	}
 
 	body, _ := resp.RawDataFull()
@@ -318,9 +318,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appBulkResponse appBulkResponse
+		var bulkResponse appBulkResponse
 
-		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
+		err = json.NewDecoder(resp.RawData()).Decode(&bulkResponse)
 		if err != nil {
 			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
 			bscData.BulkSubDiag.SetElapsed(elapsed)
@@ -332,7 +332,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		var hasAnyError bool
 
-		for _, response := range appBulkResponse.AppResponses {
+		for _, response := range bulkResponse.AppResponses {
 			if msg, ok := attemptMsgs[response.EntryId]; ok {
 				delete(attemptMsgs, response.EntryId)
 

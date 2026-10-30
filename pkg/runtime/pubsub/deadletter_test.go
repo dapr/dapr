@@ -128,9 +128,9 @@ func TestEnrichDeadLetterRequest(t *testing.T) {
 
 func TestMessageError(t *testing.T) {
 	err := NewMessageDroppedError("bad payload")
-	assert.ErrorIs(t, err, ErrMessageDropped)
+	require.ErrorIs(t, err, ErrMessageDropped)
 	assert.Equal(t, "bad payload", ErrorDetails(err))
 
-	assert.Nil(t, NewMessageError(nil, ""))
+	assert.NoError(t, NewMessageError(nil, ""))
 	assert.Empty(t, ErrorDetails(assert.AnError))
 }

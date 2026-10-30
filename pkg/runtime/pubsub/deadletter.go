@@ -15,7 +15,8 @@ package pubsub
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
+	"maps"
 	"strconv"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
@@ -157,7 +158,7 @@ func EnrichDeadLetterBulkEntry(entry *contribpubsub.BulkMessageEntry, details st
 
 func enrichCloudEventData(data []byte, details string) ([]byte, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("empty cloud event payload")
+		return nil, errors.New("empty cloud event payload")
 	}
 
 	var envelope map[string]any
@@ -170,8 +171,6 @@ func enrichCloudEventData(data []byte, details string) ([]byte, error) {
 
 func cloneMetadata(meta map[string]string) map[string]string {
 	out := make(map[string]string, len(meta)+1)
-	for k, v := range meta {
-		out[k] = v
-	}
+	maps.Copy(out, meta)
 	return out
 }
