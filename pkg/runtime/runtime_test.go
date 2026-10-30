@@ -1603,8 +1603,10 @@ func TestGRPCProxy(t *testing.T) {
 	rt, err := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, "grpc", serverPort)
 	require.NoError(t, err)
 
-	internalPort, _ := freeport.GetFreePort()
-	rt.runtimeConfig.internalGRPCPort = internalPort
+	// The internal port only serves the local app, so streams to a remote
+	// app are proxied through the API port.
+	apiPort, _ := freeport.GetFreePort()
+	rt.runtimeConfig.apiGRPCPort = apiPort
 
 	rt.runtimeConfig.registry.NameResolutions().RegisterComponent(
 		func(_ logger.Logger) nameresolution.Resolver {
@@ -1642,7 +1644,7 @@ func TestGRPCProxy(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
 
-		stream, err := pingStreamClient(ctx, internalPort)
+		stream, err := pingStreamClient(ctx, apiPort)
 		require.NoError(t, err)
 
 		require.NoError(t, stream.Send(req), "sending to PingStream must not fail")
@@ -1657,13 +1659,13 @@ func TestGRPCProxy(t *testing.T) {
 		ctx1, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
 
-		stream1, err := pingStreamClient(ctx1, internalPort)
+		stream1, err := pingStreamClient(ctx1, apiPort)
 		require.NoError(t, err)
 
 		ctx2, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 
-		stream2, err := pingStreamClient(ctx2, internalPort)
+		stream2, err := pingStreamClient(ctx2, apiPort)
 		require.NoError(t, err)
 
 		require.NoError(t, stream1.Send(req), "sending to PingStream must not fail")

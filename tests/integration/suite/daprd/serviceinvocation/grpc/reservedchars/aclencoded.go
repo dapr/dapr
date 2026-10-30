@@ -52,7 +52,8 @@ func init() {
 // aclencoded verifies that a gRPC method containing a percent-encoded '/',
 // '\' or '.' is rejected. The callee ACL treats such a sequence as a literal
 // character, but the callee's HTTP app decodes it, so it would see a path the
-// ACL never checked.
+// ACL never checked. Other escapes and ";" path parameters reach the app, so a
+// deny rule must match them in the form the app decodes and routes on.
 type aclencoded struct {
 	caller    *procdaprd.Daprd
 	denyList  *procdaprd.Daprd
@@ -204,6 +205,11 @@ func (a *aclencoded) Run(t *testing.T, ctx context.Context) {
 		method string
 	}{
 		{name: "deny-list: denied method", target: a.denyList, method: "admin/secret"},
+		{name: "deny-list: encoded letter", target: a.denyList, method: "%61dmin/secret"},
+		{name: "deny-list: path parameter", target: a.denyList, method: "admin;x/secret"},
+		{name: "deny-list: invalid escape", target: a.denyList, method: "%61dmin/secret%zz"},
+		{name: "deny-list: dot segment with path parameter", target: a.denyList, method: "public/..;x/admin"},
+		{name: "allow-list: path parameter", target: a.allowList, method: "public;x/admin"},
 		{name: "allow-list: denied method", target: a.allowList, method: "admin/secret"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

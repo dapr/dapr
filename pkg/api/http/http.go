@@ -22,6 +22,7 @@ import (
 	"io"
 	"maps"
 	nethttp "net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -168,8 +169,12 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructVectorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
-	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
-	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
+	// The public port has no API token auth, so it only serves read-only endpoints.
+	for _, e := range slices.Concat(metadataEndpoints, healthEndpoints) {
+		if slices.Equal(e.Methods, []string{nethttp.MethodGet}) {
+			api.publicEndpoints = append(api.publicEndpoints, e)
+		}
+	}
 
 	return api
 }

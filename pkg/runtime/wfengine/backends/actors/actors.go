@@ -1203,6 +1203,12 @@ func (abe *Actors) SetExecutorAvailable(available bool) {
 	abe.pendingTasksBackend.SetExecutorAvailable(available)
 }
 
+// StartSweep flips executor connectivity to false and starts the sweep of
+// the pending tasks, which settled waits for; see the pendingtracker package.
+func (abe *Actors) StartSweep() (settled func()) {
+	return abe.pendingTasksBackend.StartSweep()
+}
+
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
 	return abe.callWithBackoff(ctx, func() error {
