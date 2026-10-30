@@ -26,12 +26,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/acl"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/api/universal"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -154,6 +157,60 @@ func TestCallLocal(t *testing.T) {
 			"other":                        {"kept"},
 		}, got)
 	})
+}
+
+func TestCallLocalValidateACLHTTPVerb(t *testing.T) {
+	accessControlList, err := acl.ParseAccessControlSpec(&config.AccessControlSpec{
+		DefaultAction: config.AllowAccess,
+		TrustDomain:   "example.org",
+		AppPolicies: []config.AppPolicySpec{{
+			AppName:       "caller",
+			DefaultAction: config.AllowAccess,
+			TrustDomain:   "example.org",
+			Namespace:     "ns1",
+			AppOperationActions: []config.AppOperation{{
+				Operation: "/admin",
+				HTTPVerb:  []string{"DELETE"},
+				Action:    config.DenyAccess,
+			}},
+		}},
+	}, true)
+	require.NoError(t, err)
+
+	fakeAPI := &api{
+		Universal: universal.New(universal.Options{
+			AppID:               "callee",
+			AppConnectionConfig: config.AppConnectionConfig{Protocol: protocol.HTTPProtocol},
+		}),
+		accessControlList: accessControlList,
+	}
+	ctx := test.GenPKI(t, test.PKIOptions{
+		LeafID:   spiffeid.RequireFromString("spiffe://example.org/ns/ns1/callee"),
+		ClientID: spiffeid.RequireFromString("spiffe://example.org/ns/ns1/caller"),
+	}).ClientGRPCCtx(t)
+
+	for name, md := range map[string]map[string]*internalv1pb.ListStringValue{
+		"nil metadata":   nil,
+		"empty metadata": {},
+		"with metadata":  internalv1pb.MetadataToInternalMetadata(map[string][]string{"x-test-metadata": {"present"}}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			call := func(verb commonv1pb.HTTPExtension_Verb) error {
+				req, err := invokev1.FromInternalInvokeRequest(&internalv1pb.InternalInvokeRequest{
+					Ver: internalv1pb.APIVersion_V1,
+					Message: &commonv1pb.InvokeRequest{
+						Method:        "admin",
+						HttpExtension: &commonv1pb.HTTPExtension{Verb: verb},
+					},
+					Metadata: md,
+				})
+				require.NoError(t, err)
+				return fakeAPI.callLocalValidateACL(ctx, req)
+			}
+			assert.Equal(t, codes.PermissionDenied, status.Code(call(commonv1pb.HTTPExtension_DELETE)))
+			require.NoError(t, call(commonv1pb.HTTPExtension_GET))
+		})
+	}
 }
 
 func TestCallActorIdentityMetadata(t *testing.T) {
