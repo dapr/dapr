@@ -51,6 +51,11 @@ const (
 	renewWhenPercentagePassed = 70
 	apiServer                 = "apiServer"
 	internalServer            = "internalServer"
+
+	// minHeaderListSize is the lowest gRPC request header limit. It is above
+	// Envoy's 60 KiB default, so metadata that passes such a proxy also passes
+	// daprd.
+	minHeaderListSize = 64 << 10
 )
 
 // Server is an interface for the dapr gRPC server.
@@ -340,7 +345,7 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	opts = append(opts,
 		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize),
 		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize),
-		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSize<<10)),
+		grpcGo.MaxHeaderListSize(uint32(max(s.config.ReadBufferSize, minHeaderListSize))),
 	)
 
 	if s.sec == nil {
