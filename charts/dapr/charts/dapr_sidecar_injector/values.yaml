@@ -1,6 +1,10 @@
 enabled: true
 replicaCount: 1
 logLevel: info
+# Optional log file path. Ensure the destination is on a writable volume.
+logFile: ""
+# Comma-separated destinations (stdout, stderr, or file paths). Empty preserves logger defaults.
+logOutputs: ""
 component: sidecar-injector
 
 # Override this to use a custom sidecar image.
