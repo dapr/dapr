@@ -547,9 +547,6 @@ replace (
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-// Temporary draft replace until dapr/components-contrib#4715 merges:
-replace github.com/dapr/components-contrib => github.com/passuied/components-contrib v0.0.0-20261030004501-6389daef24bd
-
 // replace github.com/dapr/kit => ../kit
 // replace github.com/dapr/durabletask-go => ../durabletask-go
 //
