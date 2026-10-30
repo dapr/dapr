@@ -49,7 +49,7 @@ type controlplane struct {
 func (c *controlplane) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithPlacementService(),
 	)
 	c.placeBack = c.workflow.PlacementBack(t)

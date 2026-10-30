@@ -46,8 +46,8 @@ func (c *crossapp) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
-		withSettle(t, 1),
+		workflow.WithFallbackSettleN(t, 0),
+		workflow.WithFallbackSettleN(t, 1),
 	)
 
 	return []framework.Option{

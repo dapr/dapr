@@ -46,7 +46,7 @@ type rerun struct {
 func (r *rerun) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
 	return []framework.Option{
@@ -65,7 +65,7 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 		return out, nil
 	}))
 	require.NoError(t, r.workflow.Registry().AddActivityN("act", func(task.ActivityContext) (any, error) {
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	worker := r.workflow.ConnectWorker(t, ctx, r.workflow.Registry())
@@ -104,5 +104,5 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	meta, err = mgmt.WaitForWorkflowCompletion(ctx, dst)
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-	assert.Equal(t, `"`+doneOutput+`"`, meta.GetOutput().GetValue())
+	assert.Equal(t, `"`+workflow.DoneOutput+`"`, meta.GetOutput().GetValue())
 }

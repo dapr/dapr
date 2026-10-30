@@ -67,7 +67,8 @@ const placementdownSettle = 3 * time.Second
 
 func (p *placementdown) Setup(t *testing.T) []framework.Option {
 	p.logB = logline.New(t, logline.WithCaptureAll())
-	p.workflow = newPair(t, 2*time.Second, placementdownSettle,
+	p.workflow = workflow.New(t,
+		workflow.WithFallbackPair(t, 2*time.Second, placementdownSettle),
 		workflow.WithPlacementService(),
 		workflow.WithDaprdOptions(1, daprd.WithExecOptions(
 			exec.WithStdout(p.logB.Stdout()),

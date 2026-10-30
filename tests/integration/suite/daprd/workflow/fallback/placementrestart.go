@@ -51,7 +51,7 @@ func (p *placementrestart) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
 		workflow.WithPlacementService(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
 	p.placeBack = p.workflow.PlacementBack(t)
@@ -65,7 +65,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	workflowType := p.workflow.WorkflowActorType(0)

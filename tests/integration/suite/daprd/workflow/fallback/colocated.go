@@ -47,7 +47,7 @@ type colocated struct {
 }
 
 func (c *colocated) Setup(t *testing.T) []framework.Option {
-	c.workflow = newPair(t, 2*time.Second, fallbackSettle)
+	c.workflow = workflow.New(t, workflow.WithFallbackPair(t, 2*time.Second, workflow.FallbackSettle))
 
 	return []framework.Option{
 		framework.WithProcesses(c.workflow),

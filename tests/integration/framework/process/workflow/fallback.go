@@ -18,14 +18,48 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 )
+
+// FallbackSettle is a short settle period for fallback tests to give their
+// daprds in place of the default, so a daprd without a worker turns into a
+// fallback host soon after the placement tables show that no daprd of the app
+// has one.
+const FallbackSettle = time.Second
+
+// DoneOutput is what fallback tests' workflows return once they complete.
+const DoneOutput = "done"
+
+// WithFallbackSettleN gives the daprd at index the FallbackSettle settle
+// period.
+func WithFallbackSettleN(t *testing.T, index int) Option {
+	return WithDaprdOptions(index, daprd.WithWorkflowFallbackSettle(t, FallbackSettle))
+}
+
+// WithFallbackPair runs two daprds of one app with staged operations and the
+// given fallback settle period, the second with the given fallback damping
+// period, in place of the defaults.
+func WithFallbackPair(t *testing.T, damping, settle time.Duration) Option {
+	appID := uuid.NewString()
+	return func(o *options) {
+		for _, opt := range []Option{
+			WithDaprds(2),
+			WithStagedOperations(),
+			WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, settle)),
+			WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, settle), daprd.WithWorkflowFallbackDamping(t, damping)),
+		} {
+			opt(o)
+		}
+	}
+}
 
 // PlacementBack returns a placement service, not yet running, which takes
 // over the identity and address of the placement service once that one is

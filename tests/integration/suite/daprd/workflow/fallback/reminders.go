@@ -58,7 +58,7 @@ type reminders struct {
 const remindersDamping = 25 * time.Second
 
 func (r *reminders) Setup(t *testing.T) []framework.Option {
-	r.workflow = newPair(t, remindersDamping, fallbackSettle)
+	r.workflow = workflow.New(t, workflow.WithFallbackPair(t, remindersDamping, workflow.FallbackSettle))
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),

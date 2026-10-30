@@ -57,8 +57,8 @@ func (s *start) Setup(t *testing.T) []framework.Option {
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
-		withSettle(t, 1),
+		workflow.WithFallbackSettleN(t, 0),
+		workflow.WithFallbackSettleN(t, 1),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
 	)
