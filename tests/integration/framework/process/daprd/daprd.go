@@ -202,6 +202,9 @@ spec:
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
+	if opts.readBufferSize != nil {
+		args = append(args, "--read-buffer-size="+*opts.readBufferSize)
+	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
 	}
