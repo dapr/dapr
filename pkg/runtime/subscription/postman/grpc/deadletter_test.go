@@ -15,6 +15,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	publisherfake "github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
 	"github.com/dapr/kit/ptr"
 )
@@ -47,7 +49,7 @@ func TestSendToDeadLetter(t *testing.T) {
 		}).(*grpc)
 
 		msg := newMessage()
-		require.NoError(t, g.sendToDeadLetter(t.Context(), "testpubsub", msg, "dlq"))
+		require.NoError(t, g.sendToDeadLetter(t.Context(), "testpubsub", msg, "dlq", "", false, pubsub.DeadLetterErrorDetailsConfig{}))
 
 		require.NotNil(t, got)
 		assert.Equal(t, "dlq", got.Topic)
@@ -67,7 +69,7 @@ func TestSendToDeadLetter(t *testing.T) {
 		}).(*grpc)
 
 		require.ErrorIs(t,
-			g.sendToDeadLetter(t.Context(), "testpubsub", newMessage(), "dlq"),
+			g.sendToDeadLetter(t.Context(), "testpubsub", newMessage(), "dlq", "", false, pubsub.DeadLetterErrorDetailsConfig{}),
 			pubErr)
 	})
 
@@ -85,8 +87,43 @@ func TestSendToDeadLetter(t *testing.T) {
 		cancel()
 
 		require.ErrorIs(t,
-			g.sendToDeadLetter(ctx, "testpubsub", newMessage(), "dlq"),
+			g.sendToDeadLetter(ctx, "testpubsub", newMessage(), "dlq", "", false, pubsub.DeadLetterErrorDetailsConfig{}),
 			context.Canceled)
 		assert.False(t, called, "publish must not be attempted on a canceled context")
+	})
+
+	t.Run("attaches cloud event errordetails when configured", func(t *testing.T) {
+		ce, err := json.Marshal(map[string]any{
+			"specversion": "1.0",
+			"id":          "1",
+			"type":        "test",
+			"source":      "test",
+			"data":        "payload",
+		})
+		require.NoError(t, err)
+
+		var got *contribpubsub.PublishRequest
+		g := New(Options{
+			Adapter: publisherfake.New().WithPublishFn(
+				func(_ context.Context, req *contribpubsub.PublishRequest) error {
+					got = req
+					return nil
+				}),
+		}).(*grpc)
+
+		msg := &contribpubsub.NewMessage{
+			Data:        ce,
+			Topic:       "orders",
+			Metadata:    map[string]string{},
+			ContentType: ptr.Of("application/cloudevents+json"),
+		}
+		require.NoError(t, g.sendToDeadLetter(t.Context(), "testpubsub", msg, "dlq", "app failed", false, pubsub.DeadLetterErrorDetailsConfig{
+			Enabled: true,
+			MaxLen:  pubsub.DefaultDeadLetterErrorDetailsMaxLen,
+		}))
+
+		var envelope map[string]any
+		require.NoError(t, json.Unmarshal(got.Data, &envelope))
+		assert.Equal(t, "app failed", envelope[pubsub.CloudEventErrorDetailsField])
 	})
 }

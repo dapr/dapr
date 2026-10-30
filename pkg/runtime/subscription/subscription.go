@@ -52,6 +52,9 @@ type Options struct {
 	AdapterStreamer rtpubsub.AdapterStreamer
 	ConnectionID    rtpubsub.ConnectionID
 	Postman         postman.Interface
+	// DeadLetterErrorDetailsEnabled is true when the
+	// Pubsub.DeadLetterErrorDetails preview feature is enabled.
+	DeadLetterErrorDetailsEnabled bool
 }
 
 type Subscription struct {
@@ -75,6 +78,8 @@ type Subscription struct {
 	inflight    atomic.Int64
 
 	postman postman.Interface
+
+	deadLetterErrorDetails rtpubsub.DeadLetterErrorDetailsConfig
 }
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
@@ -120,6 +125,9 @@ func New(opts Options) (*Subscription, error) {
 		connectionID:    opts.ConnectionID,
 		adapterStreamer: opts.AdapterStreamer,
 		postman:         opts.Postman,
+		deadLetterErrorDetails: rtpubsub.DeadLetterErrorDetailsConfigFromMetadata(
+			opts.Route.Metadata, opts.DeadLetterErrorDetailsEnabled,
+		),
 	}
 
 	name := s.pubsubName
@@ -202,7 +210,7 @@ func New(opts Options) (*Subscription, error) {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 
 			if route.DeadLetterTopic != "" {
-				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
@@ -245,7 +253,7 @@ func New(opts Options) (*Subscription, error) {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 
 				if route.DeadLetterTopic != "" {
-					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
@@ -276,7 +284,7 @@ func New(opts Options) (*Subscription, error) {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 
 				if route.DeadLetterTopic != "" {
-					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 					if dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
@@ -322,7 +330,7 @@ func New(opts Options) (*Subscription, error) {
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 
 			if route.DeadLetterTopic != "" {
-				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 			}
 
 			return nil
@@ -333,7 +341,7 @@ func New(opts Options) (*Subscription, error) {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[contribpubsub.IDField], name, msgTopic, err)
 
 			if route.DeadLetterTopic != "" {
-				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
@@ -352,7 +360,7 @@ func New(opts Options) (*Subscription, error) {
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msgTopic, 0)
 
 			if route.DeadLetterTopic != "" {
-				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, "")
 			}
 
 			return nil
@@ -377,7 +385,7 @@ func New(opts Options) (*Subscription, error) {
 			} else if errors.Is(pErr, rtpubsub.ErrMessageDropped) {
 				// send dropped message to dead letter queue if configured
 				if route.DeadLetterTopic != "" {
-					derr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					derr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, rtpubsub.ErrorDetails(pErr))
 					if derr != nil {
 						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
 						return nil, pErr
@@ -409,7 +417,7 @@ func New(opts Options) (*Subscription, error) {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.DeadLetterTopic != "" {
-				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+				dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic, rtpubsub.ErrorDetails(err))
 				if dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
@@ -572,7 +580,7 @@ func (s *Subscription) Stop(err ...error) {
 	s.cancel(nil)
 }
 
-func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
+func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string, errorDetails string) error {
 	req := &contribpubsub.PublishRequest{
 		Data:        msg.Data,
 		PubsubName:  name,
@@ -580,6 +588,9 @@ func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *c
 		Metadata:    msg.Metadata,
 		ContentType: msg.ContentType,
 	}
+
+	rawPayload, _ := metadata.IsRawPayload(s.route.Metadata)
+	rtpubsub.EnrichDeadLetterRequest(req, errorDetails, rawPayload, s.deadLetterErrorDetails)
 
 	// If the parent context was explicitly canceled (e.g. shutdown), skip
 	// the DLQ publish: detaching the deadline below would otherwise let this

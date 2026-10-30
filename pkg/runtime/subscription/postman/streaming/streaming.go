@@ -59,6 +59,7 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 
 	elapsed := diag.ElapsedSince(start)
 
+	appMessage := resp.GetStatus().GetMessage()
 	switch resp.GetStatus().GetStatus() {
 	case rtv1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
@@ -67,17 +68,18 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 		return nil
 	case rtv1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		// TODO: add retry error info
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
+		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField],
+			rterrors.NewRetriable(pubsub.NewMessageError(nil, appMessage)))
 	case rtv1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", msg.CloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
 
-		return pubsub.ErrMessageDropped
+		return pubsub.NewMessageDroppedError(appMessage)
 	default:
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", msg.CloudEvent[contribpubsub.IDField], resp.GetStatus(), rterrors.NewRetriable(nil))
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", msg.CloudEvent[contribpubsub.IDField], resp.GetStatus(),
+			rterrors.NewRetriable(pubsub.NewMessageError(nil, appMessage)))
 	}
 }
 
