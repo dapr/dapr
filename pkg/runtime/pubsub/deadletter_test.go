@@ -131,6 +131,6 @@ func TestMessageError(t *testing.T) {
 	require.ErrorIs(t, err, ErrMessageDropped)
 	assert.Equal(t, "bad payload", ErrorDetails(err))
 
-	assert.NoError(t, NewMessageError(nil, ""))
+	require.NoError(t, NewMessageError(nil, ""))
 	assert.Empty(t, ErrorDetails(assert.AnError))
 }
