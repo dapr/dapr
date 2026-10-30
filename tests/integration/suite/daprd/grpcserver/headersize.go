@@ -19,7 +19,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -70,8 +72,13 @@ func (h *headersize) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("128KiB of metadata is rejected by the internal server", func(t *testing.T) {
-		client := h.daprd.InternalGRPCClient(t, ctx, nil, "", "")
-		_, err := client.CallLocal(withMD(128<<10), new(internalv1pb.InternalInvokeRequest))
+		conn, err := grpc.NewClient(h.daprd.InternalGRPCAddress(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+		_, err = internalv1pb.NewServiceInvocationClient(conn).CallLocal(withMD(128<<10), new(internalv1pb.InternalInvokeRequest))
 		require.Equal(t, codes.Internal, status.Code(err), err)
 		require.ErrorContains(t, err, "header list size to send violates the maximum size (65536 bytes)")
 	})
