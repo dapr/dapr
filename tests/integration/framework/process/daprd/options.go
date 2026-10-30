@@ -72,6 +72,7 @@ type options struct {
 	schedulerAddresses         []string
 	disableInitEndpoints       []string
 	maxBodySize                *string
+	readBufferSize             *string
 	allowedOrigins             *string
 }
 
@@ -409,6 +410,12 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithReadBufferSize(size string) Option {
+	return func(o *options) {
+		o.readBufferSize = &size
 	}
 }
 
