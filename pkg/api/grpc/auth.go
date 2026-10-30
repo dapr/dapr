@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 
 	"google.golang.org/grpc"
@@ -49,7 +50,7 @@ func checkAPITokenInContext(ctx context.Context, apiToken, authHeader string) (c
 		return ctx, invokev1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing api token in request metadata")
 	}
 
-	if md[authHeader][0] != apiToken {
+	if subtle.ConstantTimeCompare([]byte(md[authHeader][0]), []byte(apiToken)) != 1 {
 		return ctx, invokev1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
 	}
 
