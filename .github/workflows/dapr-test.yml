@@ -277,6 +277,17 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           rm.exe "C:/WINDOWS/system32/bash.EXE"
+      # Docker on GitHub Windows runners sometimes fails to start at boot and
+      # stays stopped (actions/runner-images#13729). Start it before any step
+      # that needs the daemon.
+      - name: Start Docker service
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dockerState = Get-Service -Name "docker"
+          if ($dockerState.Status -ne "Running") {
+            Start-Service -Name "docker"
+          }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v6
