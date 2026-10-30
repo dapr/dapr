@@ -51,6 +51,24 @@ var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.http")
 // pkg/runtime/subscription and the gRPC postman.
 const deadLetterPublishTimeout = 30 * time.Second
 
+// appResponse is the HTTP subscriber response body. Message is decoded here
+// rather than via components-contrib AppResponse so the runtime can consume
+// optional error details before that field is released in contrib.
+type appResponse struct {
+	Status  contribpubsub.AppResponseStatus `json:"status"`
+	Message string                          `json:"message,omitempty"`
+}
+
+type appBulkResponseEntry struct {
+	EntryId string                          `json:"entryId"` //nolint:stylecheck
+	Status  contribpubsub.AppResponseStatus `json:"status"`
+	Message string                          `json:"message,omitempty"`
+}
+
+type appBulkResponse struct {
+	AppResponses []appBulkResponseEntry `json:"statuses"`
+}
+
 type Options struct {
 	Tracing  *config.TracingSpec
 	Channels *channels.Channels
@@ -130,7 +148,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appResponse contribpubsub.AppResponse
+		var appResponse appResponse
 
 		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
 		if err != nil {
@@ -300,7 +318,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appBulkResponse contribpubsub.AppBulkResponse
+		var appBulkResponse appBulkResponse
 
 		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
