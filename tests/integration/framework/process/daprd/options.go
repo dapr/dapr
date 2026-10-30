@@ -70,6 +70,7 @@ type options struct {
 	disableInitEndpoints     []string
 	maxBodySize              *string
 	allowedOrigins           *string
+	readBufferSize           *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -385,6 +386,12 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithReadBufferSize(size string) Option {
+	return func(o *options) {
+		o.readBufferSize = &size
 	}
 }
 
