@@ -14,8 +14,8 @@ limitations under the License.
 package http
 
 import (
+	"crypto/subtle"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 
@@ -58,7 +58,7 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			v := r.Header.Get(securityConsts.APITokenHeader)
-			if v != token && !isRouteExcludedFromAPITokenAuth(r.Method, r.URL) {
+			if subtle.ConstantTimeCompare([]byte(v), []byte(token)) != 1 && !isRouteExcludedFromAPITokenAuth(r) {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
 				return
 			}
@@ -69,13 +69,14 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 	}
 }
 
-func isRouteExcludedFromAPITokenAuth(method string, u *url.URL) bool {
-	path := strings.Trim(u.Path, "/")
-	switch path {
+// Match on the path the router uses, not the decoded URL path, so encoded
+// variants that route elsewhere are not exempt.
+func isRouteExcludedFromAPITokenAuth(r *http.Request) bool {
+	switch strings.Trim(routePath(r), "/") {
 	case apiVersionV1 + "/healthz":
-		return method == http.MethodGet
+		return r.Method == http.MethodGet
 	case apiVersionV1 + "/healthz/outbound":
-		return method == http.MethodGet
+		return r.Method == http.MethodGet
 	default:
 		return false
 	}
