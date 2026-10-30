@@ -105,5 +105,5 @@ func (c *colocated) Run(t *testing.T, ctx context.Context) {
 	// workflow actor and served nothing as a fallback host since.
 	assert.False(t, c.workflow.HostsActorType(t, ctx, 1, c.workflow.WorkflowActorType(1)))
 	assert.True(t, c.workflow.HostsActorType(t, ctx, 0, c.workflow.WorkflowActorType(0)))
-	assert.Zero(t, stagedStarts(t, ctx, c.workflow, 1))
+	assert.Zero(t, c.workflow.StagedStarts(t, ctx, 1))
 }

@@ -679,6 +679,31 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 	return resp
 }
 
+// JobKeysLookup returns a lookup of the stored job keys containing substr,
+// for polls. It dials etcd once, here on the test goroutine, and a poll
+// reports a failed lookup to its collector, which retries it.
+func (s *Scheduler) JobKeysLookup(t *testing.T, ctx context.Context) func(c *assert.CollectT, substr string) []string {
+	t.Helper()
+	etcd := client.Etcd(t, clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
+		DialTimeout: 5 * time.Second,
+		Context:     ctx,
+	})
+	return func(c *assert.CollectT, substr string) []string {
+		all, err := etcd.ListAllKeys(ctx, "dapr/jobs")
+		if !assert.NoError(c, err) {
+			return nil
+		}
+		var keys []string
+		for _, key := range all {
+			if strings.Contains(key, substr) {
+				keys = append(keys, key)
+			}
+		}
+		return keys
+	}
+}
+
 // WaitJobKeyCount polls the number of job keys containing substr until cond
 // holds, failing after 20 seconds. It polls on the calling goroutine so the
 // assertions inside JobKeyCount never run after the test has finished.

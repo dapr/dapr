@@ -557,6 +557,17 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
+// PlacementStatus returns the placement connection status the daprd reports,
+// such as "placement: connected". A failed metadata read fails t and returns
+// "".
+func (d *Daprd) PlacementStatus(t assert.TestingT, ctx context.Context) string {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return ""
+	}
+	return rt.Placement
+}
+
 func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {
 	return d.meta(t, ctx).Resiliencies
 }

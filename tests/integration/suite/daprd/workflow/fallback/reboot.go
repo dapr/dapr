@@ -92,7 +92,7 @@ func (r *reboot) Run(t *testing.T, ctx context.Context) {
 		assert.True(c, r.workflow.HostsActorType(c, ctx, 0, r.workflow.WorkflowActorType(0)))
 	}, time.Second*10, time.Millisecond*50)
 	mgmt = r.workflow.ManagementClient(t, ctx)
-	waitPending(t, ctx, mgmt, time.Second*10, ids...)
+	workflow.WaitPending(t, ctx, mgmt, time.Second*10, ids...)
 
 	r.workflow.ConnectWorker(t, ctx, r.workflow.Registry())
 

@@ -95,7 +95,7 @@ func (k *kill) Run(t *testing.T, ctx context.Context) {
 
 	// The survivor serves every instance once placement dropped the killed
 	// daprd, still pending.
-	waitPending(t, ctx, mgmt[1], time.Second*20, ids...)
+	workflow.WaitPending(t, ctx, mgmt[1], time.Second*20, ids...)
 
 	k.workflow.ConnectWorkerN(t, ctx, 1, k.workflow.RegistryN(1))
 

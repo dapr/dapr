@@ -149,8 +149,8 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	require.Less(t, time.Since(connected), remindersDamping-time.Second*3,
 		"the fallback host must still hold the workflow actor types")
 	assert.True(t, r.workflow.HostsActorType(t, ctx, 1, r.workflow.WorkflowActorType(1)))
-	assert.Zero(t, reminderDeliveries(t, ctx, r.workflow, 1), "the scheduler delivered a reminder to the fallback host")
-	assert.Positive(t, reminderDeliveries(t, ctx, r.workflow, 0))
+	assert.Zero(t, r.workflow.ReminderDeliveries(t, ctx, 1), "the scheduler delivered a reminder to the fallback host")
+	assert.Positive(t, r.workflow.ReminderDeliveries(t, ctx, 0))
 
 	// Once the damping period ends, the fallback host gives its instances to
 	// the daprd with the worker, where they complete.
@@ -161,5 +161,5 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, fmt.Sprintf(`"done-%d"`, i), meta.GetOutput().GetValue(), id)
 	}
 	assert.False(t, r.workflow.HostsActorType(t, ctx, 1, r.workflow.WorkflowActorType(1)))
-	assert.Zero(t, reminderDeliveries(t, ctx, r.workflow, 1), "the scheduler delivered a reminder to the daprd without a worker")
+	assert.Zero(t, r.workflow.ReminderDeliveries(t, ctx, 1), "the scheduler delivered a reminder to the daprd without a worker")
 }

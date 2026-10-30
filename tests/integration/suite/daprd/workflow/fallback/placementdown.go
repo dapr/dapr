@@ -74,7 +74,7 @@ func (p *placementdown) Setup(t *testing.T) []framework.Option {
 			exec.WithStderr(p.logB.Stderr()),
 		)),
 	)
-	p.placeBack = placementBack(t, p.workflow)
+	p.placeBack = p.workflow.PlacementBack(t)
 
 	return []framework.Option{
 		framework.WithProcesses(p.logB, p.workflow),
@@ -122,17 +122,17 @@ func (p *placementdown) Run(t *testing.T, ctx context.Context) {
 
 	p.workflow.Placement().Cleanup(t)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, "placement: disconnected", placementStatus(c, ctx, p.workflow, 1))
+		assert.Equal(c, "placement: disconnected", p.workflow.DaprN(1).PlacementStatus(c, ctx))
 	}, time.Second*20, time.Millisecond*50)
 
 	// Several damping periods long.
 	assert.Never(t, hostedB, time.Second*10, time.Millisecond*50,
 		"the daprd without a worker took the workflow actor types while placement was down")
 
-	runPlacementBack(t, ctx, p.placeBack)
+	workflow.RunPlacementBack(t, ctx, p.placeBack)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, "placement: connected", placementStatus(c, ctx, p.workflow, 0))
-		assert.Equal(c, "placement: connected", placementStatus(c, ctx, p.workflow, 1))
+		assert.Equal(c, "placement: connected", p.workflow.DaprN(0).PlacementStatus(c, ctx))
+		assert.Equal(c, "placement: connected", p.workflow.DaprN(1).PlacementStatus(c, ctx))
 	}, time.Second*20, time.Millisecond*50)
 	assert.Never(t, hostedB, time.Second*5, time.Millisecond*50,
 		"the daprd without a worker took the workflow actor types once placement was back")
@@ -171,5 +171,5 @@ func (p *placementdown) Run(t *testing.T, ctx context.Context) {
 	// Every instance ran on the daprd with the worker: the other served
 	// nothing as a fallback host.
 	assert.False(t, p.workflow.HostsActorType(t, ctx, 1, p.workflow.WorkflowActorType(1)))
-	assert.Zero(t, stagedStarts(t, ctx, p.workflow, 1))
+	assert.Zero(t, p.workflow.StagedStarts(t, ctx, 1))
 }

@@ -52,7 +52,7 @@ func (c *controlplane) Setup(t *testing.T) []framework.Option {
 		withSettle(t, 0),
 		workflow.WithPlacementService(),
 	)
-	c.placeBack = placementBack(t, c.workflow)
+	c.placeBack = c.workflow.PlacementBack(t)
 
 	return []framework.Option{
 		framework.WithProcesses(c.workflow),
@@ -117,21 +117,21 @@ func (c *controlplane) Run(t *testing.T, ctx context.Context) {
 			assert.NoError(col, mgmt.RaiseEvent(rctx, id, "go", api.WithEventPayload(fmt.Sprintf("ev-%d", i))))
 		}, time.Second*20, time.Millisecond*100, id)
 	}
-	waitPending(t, ctx, mgmt, time.Second*20, ids...)
+	workflow.WaitPending(t, ctx, mgmt, time.Second*20, ids...)
 	assert.True(t, c.workflow.HostsActorType(t, ctx, 0, c.workflow.WorkflowActorType(0)))
 
 	c.workflow.Placement().Cleanup(t)
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Equal(col, "placement: disconnected", placementStatus(col, ctx, c.workflow, 0))
+		assert.Equal(col, "placement: disconnected", c.workflow.DaprN(0).PlacementStatus(col, ctx))
 	}, time.Second*20, time.Millisecond*50)
 	assert.True(t, c.workflow.HostsActorType(t, ctx, 0, c.workflow.WorkflowActorType(0)))
 
-	runPlacementBack(t, ctx, c.placeBack)
+	workflow.RunPlacementBack(t, ctx, c.placeBack)
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Equal(col, "placement: connected", placementStatus(col, ctx, c.workflow, 0))
+		assert.Equal(col, "placement: connected", c.workflow.DaprN(0).PlacementStatus(col, ctx))
 		assert.True(col, c.workflow.HostsActorType(col, ctx, 0, c.workflow.WorkflowActorType(0)))
 	}, time.Second*20, time.Millisecond*50)
-	waitPending(t, ctx, mgmt, time.Second*20, ids...)
+	workflow.WaitPending(t, ctx, mgmt, time.Second*20, ids...)
 
 	c.workflow.ConnectWorker(t, ctx, c.workflow.Registry())
 
