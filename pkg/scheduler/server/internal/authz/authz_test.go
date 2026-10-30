@@ -119,6 +119,15 @@ func Test_Initial(t *testing.T) {
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-scheduler")
 	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
+	actorLimit := func(actorType string) *schedulerv1pb.ConcurrencyLimit {
+		return &schedulerv1pb.ConcurrencyLimit{
+			MaxConcurrent: 1,
+			Target: &schedulerv1pb.ConcurrencyLimit_Actor{
+				Actor: &schedulerv1pb.ConcurrencyLimitActor{Type: actorType},
+			},
+		}
+	}
+
 	tests := map[string]struct {
 		ctx         context.Context
 		initial     *schedulerv1pb.WatchJobsRequestInitial
@@ -178,6 +187,72 @@ func Test_Initial(t *testing.T) {
 			},
 			expCode:     nil,
 			nonMTlSCode: nil,
+		},
+		"own internal actor types are allowed": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:     "app1",
+				Namespace: "ns1",
+				ActorTypes: []string{
+					"dapr.internal.ns1.app1.workflow",
+					"dapr.internal.ns1.app1.activity",
+					"dapr.internal.ns1.app1.executor",
+				},
+				ConcurrencyLimits: []*schedulerv1pb.ConcurrencyLimit{
+					actorLimit("dapr.internal.ns1.app1.workflow"),
+					actorLimit("dapr.internal.ns1.app1.activity"),
+				},
+			},
+		},
+		"user actor types are allowed": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:             "app1",
+				Namespace:         "ns1",
+				ActorTypes:        []string{"myactor"},
+				ConcurrencyLimits: []*schedulerv1pb.ConcurrencyLimit{actorLimit("myactor"), {MaxConcurrent: 1}},
+			},
+		},
+		"other app internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns1.app1.workflow", "dapr.internal.ns1.app2.workflow"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
+		"other namespace internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns2.app1.activity"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
+		"malformed internal actor type should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns1"},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
+		"other app internal concurrency limit should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:             "app1",
+				Namespace:         "ns1",
+				ActorTypes:        []string{"dapr.internal.ns1.app1.workflow"},
+				ConcurrencyLimits: []*schedulerv1pb.ConcurrencyLimit{actorLimit("dapr.internal.ns1.app2.activity")},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
 		},
 	}
 
