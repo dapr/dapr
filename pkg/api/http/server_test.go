@@ -29,6 +29,8 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
@@ -430,6 +432,90 @@ func TestAPILogging(t *testing.T) {
 
 	// Test obfuscate URLs
 	t.Run("obfuscate URL", runTest("daprtest/1", true))
+}
+
+func TestAPILoggingTraceContext(t *testing.T) {
+	// Replace the logger with a custom one for testing
+	prev := infoLog
+	logDest := &bytes.Buffer{}
+	infoLog = logger.NewLogger("test-api-logging-trace")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
+	defer func() {
+		infoLog = prev
+	}()
+
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	defer func() { _ = tp.Shutdown(t.Context()) }()
+	prevTracerProvider := otel.GetTracerProvider()
+	defer otel.SetTracerProvider(prevTracerProvider)
+	otel.SetTracerProvider(tp)
+
+	endpoints := []endpoints.Endpoint{
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "state/{storeName}/{key}",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetState",
+			},
+		},
+	}
+
+	const (
+		path     = "/" + apiVersionV1 + "/state/mystate/mykey"
+		traceID  = "4bf92f3577b34da6a3ce929d0e0e4736"
+		emptySID = "0000000000000000"
+	)
+
+	newRouter := func(samplingRate string) chi.Router {
+		srv := newServer()
+		srv.config.EnableAPILogging = true
+		srv.tracingSpec = config.TracingSpec{SamplingRate: samplingRate}
+
+		router := chi.NewRouter()
+		srv.useContextSetup(router)
+		srv.useTracing(router)
+		srv.useAPILogging(router)
+		srv.setupRoutes(router, endpoints)
+		return router
+	}
+
+	dec := json.NewDecoder(logDest)
+
+	t.Run("span in the request context", func(t *testing.T) {
+		router := newRouter("1")
+
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("traceparent", "00-"+traceID+"-00f067aa0ba902b7-01")
+		router.ServeHTTP(httptest.NewRecorder(), req)
+
+		logData := map[string]any{}
+		require.NoError(t, dec.Decode(&logData))
+
+		assert.Equal(t, "HTTP API Called", logData["msg"])
+		assert.Equal(t, traceID, logData["trace_id"])
+		spanID, ok := logData["span_id"].(string)
+		require.True(t, ok)
+		assert.NotEqual(t, emptySID, spanID)
+		assert.Len(t, spanID, len(emptySID))
+	})
+
+	// With tracing disabled no span is started, so the fields must be absent
+	t.Run("no span in the request context", func(t *testing.T) {
+		router := newRouter("0")
+
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(httptest.NewRecorder(), req)
+
+		logData := map[string]any{}
+		require.NoError(t, dec.Decode(&logData))
+
+		assert.Equal(t, "HTTP API Called", logData["msg"])
+		assert.NotContains(t, logData, "trace_id")
+		assert.NotContains(t, logData, "span_id")
+	})
 }
 
 func TestAPILoggingOmitHealthChecks(t *testing.T) {
