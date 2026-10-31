@@ -338,3 +338,51 @@ func TestDrainPending_PreservesSeniority(t *testing.T) {
 	assert.Equal(t, uint32(1), primary.current, "only the dispatched trigger holds the primary gate")
 	assert.Equal(t, uint32(1), named.current, "partial acquisition must be rolled back")
 }
+
+// TestHandleConcurrencyRelease_ReleasesAllGatesBeforeDraining asserts that a
+// trigger waiting on the type gate is dispatched when the release of a
+// trigger holding both the type gate and its named gate frees the named slot
+// it needs, rather than stalling until an unrelated release.
+func TestHandleConcurrencyRelease_ReleasesAllGatesBeforeDraining(t *testing.T) {
+	t.Parallel()
+
+	const actorType = "dapr.internal.default.myapp.activity"
+	namedKey := actorType + ":act"
+
+	var dispatched []loops.EventStream
+	streamLoop := loopfake.New[loops.EventStream]().WithEnqueue(func(e loops.EventStream) {
+		dispatched = append(dispatched, e)
+	})
+
+	pool := store.New()
+	pool.Add(store.Options{
+		Loop:       streamLoop,
+		ActorTypes: []string{actorType},
+	})
+
+	primary := &concurrencyGate{globalLimit: 10, current: 1}
+	named := &concurrencyGate{globalLimit: 1, current: 1}
+
+	c := &connections{
+		streamPool: pool,
+		concurrencyGates: map[string]*concurrencyGate{
+			actorType: primary,
+			namedKey:  named,
+		},
+		streamGateKeys: make(map[uint64][]string),
+		schedulerCount: 1,
+	}
+
+	waiting := makeTriggerRequest(actorType, "a2", "act")
+	require.True(t, primary.enqueue(waiting))
+
+	c.handleConcurrencyRelease(&loops.ConcurrencyRelease{
+		GateKeys: []string{actorType, namedKey},
+	})
+
+	require.Len(t, dispatched, 1, "waiting trigger must be dispatched by the release that freed its named slot")
+	assert.Same(t, waiting, dispatched[0].(*loops.TriggerRequest))
+	assert.Equal(t, 0, primary.pendingLen())
+	assert.Equal(t, uint32(1), primary.current)
+	assert.Equal(t, uint32(1), named.current)
+}

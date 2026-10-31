@@ -162,12 +162,16 @@ func (s *seniority) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "w1", first.GetName(),
 		"gate-blocked elder lost its place in the pending queue to a fresher arrival")
 
+	// Acknowledging w1 frees both the type gate and the "hot" gate, so w2 is
+	// dispatched by that one acknowledgement rather than waiting for the
+	// next unrelated release.
 	ack(first)
+	second := recv("second hot waiter")
+	assert.Equal(t, "w2", second.GetName())
+
 	schedule("f2", "")
 	f2 := recv("f2")
 	require.Equal(t, "f2", f2.GetName())
 	ack(f2)
-	second := recv("second hot waiter")
-	assert.Equal(t, "w2", second.GetName())
 	ack(second)
 }
