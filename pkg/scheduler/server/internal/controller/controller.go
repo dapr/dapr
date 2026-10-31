@@ -116,6 +116,10 @@ func New(opts Options) (*Controller, error) {
 		}
 	}
 
+	// logr.Discard() has a nil sink, so the manager falls back to the global
+	// controller-runtime logger. Set it to avoid the "log.SetLogger(...) was
+	// never called" stack trace on stderr.
+	ctrl.SetLogger(logr.Discard())
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Logger:                 logr.Discard(),
 		Scheme:                 scheme,
