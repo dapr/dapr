@@ -385,6 +385,9 @@ func TestPatching(t *testing.T) {
 		},
 		{
 			name: "basic test",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.MTLSEnabled = true
+			},
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
 				assertDaprdContainerFn(t, pod)
 
@@ -397,23 +400,34 @@ func TestPatching(t *testing.T) {
 					daprdEnvVars[env.Name] = env.Value
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
+				assert.Equal(t, "/var/run/secrets/dapr.io/tls/ca.crt", daprdEnvVars["DAPR_TRUST_ANCHORS_FILE"],
+					"daprd must be pointed at the mounted trust anchors file when mTLS is enabled")
 
-				assert.Len(t, daprdContainer.VolumeMounts, 1)
+				assert.Len(t, daprdContainer.VolumeMounts, 2)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
 				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
+				assert.Equal(t, "dapr-trust-bundle", daprdContainer.VolumeMounts[1].Name)
+				assert.Equal(t, "/var/run/secrets/dapr.io/tls", daprdContainer.VolumeMounts[1].MountPath)
+				assert.True(t, daprdContainer.VolumeMounts[1].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
 				assert.Equal(t, 3501, daprdContainer.LivenessProbe.TCPSocket.Port.IntValue())
 
 				// Assertions on added volumes
-				assert.Len(t, pod.Spec.Volumes, 1)
+				assert.Len(t, pod.Spec.Volumes, 2)
 				tokenVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
 				require.Len(t, tokenVolume.Projected.Sources, 1)
 				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
 				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
+				trustBundleVolume := pod.Spec.Volumes[1]
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
+				assert.NotNil(t, trustBundleVolume.ConfigMap)
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
+				assert.Nil(t, trustBundleVolume.ConfigMap.Optional,
+					"the volume must be required so pods wait for the ConfigMap instead of starting on static trust anchors")
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
@@ -432,15 +446,36 @@ func TestPatching(t *testing.T) {
 			},
 		},
 		{
+			name: "trust bundle volume is not injected when mTLS is disabled",
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assertDaprdContainerFn(t, pod)
+
+				daprdContainer := pod.Spec.Containers[1]
+				require.Len(t, daprdContainer.VolumeMounts, 1)
+				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
+
+				require.Len(t, pod.Spec.Volumes, 1)
+				assert.Equal(t, "dapr-identity-token", pod.Spec.Volumes[0].Name)
+
+				for _, env := range daprdContainer.Env {
+					assert.NotEqual(t, "DAPR_TRUST_ANCHORS_FILE", env.Name,
+						"the trust anchors file env var must not be set when mTLS is disabled")
+				}
+			},
+		},
+		{
 			name: "with UDS",
 			podModifierFn: func(pod *corev1.Pod) {
 				pod.Annotations[annotations.KeyUnixDomainSocketPath] = "/tmp/socket"
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.MTLSEnabled = true
 			},
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
 				assertDaprdContainerFn(t, pod)
 
 				// Check the presence of the volume
-				assert.Len(t, pod.Spec.Volumes, 2)
+				assert.Len(t, pod.Spec.Volumes, 3)
 				socketVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-unix-domain-socket", socketVolume.Name)
 				assert.NotNil(t, socketVolume.EmptyDir)
@@ -451,6 +486,10 @@ func TestPatching(t *testing.T) {
 				require.Len(t, tokenVolume.Projected.Sources, 1)
 				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
 				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
+				trustBundleVolume := pod.Spec.Volumes[2]
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
+				assert.NotNil(t, trustBundleVolume.ConfigMap)
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
 
 				// Check the presence of the volume mount in the app container
 				appContainer := pod.Spec.Containers[0]
@@ -460,7 +499,7 @@ func TestPatching(t *testing.T) {
 
 				// Check the presence of the volume mount in the daprd container
 				daprdContainer := pod.Spec.Containers[1]
-				assert.Len(t, daprdContainer.VolumeMounts, 2)
+				assert.Len(t, daprdContainer.VolumeMounts, 3)
 				assert.Equal(t, "dapr-unix-domain-socket", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
 
@@ -473,4 +512,90 @@ func TestPatching(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, testCaseFn(tc))
 	}
+}
+
+func TestTrustBundleVolumeConflict(t *testing.T) {
+	newPod := func(volume *corev1.Volume) *corev1.Pod {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "myapp",
+				Annotations: map[string]string{
+					"dapr.io/enabled": "true",
+					"dapr.io/app-id":  "myapp",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "appcontainer", Image: "container:1.0"}},
+			},
+		}
+		if volume != nil {
+			pod.Spec.Volumes = []corev1.Volume{*volume}
+		}
+		return pod
+	}
+	newConfig := func(pod *corev1.Pod) *SidecarConfig {
+		c := NewSidecarConfig(pod)
+		c.Namespace = "testns"
+		c.Identity = "pod:identity"
+		c.SentrySPIFFEID = "spiffe://foo.bar/ns/example/dapr-sentry"
+		c.MTLSEnabled = true
+		c.SetFromPodAnnotations()
+		return c
+	}
+
+	t.Run("a pre-existing volume with the trust bundle name of the wrong type is rejected", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name:         "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}))
+		_, err := c.GetPatch()
+		require.ErrorContains(t, err, "dapr-trust-bundle",
+			"a shadowing volume would leave daprd without the watched trust anchors file")
+	})
+
+	t.Run("a pre-existing volume pointing at another ConfigMap is rejected", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name: "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "some-other-configmap"},
+				},
+			},
+		}))
+		_, err := c.GetPatch()
+		require.ErrorContains(t, err, "dapr-trust-bundle")
+	})
+
+	t.Run("a pre-existing expected trust bundle volume is accepted without duplication", func(t *testing.T) {
+		c := newConfig(newPod(&corev1.Volume{
+			Name: "dapr-trust-bundle",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "dapr-trust-bundle"},
+				},
+			},
+		}))
+		patch, err := c.GetPatch()
+		require.NoError(t, err)
+
+		newPod, err := PatchPod(c.pod, patch)
+		require.NoError(t, err)
+
+		count := 0
+		for _, volume := range newPod.Spec.Volumes {
+			if volume.Name == "dapr-trust-bundle" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "the trust bundle volume must not be duplicated")
+
+		daprdContainer := newPod.Spec.Containers[1]
+		found := false
+		for _, mount := range daprdContainer.VolumeMounts {
+			if mount.Name == "dapr-trust-bundle" {
+				found = true
+			}
+		}
+		assert.True(t, found, "the trust bundle mount must still be added")
+	})
 }

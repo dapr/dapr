@@ -31,6 +31,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["list", "get", "watch"]
+  # Cluster-wide read of the operator-synced dapr-trust-bundle ConfigMaps, so
+  # sentry can verify new trust anchors have propagated to every namespace
+  # before the rotation cleanup removes the old root CA.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list", "get", "watch"]
 {{- end }}
 ---
 kind: ClusterRoleBinding
