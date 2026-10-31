@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -67,19 +68,25 @@ type API interface {
 }
 
 type api struct {
-	universal             *universal.Universal
-	endpoints             []endpoints.Endpoint
-	publicEndpoints       []endpoints.Endpoint
-	directMessaging       invokev1.DirectMessaging
-	channels              *channels.Channels
-	pubsubAdapter         runtimePubsub.Adapter
-	outbox                outbox.Outbox
-	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	metricSpec            *config.MetricSpec
-	tracingSpec           config.TracingSpec
-	maxRequestBodySize    int64 // In bytes
-	healthz               healthz.Healthz
-	outboundHealthz       healthz.Healthz
+	universal              *universal.Universal
+	endpoints              []endpoints.Endpoint
+	publicEndpoints        []endpoints.Endpoint
+	directMessaging        invokev1.DirectMessaging
+	channels               *channels.Channels
+	pubsubAdapter          runtimePubsub.Adapter
+	outbox                 outbox.Outbox
+	sendToOutputBindingFn  func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	metricSpec             *config.MetricSpec
+	tracingSpec            config.TracingSpec
+	maxRequestBodySize     int64 // In bytes
+	healthz                healthz.Healthz
+	outboundHealthz        healthz.Healthz
+	healthzNotReadyLogged  atomic.Bool
+	outboundNotReadyLogged atomic.Bool
+	healthzEverReady       atomic.Bool
+	outboundEverReady      atomic.Bool
+	healthzNotReadySince   atomic.Int64 // UnixNano; 0 when currently ready
+	outboundNotReadySince  atomic.Int64 // UnixNano; 0 when currently ready
 }
 
 const (
