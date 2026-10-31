@@ -194,6 +194,7 @@ func New(opts Options) *Processor {
 		Adapter:                         opts.Adapter,
 		AdapterStreamer:                 opts.AdapterStreamer,
 		ProgrammaticSubscriptionEnabled: opts.ProgrammaticSubscriptionEnabled,
+		DeadLetterErrorDetailsEnabled:   opts.GlobalConfig.IsFeatureEnabled(config.PubsubDeadLetterErrorDetails),
 	})
 
 	stateProc := state.New(state.Options{

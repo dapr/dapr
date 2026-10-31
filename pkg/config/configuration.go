@@ -110,6 +110,15 @@ const (
 	// which run workflows rather than of every app. Preview feature;
 	// disabled by default.
 	WorkflowsStagedOperations Feature = "WorkflowsStagedOperations"
+
+	// PubsubDeadLetterErrorDetails enables attaching app-returned error
+	// details when republishing a message to a dead-letter topic. When
+	// enabled, subscriptions must also set metadata
+	// deadLetterErrorDetails=true. CloudEvents receive an errordetails
+	// extension; raw payloads receive an __error metadata/header value.
+	// Details are truncated to deadLetterErrorDetailsMaxLen bytes
+	// (default 1024). Preview feature; disabled by default.
+	PubsubDeadLetterErrorDetails Feature = "Pubsub.DeadLetterErrorDetails"
 )
 
 // end feature flags section

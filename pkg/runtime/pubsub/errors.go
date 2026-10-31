@@ -27,6 +27,56 @@ var ErrMessageDropped = errors.New("pubsub message dropped") // TODO: remove thi
 // hot-reload). Callers should avoid NACKing the message.
 var ErrSubscriptionClosed = errors.New("subscription is closed")
 
+// MessageError wraps a pubsub delivery error with optional app-provided details
+// that can be forwarded to a dead-letter publish when configured.
+type MessageError struct {
+	err     error
+	details string
+}
+
+// NewMessageError returns err annotated with app-provided details.
+// If details is empty, err is returned unchanged. If err is nil and details is
+// non-empty, details becomes the base error text. Error() preserves the base
+// error string so existing log/test expectations stay stable; callers that need
+// the app text should use Details() / ErrorDetails().
+func NewMessageError(err error, details string) error {
+	if details == "" {
+		return err
+	}
+	if err == nil {
+		err = errors.New(details)
+	}
+	return &MessageError{err: err, details: details}
+}
+
+// NewMessageDroppedError returns ErrMessageDropped, optionally annotated with
+// app-provided details while preserving errors.Is(..., ErrMessageDropped).
+func NewMessageDroppedError(details string) error {
+	return NewMessageError(ErrMessageDropped, details)
+}
+
+func (e *MessageError) Error() string {
+	return e.err.Error()
+}
+
+func (e *MessageError) Unwrap() error {
+	return e.err
+}
+
+// Details returns the app-provided error text, if any.
+func (e *MessageError) Details() string {
+	return e.details
+}
+
+// ErrorDetails extracts app-provided error details from err's chain, if present.
+func ErrorDetails(err error) string {
+	var me *MessageError
+	if errors.As(err, &me) {
+		return me.Details()
+	}
+	return ""
+}
+
 // pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
 type NotFoundError struct {
 	PubsubName string

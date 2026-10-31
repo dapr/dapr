@@ -156,6 +156,10 @@ message TopicEventResponse {
 
   // The list of output bindings.
   TopicEventResponseStatus status = 1;
+
+  // Optional error/detail message from the app, forwarded to dead-letter
+  // publishes when configured (CloudEvent extension or raw metadata).
+  string message = 2;
 }
 
 // TopicEventCERequest message is compatible with CloudEvent spec v1.0
@@ -233,6 +237,10 @@ message TopicEventBulkResponseEntry {
 
   // The status of the response.
   TopicEventResponse.TopicEventResponseStatus status = 2;
+
+  // Optional error/detail message from the app for this entry, forwarded to
+  // dead-letter publishes when configured.
+  string message = 3;
 }
 
 // AppBulkResponse is response from app on published message
