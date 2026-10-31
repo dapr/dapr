@@ -41,6 +41,9 @@ var buildTags = []string{
 	// reports whether the SPIFFE identity reached the component operation
 	// context. Never set for released daprd flavors.
 	"state_spiffeprobe",
+	// nameresolution_sqlite compiles in the SQLite name resolver, which daprd
+	// uses on darwin where mDNS multicast is blocked on CI runners.
+	"nameresolution_sqlite",
 }
 
 func BuildAll(t *testing.T) {

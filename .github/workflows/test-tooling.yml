@@ -25,8 +25,8 @@ jobs:
         os:
           - "ubuntu-latest"
           - "windows-latest"
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - "macos-14"
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - "macos-15"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/modes"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -86,6 +87,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
 	}
 
 	dir := t.TempDir()
