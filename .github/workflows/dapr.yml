@@ -184,8 +184,8 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: amd64
     env:
@@ -232,8 +232,8 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: amd64
     env:
@@ -315,14 +315,14 @@ jobs:
             windows_version: ltsc2022
             job_name: "Windows LTSC 2022"
             sidecar_flavor: "allcomponents"
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: amd64
             job_name: "macOS/Intel"
             sidecar_flavor: "allcomponents"
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: arm64
             job_name: "macOS/Apple Silicon"

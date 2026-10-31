@@ -53,13 +53,14 @@ type routeralias struct {
 
 func (r *routeralias) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
+	nameResolution := daprd.NameResolutionJSON(t)
 
 	r.operator = operator.New(t,
 		operator.WithSentry(sentry),
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"nameResolution": {"component": "mdns"}, "features":[{"name":"HotReload","enabled":true}],
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"nameResolution": ` + nameResolution + `, "features":[{"name":"HotReload","enabled":true}],
 					"appHttpPipeline":{"handlers":[{"name":"routeralias1","type":"middleware.http.routeralias"},{"name":"routeralias2","type":"middleware.http.routeralias"},{"name":"routeralias3","type":"middleware.http.routeralias"}]}}}`,
 				),
 			}, nil
