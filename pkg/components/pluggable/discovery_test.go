@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.NotEmpty(t, onServiceDiscovered)
 	})
 	t.Run("serviceDiscovery should return empty services if directory not exists", func(t *testing.T) {
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -115,7 +116,7 @@ func TestComponentDiscovery(t *testing.T) {
 		_, err = os.CreateTemp(fakeSocketFolder, pattern)
 		require.NoError(t, err)
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
@@ -135,7 +136,7 @@ func TestComponentDiscovery(t *testing.T) {
 
 		reflectService := &fakeReflectService{}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		_, err = serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return nil, nil, errors.New("fake-err")
 		})
 		require.Error(t, err)
@@ -157,7 +158,7 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesErr: errors.New("fake-err"),
 		}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		_, err = serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
 		require.Error(t, err)
@@ -185,12 +186,65 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesResp: svcList,
 		}
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
 		require.NoError(t, err)
 		assert.Len(t, services, len(svcList))
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
+	})
+
+	t.Run("serviceDiscovery should wait for a socket that appears after startup", func(t *testing.T) {
+		fakeSocketFolder := t.TempDir()
+		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+
+		oldInterval, oldTimeout := discoveryRetryInterval, discoveryTimeout
+		discoveryRetryInterval = 10 * time.Millisecond
+		discoveryTimeout = 5 * time.Second
+		t.Cleanup(func() {
+			discoveryRetryInterval, discoveryTimeout = oldInterval, oldTimeout
+		})
+
+		// Simulate a slow component container: its socket only shows up 300ms
+		// after discovery starts, long after a single unretried read.
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			listener, err := net.Listen("unix", fakeSocketFolder+"/slow.sock")
+			assert.NoError(t, err)
+			defer listener.Close()
+			time.Sleep(2 * time.Second)
+		}()
+
+		reflectService := &fakeReflectService{
+			listServicesResp: []string{"svcA"},
+		}
+
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
+			return reflectService, func() {}, nil
+		})
+		require.NoError(t, err)
+		require.Len(t, services, 1)
+		assert.Equal(t, "slow", services[0].componentName)
+	})
+
+	t.Run("serviceDiscovery should give up waiting once the timeout elapses", func(t *testing.T) {
+		fakeSocketFolder := t.TempDir()
+		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+
+		oldInterval, oldTimeout := discoveryRetryInterval, discoveryTimeout
+		discoveryRetryInterval = 10 * time.Millisecond
+		discoveryTimeout = 100 * time.Millisecond
+		t.Cleanup(func() {
+			discoveryRetryInterval, discoveryTimeout = oldInterval, oldTimeout
+		})
+
+		start := time.Now()
+		services, err := serviceDiscovery(context.Background(), func(string) (reflectServiceClient, func(), error) {
+			return &fakeReflectService{}, func() {}, nil
+		})
+		require.NoError(t, err)
+		assert.Empty(t, services)
+		assert.Less(t, time.Since(start), 5*time.Second)
 	})
 }
 
