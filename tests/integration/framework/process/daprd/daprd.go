@@ -94,6 +94,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		fopt(&opts)
 	}
 
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
+	}
+
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
