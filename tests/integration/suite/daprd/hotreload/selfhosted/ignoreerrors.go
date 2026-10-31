@@ -43,8 +43,8 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 	i.logline = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Failed to init component a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
-			"Ignoring error processing component: process component a error: [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
-			"Error processing component, daprd will exit gracefully: process component a error: [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
+			"Ignoring error processing component: process component a (type: state.sqlite) error: [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
+			"Error processing component 'a' (type: state.sqlite), daprd will exit gracefully: process component a (type: state.sqlite) error: [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
 		),
 	)
 
