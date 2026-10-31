@@ -165,12 +165,16 @@ func New(opts Options) (Interface, error) {
 		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
-	// Scheduler-enforced concurrency limits gate per job delivery, which
-	// the fast path's local drives bypass: fall back to durable reminders
-	// when limits are configured.
+	// Scheduler-enforced concurrency limits and niceness gate per job
+	// delivery, which the fast path's local drives bypass: fall back to
+	// durable reminders when either is configured.
 	fastPath := opts.WorkflowsFastPath
 	if fastPath && opts.Spec.HasSchedulerConcurrencyLimits() {
 		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
+		fastPath = false
+	}
+	if fastPath && opts.Spec.HasNiceness() {
+		log.Info("WorkflowsFastPath is enabled but workflow niceness is configured; disabling the fast path so the scheduler can apply it")
 		fastPath = false
 	}
 

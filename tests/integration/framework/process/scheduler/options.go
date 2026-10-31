@@ -56,6 +56,8 @@ type options struct {
 	placementEnabled                   *bool
 	placementDisseminateTimeout        *time.Duration
 	placementDisseminateCoalesceWindow *time.Duration
+
+	adaptiveConcurrencyLimits *bool
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -69,6 +71,15 @@ func WithExecOptions(execOptions ...exec.Option) Option {
 func WithPlacementEnabled(enabled bool) Option {
 	return func(o *options) {
 		o.placementEnabled = &enabled
+	}
+}
+
+// WithAdaptiveConcurrencyLimits sets whether the scheduler derives
+// concurrency limits from acknowledgement latency
+// (--adaptive-concurrency-limits).
+func WithAdaptiveConcurrencyLimits(enabled bool) Option {
+	return func(o *options) {
+		o.adaptiveConcurrencyLimits = &enabled
 	}
 }
 

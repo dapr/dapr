@@ -161,6 +161,16 @@ message WatchJobsRequestInitial {
   // the well-known service name still withholds the placement leader
   // advertisement while it runs.
   repeated string placement_addresses = 8;
+
+  // niceness weights this app's workflows and activities when capacity is
+  // saturated. Unset is niceness 0 for everything.
+  WorkflowNiceness niceness = 9;
+
+  // host_concurrency_limits are the per-sidecar limits this client enforces
+  // itself, one per actor type. The scheduler sums them over the app's
+  // connected hosts to bound how many triggers it keeps in flight when no
+  // global limit is configured.
+  repeated ConcurrencyLimit host_concurrency_limits = 10;
 }
 
 // ConcurrencyLimit defines a global concurrency limit enforced by the
@@ -192,6 +202,22 @@ message ConcurrencyLimitActor {
   // type is the actor type the limit applies to (e.g., the workflow or
   // activity actor type).
   string type = 1;
+}
+
+// WorkflowNiceness holds the niceness of an app and of its workflow and
+// activity names, each in the range [-20, 19]. Lower values are served more
+// often.
+message WorkflowNiceness {
+  // default is the niceness of this app against the other apps in its
+  // namespace, and of every workflow and activity of this app without its own
+  // entry.
+  int32 default = 1;
+
+  // workflows is the niceness of workflow names, overriding default.
+  map<string, int32> workflows = 2;
+
+  // activities is the niceness of activity names, overriding default.
+  map<string, int32> activities = 3;
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job

@@ -48,6 +48,10 @@ type Options struct {
 	// PlacementEnabled gates the incapable sidecars: on a scheduler
 	// not serving placement every sidecar counts as incapable
 	PlacementEnabled bool
+
+	// AdaptiveConcurrencyLimits enables deriving workflow concurrency limits
+	// from trigger acknowledgement latency and throughput.
+	AdaptiveConcurrencyLimits bool
 }
 
 // maxAddressesPerReport bounds a client-supplied report, so one client
@@ -77,6 +81,7 @@ type Pool struct {
 	addrs                      map[string]int
 	onPlacementAddressesChange func(added bool)
 	placementEnabled           bool
+	adaptive                   bool
 }
 
 func New(opts Options) *Pool {
@@ -87,6 +92,7 @@ func New(opts Options) *Pool {
 		addrs:                       make(map[string]int),
 		onPlacementAddressesChange:  opts.OnPlacementAddressesChange,
 		placementEnabled:            opts.PlacementEnabled,
+		adaptive:                    opts.AdaptiveConcurrencyLimits,
 	}
 }
 
@@ -96,6 +102,7 @@ func (p *Pool) Run(ctx context.Context) error {
 		Cron:             p.cron,
 		CancelPool:       cancel,
 		PlacementEnabled: p.placementEnabled,
+		Adaptive:         p.adaptive,
 	})
 
 	close(p.readyCh)

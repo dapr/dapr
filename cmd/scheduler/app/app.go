@@ -160,6 +160,7 @@ func Run() {
 					Workers: opts.Workers,
 
 					PlacementEnabled:                   opts.PlacementEnabled,
+					AdaptiveConcurrencyLimits:          opts.AdaptiveConcurrencyLimits,
 					PlacementDisseminateTimeout:        opts.PlacementDisseminateTimeout,
 					PlacementDisseminateCoalesceWindow: opts.PlacementDisseminateCoalesceWindow,
 				})

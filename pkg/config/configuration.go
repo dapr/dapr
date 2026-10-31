@@ -210,6 +210,10 @@ type WorkflowSpec struct {
 	// Per-activity-name concurrency limits enforced globally by the scheduler.
 	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
 
+	// Niceness sets how this app and its workflows and activities are
+	// weighted when capacity is saturated.
+	Niceness *WorkflowNiceness `json:"niceness,omitempty" yaml:"niceness,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
@@ -220,6 +224,25 @@ type WorkflowSpec struct {
 type NamedConcurrencyLimit struct {
 	Name          *string `json:"name"          yaml:"name"`
 	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
+}
+
+// WorkflowNiceness defines scheduling weights in the range -20 to 19, where
+// lower values are served more often when capacity is saturated.
+type WorkflowNiceness struct {
+	// Default is the niceness of this app against the other apps in its
+	// namespace, and of every workflow and activity of this app without its
+	// own entry. If omitted, 0 is used.
+	Default *int32 `json:"default,omitempty" yaml:"default,omitempty"`
+	// Workflows overrides Default for specific workflow names.
+	Workflows []NamedNiceness `json:"workflows,omitempty" yaml:"workflows,omitempty"`
+	// Activities overrides Default for specific activity names.
+	Activities []NamedNiceness `json:"activities,omitempty" yaml:"activities,omitempty"`
+}
+
+// NamedNiceness defines a per-name niceness.
+type NamedNiceness struct {
+	Name     string `json:"name"     yaml:"name"`
+	Niceness int32  `json:"niceness" yaml:"niceness"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -326,6 +349,26 @@ func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
 		return false
 	}
 	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
+}
+
+// HasNiceness reports whether any niceness is configured, either for the app
+// or for a workflow or activity name.
+func (w *WorkflowSpec) HasNiceness() bool {
+	if w == nil || w.Niceness == nil {
+		return false
+	}
+	if w.Niceness.Default != nil {
+		return true
+	}
+	named := func(ls []NamedNiceness) bool {
+		for _, l := range ls {
+			if l.Name != "" {
+				return true
+			}
+		}
+		return false
+	}
+	return named(w.Niceness.Workflows) || named(w.Niceness.Activities)
 }
 
 type SecretsSpec struct {
