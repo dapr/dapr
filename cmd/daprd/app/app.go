@@ -114,7 +114,8 @@ func Run() {
 	// Hold the internal gRPC port across SIGHUP restarts; see
 	// runtime.ReserveInternalGRPCPort. Released when shutdown starts, so the
 	// port frees as soon as the runtime closes its server.
-	heldInternalGRPC, internalGRPCPort, err := runtime.ReserveInternalGRPCPort(ctx, opts.DaprInternalGRPCListenAddress, opts.DaprInternalGRPCPort, opts.AppID)
+	heldInternalGRPC, internalGRPCPort, err := runtime.ReserveInternalGRPCPort(ctx, opts.DaprInternalGRPCListenAddress, opts.DaprInternalGRPCPort, opts.AppID,
+		opts.DaprAPIGRPCPort, opts.DaprHTTPPort, opts.ProfilePort, opts.DaprPublicPort, opts.Metrics.Port(), opts.AppPort)
 	if err != nil {
 		log.Warnf("Could not hold the internal gRPC port across restarts; each runtime start will bind it: %v", err)
 	} else {

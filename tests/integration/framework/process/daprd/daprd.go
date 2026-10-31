@@ -122,7 +122,6 @@ spec:
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
-		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
 		"--dapr-internal-grpc-listen-address=127.0.0.1",
 		"--dapr-listen-addresses=127.0.0.1",
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
@@ -139,6 +138,9 @@ spec:
 		"--enable-profiling",
 	}
 
+	if !opts.omitInternalGRPCPort {
+		args = append(args, "--dapr-internal-grpc-port="+strconv.Itoa(opts.internalGRPCPort))
+	}
 	if opts.appPort != nil {
 		args = append(args, "--app-port="+strconv.Itoa(*opts.appPort))
 	}

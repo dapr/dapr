@@ -1167,8 +1167,8 @@ func (a *DaprRuntime) reserveInternalGRPCServerPort(ctx context.Context) error {
 // is free from when the old runtime closes its server until the new one binds
 // it, and the new runtime's own connections (sentry, operator, scheduler) can
 // be given it as their ephemeral source port.
-func ReserveInternalGRPCPort(ctx context.Context, listenAddress, port, appID string) (*InternalGRPCListener, int, error) {
-	p, err := resolveInternalGRPCPort(port, appID)
+func ReserveInternalGRPCPort(ctx context.Context, listenAddress, port, appID string, serverPorts ...string) (*InternalGRPCListener, int, error) {
+	p, err := resolveInternalGRPCPort(port, appID, serverPorts...)
 	if err != nil {
 		return nil, 0, err
 	}
