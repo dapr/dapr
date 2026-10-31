@@ -15,7 +15,10 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -23,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1102,4 +1106,68 @@ func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethod
 	return invokev1.NewInvokeMethodResponse(int32(code), http.StatusText(code), nil).
 		WithRawDataString("fakeDirectMessageResponse").
 		WithContentType("application/json")
+}
+
+// failingReader returns its data once, then fails with err.
+type failingReader struct {
+	data []byte
+	err  error
+	read bool
+}
+
+func (r *failingReader) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, r.err
+	}
+	r.read = true
+	return copy(p, r.data), nil
+}
+
+func TestV1DirectMessagingTruncatedResponseAborts(t *testing.T) {
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	compStore := compstore.New()
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+		universal: universal.New(universal.Options{
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
+		}),
+	}
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
+	defer fakeServer.Shutdown()
+
+	fakeResponse := invokev1.NewInvokeMethodResponse(int32(http.StatusOK), http.StatusText(http.StatusOK), nil).
+		WithRawData(&failingReader{data: []byte("fakeDirectMessageResponse"), err: io.ErrUnexpectedEOF}).
+		WithContentType("application/json")
+	defer fakeResponse.Close()
+
+	mockDirectMessaging.
+		On(
+			"Invoke",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).
+		Return(fakeResponse, nil).
+		Once()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		"http://127.0.0.1/v1.0/invoke/fakeAppID/method/fakeMethod", bytes.NewBuffer([]byte("fakeData")))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := fakeServer.client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	assert.Equal(t, 200, res.StatusCode)
+
+	// The response body failed partway through, so reading it must
+	// surface the truncation instead of a clean end of stream.
+	body, err := io.ReadAll(res.Body)
+	assert.Equal(t, "fakeDirectMessageResponse", string(body))
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
