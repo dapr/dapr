@@ -55,8 +55,8 @@ func (w *Workflow) WatchActorTypeHosted(t *testing.T, ctx context.Context, index
 	go func() {
 		defer close(done)
 		for {
-			var rerr readErrors
-			if !w.HostsActorType(&rerr, wctx, index, actorType) && !rerr.failed {
+			var rerr ReadErrors
+			if !w.HostsActorType(&rerr, wctx, index, actorType) && !rerr.Failed {
 				seen.Store(true)
 			}
 			select {
@@ -79,11 +79,11 @@ func (w *Workflow) WatchActorTypeHosted(t *testing.T, ctx context.Context, index
 	}
 }
 
-// readErrors records whether a read failed, for a background poll which
+// ReadErrors records whether a read failed, for a background poll which
 // must not fail the test on a read cut short by its own end.
-type readErrors struct{ failed bool }
+type ReadErrors struct{ Failed bool }
 
-func (r *readErrors) Errorf(string, ...any) { r.failed = true }
+func (r *ReadErrors) Errorf(string, ...any) { r.Failed = true }
 
 // WaitForActorTypePlaced waits until the daprd at index hosts actorType, with
 // placed, or no longer does, and until the placement tables the daprds

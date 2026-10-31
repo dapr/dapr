@@ -1912,7 +1912,7 @@ func Test_runWorkflowFromReminder_settledTerminalSkipsTheFullLoad(t *testing.T) 
 	assert.Nil(t, o.settled)
 
 	o.settled = &settledTerminal{etag: v2, generation: 1, historyLength: uint64(len(history))}
-	_, err = o.executeMethod(t.Context(), "unknown", nil, nil, nil)
+	_, _, err = o.executeMethod(t.Context(), "unknown", nil, nil, nil)
 	require.Error(t, err)
 	assert.Nil(t, o.settled, "a method call must drop the settled record")
 

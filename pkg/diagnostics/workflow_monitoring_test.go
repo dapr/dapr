@@ -379,6 +379,33 @@ func TestExecution(t *testing.T) {
 	})
 }
 
+func TestStagedOperation(t *testing.T) {
+	const countMetricName = "runtime/workflow/staged/operation/count"
+
+	w, meter := initWorkflowMetrics()
+	t.Cleanup(func() { meter.Stop() })
+
+	w.WorkflowStagedOperation(t.Context(), CreateWorkflow)
+	w.WorkflowStagedOperation(t.Context(), CreateWorkflow)
+	w.WorkflowStagedOperation(t.Context(), RaiseEvent)
+
+	viewData, err := meter.RetrieveData(countMetricName)
+	require.NoError(t, err)
+	v := meter.Find(countMetricName)
+	require.Len(t, viewData, 2)
+
+	counts := make(map[string]int64, len(viewData))
+	for _, row := range viewData {
+		allTagsPresent(t, v, row.Tags)
+		for _, tg := range row.Tags {
+			if tg.Key == operationKey {
+				counts[tg.Value] = row.Data.(*view.CountData).Value
+			}
+		}
+	}
+	assert.Equal(t, map[string]int64{CreateWorkflow: 2, RaiseEvent: 1}, counts)
+}
+
 // TestLatencyDistributionRouting verifies which histogram each latency view is
 // registered with when a workflow-specific bucket override is configured: only
 // the workflow and activity *execution* latency views follow the workflow

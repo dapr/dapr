@@ -48,7 +48,7 @@ type flap struct {
 const flapDamping = 5 * time.Second
 
 func (f *flap) Setup(t *testing.T) []framework.Option {
-	f.workflow = newPair(t, flapDamping, fallbackSettle)
+	f.workflow = workflow.New(t, workflow.WithFallbackPair(t, flapDamping, workflow.FallbackSettle))
 
 	return []framework.Option{
 		framework.WithProcesses(f.workflow),
@@ -59,7 +59,7 @@ func (f *flap) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, f.workflow.RegistryN(0).AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	workflowType := f.workflow.WorkflowActorType(1)

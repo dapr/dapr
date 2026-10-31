@@ -84,7 +84,10 @@ func (h *haltparked) Setup(t *testing.T) []framework.Option {
 func (h *haltparked) Run(t *testing.T, ctx context.Context) {
 	h.workflow.WaitUntilRunning(t, ctx)
 
-	const instances = 12
+	// Which executor keys move depends on the daprd ports, which change every
+	// run. With 12 instances, about 4 runs in 10,000 kept every executor key
+	// on daprd 0, so nothing was handed off. With 24 that does not happen.
+	const instances = 24
 
 	var ran atomic.Int32
 	for i := range 2 {

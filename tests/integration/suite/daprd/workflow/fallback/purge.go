@@ -43,7 +43,7 @@ type purge struct {
 func (p *purge) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
 	return []framework.Option{
@@ -55,7 +55,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	worker := p.workflow.ConnectWorker(t, ctx, p.workflow.Registry())
@@ -79,7 +79,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 		meta, merr := mgmt.FetchWorkflowMetadata(octx, id)
 		if assert.NoError(c, merr) {
 			assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
-			assert.Equal(c, `"done"`, meta.GetOutput().GetValue())
+			assert.Equal(c, `"`+workflow.DoneOutput+`"`, meta.GetOutput().GetValue())
 		}
 	}, time.Second*5, time.Millisecond*10)
 
