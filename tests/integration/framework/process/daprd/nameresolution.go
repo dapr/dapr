@@ -31,11 +31,14 @@ import (
 // can't discover each other through the default standalone name resolver.
 // There, every daprd in the test run resolves app IDs through one shared SQLite
 // database instead, which keeps the single global namespace mDNS provides.
-var (
-	nrDBOnce sync.Once
-	nrDBPath string
-	nrDBErr  error
-)
+// The database outlives any one test, so it is not under a t.TempDir.
+var sharedNRDBPath = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "dapr-integration-nr-")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "nr.db"), nil
+})
 
 func useSQLiteNameResolution() bool {
 	return runtime.GOOS == "darwin"
@@ -44,13 +47,9 @@ func useSQLiteNameResolution() bool {
 func sqliteNameResolutionDB(t *testing.T) string {
 	t.Helper()
 
-	nrDBOnce.Do(func() {
-		var dir string
-		dir, nrDBErr = os.MkdirTemp("", "dapr-integration-nr-")
-		nrDBPath = filepath.Join(dir, "nr.db")
-	})
-	require.NoError(t, nrDBErr)
-	return nrDBPath
+	path, err := sharedNRDBPath()
+	require.NoError(t, err)
+	return path
 }
 
 // NameResolutionSpec returns the name resolution spec for tests that set one
