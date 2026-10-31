@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,9 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,10 +41,14 @@ type grpc struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
 	sub    *subscriber.Subscriber
+	log1   *logline.LogLine
+	log2   *logline.LogLine
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.sub = subscriber.New(t)
+	g.log1 = logline.New(t, logline.WithCaptureAll())
+	g.log2 = logline.New(t, logline.WithCaptureAll())
 
 	resDir := t.TempDir()
 
@@ -49,11 +56,19 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(g.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithResourcesDir(resDir),
+		daprd.WithExecOptions(
+			exec.WithStdout(g.log1.Stdout()),
+			exec.WithStderr(g.log1.Stderr()),
+		),
 	)
 	g.daprd2 = daprd.New(t,
 		daprd.WithAppPort(g.sub.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithResourcesDir(resDir),
+		daprd.WithExecOptions(
+			exec.WithStdout(g.log2.Stdout()),
+			exec.WithStderr(g.log2.Stderr()),
+		),
 	)
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"),
@@ -126,13 +141,27 @@ scopes:
 `, g.daprd1.AppID(), g.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
-		framework.WithProcesses(g.sub, g.daprd1, g.daprd2),
+		framework.WithProcesses(g.log1, g.log2, g.sub, g.daprd1, g.daprd2),
 	}
 }
 
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.daprd1.WaitUntilRunning(t, ctx)
 	g.daprd2.WaitUntilRunning(t, ctx)
+
+	for _, name := range []string{"sub1", "sub2", "sub3", "sub5"} {
+		g.log1.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
+	}
+
+	for _, name := range []string{"sub1", "sub2", "sub4", "sub5"} {
+		g.log2.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
+	}
+
+	assert.Never(t, func() bool {
+		return g.log1.Contains("Found Subscription: sub4") ||
+			g.log2.Contains("Found Subscription: sub3")
+	}, time.Second*3, time.Millisecond*10,
+		"daprd logged a subscription scoped to another app")
 
 	client1 := g.daprd1.GRPCClient(t, ctx)
 	client2 := g.daprd2.GRPCClient(t, ctx)
