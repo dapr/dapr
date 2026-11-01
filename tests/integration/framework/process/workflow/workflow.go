@@ -419,9 +419,17 @@ func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.Task
 func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
+	return w.BackendClientFor(t, ctx, w.daprds[index], w.RegistryN(index))
+}
 
-	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
+// BackendClientFor starts a work item listener on d for registry and waits
+// until the sidecar hosts the workflow actor types and sees the worker. Use
+// it for a daprd built with NewDaprd; the indexed daprds use BackendClientN.
+func (w *Workflow) BackendClientFor(t *testing.T, ctx context.Context, d *daprd.Daprd, registry *task.TaskRegistry) *client.TaskHubGrpcClient {
+	t.Helper()
+
+	backendClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, registry))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// GetMetadata can return a partially-populated value if the underlying
@@ -429,7 +437,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 		// context with its own deadline). Guard each field access so a nil
 		// here causes the Eventually tick to retry rather than panic the
 		// whole test binary.
-		md := w.DaprN(index).GetMetadata(t, ctx)
+		md := d.GetMetadata(t, ctx)
 		if !assert.NotNil(c, md) {
 			return
 		}
@@ -498,6 +506,23 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 		opts = append(opts, daprd.WithFeatureEnabled(t, features...))
 	}
 	return opts
+}
+
+// NewDaprd builds, without starting, a daprd that joins this harness's
+// cluster: the same actor state store, scheduler and placement as the
+// indexed daprds, plus JoinOptions. opts are applied last. The caller runs it
+// and connects a worker with BackendClientFor.
+func (w *Workflow) NewDaprd(t *testing.T, opts ...daprd.Option) *daprd.Daprd {
+	t.Helper()
+	all := []daprd.Option{
+		daprd.WithResourceFiles(w.db.GetComponent(t)),
+		daprd.WithSchedulerAddresses(w.sched.Address()),
+	}
+	if w.HasPlacement() {
+		all = append(all, daprd.WithPlacementAddresses(w.place.Address()))
+	}
+	all = append(all, w.JoinOptions(t)...)
+	return daprd.New(t, append(all, opts...)...)
 }
 
 // ClusteredDeployment reports whether every daprd in this workflow runs with

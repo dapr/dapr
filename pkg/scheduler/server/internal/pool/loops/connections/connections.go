@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -37,9 +38,17 @@ var (
 	connsCache  = sync.Pool{New: func() any {
 		return &connections{
 			streams:          make(map[uint64]context.CancelFunc),
+			streamLoops:      make(map[uint64]loop.Interface[loops.EventStream]),
 			streamPool:       store.New(),
 			concurrencyGates: make(map[string]*concurrencyGate),
 			streamGateKeys:   make(map[uint64][]string),
+			streamSidecars:   make(map[uint64]string),
+			pullPools:        make(map[string][]*pullPool),
+			pullPending:      make(map[string]*pullQueue),
+			pullClaims:       make(map[string]*pullClaim),
+			pullBacklog:      newPullGauge(monitoring.RecordWorkflowActivityBacklog),
+			pullInflight:     newPullGauge(monitoring.RecordWorkflowActivityInflight),
+			pullSidecars:     make(map[string]*pullSidecar),
 		}
 	}}
 )
@@ -68,11 +77,31 @@ type connections struct {
 	schedulerIdx   uint32
 
 	streams          map[uint64]context.CancelFunc
+	streamLoops      map[uint64]loop.Interface[loops.EventStream]
 	streamIDx        uint64
 	streamPool       *store.Store
 	concurrencyGates map[string]*concurrencyGate
 	streamGateKeys   map[uint64][]string
-	wg               sync.WaitGroup
+
+	// Pull dispatch state, see pull.go. pullPools lists per actor type the
+	// sidecars reporting pull slots; a sidecar's several streams share one
+	// pool keyed by its actor address. pullPending parks pull triggers per
+	// actor type while no pool has a free slot. pullSidecars holds each
+	// sidecar's stream count and the pull triggers dispatched to it, which
+	// outlive the stream that delivered them. pullRotate offsets the slot
+	// search so equally loaded pools take turns.
+	streamSidecars map[uint64]string
+	pullPools      map[string][]*pullPool
+	pullPending    map[string]*pullQueue
+	pullClaims     map[string]*pullClaim
+	pullBacklog    *pullGauge
+	pullInflight   *pullGauge
+	pullSidecars   map[string]*pullSidecar
+	pullRotate     int
+	reattachGrace  time.Duration
+	namespace      string
+
+	wg sync.WaitGroup
 }
 
 func New(opts Options) loop.Interface[loops.EventConn] {
@@ -84,6 +113,7 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 	conns.streamIDx = 0
 	conns.schedulerCount = 1
 	conns.schedulerIdx = 0
+	conns.reattachGrace = defaultReattachGrace
 
 	conns.loop = loopFactory.NewLoop(conns)
 	return conns.loop
@@ -101,6 +131,12 @@ func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 		c.handleConcurrencyRelease(e)
 	case *loops.SchedulerInfoUpdate:
 		c.handleSchedulerInfoUpdate(e)
+	case *loops.PullSlotsUpdate:
+		c.handlePullSlotsUpdate(e)
+	case *loops.PullResult:
+		c.handlePullResult(e)
+	case *loops.ConnRun:
+		e.Fn()
 	case *loops.Shutdown:
 		c.handleShutdown()
 	default:
@@ -118,16 +154,21 @@ func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 	c.schedulerCount = max(uint32(e.Count), 1)
 	//nolint:gosec // idx is non-negative
 	c.schedulerIdx = uint32(e.Idx)
+	// Every scheduler starts its pull rotation elsewhere, so equally loaded
+	// sidecars are not all picked first by every scheduler at once.
+	c.pullRotate = int(c.schedulerIdx)
 
 	for key, gate := range c.concurrencyGates {
 		if gate.pendingLen() > 0 {
 			c.drainPending(key, gate)
 		}
 	}
+	c.drainPullPending()
 }
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
 func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
+	c.namespace = add.Request.GetNamespace()
 	streamIDx := c.streamIDx
 	c.streamIDx++
 
@@ -157,8 +198,11 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorTypes:   add.Request.GetActorTypes(),
 		ActorAddress: add.Request.ActorAddress,
 	})
+	c.streamLoops[streamIDx] = streamLoop
 
 	c.updateConcurrencyLimits(streamIDx, add.Request)
+	c.addPullStream(streamIDx, add.Request)
+	c.drainPullPending()
 
 	return nil
 }
@@ -198,6 +242,7 @@ func (c *connections) removeOrphanedGates() {
 			referenced[key] = struct{}{}
 		}
 	}
+	c.markPullGates(referenced)
 
 	for key, gate := range c.concurrencyGates {
 		if _, ok := referenced[key]; !ok {
@@ -232,6 +277,10 @@ func (c *connections) releaseGates(keys []string) {
 }
 
 func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
+	if c.handlePullTrigger(req) {
+		return
+	}
+
 	streamLoop, ok := c.getStreamLoop(req.Job.GetMetadata())
 	if !ok {
 		req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
@@ -329,6 +378,12 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 
 		c.drainPending(key, gate)
 	}
+
+	// A pull trigger may be parked behind a type or per-name gate. Hashed
+	// pending is drained first, so behind a shared gate pull work waits until
+	// the hashed queue for that gate is empty. Pull workloads are low rate by
+	// design, so the bias is accepted over interleaving the two queues.
+	c.drainPullPending()
 }
 
 // drainPending scans the pending queue to find a trigger that can acquire all
@@ -406,17 +461,26 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
+	delete(c.streamLoops, closeStream.StreamIDx)
 	delete(c.streamGateKeys, closeStream.StreamIDx)
 	cancel()
 
+	c.closePullStream(closeStream.StreamIDx)
 	c.removeOrphanedGates()
+	c.drainPullPending()
 
-	// This loop owns the authoritative stream set: confirm emptiness to the
-	// namespaces loop so it can delete the namespace. Deleting on the
-	// namespaces loop's own counting alone is unsafe against stray events.
-	if len(c.streams) == 0 {
+	c.maybeCloseNamespace()
+}
+
+// maybeCloseNamespace confirms to the namespaces loop that this loop has no
+// stream left, so it can delete the namespace. This loop owns the
+// authoritative stream set; deleting on the namespaces loop's own counting
+// alone is unsafe against stray events. Unresolved pull triggers keep the
+// loop until they resolve, so their sidecars can reattach.
+func (c *connections) maybeCloseNamespace() {
+	if len(c.streams) == 0 && !c.hasPullFlights() {
 		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{
-			Namespace: closeStream.Namespace,
+			Namespace: c.namespace,
 		})
 	}
 }
@@ -430,12 +494,14 @@ func (c *connections) handleShutdown() {
 	}
 
 	clear(c.streams)
+	clear(c.streamLoops)
 
 	for _, gate := range c.concurrencyGates {
 		for req := gate.dequeue(); req != nil; req = gate.dequeue() {
 			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 		}
 	}
+	c.shutdownPull()
 	clear(c.concurrencyGates)
 	clear(c.streamGateKeys)
 

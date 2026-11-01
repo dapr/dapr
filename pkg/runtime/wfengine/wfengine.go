@@ -66,6 +66,9 @@ type Interface interface {
 	InProcessExecutor() *inprocess.Executor
 	ActivityActorType() string
 	WorkflowActorType() string
+	// ActivityFreeSlots returns how many more activities this sidecar can take
+	// before its activity cap, and a channel closed on the next change.
+	ActivityFreeSlots() (free uint32, changed <-chan struct{})
 }
 
 type Options struct {
@@ -173,9 +176,19 @@ func New(opts Options) (Interface, error) {
 		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
 		fastPath = false
 	}
+	// Pull dispatch executes activities on whichever host the scheduler
+	// selects, so the fast path's local drives and janitor re-dispatches (which
+	// target the placement owner) would race the scheduler's delivery.
+	if fastPath && opts.Spec.HasPullActivityDispatch() {
+		log.Info("WorkflowsFastPath is enabled but pull activity dispatch is configured; disabling the fast path so activities are dispatched through the scheduler")
+		fastPath = false
+	}
+	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil && opts.Spec.HasPullActivityDispatch() {
+		log.Infof("Pull activity dispatch is configured with %d activity slots per sidecar", *v)
+	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
-	abackend, err := backendactors.New(backendactors.Options{
+	bopts := backendactors.Options{
 		AppID:                  opts.AppID,
 		Namespace:              opts.Namespace,
 		Actors:                 opts.Actors,
@@ -192,7 +205,12 @@ func New(opts Options) (Interface, error) {
 		WorkflowsFastPath:               fastPath,
 		WorkflowsStagedOperations:       opts.WorkflowsStagedOperations,
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
-	})
+		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
+	}
+	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil {
+		bopts.MaxConcurrentActivityInvocations = *v
+	}
+	abackend, err := backendactors.New(bopts)
 	if err != nil {
 		return nil, err
 	}
@@ -586,6 +604,10 @@ func (wfe *engine) ActivityActorType() string {
 
 func (wfe *engine) WorkflowActorType() string {
 	return wfe.backend.WorkflowActorType()
+}
+
+func (wfe *engine) ActivityFreeSlots() (uint32, <-chan struct{}) {
+	return wfe.backend.ActivityFreeSlots()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

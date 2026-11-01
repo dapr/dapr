@@ -76,9 +76,12 @@ type Proxy struct {
 	done     chan struct{}
 	serveErr chan error
 
-	mu       sync.Mutex
-	armed    map[string]armConfig
-	failures atomic.Int32
+	mu    sync.Mutex
+	armed map[string]armConfig
+	// watchJobs holds a channel per live WatchJobs stream, closed by
+	// DropWatchJobs. Guarded by mu.
+	watchJobs map[chan struct{}]struct{}
+	failures  atomic.Int32
 
 	partitioned atomic.Bool
 }
@@ -319,6 +322,19 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
+	dropped := make(chan struct{})
+	p.mu.Lock()
+	if p.watchJobs == nil {
+		p.watchJobs = make(map[chan struct{}]struct{})
+	}
+	p.watchJobs[dropped] = struct{}{}
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		delete(p.watchJobs, dropped)
+		p.mu.Unlock()
+	}()
+
 	upstream, err := p.client.WatchJobs(ctx)
 	if err != nil {
 		return err
@@ -354,13 +370,32 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 		}
 	}()
 
-	first := <-errCh
+	var first error
+	select {
+	case first = <-errCh:
+	case <-dropped:
+		// Both legs end now; the forwarding goroutines exit on their own.
+		cancel()
+		return status.Error(codes.Unavailable, "watch jobs stream dropped by proxy")
+	}
 	cancel()
 	<-errCh
 	if errors.Is(first, io.EOF) {
 		return nil
 	}
 	return first
+}
+
+// DropWatchJobs ends every live WatchJobs stream through the proxy on both
+// legs, as a network blip would. Streams opened afterwards are proxied as
+// usual.
+func (p *Proxy) DropWatchJobs() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for ch := range p.watchJobs {
+		close(ch)
+	}
+	clear(p.watchJobs)
 }
 
 func (p *Proxy) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
