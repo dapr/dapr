@@ -196,7 +196,7 @@ func (o *orchestrator) redispatchActivities(ctx context.Context, state *wfengine
 		g.SetLimit(redispatchConcurrency)
 		for _, e := range unresolved {
 			g.Go(func() error {
-				cerr := o.callActivity(pctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, elide && !durable[e.GetEventId()], true)
+				cerr := o.callActivity(pctx, e, dueTime, phs[e.GetEventId()], wfName, executionID, state.EncryptionKey, elide && !durable[e.GetEventId()], true)
 				switch {
 				case cerr == nil && durable[e.GetEventId()]:
 					log.Infof("Workflow actor '%s': janitor escalated unresolved activity '%s::%d' to its durable run-activity reminder (a prior re-dispatch did not resolve it)", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())

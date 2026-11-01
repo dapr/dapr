@@ -37,6 +37,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
@@ -129,8 +130,36 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 	}
 }
 
+// openReminder returns the reminder with its payload unsealed. A plaintext
+// payload, created before encryption was enabled, is accepted.
+func (o *orchestrator) openReminder(ctx context.Context, reminder *actorapi.Reminder) (*actorapi.Reminder, error) {
+	data, key, err := o.encryptor.OpenReminder(ctx, encryption.ReminderAAD(reminder.ActorType, reminder.ActorID, reminder.Name), reminder.Data)
+	if err != nil {
+		return nil, fmt.Errorf("workflow actor '%s': failed to open reminder '%s': %w", o.actorID, reminder.Name, err)
+	}
+	if key == nil {
+		if o.encryptor != nil && reminder.Data != nil {
+			log.Warnf("Workflow actor '%s': reminder '%s' carries a plaintext payload; accepting it as created before workflow payload encryption was enabled", o.actorID, reminder.Name)
+		}
+		return reminder, nil
+	}
+	opened := *reminder
+	opened.Data = data
+	return &opened, nil
+}
+
 func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
+
+	if reminder.Name == reminderCascadeTerminate || strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult) {
+		// A payload that does not open is retried rather than dropped: the
+		// result it carries would otherwise be lost for good.
+		opened, err := o.openReminder(ctx, reminder)
+		if err != nil {
+			return err
+		}
+		reminder = opened
+	}
 
 	switch {
 	// Must precede the new-event prefix arm: the janitor shares the prefix

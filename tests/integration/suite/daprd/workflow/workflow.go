@@ -30,6 +30,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/detached"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/disk"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/encryption"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/executionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/externalevent"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/fallback"

@@ -57,7 +57,7 @@ func Test_runOwned_handoffPublishIsOwned(t *testing.T) {
 
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation(), nil)
 		}()
 
 		wi := recvWorkItem(t, scheduled)
@@ -159,7 +159,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -192,7 +192,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -218,7 +218,7 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -283,7 +283,7 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -315,7 +315,7 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		t.Cleanup(cancel)
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -346,7 +346,7 @@ func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
 		a := f.GetOrCreate("wf::3::0").(*activity)
 		ownerErr := make(chan error, 1)
 		go func() {
-			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		}()
 		wi := recvWorkItem(t, scheduled)
 		call, ok := f.inflight.Peek(key)
@@ -395,7 +395,7 @@ func Test_publish_notFoundIsNotCachedAsDelivered(t *testing.T) {
 		run := func() chan error {
 			errCh := make(chan error, 1)
 			go func() {
-				errCh <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+				errCh <- a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 			}()
 			return errCh
 		}
@@ -428,7 +428,7 @@ func Test_publish_notFoundIsNotCachedAsDelivered(t *testing.T) {
 		call.Finish(errResultUndelivered)
 
 		a := f.GetOrCreate("wf::3::0").(*activity)
-		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
+		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation(), nil))
 		assert.Empty(t, scheduled, "a follower must not dispatch a work item")
 	})
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
@@ -50,6 +51,7 @@ func (o *orchestrator) stateOptions() wfenginestate.Options {
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
 		Signer:            o.signer,
+		Encryptor:         o.encryptor,
 	}
 }
 
@@ -189,6 +191,10 @@ const commitTimeout = 30 * time.Second
 // state. This is the single entry point for all state persistence; callers
 // must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.ensureEncryptionKey(ctx, state); err != nil {
+		o.invalidateCachedState()
+		return fmt.Errorf("failed to prepare workflow payload encryption key: %w", err)
+	}
 	if err := o.signing.SignNewEvents(state); err != nil {
 		o.invalidateCachedState()
 		return fmt.Errorf("failed to sign new history events: %w", err)
@@ -197,6 +203,36 @@ func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestat
 		o.invalidateCachedState()
 		return err
 	}
+	return nil
+}
+
+// ensureEncryptionKey gives an instance its payload key before its first
+// encrypted save, and re-wraps the key when the configured key encryption key
+// changed. Failing to reach the key encryption key fails the save, so nothing
+// is ever written in plaintext while encryption is on.
+func (o *orchestrator) ensureEncryptionKey(ctx context.Context, state *wfenginestate.State) error {
+	if state.EncryptionKeyUnopened() {
+		return errors.New("the workflow's payload encryption key was not opened; refusing to replace it")
+	}
+	if o.encryptor == nil {
+		return nil
+	}
+	var (
+		k   *encryption.InstanceKey
+		err error
+	)
+	switch {
+	case state.EncryptionKey == nil:
+		k, err = o.encryptor.NewInstanceKey(ctx)
+	case state.EncryptionRewrapNeeded():
+		k, err = o.encryptor.Rewrap(ctx, state.EncryptionKey)
+	default:
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	state.SetEncryptionKey(o.actorID, k)
 	return nil
 }
 

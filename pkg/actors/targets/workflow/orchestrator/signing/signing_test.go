@@ -32,6 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption/encryptiontest"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -808,4 +809,37 @@ func TestVerifyInboxAttestation_StaleActivityTamperedSignatureStillTombstones(t 
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrUnknownTaskScheduledID)
 	assert.Contains(t, err.Error(), "verification failed")
+}
+
+// TestSignNewEvents_SignsSealedBytes verifies encrypt-then-sign: the stored
+// rows are what was signed, hold no plaintext payload, and verify without
+// the payload key, while the in-memory history stays plaintext.
+func TestSignNewEvents_SignsSealedBytes(t *testing.T) {
+	t.Parallel()
+
+	const secret = "4111-1111-1111-1111"
+	certDER, priv := generateTestCert(t)
+	sig := testSigner(t, certDER, priv)
+	o := &Signing{Signer: sig}
+
+	st := testState(makeTaskScheduledEvent(0, "act", secret), makeTaskScheduledEvent(1, "act", secret))
+	st.SetEncryptionKey("wf", encryptiontest.NewKey(t))
+	require.NoError(t, o.SignNewEvents(st))
+
+	req, err := st.GetSaveRequest("wf")
+	require.NoError(t, err)
+	stored := map[string][]byte{}
+	for _, op := range req.Operations {
+		if u, ok := op.Request.(api.TransactionalUpsert); ok {
+			stored[u.Key] = u.Value.([]byte)
+		}
+	}
+	rawEvents := [][]byte{stored["history-000000"], stored["history-000001"]}
+	for i, raw := range rawEvents {
+		require.NotEmpty(t, raw, "history row %d", i)
+		assert.NotContains(t, string(raw), secret)
+	}
+
+	require.NoError(t, historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents, nil))
+	assert.Equal(t, secret, st.History[0].GetTaskScheduled().GetInput().GetValue())
 }

@@ -89,7 +89,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, o.createCascadeTerminateReminder(t.Context(),
-		childRef{instanceID: "child-1"}, &protos.ExecutionTerminatedEvent{}))
+		childRef{instanceID: "child-1"}, &protos.ExecutionTerminatedEvent{}, nil))
 
 	require.NoError(t, o.createTimerReminder(t.Context(), "timer",
 		wrapperspb.String("payload"), time.Now()))

@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -56,7 +57,7 @@ const (
 // cancelled. Delivering through router.CallReminder re-enters the normal
 // InvokeReminder path, so locking, inflight dedup, error classification and
 // deactivation are identical to a reminder fire.
-func (a *activity) localDrive(invocation *protos.ActivityInvocation, activityName *string) bool {
+func (a *activity) localDrive(invocation *protos.ActivityInvocation, activityName *string, encKey *encryption.InstanceKey) bool {
 	if dropActivityDriveForTest() {
 		log.Warnf("TEST INJECTION: dropping the local drive arm for activity actor '%s'", a.actorID)
 		return true
@@ -64,7 +65,7 @@ func (a *activity) localDrive(invocation *protos.ActivityInvocation, activityNam
 
 	f, actorID := a.factory, a.actorID
 	return f.driveScope().Go(func(driveCtx context.Context) {
-		f.driveActivity(driveCtx, actorID, invocation, activityName)
+		f.driveActivity(driveCtx, actorID, invocation, activityName, encKey)
 	})
 }
 
@@ -106,12 +107,15 @@ var dropActivityDriveForTest = testBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIV
 // churn or shutdown, where a host-agnostic reminder create is exactly what
 // is wanted). If the escalation also fails, the workflow janitor
 // re-dispatches the unresolved task within one period.
-func (f *factory) driveActivity(driveCtx context.Context, actorID string, invocation *protos.ActivityInvocation, activityName *string) {
+func (f *factory) driveActivity(driveCtx context.Context, actorID string, invocation *protos.ActivityInvocation, activityName *string, encKey *encryption.InstanceKey) {
 	anydata, err := anypb.New(invocation)
+	if err == nil {
+		anydata, err = encryption.SealReminder(encKey, encryption.ReminderAAD(f.actorType, actorID, activityReminderName), anydata)
+	}
 	if err != nil {
 		// Unreachable for a just-decoded invocation; keep durability anyway.
-		log.Errorf("Activity actor '%s': failed to marshal invocation for local drive: %v", actorID, err)
-		f.escalateActivity(actorID, invocation, activityName)
+		log.Errorf("Activity actor '%s': failed to build the invocation for local drive: %v", actorID, err)
+		f.escalateActivity(actorID, invocation, activityName, encKey)
 		return
 	}
 
@@ -181,7 +185,7 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 
 	log.Warnf("Activity actor '%s': local drive failed; escalating to a durable run-activity reminder: %v", actorID, err)
 	diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusFailed)
-	f.escalateActivity(actorID, invocation, activityName)
+	f.escalateActivity(actorID, invocation, activityName, encKey)
 }
 
 // escalateActivity creates the durable run-activity reminder after a failed
@@ -189,12 +193,12 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 // runtime-scoped runner rather than the drive scope, bounded by
 // escalateTimeout, so HaltAll latency is unaffected. The reminder is due now:
 // a drive is only ever armed for an invocation whose dueTime has passed.
-func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityInvocation, activityName *string) {
+func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityInvocation, activityName *string, encKey *encryption.InstanceKey) {
 	started := f.detached.Go(func(rootCtx context.Context) {
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 
-		if err := f.createActivityReminder(ctx, actorID, invocation, time.Now(), activityName); err != nil {
+		if err := f.createActivityReminder(ctx, actorID, invocation, time.Now(), activityName, encKey); err != nil {
 			log.Warnf("Activity actor '%s': failed to escalate to a durable run-activity reminder; the workflow janitor re-dispatches within one period: %v", actorID, err)
 			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateFailed)
 			return

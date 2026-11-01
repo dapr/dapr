@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -63,7 +64,7 @@ func (o *orchestrator) terminateChildren(ctx context.Context, state *wfenginesta
 		if o.isRemoteApp(child.targetAppID) {
 			err = o.terminateRemoteChild(ctx, child, term)
 		} else {
-			err = o.createCascadeTerminateReminder(ctx, child, term)
+			err = o.createCascadeTerminateReminder(ctx, child, term, state.EncryptionKey)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("child %q: %w", child.instanceID, err))
@@ -76,9 +77,13 @@ func (o *orchestrator) terminateChildren(ctx context.Context, state *wfenginesta
 // same-app child's workflow actor, carrying the ExecutionTerminated event as
 // data. A reminder rather than an actor invocation so no actor lock is taken
 // under the parent's lock, and delivery keeps retrying while the child is
-// unavailable.
-func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child childRef, term *protos.ExecutionTerminatedEvent) error {
+// unavailable. The terminate output is sealed with the parent's key.
+func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child childRef, term *protos.ExecutionTerminatedEvent, key *encryption.InstanceKey) error {
 	data, err := anypb.New(cascadeTerminateEvent(term))
+	if err != nil {
+		return err
+	}
+	data, err = encryption.SealReminder(key, encryption.ReminderAAD(o.actorType, child.instanceID, reminderCascadeTerminate), data)
 	if err != nil {
 		return err
 	}

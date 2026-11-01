@@ -214,6 +214,24 @@ type WorkflowSpec struct {
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+
+	// Encryption, when set, encrypts persisted workflow payloads (history,
+	// inbox, custom status and reminders) with a key from a crypto component.
+	// Once an instance is encrypted it cannot be loaded without it.
+	Encryption *WorkflowEncryptionSpec `json:"encryption,omitempty" yaml:"encryption,omitempty"`
+}
+
+// WorkflowEncryptionSpec names the key that encrypts persisted workflow
+// payloads.
+type WorkflowEncryptionSpec struct {
+	// CryptoComponent is the crypto component holding the key encryption key.
+	CryptoComponent string `json:"cryptoComponent" yaml:"cryptoComponent"`
+	// KeyName is the key encryption key's name in the component, as "name" or
+	// "name/version".
+	KeyName string `json:"keyName" yaml:"keyName"`
+	// KeyWrapAlgorithm is A256KW (the default) for a symmetric key, or
+	// RSA-OAEP-256 for an RSA key.
+	KeyWrapAlgorithm string `json:"keyWrapAlgorithm,omitempty" yaml:"keyWrapAlgorithm,omitempty"`
 }
 
 // NamedConcurrencyLimit defines a per-name concurrency limit.

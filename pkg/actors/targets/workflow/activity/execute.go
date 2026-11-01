@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 )
@@ -38,11 +39,13 @@ var errStaleClaimEvicted = wferrors.NewRecoverable(errors.New(
 // under the fast path a fresh owner consults the durable execution-claim
 // record first (see gate). A local drive sets SkipRetries and stays ungated:
 // handleInvoke gates its janitor re-dispatch before arming it.
-func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Reminder, invocation *protos.ActivityInvocation) error {
+// encKey is the instance's payload key the activity's result reminder is
+// sealed with; nil when encryption is off.
+func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Reminder, invocation *protos.ActivityInvocation, encKey *encryption.InstanceKey) error {
 	taskEvent := invocation.GetHistoryEvent()
 	ts := taskEvent.GetTaskScheduled()
 	if ts == nil {
-		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+		return fmt.Errorf("invalid activity task event %d: not a task scheduled event (%T)", taskEvent.GetEventId(), taskEvent.GetEventType())
 	}
 	activityName := ts.GetName()
 
@@ -72,7 +75,7 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 					return gerr
 				}
 			}
-			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation)
+			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation, encKey)
 		}
 
 		// Another arrival owns this scheduling (in flight, or its outcome is

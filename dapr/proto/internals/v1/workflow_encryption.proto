@@ -1,0 +1,51 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.internals.v1;
+
+option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+
+// WorkflowEncryptionKey is the wrapped data encryption key of one workflow
+// instance. It is stored in plaintext in the instance's `encryption` actor
+// state row, and travels inside every EncryptedPayload sealed with it.
+message WorkflowEncryptionKey {
+  // Identifier of the key encryption key that wrapped the DEK, as
+  // "<crypto component>/<key name>".
+  string kid = 1;
+  // Key wrapping algorithm, for example "A256KW" or "RSA-OAEP-256".
+  string alg = 2;
+  // The wrapped DEK, as returned by the crypto component's WrapKey.
+  bytes wrapped = 3;
+  // Nonce and tag returned by WrapKey for AEAD wrapping algorithms. Empty
+  // otherwise.
+  bytes nonce = 4;
+  bytes tag = 5;
+  // History index from which history rows are sealed. 0 for an instance
+  // sealed from its first event; the history length at the time encryption
+  // was enabled for a signed instance, whose earlier signed rows are kept as
+  // they were written.
+  uint64 history_sealed_from = 6;
+}
+
+// EncryptedPayload is the data of a workflow reminder whose payload is
+// sealed. The ciphertext is a serialized google.protobuf.Any sealed with the
+// DEK that key wraps.
+message EncryptedPayload {
+  WorkflowEncryptionKey key = 1;
+  // AES-GCM nonce.
+  bytes nonce = 2;
+  // AES-GCM ciphertext with the 16-byte tag appended.
+  bytes ciphertext = 3;
+}

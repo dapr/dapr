@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -57,6 +60,9 @@ const (
 	ParentNotifyKey      = "parent-notify"
 	propagatedHistoryKey = "propagated-history"
 	creationInputKey     = "creation-input"
+	// encryptionKey holds the instance's wrapped payload encryption key. It
+	// is present if and only if the instance's payloads are sealed.
+	encryptionKey = "encryption"
 
 	// maxStateEntries is the upper bound for any metadata count field
 	// (inbox, history, signatures, own signing certificates, external
@@ -73,6 +79,9 @@ type Options struct {
 	WorkflowActorType string
 	ActivityActorType string
 	Signer            *signer.Signer
+	// Encryptor opens the keys of encrypted instances on load. Nil when
+	// payload encryption is off.
+	Encryptor *encryption.Encryptor
 }
 
 type State struct {
@@ -163,6 +172,25 @@ type State struct {
 	creationInputPersisted     bool
 	creationInputChanged       bool
 
+	// EncryptionKey seals the instance's payloads; nil while the instance is
+	// stored in plaintext. Exported so code that persists or reads workflow
+	// state outside this package can seal and unseal with it.
+	EncryptionKey *encryption.InstanceKey
+	// aadBase binds sealed values to this instance: "<actor type>||<id>".
+	aadBase string
+	// historySealedFrom is the first sealed history index. History rows
+	// below it predate encryption and are signed, so they are kept as
+	// written.
+	historySealedFrom   uint64
+	encryptionPersisted bool
+	encryptionChanged   bool
+	encryptionRewrap    bool
+	// sealRewritePending makes the next save rewrite every plaintext payload
+	// row sealed: set when an instance loaded in plaintext gets its key.
+	sealRewritePending bool
+	// loaded is set when the state was read from the store.
+	loaded bool
+
 	// change tracking
 	inboxAddedCount                         int
 	inboxRemovedCount                       int
@@ -236,6 +264,12 @@ func (s *State) Reset() {
 		s.CreationInput = nil
 		s.creationInputChanged = true
 	}
+	s.historyReplaced()
+	// A stored key that was not opened (a tamper-marked instance) goes with
+	// the rows it sealed.
+	if s.EncryptionKey == nil && s.encryptionPersisted {
+		s.encryptionChanged = true
+	}
 	s.Generation++
 }
 
@@ -260,6 +294,11 @@ func (s *State) ResetChangeTracking() {
 		s.creationInputPersisted = s.CreationInput != nil
 		s.creationInputChanged = false
 	}
+	if s.encryptionChanged {
+		s.encryptionPersisted = s.EncryptionKey != nil
+		s.encryptionChanged = false
+	}
+	s.sealRewritePending = false
 
 	s.inboxAddedCount = 0
 	s.inboxRemovedCount = 0
@@ -400,6 +439,7 @@ func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 		s.signaturesAddedCount = 0
 		s.Signatures = nil
 		s.RawSignatures = nil
+		s.historyReplaced()
 	}
 
 	newHistoryEvents := rs.GetNewEvents()
@@ -561,6 +601,122 @@ func (s *State) ClearInbox() {
 	s.inboxAddedCount = 0
 }
 
+// SetEncryptionKey sets the key that seals the instance's payloads. The
+// first key set on an instance loaded in plaintext makes the next save seal
+// it: an unsigned instance has every row rewritten sealed, while a signed one
+// keeps its signed history rows as written and seals from the next event on.
+func (s *State) SetEncryptionKey(actorID string, k *encryption.InstanceKey) {
+	legacy := s.EncryptionKey == nil && s.loaded && !s.encryptionPersisted
+	s.EncryptionKey = k
+	s.aadBase = s.workflowActorType + "||" + actorID
+	s.encryptionChanged = true
+	s.encryptionRewrap = false
+	if legacy {
+		s.sealRewritePending = true
+		if len(s.Signatures) > 0 {
+			//nolint:gosec
+			s.historySealedFrom = uint64(len(s.History) - s.historyAddedCount)
+		}
+	}
+}
+
+// EncryptionKeyUnopened reports whether the instance has a stored payload key
+// that was not opened on load (a tamper-marked instance). Its sealed rows are
+// only readable with that key, so it must not be replaced.
+func (s *State) EncryptionKeyUnopened() bool {
+	return s.EncryptionKey == nil && s.encryptionPersisted && !s.encryptionChanged
+}
+
+// EncryptionRewrapNeeded reports whether the instance key was wrapped by a
+// key encryption key other than the configured one.
+func (s *State) EncryptionRewrapNeeded() bool {
+	return s.encryptionRewrap
+}
+
+// SealedHistoryEvent returns history event i as it is stored: with its
+// payload fields sealed when the instance is encrypted.
+func (s *State) SealedHistoryEvent(i int) (*backend.HistoryEvent, error) {
+	e := s.History[i]
+	//nolint:gosec
+	if s.EncryptionKey == nil || uint64(i) < s.historySealedFrom || IsTamperMarker(e) {
+		return e, nil
+	}
+	//nolint:gosec
+	return encryption.SealMessage(s.EncryptionKey, s.rowAAD(getMultiEntryKeyName(historyKeyPrefix, uint64(i))), e)
+}
+
+// historyReplaced records that the whole history is rewritten in the next
+// save, so every history row is sealed from index 0.
+func (s *State) historyReplaced() {
+	if s.historySealedFrom != 0 {
+		s.historySealedFrom = 0
+		s.encryptionChanged = true
+	}
+}
+
+func (s *State) rowAAD(rowKey string) string {
+	return s.aadBase + "||" + rowKey
+}
+
+// sealInbox returns inbox with entries from index from on sealed.
+func (s *State) sealInbox(inbox []*backend.HistoryEvent, from int) ([]*backend.HistoryEvent, error) {
+	if s.EncryptionKey == nil {
+		return inbox, nil
+	}
+	sealed := slices.Clone(inbox)
+	for i := from; i < len(sealed); i++ {
+		var err error
+		//nolint:gosec
+		if sealed[i], err = encryption.SealMessage(s.EncryptionKey, s.rowAAD(getMultiEntryKeyName(inboxKeyPrefix, uint64(i))), sealed[i]); err != nil {
+			return nil, err
+		}
+	}
+	return sealed, nil
+}
+
+// unsealAll unseals the payloads of a loaded encrypted instance in place.
+func (s *State) unsealAll() error {
+	k := s.EncryptionKey
+	for i, e := range s.Inbox {
+		key := getMultiEntryKeyName(inboxKeyPrefix, uint64(i))
+		if err := encryption.UnsealMessage(k, s.rowAAD(key), e); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	if s.historySealedFrom > uint64(len(s.History)) {
+		return fmt.Errorf("history is sealed from event %d but has %d events", s.historySealedFrom, len(s.History))
+	}
+	for i := s.historySealedFrom; i < uint64(len(s.History)); i++ {
+		if IsTamperMarker(s.History[i]) {
+			continue
+		}
+		key := getMultiEntryKeyName(historyKeyPrefix, i)
+		if err := encryption.UnsealMessage(k, s.rowAAD(key), s.History[i]); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	if s.CustomStatus != nil {
+		v, err := k.UnsealString(s.rowAAD(customStatusKey), s.CustomStatus.GetValue())
+		if err != nil {
+			return fmt.Errorf("%s: %w", customStatusKey, err)
+		}
+		s.CustomStatus.Value = v
+	}
+	if s.CreationInput != nil {
+		v, err := k.UnsealString(s.rowAAD(creationInputKey), s.CreationInput.GetValue())
+		if err != nil {
+			return fmt.Errorf("%s: %w", creationInputKey, err)
+		}
+		s.CreationInput.Value = v
+	}
+	if s.IncomingHistory != nil {
+		if err := encryption.UnsealMessage(k, s.rowAAD(propagatedHistoryKey), s.IncomingHistory); err != nil {
+			return fmt.Errorf("%s: %w", propagatedHistoryKey, err)
+		}
+	}
+	return nil
+}
+
 // persistableInbox returns the inbox without timer events, which are never
 // written as inbox keys. Unlike app-delivered events (whose durable home is
 // their inbox row, written before their trigger reminder), a TimerFired's
@@ -590,7 +746,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		s.signingCertificatesAddedCount + s.signingCertificatesRemovedCount +
 		s.externalSigningCertificatesAddedCount + s.externalSigningCertificatesRemovedCount +
 		s.signaturesAddedCount + s.signaturesRemovedCount +
-		4 // customStatus + metadata + parent-notify + creation-input
+		5 // customStatus + metadata + parent-notify + creation-input + encryption
 	req := &api.TransactionalRequest{
 		ActorType:  s.workflowActorType,
 		ActorID:    actorID,
@@ -598,7 +754,15 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	}
 
 	inbox := s.persistableInbox()
-	if err := addStateOperations(req, inboxKeyPrefix, inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
+	inboxWritten := s.inboxAddedCount
+	if s.sealRewritePending {
+		inboxWritten = len(inbox)
+	}
+	sealedInbox, serr := s.sealInbox(inbox, len(inbox)-inboxWritten)
+	if serr != nil {
+		return nil, fmt.Errorf("failed to seal inbox: %w", serr)
+	}
+	if err := addStateOperations(req, inboxKeyPrefix, sealedInbox, inboxWritten, s.inboxRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -622,10 +786,14 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	// we're saving changes only to the workflow inbox. Re-writes of an
 	// unchanged status are skipped once the key is persisted; the
 	// customStatusChanged flag is set wherever CustomStatus mutates.
-	if (s.historyAddedCount > 0 || s.historyRemovedCount > 0) && (s.customStatusChanged || !s.customStatusPersisted) {
+	if ((s.historyAddedCount > 0 || s.historyRemovedCount > 0) && (s.customStatusChanged || !s.customStatusPersisted)) ||
+		(s.sealRewritePending && s.customStatusPersisted) {
 		cs := s.CustomStatus
 		if cs == nil {
 			cs = &wrapperspb.StringValue{}
+		}
+		if s.EncryptionKey != nil {
+			cs = wrapperspb.String(s.EncryptionKey.SealString(s.rowAAD(customStatusKey), cs.GetValue()))
 		}
 
 		csProto, err := proto.Marshal(cs)
@@ -639,9 +807,16 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		})
 	}
 
-	if s.incomingHistoryChanged {
+	if s.incomingHistoryChanged || (s.sealRewritePending && s.propagatedHistoryPersisted && s.IncomingHistory != nil) {
 		if s.IncomingHistory != nil {
-			phBytes, err := proto.Marshal(s.IncomingHistory)
+			ph := s.IncomingHistory
+			if s.EncryptionKey != nil {
+				var err error
+				if ph, err = encryption.SealMessage(s.EncryptionKey, s.rowAAD(propagatedHistoryKey), ph); err != nil {
+					return nil, fmt.Errorf("failed to seal incoming propagated history: %w", err)
+				}
+			}
+			phBytes, err := proto.Marshal(ph)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal incoming propagated history: %w", err)
 			}
@@ -672,9 +847,13 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 			})
 		}
 	}
-	if s.creationInputChanged {
+	if s.creationInputChanged || (s.sealRewritePending && s.creationInputPersisted && s.CreationInput != nil) {
 		if s.CreationInput != nil {
-			data, err := json.Marshal(creationInputRow{creationParent: s.creationInputParent, Input: s.CreationInput.GetValue()})
+			input := s.CreationInput.GetValue()
+			if s.EncryptionKey != nil {
+				input = s.EncryptionKey.SealString(s.rowAAD(creationInputKey), input)
+			}
+			data, err := json.Marshal(creationInputRow{creationParent: s.creationInputParent, Input: input})
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal creation input: %w", err)
 			}
@@ -688,6 +867,25 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 				Request:   api.TransactionalDelete{Key: creationInputKey},
 			})
 		}
+	}
+
+	switch {
+	case s.encryptionChanged && s.EncryptionKey != nil:
+		w := s.EncryptionKey.Wrapped()
+		w.HistorySealedFrom = s.historySealedFrom
+		data, err := proto.Marshal(w)
+		if err != nil {
+			return nil, err
+		}
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			Request:   api.TransactionalUpsert{Key: encryptionKey, Value: data},
+		})
+	case s.encryptionChanged && s.encryptionPersisted:
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: encryptionKey},
+		})
 	}
 
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
@@ -766,31 +964,47 @@ func (s *State) String() string {
 // events are marshaled with proto.Marshal.
 func (s *State) addHistoryOperations(req *api.TransactionalRequest) error {
 	start := len(s.History) - s.historyAddedCount
-	// All unsigned events this save marshal into one shared slab instead of
-	// one buffer each. The value slices are subslices of the slab; a
-	// mid-append reallocation leaves earlier subslices pointing at the old
-	// backing array, which still holds their bytes, so they stay valid.
-	var slabSize int
-	for i := start; i < len(s.History); i++ {
-		if i-start >= len(s.marshaledNewHistory) {
-			slabSize += proto.Size(s.History[i])
-		}
+	// A plaintext unsigned instance getting its key has every row rewritten
+	// sealed; a signed one keeps the rows below historySealedFrom.
+	from := start
+	if s.sealRewritePending {
+		from = min(start, int(s.historySealedFrom)) //nolint:gosec
 	}
+
+	// Events not pre-marshaled by the signing flow (nil entries are), sealed
+	// when the instance is encrypted.
+	toMarshal := make([]*backend.HistoryEvent, len(s.History)-from)
+	var slabSize int
+	for i := from; i < len(s.History); i++ {
+		if localIdx := i - start; localIdx >= 0 && localIdx < len(s.marshaledNewHistory) {
+			continue
+		}
+		e, err := s.SealedHistoryEvent(i)
+		if err != nil {
+			return fmt.Errorf("failed to seal history event %d: %w", i, err)
+		}
+		toMarshal[i-from] = e
+		slabSize += proto.Size(e)
+	}
+
+	// All of those events marshal into one shared slab instead of one buffer
+	// each. The value slices are subslices of the slab; a mid-append
+	// reallocation leaves earlier subslices pointing at the old backing
+	// array, which still holds their bytes, so they stay valid.
 	slab := make([]byte, 0, slabSize)
 	mo := proto.MarshalOptions{}
-	for i := start; i < len(s.History); i++ {
+	for i := from; i < len(s.History); i++ {
 		var data []byte
-		var err error
-		localIdx := i - start
-		if localIdx < len(s.marshaledNewHistory) {
-			data = s.marshaledNewHistory[localIdx]
-		} else {
+		if e := toMarshal[i-from]; e != nil {
 			off := len(slab)
-			slab, err = mo.MarshalAppend(slab, s.History[i])
+			var err error
+			slab, err = mo.MarshalAppend(slab, e)
 			if err != nil {
 				return err
 			}
 			data = slab[off:len(slab):len(slab)]
+		} else {
+			data = s.marshaledNewHistory[i-start]
 		}
 
 		req.Operations = append(req.Operations, api.TransactionalOperation{
@@ -985,7 +1199,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	wState.ExternalSigningCertificates = make([]*backend.ExternalSigningCertificate, 0, extSigningCertLen)
 	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 4
+	totalKeys := inboxLen + historyLen + signingCertLen + extSigningCertLen + signatureLen + 5
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
@@ -1001,6 +1215,8 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	bulkReq.Keys[n] = ParentNotifyKey
 	n++
 	bulkReq.Keys[n] = creationInputKey
+	n++
+	bulkReq.Keys[n] = encryptionKey
 	n++
 
 	for i := range metadata.GetInboxLength() {
@@ -1033,6 +1249,12 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}
+
+	// Recorded before any early return, so that a purge of a state that
+	// fails to load still deletes the encryption row.
+	wState.loaded = true
+	encRow := bulkRes[encryptionKey]
+	wState.encryptionPersisted = encRow.ETag != nil || len(encRow.Data) > 0
 
 	defer func() {
 		// TODO: @joshvanl: remove in v1.16 where we will no longer have legacy
@@ -1258,7 +1480,45 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		)
 	}
 
+	// Payloads are unsealed after the signature chain verified, because the
+	// signatures cover the stored (sealed) bytes.
+	if len(encRow.Data) > 0 {
+		if err := openEncryptedState(ctx, wState, encRow.Data, actorID, opts); err != nil {
+			return wState, err
+		}
+	}
+
 	return wState, nil
+}
+
+// openEncryptedState unwraps an encrypted instance's key and unseals its
+// payloads. Payload encryption cannot be turned off for an instance created
+// with it. A key that cannot be unwrapped (key vault unavailable, key
+// missing) is a plain error, so the caller retries; a payload that does not
+// unseal under the instance's key was modified, which is a verification
+// error.
+func openEncryptedState(ctx context.Context, s *State, row []byte, actorID string, opts Options) error {
+	if opts.Encryptor == nil {
+		return wferrors.NewConfigurationError(
+			fmt.Errorf("workflow '%s' has encrypted payloads but workflow payload encryption is not configured; encryption cannot be disabled for workflows that were created with it", actorID),
+		)
+	}
+	var w internalsv1pb.WorkflowEncryptionKey
+	if err := proto.Unmarshal(row, &w); err != nil {
+		return wferrors.NewVerificationError(fmt.Errorf("workflow '%s': malformed encryption key row: %w", actorID, err))
+	}
+	k, err := opts.Encryptor.Open(ctx, &w)
+	if err != nil {
+		return fmt.Errorf("workflow '%s': failed to open payload encryption key: %w", actorID, err)
+	}
+	s.EncryptionKey = k
+	s.aadBase = s.workflowActorType + "||" + actorID
+	s.historySealedFrom = w.GetHistorySealedFrom()
+	s.encryptionRewrap = k.NeedsRewrap(opts.Encryptor.CurrentKID())
+	if err := s.unsealAll(); err != nil {
+		return wferrors.NewVerificationError(fmt.Errorf("workflow '%s': encrypted payload verification failed: %w", actorID, err))
+	}
+	return nil
 }
 
 // IsTamperMarker reports whether e is the well-known terminal event written
@@ -1470,7 +1730,7 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
-		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+5),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+len(s.SigningCertificates)+len(s.ExternalSigningCertificates)+len(s.Signatures)+6),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, len(s.Inbox))
@@ -1502,6 +1762,12 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: creationInputKey},
+		})
+	}
+	if s.encryptionPersisted {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: encryptionKey},
 		})
 	}
 

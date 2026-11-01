@@ -20,11 +20,14 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -83,6 +86,11 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		}
 	}
 
+	encKey, err := a.invokeKey(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
 	// Fast path: when the dispatching orchestrator certifies its janitor
 	// backstop is armed and this host runs the preview, drive the execution
 	// locally instead of creating the durable run-activity reminder, eliding
@@ -91,12 +99,35 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// drive that cannot be armed (factory halting) falls through to the
 	// durable reminder.
 	if a.localFastPath() && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
-		if a.localDrive(invocation, activityName) {
+		if a.localDrive(invocation, activityName, encKey) {
 			return nil, nil
 		}
 	}
 
-	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
+	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName, encKey)
+}
+
+// invokeKey opens the payload key the dispatching workflow sent with the
+// invocation, so the activity's reminders are sealed with the instance's
+// key. Without one, the workflow's payloads are stored in plaintext and so
+// are the activity's reminders.
+func (a *activity) invokeKey(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*encryption.InstanceKey, error) {
+	var header string
+	if v := req.GetMetadata()[todo.MetadataWorkflowEncryptionKey].GetValues(); len(v) > 0 {
+		header = v[0]
+	}
+	switch {
+	case header != "" && a.encryptor == nil:
+		return nil, status.Error(codes.FailedPrecondition, "the dispatching workflow encrypts its payloads but workflow payload encryption is not configured on this activity host")
+	case header != "":
+		k, err := a.encryptor.OpenHeader(ctx, header)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open the dispatching workflow's payload encryption key: %w", err)
+		}
+		return k, nil
+	default:
+		return nil, nil
+	}
 }
 
 // localFastPath reports whether an activity may be driven locally: never on
@@ -148,12 +179,17 @@ func taskScheduledName(e *backend.HistoryEvent) *string {
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
+	data, encKey, oerr := a.encryptor.OpenReminder(ctx, encryption.ReminderAAD(reminder.ActorType, reminder.ActorID, reminder.Name), reminder.Data)
+	if oerr != nil {
+		return fmt.Errorf("activity actor '%s': failed to open reminder '%s': %w", a.actorID, reminder.Name, oerr)
+	}
+
 	// TODO: remove the legacy raw HistoryEvent fallback in v1.19 once reminders
 	// written by pre-propagation daprds have been drained from the rollout.
 	var invocation protos.ActivityInvocation
-	if err := reminder.Data.UnmarshalTo(&invocation); err != nil {
+	if err := data.UnmarshalTo(&invocation); err != nil {
 		var legacy backend.HistoryEvent
-		if legacyErr := reminder.Data.UnmarshalTo(&legacy); legacyErr != nil {
+		if legacyErr := data.UnmarshalTo(&legacy); legacyErr != nil {
 			return fmt.Errorf("failed to decode activity reminder (new format: %v; legacy: %w)", err, legacyErr)
 		}
 		invocation.HistoryEvent = &legacy
@@ -163,7 +199,7 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		return errors.New("activity reminder missing history event")
 	}
 
-	err := a.executeActivity(ctx, reminder, &invocation)
+	err := a.executeActivity(ctx, reminder, &invocation, encKey)
 	if err == nil {
 		return nil
 	}

@@ -608,6 +608,30 @@ spec:
                           type: string
                       type: object
                     type: array
+                  encryption:
+                    description: |-
+                      Encryption, when set, encrypts persisted workflow payloads (history,
+                      inbox, custom status and reminders) with a key from a crypto component.
+                      Once an instance is encrypted it cannot be loaded without it.
+                    properties:
+                      cryptoComponent:
+                        description: CryptoComponent is the crypto component holding
+                          the key encryption key.
+                        type: string
+                      keyName:
+                        description: |-
+                          KeyName is the key encryption key's name in the component, as "name" or
+                          "name/version".
+                        type: string
+                      keyWrapAlgorithm:
+                        description: |-
+                          KeyWrapAlgorithm is A256KW (the default) for a symmetric key, or
+                          RSA-OAEP-256 for an RSA key.
+                        type: string
+                    required:
+                    - cryptoComponent
+                    - keyName
+                    type: object
                   globalMaxConcurrentActivityInvocations:
                     description: |-
                       globalMaxConcurrentActivityInvocations is the maximum number of concurrent

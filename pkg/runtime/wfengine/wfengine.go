@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
@@ -138,6 +139,7 @@ type engine struct {
 	client        backend.TaskHubClient
 	inProcessExec *inprocess.Executor
 	compStore     *compstore.ComponentStore
+	encryptor     *encryption.Encryptor
 
 	// streamShutdownCh is closed during shutdown to tell all connected
 	// GetWorkItems streams to terminate, so the gRPC API server's GracefulStop
@@ -165,6 +167,11 @@ func New(opts Options) (Interface, error) {
 		return nil, errors.New("WorkflowHistorySigning feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
+	enc, err := newEncryptor(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	// Scheduler-enforced concurrency limits gate per job delivery, which
 	// the fast path's local drives bypass: fall back to durable reminders
 	// when limits are configured.
@@ -184,6 +191,7 @@ func New(opts Options) (Interface, error) {
 		ComponentStore:         opts.ComponentStore,
 		RetentionPolicy:        retPolicy,
 		Signer:                 s,
+		Encryptor:              enc,
 		MaxRequestBodySize:     opts.MaxRequestBodySize,
 		WorkflowAccessPolicies: opts.WorkflowAccessPolicies,
 
@@ -209,6 +217,7 @@ func New(opts Options) (Interface, error) {
 		backend:          abackend,
 		inProcessExec:    inProcessExec,
 		compStore:        opts.ComponentStore,
+		encryptor:        enc,
 		streamShutdownCh: make(chan any),
 	}
 	if opts.WorkflowsStagedOperations {
@@ -543,6 +552,13 @@ func (wfe *engine) Run(ctx context.Context) error {
 		return ctx.Err()
 	}
 
+	if wfe.encryptor != nil {
+		if err := wfe.encryptor.SelfCheck(ctx); err != nil {
+			return fmt.Errorf("workflow payload encryption is enabled but its key is not usable: %w", err)
+		}
+		log.Info("Workflow payload encryption enabled")
+	}
+
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
@@ -574,6 +590,26 @@ func (wfe *engine) Run(ctx context.Context) error {
 	log.Info("Workflow engine stopped")
 
 	return nil
+}
+
+// newEncryptor returns the payload encryptor, or nil when
+// spec.workflow.encryption is not set.
+func newEncryptor(opts Options) (*encryption.Encryptor, error) {
+	if opts.Spec == nil || opts.Spec.Encryption == nil {
+		return nil, nil
+	}
+	spec := opts.Spec.Encryption
+	enc, err := encryption.New(encryption.Options{
+		ComponentStore: opts.ComponentStore,
+		Resiliency:     opts.Resiliency,
+		ComponentName:  spec.CryptoComponent,
+		KeyName:        spec.KeyName,
+		WrapAlgorithm:  spec.KeyWrapAlgorithm,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid spec.workflow.encryption: %w", err)
+	}
+	return enc, nil
 }
 
 func (wfe *engine) Client() backend.TaskHubClient {

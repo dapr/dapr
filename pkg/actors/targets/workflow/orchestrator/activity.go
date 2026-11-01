@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -68,7 +69,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 			continue
 		}
 
-		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, executionID, elide, false)
+		err := o.callActivity(ctx, e, dueTime, outgoingHistory[e.GetEventId()], workflowName, executionID, state.EncryptionKey, elide, false)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -83,10 +84,12 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return result
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName, executionID string, elide, redispatch bool) error {
+// key is the instance's payload key, sent along so that the activity seals
+// the reminders it creates with it; nil for a plaintext instance.
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, ph *protos.PropagatedHistory, workflowName, executionID string, key *encryption.InstanceKey, elide, redispatch bool) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
-		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
+		log.Warnf("Workflow actor '%s': unable to process task %d: not an activity (%T)", o.actorID, e.GetEventId(), e.GetEventType())
 		return nil
 	}
 
@@ -131,6 +134,13 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	}
 	if executionID != "" {
 		meta[todo.MetadataParentExecutionID] = []string{executionID}
+	}
+	if key != nil {
+		h, herr := key.Header()
+		if herr != nil {
+			return herr
+		}
+		meta[todo.MetadataWorkflowEncryptionKey] = []string{h}
 	}
 
 	if o.fastPath {

@@ -239,7 +239,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 	// TODO: @joshvanl: remove `workflowsRemoteActivityReminder` check in later
 	// version.
 	if f.workflowsRemoteActivityReminder && f.actorNotReachable(ctx, wfActorType, ex.workflowID) {
-		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result)
+		err = f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result, ex.encKey)
 	} else {
 		// publish the result back to the workflow actor as a new event to be processed
 		var resultData []byte
@@ -270,7 +270,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		}
 
 		if f.workflowsRemoteActivityReminder {
-			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result); cerr == nil {
+			if cerr := f.createWorkflowResultReminder(ctx, wfActorType, ex.workflowID, ex.parentExecutionID, ex.wi.Result, ex.encKey); cerr == nil {
 				return nil
 			}
 		}

@@ -21,6 +21,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
@@ -51,6 +52,8 @@ type execution struct {
 	// parentExecutionID is the execution ID of the workflow generation that
 	// dispatched the activity, empty when the dispatching daprd predates it.
 	parentExecutionID string
+	// encKey seals the result reminder; nil when encryption is off.
+	encKey *encryption.InstanceKey
 
 	// start anchors the execution-duration metric; set once the engine has
 	// accepted the WorkItem.
@@ -80,7 +83,7 @@ func (f *factory) settle(key string, call *inflight.Call, err error) {
 // ctx cancellation it hands off to the factory's detached watcher so the
 // WorkItem already in the durabletask queue still has its result published,
 // and returns ctx.Err() so the caller can surface the cancellation.
-func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation) error {
+func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation, encKey *encryption.InstanceKey) error {
 	// The app reports completion through this callback channel; there is no
 	// execution timeout, activities may run for hours.
 	callback := make(chan bool, 1)
@@ -93,6 +96,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		activityName:      activityName,
 		workflowID:        workflowID,
 		parentExecutionID: invocation.GetParentExecutionId(),
+		encKey:            encKey,
 		wi: &backend.ActivityWorkItem{
 			SequenceNumber:  int64(taskEvent.GetEventId()),
 			InstanceID:      api.InstanceID(workflowID),

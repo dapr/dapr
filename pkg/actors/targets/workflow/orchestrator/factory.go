@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/crypto/spiffe/signer"
@@ -63,6 +64,10 @@ type Options struct {
 	// Signer provides cryptographic signing and verification. If nil, history
 	// signing is disabled.
 	Signer *signer.Signer
+
+	// Encryptor seals persisted workflow payloads. Nil when payload
+	// encryption is off.
+	Encryptor *encryption.Encryptor
 
 	// MaxRequestBodySize is the gRPC server max message size in bytes. The
 	// orchestrator stalls workflows whose history payload would exceed this
@@ -107,6 +112,7 @@ type factory struct {
 	actorTypeBuilder       *common.ActorTypeBuilder
 	retentionPolicy        *config.WorkflowStateRetentionPolicy
 	signer                 *signer.Signer
+	encryptor              *encryption.Encryptor
 	maxRequestBodySize     int
 	workflowAccessPolicies *workflowacl.Holder
 
@@ -205,6 +211,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		placement:              placement,
 		retentionPolicy:        opts.RetentionPolicy,
 		signer:                 opts.Signer,
+		encryptor:              opts.Encryptor,
 		maxRequestBodySize:     opts.MaxRequestBodySize,
 		foldWaitTimeout:        foldWaitTimeout,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,

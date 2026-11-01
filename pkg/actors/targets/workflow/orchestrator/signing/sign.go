@@ -53,9 +53,17 @@ func (s *Signing) SignNewEvents(state *wfenginestate.State) error {
 			newEventCount, startIndex)
 	}
 
+	// Encrypt then sign: the signed bytes are the stored bytes, with the
+	// payloads sealed when the instance is encrypted, so the chain verifies
+	// without the payload key.
 	rawNewEvents := make([][]byte, newEventCount)
 	for i := range newEventCount {
-		data, err := historysigning.MarshalEvent(state.History[startIndex+uint64(i)])
+		//nolint:gosec
+		e, err := state.SealedHistoryEvent(int(startIndex) + i)
+		if err != nil {
+			return fmt.Errorf("failed to seal history event %d: %w", startIndex+uint64(i), err)
+		}
+		data, err := historysigning.MarshalEvent(e)
 		if err != nil {
 			return fmt.Errorf("failed to marshal history event %d: %w", startIndex+uint64(i), err)
 		}

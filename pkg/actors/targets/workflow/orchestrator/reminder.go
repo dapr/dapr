@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -285,6 +286,13 @@ func (o *orchestrator) failTaskViaReminder(ctx context.Context, failedEvent *pro
 	req, err := o.buildReminderRequest(reminderName, failedEvent, time.Now(), o.actorTypeBuilder.Workflow(o.appID), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create failure reminder: %w", err)
+	}
+	var key *encryption.InstanceKey
+	if o.state != nil {
+		key = o.state.EncryptionKey
+	}
+	if req.Data, err = encryption.SealReminder(key, encryption.ReminderAAD(req.ActorType, req.ActorID, req.Name), req.Data); err != nil {
+		return fmt.Errorf("failed to seal failure reminder: %w", err)
 	}
 	// Create only, as the activity host does for this name family: the name
 	// is random, so AlreadyExists means a retry of an unacked create.

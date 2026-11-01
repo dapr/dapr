@@ -26,6 +26,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -40,7 +41,7 @@ const activityReminderName = todo.ActivityReminderName
 // createActivityReminder lives on the factory (with an explicit actorID)
 // rather than the *activity because the drive-failure escalation path may
 // outlive the actor object (HaltAll recycles it).
-func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
+func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string, encKey *encryption.InstanceKey) error {
 	// Clamp a past dueTime to now: the scheduler paces failure retries from
 	// the scheduled time, so a stale dueTime replays the whole elapsed
 	// backlog as a burst on every failed trigger.
@@ -51,6 +52,10 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", f.actorType, actorID, activityReminderName, dueTime)
 
 	anydata, err := anypb.New(invocation)
+	if err != nil {
+		return err
+	}
+	anydata, err = encryption.SealReminder(encKey, encryption.ReminderAAD(f.actorType, actorID, activityReminderName), anydata)
 	if err != nil {
 		return err
 	}
@@ -69,7 +74,7 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 	})
 }
 
-func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID, parentExecutionID string, result *backend.HistoryEvent) error {
+func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID, parentExecutionID string, result *backend.HistoryEvent, encKey *encryption.InstanceKey) error {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -79,6 +84,10 @@ func (f *factory) createWorkflowResultReminder(ctx context.Context, wfActorType,
 	reminderName := common.ActivityResultReminderName(base64.RawURLEncoding.EncodeToString(b), parentExecutionID)
 
 	anydata, err := anypb.New(result)
+	if err != nil {
+		return err
+	}
+	anydata, err = encryption.SealReminder(encKey, encryption.ReminderAAD(wfActorType, wfActorID, reminderName), anydata)
 	if err != nil {
 		return err
 	}

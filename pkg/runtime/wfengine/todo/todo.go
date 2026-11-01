@@ -67,6 +67,11 @@ const (
 	// task IDs restart with each generation.
 	MetadataParentExecutionID = "ParentExecutionID"
 
+	// MetadataWorkflowEncryptionKey carries the dispatching workflow's
+	// wrapped payload key to the activity actor, so that the reminders the
+	// activity creates are sealed with the instance's key.
+	MetadataWorkflowEncryptionKey = "WorkflowEncryptionKey"
+
 	ActorTypePrefix = "dapr.internal."
 
 	// ActivityReminderName is the per-activity-actor execution reminder name.

@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
@@ -114,6 +115,9 @@ type Options struct {
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
+	// Encryptor seals persisted workflow payloads. Nil when payload
+	// encryption is off.
+	Encryptor *encryption.Encryptor
 
 	// MaxRequestBodySize is the gRPC server max message size in bytes. The
 	// orchestrator uses it to detect and gracefully stall workflows whose
@@ -140,6 +144,7 @@ type Actors struct {
 	compStore              *compstore.ComponentStore
 	retentionPolicy        *config.WorkflowStateRetentionPolicy
 	signer                 *signer.Signer
+	encryptor              *encryption.Encryptor
 	maxRequestBodySize     int
 	workflowAccessPolicies *workflowacl.Holder
 
@@ -278,6 +283,7 @@ func New(opts Options) (*Actors, error) {
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
 		signer:                    opts.Signer,
+		encryptor:                 opts.Encryptor,
 		maxRequestBodySize:        opts.MaxRequestBodySize,
 		workflowAccessPolicies:    opts.WorkflowAccessPolicies,
 
@@ -339,6 +345,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		RetentionActorType:     abe.retentionerActorType,
 		RetentionPolicy:        abe.retentionPolicy,
 		Signer:                 abe.signer,
+		Encryptor:              abe.encryptor,
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
@@ -390,6 +397,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		ActorTypeBuilder:                actorTypeBuilder,
 		WorkflowAccessPolicies:          abe.workflowAccessPolicies,
 		Signer:                          abe.signer,
+		Encryptor:                       abe.encryptor,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
 		Fallback:                        abe.fallbackFunc(),
@@ -1149,6 +1157,7 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		Signer:            abe.signer,
+		Encryptor:         abe.encryptor,
 	})
 	if err != nil {
 		return nil, err
@@ -1392,6 +1401,7 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		Signer:            abe.signer,
+		Encryptor:         abe.encryptor,
 	})
 	if err != nil {
 		return nil, err
@@ -1447,6 +1457,9 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		Signer:            abe.signer,
+		// No encryptor: purging needs no plaintext, and an instance whose
+		// payload key cannot be opened must stay purgeable. Its rows load
+		// with a ConfigurationError, accepted below.
 	})
 	if err != nil {
 		// Force purge is the escape hatch for instances that cannot be

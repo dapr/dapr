@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/encryption"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 )
@@ -49,6 +50,10 @@ type Options struct {
 	// parent workflow can cryptographically verify the activity's identity,
 	// input, and output. Nil when signing is disabled for this deployment.
 	Signer *signer.Signer
+
+	// Encryptor seals the payloads of the reminders the activity creates. Nil
+	// when payload encryption is off.
+	Encryptor *encryption.Encryptor
 
 	// May be nil when the feature is disabled.
 	WorkflowAccessPolicies *workflowacl.Holder
@@ -106,6 +111,7 @@ type factory struct {
 	actorTypeBuilder       *common.ActorTypeBuilder
 	workflowAccessPolicies *workflowacl.Holder
 	signing                *signing.Signing
+	encryptor              *encryption.Encryptor
 
 	scheduler todo.ActivityScheduler
 
@@ -247,6 +253,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		workflowActorType:      opts.WorkflowActorType,
 		actorTypeBuilder:       opts.ActorTypeBuilder,
 		workflowAccessPolicies: opts.WorkflowAccessPolicies,
+		encryptor:              opts.Encryptor,
 
 		signing: &signing.Signing{
 			Signer:    opts.Signer,

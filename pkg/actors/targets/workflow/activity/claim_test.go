@@ -638,7 +638,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().UnixMilli()})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		err := a.executeActivity(t.Context(), testReminder(), testInvocation())
+		err := a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
 		assert.True(t, wferrors.IsRecoverable(err), "the deferral must be retried, not failed terminally")
 		select {
@@ -654,7 +654,7 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		store.set(t, actorID, claim.Record{TaskKey: key, HeartbeatMs: time.Now().Add(-time.Hour).UnixMilli(), Completed: true})
 
 		a := f.GetOrCreate(actorID).(*activity)
-		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
+		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation(), nil))
 		select {
 		case <-scheduled:
 			t.Fatal("a completed execution must not be re-run")
@@ -679,13 +679,13 @@ func Test_executeActivity_recoveryGate(t *testing.T) {
 		// retried in a loop like real recovery arrivals: a single sleep
 		// must land between StaleAfter and the 2x prune window, a margin a
 		// loaded runner can miss.
-		err := a.executeActivity(t.Context(), testReminder(), testInvocation())
+		err := a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 		require.ErrorIs(t, err, claim.ErrHeldElsewhere)
 
 		ownerErr := make(chan error, 1)
 		go func() {
 			for {
-				err := a.executeActivity(t.Context(), testReminder(), testInvocation())
+				err := a.executeActivity(t.Context(), testReminder(), testInvocation(), nil)
 				if !errors.Is(err, claim.ErrHeldElsewhere) {
 					ownerErr <- err
 					return
@@ -917,7 +917,7 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), &name))
+		require.True(t, a.localDrive(testInvocation(), &name, nil))
 		h.fact.driveScope().Wait()
 		h.fact.detached.Wait()
 
@@ -936,7 +936,7 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), &name))
+		require.True(t, a.localDrive(testInvocation(), &name, nil))
 		assert.Eventually(t, func() bool {
 			return len(h.sched.snapshotCreates()) == 1
 		}, time.Second*5, time.Millisecond*10, "without a live claim the durable-reminder escalation must be restored")

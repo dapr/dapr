@@ -524,7 +524,7 @@ func (o *orchestrator) classifyOutboundMessages(rs *backend.WorkflowRuntimeState
 			// delivers them after the save in the completion block below.
 
 		default:
-			return nil, fmt.Errorf("workflow actor '%s': don't know how to process outbound message '%v'", o.actorID, msg)
+			return nil, fmt.Errorf("workflow actor '%s': don't know how to process outbound message for '%s' (%T)", o.actorID, msg.GetTargetInstanceId(), msg.GetHistoryEvent().GetEventType())
 		}
 	}
 	return createWorkflows, nil
