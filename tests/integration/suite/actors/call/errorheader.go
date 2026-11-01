@@ -66,7 +66,7 @@ func (e *errorheader) Run(t *testing.T, ctx context.Context) {
 	e.app2.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(t, []*daprd.MetadataActorRuntimeActiveActor{
+		assert.ElementsMatch(c, []*daprd.MetadataActorRuntimeActiveActor{
 			{
 				Type:  "abc",
 				Count: 0,

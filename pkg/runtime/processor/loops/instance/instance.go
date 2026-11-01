@@ -29,6 +29,7 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
@@ -150,6 +151,17 @@ func (i *Instance) handleInit(ctx context.Context, ev *loops.Init) {
 }
 
 func (i *Instance) runInit(ctx context.Context, comp compapi.Component) error {
+	// A component identical to one already installed is a no-op. This makes
+	// duplicate init events idempotent: a component parked behind an unready
+	// secret store is re-created by the hot reload reconciler on subsequent
+	// reconciles (it is not in the component store while parked), so when the
+	// secret store arrives the flushed parked copy and the reconciler's copy
+	// race to init the same component.
+	if existing, ok := i.compStore.GetComponent(comp.Name); ok && differ.AreSame(existing, comp) {
+		log.Debugf("Component init skipped: identical component already installed: %s", comp.LogName())
+		return nil
+	}
+
 	if err := i.compStore.AddPendingComponentForCommit(comp); err != nil {
 		return err
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -91,11 +92,11 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(r.wf.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(r.wf.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	for i := 1; i < r.n; i++ {
-		cl := dworkflow.NewClient(r.wf.DaprN(i).GRPCConn(t, ctx))
+		cl := dworkflow.NewClientWithLogger(r.wf.DaprN(i).GRPCConn(t, ctx), logger.New(t))
 		require.NoError(t, cl.StartWorker(ctx, reg))
 	}
 

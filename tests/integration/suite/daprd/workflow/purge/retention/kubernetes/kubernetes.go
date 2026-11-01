@@ -26,6 +26,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/manifest"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -60,6 +61,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentrySvc.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "wfretention"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
@@ -100,6 +102,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 	b.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("wfretention"),
+		daprd.WithAppID("myapp"),
 		daprd.WithNamespace("default"),
 		daprd.WithSentry(t, sentrySvc),
 		daprd.WithControlPlaneAddress(b.oper.Address()),
@@ -129,7 +132,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(b.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(b.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")

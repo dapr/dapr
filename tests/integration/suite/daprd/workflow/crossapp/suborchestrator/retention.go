@@ -15,6 +15,7 @@ package suborchestrator
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -96,9 +97,20 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, parentMeta.GetRuntimeStatus())
 
-	childMeta, err := child.WaitForWorkflowCompletion(ctx, api.InstanceID(childInstanceID))
-	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, childMeta.GetRuntimeStatus())
+	// The child's 1s retention can purge it before this wait begins, and a
+	// watch registered on a purged instance parks until the case deadline.
+	// Retention only purges terminal instances, so purged-already proves the
+	// completion this wait is for.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		childMeta, cerr := child.FetchWorkflowMetadata(ctx, api.InstanceID(childInstanceID))
+		if errors.Is(cerr, api.ErrInstanceNotFound) {
+			return
+		}
+		if !assert.NoError(c, cerr) {
+			return
+		}
+		assert.Equal(c, api.RUNTIME_STATUS_COMPLETED, childMeta.GetRuntimeStatus())
+	}, time.Second*20, time.Millisecond*10)
 
 	// With a 1s completion-retention policy on both apps, each app's own
 	// retention reminder should purge its own instance shortly after the

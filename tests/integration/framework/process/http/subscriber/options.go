@@ -14,8 +14,10 @@ limitations under the License.
 package subscriber
 
 import (
+	"context"
 	"net/http"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 )
 
@@ -25,6 +27,7 @@ type options struct {
 	handlerFuncs []app.Option
 	progSubs     *[]SubscriptionJSON
 	initHealth   bool
+	bulkStatusFn func(context.Context, []string) map[string]contribpubsub.AppResponseStatus
 }
 
 func WithRoutes(routes ...string) Option {
@@ -36,6 +39,16 @@ func WithRoutes(routes ...string) Option {
 func WithBulkRoutes(routes ...string) Option {
 	return func(o *options) {
 		o.bulkRoutes = append(o.bulkRoutes, routes...)
+	}
+}
+
+// WithBulkStatusFn sets the status a bulk route answers each entry of a
+// delivery with, given the delivery's entry IDs in order. Entries without a
+// status are answered SUCCESS. fn is called with the delivery's request
+// context, which it may block on to hold the delivery until daprd cancels it.
+func WithBulkStatusFn(fn func(ctx context.Context, entryIDs []string) map[string]contribpubsub.AppResponseStatus) Option {
+	return func(o *options) {
+		o.bulkStatusFn = fn
 	}
 }
 

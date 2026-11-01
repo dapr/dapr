@@ -24,7 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -34,7 +33,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
+func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName, parentExecutionID string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	var errs []error
@@ -52,7 +51,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 					ParentInstance: &protos.ParentInstanceInfo{
 						TaskScheduledId:  e.EventId,
 						Name:             wrapperspb.String(startEventName),
-						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID},
+						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID, ExecutionId: wrapperspb.String(parentExecutionID)},
 						AppID:            new(o.appID),
 					},
 					Input: createSO.Input,
@@ -69,9 +68,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			StartEvent: startEvent,
 		}
 		if ph := outgoingHistory[e.GetEventId()]; ph != nil {
-			if o.signer == nil {
-				log.Warnf("Workflow actor '%s': propagating unsigned workflow history to child workflow '%s' (signing is not configured; chunks cannot be cryptographically verified by the receiver)", o.actorID, createSO.GetInstanceId())
-			}
+			o.warnUnsignedPropagation(fmt.Sprintf("child workflow '%s'", createSO.GetInstanceId()))
 			createReq.PropagatedHistory = ph
 		}
 
@@ -124,24 +121,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 // taskScheduledID is the correlation ID that the parent orchestrator engine
 // uses to match this failure with the original sub-orchestration request.
 func (o *orchestrator) failChildWorkflowTask(ctx context.Context, taskScheduledID int32, errorType, errorMessage string) error {
-	failedEvent := &protos.HistoryEvent{
-		EventId:   -1,
-		Timestamp: timestamppb.New(time.Now()),
-		Router:    &protos.TaskRouter{SourceAppID: o.appID},
+	return o.failTaskViaReminder(ctx, &protos.HistoryEvent{
 		EventType: events.NewChildWorkflowFailedEventType(taskScheduledID, errorType, errorMessage, false),
-	}
-
-	// Create a reminder that carries the failure event. When this
-	// reminder fires (in a fresh execution cycle after the current run
-	// completes), handleReminder routes it to addWorkflowEvent which
-	// adds the event to the inbox and triggers re-execution.
-	reminderName, err := randomReminderName(common.ReminderPrefixActivityResult)
-	if err != nil {
-		return fmt.Errorf("failed to create failure reminder: %w", err)
-	}
-	if err := o.createWorkflowReminder(ctx, reminderName, failedEvent, time.Now(), o.appID, nil); err != nil {
-		return fmt.Errorf("failed to create failure reminder: %w", err)
-	}
-
-	return nil
+	})
 }

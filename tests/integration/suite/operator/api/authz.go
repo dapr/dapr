@@ -63,6 +63,7 @@ func (a *authz) Setup(t *testing.T) []framework.Option {
 			"default",
 			a.sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "foo"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{Items: []configapi.Configuration{
 			{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},

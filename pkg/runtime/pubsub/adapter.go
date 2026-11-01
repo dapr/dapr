@@ -45,7 +45,10 @@ type Adapter interface {
 }
 
 type AdapterStreamer interface {
-	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, ConnectionID) error
+	// Subscribe registers the stream connection, calls start, sends the
+	// initial response and then blocks receiving from the stream. Messages
+	// published once start has begun are delivered after the initial response.
+	Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, connectionID ConnectionID, start func() error) error
 	Publish(context.Context, *SubscribedMessage) (*rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, error)
 	StreamerKey(pubsub, topic string) string
 	Close(key string, connectionID ConnectionID)

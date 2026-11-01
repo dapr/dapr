@@ -17,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"net/textproto"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -212,4 +214,59 @@ func TestResponseWriterWithReadFrom(t *testing.T) {
 	require.Len(t, writeString, int(n))
 	require.Equal(t, writeString, mrw.Body.String())
 	require.Equal(t, writeString, mrw.writtenStr)
+}
+
+func TestResponseWriterInformationalResponses(t *testing.T) {
+	statuses := make(chan int, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rw := NewResponseWriter(w)
+		rw.WriteHeader(http.StatusEarlyHints)
+		rw.WriteHeader(http.StatusEarlyHints)
+		rw.WriteHeader(http.StatusCreated)
+		_, _ = rw.Write([]byte("created"))
+		statuses <- rw.Status()
+	}))
+	defer server.Close()
+
+	var hints []int
+	trace := &httptrace.ClientTrace{
+		Got1xxResponse: func(code int, _ textproto.MIMEHeader) error {
+			hints = append(hints, code)
+			return nil
+		},
+	}
+	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	require.Equal(t, []int{http.StatusEarlyHints, http.StatusEarlyHints}, hints)
+	require.Equal(t, http.StatusCreated, <-statuses)
+	require.Equal(t, "created", string(body))
+}
+
+func TestResponseWriterInformationalResponseBeforeFinal(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rw := NewResponseWriter(rec)
+	calls := 0
+	rw.Before(func(ResponseWriter) { calls++ })
+	rw.WriteHeader(http.StatusEarlyHints)
+	require.False(t, rw.Written())
+	require.Zero(t, rw.Status())
+	require.Zero(t, calls)
+	rw.WriteHeader(http.StatusCreated)
+	require.True(t, rw.Written())
+	require.Equal(t, http.StatusCreated, rw.Status())
+	require.Equal(t, 1, calls)
+}
+
+func TestResponseWriterSwitchingProtocolsIsFinal(t *testing.T) {
+	rw := NewResponseWriter(httptest.NewRecorder())
+	rw.WriteHeader(http.StatusSwitchingProtocols)
+	rw.WriteHeader(http.StatusCreated)
+	require.True(t, rw.Written())
+	require.Equal(t, http.StatusSwitchingProtocols, rw.Status())
 }

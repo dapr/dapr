@@ -25,9 +25,16 @@ import (
 // Real-time clock (wrapper around time.Time) to allow mocking
 var clock kclock.Clock = &kclock.RealClock{}
 
-// Maximum number of concurrent streams in a single gRPC connection
-// This is the default value used by gRPC servers and clients
-const grpcMaxConcurrentStreams = 100
+// grpcMaxConcurrentStreams caps concurrent shared refs per pooled
+// connection before the pool grows. The historical value of 100 was
+// measured as the cluster throughput ceiling for actor-heavy workloads
+// (workflow cross-host traffic sits on these pools): in-flight refs
+// reach the cap at moderate rates, every further caller falls into the
+// write-locked growth path, and new-connection mTLS handshakes
+// serialize per peer. The internal HTTP/2 servers advertise no such
+// stream limit; 100 was self-imposed. 2048 keeps a growth bound while
+// taking the cap out of the operating range.
+const grpcMaxConcurrentStreams = 2048
 
 // ConnectionPool holds a pool of connections to the same address.
 type ConnectionPool struct {
@@ -121,19 +128,24 @@ func (p *ConnectionPool) Share() grpc.ClientConnInterface {
 // doShare performs the sharing of the connection from the pool, incrementing its reference count.
 // This needs to be wrapped in a (read/write) lock.
 func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
-	// If there's more than 1 connection, grab the first one whose reference count is less or equal than 100 (grpcMaxConcurrentStreams)
+	// Grab the first pooled connection whose reference count is below the cap
 	for i := range len(p.connections) {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
 		// This should be safe for concurrent use
-		if atomic.LoadInt32(&p.connections[i].referenceCount) == 0 && p.connections[i].Expired(p.maxConnIdle) {
+		// Connections held to satisfy minActiveConns are exempt: they are the pool's warm connections,
+		// which Purge keeps for the same reason. Expiring them here would leave them in the pool
+		// unusable and unclosed, and force a fresh dial for every request that follows an idle period.
+		if i >= p.minActiveConns &&
+			atomic.LoadInt32(&p.connections[i].referenceCount) == 0 &&
+			p.connections[i].Expired(p.maxConnIdle) {
 			continue
 		}
 
 		// Increment the reference counter to signal that we're using the connection
 		count := atomic.AddInt32(&p.connections[i].referenceCount, 1)
 
-		// If the reference count is less (or equal) than 100, we can use this connection
+		// If the reference count is within the cap, we can use this connection
 		if count <= grpcMaxConcurrentStreams {
 			return p.connections[i].conn
 		}
@@ -199,14 +211,16 @@ func (p *ConnectionPool) DestroyAll() {
 	p.connections = p.connections[:0]
 }
 
-// Purge connections that have been idle for longer than maxConnIdle.
+// Purge connections that have been idle for longer than maxConnIdle,
+// returning the number of connections that were closed.
 // Note that this method should not be called by multiple goroutines at the same time.
-func (p *ConnectionPool) Purge() {
+func (p *ConnectionPool) Purge() int {
 	// Need a write lock as we modify the slice
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	n := 0
+	purged := 0
 	for i := 0; i < len(p.connections); i++ {
 		el := p.connections[i]
 
@@ -217,6 +231,7 @@ func (p *ConnectionPool) Purge() {
 			if closer, ok := el.conn.(interface{ Close() error }); ok {
 				_ = closer.Close()
 			}
+			purged++
 			continue
 		}
 
@@ -224,6 +239,7 @@ func (p *ConnectionPool) Purge() {
 		n++
 	}
 	p.connections = p.connections[:n]
+	return purged
 }
 
 // connectionPoolConnection is used by connectionPool to store the connection.
@@ -300,8 +316,10 @@ func (p *RemoteConnectionPool) Destroy(address string, conn grpc.ClientConnInter
 // Purge connections that have been idle for longer than maxConnIdle.
 // Note that this method should not be called by multiple goroutines at the same time.
 func (p *RemoteConnectionPool) Purge() {
-	p.pool.Range(func(_ any, item any) bool {
-		item.(*ConnectionPool).Purge()
+	p.pool.Range(func(address any, item any) bool {
+		if purged := item.(*ConnectionPool).Purge(); purged > 0 {
+			log.Debugf("Purged %d expired gRPC connection(s) to %s", purged, address)
+		}
 		return true
 	})
 }

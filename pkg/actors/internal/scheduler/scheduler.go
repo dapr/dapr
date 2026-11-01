@@ -116,7 +116,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 
 	_, err = s.client.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
+		log.Errorf("Error scheduling reminder job %s for actor type '%s' with ID '%s' due to: %s", reminder.Name, reminder.ActorType, reminder.ActorID, err)
 		return err
 	}
 
@@ -292,13 +292,22 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 
 		job := named.GetJob()
 
+		var expirationTime time.Time
+		if job.Ttl != nil {
+			expirationTime, err = time.Parse(time.RFC3339Nano, job.GetTtl())
+			if err != nil {
+				log.Debugf("Error parsing expiration time for reminder job %s due to: %s", named.GetName(), err)
+			}
+		}
+
 		reminders[i] = &api.Reminder{
-			Name:      named.GetName(),
-			ActorID:   actor.GetId(),
-			ActorType: actor.GetType(),
-			Data:      job.GetData(),
-			Period:    api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
-			DueTime:   job.GetDueTime(),
+			Name:           named.GetName(),
+			ActorID:        actor.GetId(),
+			ActorType:      actor.GetType(),
+			Data:           job.GetData(),
+			Period:         api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
+			DueTime:        job.GetDueTime(),
+			ExpirationTime: expirationTime,
 		}
 	}
 	return reminders, nil

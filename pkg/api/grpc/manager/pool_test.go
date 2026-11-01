@@ -110,7 +110,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, int32(0), cp.connections[0].referenceCount)
 		require.Equal(t, int32(0), cp.connections[1].referenceCount)
 
-		// Share the connection grpcMaxConcurrentStreams times (100)
+		// Share the connection grpcMaxConcurrentStreams times
 		// Should always return the first connection
 
 		for i := range grpcMaxConcurrentStreams {
@@ -120,7 +120,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 		}
 
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 
 		// Next grpcMaxConcurrentStreams should return the second connection
 
@@ -128,7 +128,7 @@ func TestConnectionPool(t *testing.T) {
 			conn = cp.Share()
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, int32(i+1), cp.connections[1].referenceCount)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 		}
 
 		// Next call to Share should return nil because all connections are at capacity
@@ -139,18 +139,18 @@ func TestConnectionPool(t *testing.T) {
 		// When both connections have capacity, the first one is used first
 		cp.Release(conns[0])
 		cp.Release(conns[1])
-		require.Equal(t, int32(99), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		conn = cp.Share()
 		require.Equal(t, conns[0], conn)
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		conn = cp.Share()
 		require.Equal(t, conns[1], conn)
-		require.Equal(t, int32(100), cp.connections[0].referenceCount)
-		require.Equal(t, int32(100), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[1].referenceCount)
 
 		// Destroy all connections
 		cp.DestroyAll()
@@ -181,7 +181,7 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, conns[0], conn)
 		require.Equal(t, 1, n)
 
-		// Next grpcMaxConcurrentStreams-1 calls (99) should still return the first connection
+		// Next grpcMaxConcurrentStreams-1 calls should still return the first connection
 		for i := 1; i < grpcMaxConcurrentStreams; i++ { // Start from 1
 			conn, err = cp.Get(createFn)
 			require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, 2, n) // Should have called the function 2 times in total
 			require.Equal(t, int32(i+1), cp.connections[1].referenceCount)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 		}
 
 		// Next call should return errNoNewConns (which is just from our mock handler)
@@ -211,8 +211,8 @@ func TestConnectionPool(t *testing.T) {
 		// Release one from each connection
 		cp.Release(conns[0])
 		cp.Release(conns[1])
-		require.Equal(t, int32(99), cp.connections[0].referenceCount)
-		require.Equal(t, int32(99), cp.connections[1].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[0].referenceCount)
+		require.Equal(t, int32(grpcMaxConcurrentStreams-1), cp.connections[1].referenceCount)
 
 		// Next calls should return conns[0] and conns[1], without calling createFn again
 		conn, err = cp.Get(createFn)
@@ -266,14 +266,14 @@ func TestConnectionPool(t *testing.T) {
 				}
 			}
 
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Calling purge should not remove any connection
 			cp.Purge()
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Wait 15 seconds (more than expiration time) and repeat
@@ -281,13 +281,13 @@ func TestConnectionPool(t *testing.T) {
 			clockMock.Step(15 * time.Second)
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(1), cp.connections[1].referenceCount)
 
 			// Release the second connection, which should now become idle
 			cp.Release(conns[1])
 
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 			require.Equal(t, clock.Now(), *(cp.connections[1].idleSince.Load()))
 
@@ -295,7 +295,7 @@ func TestConnectionPool(t *testing.T) {
 			cp.Purge()
 
 			require.Len(t, cp.connections, 2)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 
 			// Wait 15 seconds (more than expiration time)
@@ -310,9 +310,9 @@ func TestConnectionPool(t *testing.T) {
 
 			require.Len(t, cp.connections, 1)
 			require.Equal(t, conns[0], cp.connections[0].conn)
-			require.Equal(t, int32(100), cp.connections[0].referenceCount)
+			require.Equal(t, int32(grpcMaxConcurrentStreams), cp.connections[0].referenceCount)
 
-			// Release the first connection 100 times, to bring it to 0
+			// Release the first connection grpcMaxConcurrentStreams times, to bring it to 0
 			for range grpcMaxConcurrentStreams {
 				cp.Release(conns[0])
 			}
@@ -331,29 +331,108 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, idleStart, *(cp.connections[0].idleSince.Load()))
 
 			// Wait 15 seconds (more than expiration time)
-			// Share should return nil because the connection has expired
 			clockMock.Step(15 * time.Second)
-			conn = cp.Share()
-			require.Nil(t, conn)
-			require.Equal(t, int32(0), cp.connections[0].referenceCount)
 
-			// Now the first connection should be purged if minActiveConns == 0 only
+			if minActiveConns == 0 {
+				// Share should return nil because the connection has expired
+				conn = cp.Share()
+				require.Nil(t, conn)
+				require.Equal(t, int32(0), cp.connections[0].referenceCount)
+
+				// Now the first connection should be purged
+				clockMock.Step(15 * time.Second)
+				cp.Purge()
+
+				require.Empty(t, cp.connections)
+				return
+			}
+
+			// Connections kept to satisfy minActiveConns are the pool's warm
+			// connections, so they are never expired out: Share keeps handing
+			// them out and Purge keeps them.
+			conn = cp.Share()
+			require.Equal(t, conns[0], conn)
+			require.Equal(t, int32(1), cp.connections[0].referenceCount)
+
+			cp.Release(conns[0])
+			require.Equal(t, int32(0), cp.connections[0].referenceCount)
+			require.Equal(t, clock.Now(), *(cp.connections[0].idleSince.Load()))
+
 			clockMock.Step(15 * time.Second)
 			cp.Purge()
 
-			if minActiveConns == 0 {
-				require.Empty(t, cp.connections)
-			} else {
-				require.Len(t, cp.connections, 1)
-				require.Equal(t, conns[0], cp.connections[0].conn)
-				require.Equal(t, int32(0), cp.connections[0].referenceCount)
-				require.Equal(t, idleStart, *(cp.connections[0].idleSince.Load()))
-			}
+			require.Len(t, cp.connections, 1)
+			require.Equal(t, conns[0], cp.connections[0].conn)
+			require.Equal(t, int32(0), cp.connections[0].referenceCount)
 		}
 	}
 
 	t.Run("expired connection", testExpiredConn(0))
 	t.Run("expired connection with 1 min", testExpiredConn(1))
+}
+
+// TestConnectionPoolWarmConnection covers the pool half of
+// https://github.com/dapr/dapr/issues/10335 for the local app pool, which is
+// created with minActiveConns == 1 so that a warm connection to the app is
+// always kept around.
+//
+// That connection used to be stuck once it had been idle for longer than
+// maxConnIdle: Get no longer handed it out (doShare skipped expired
+// connections) while Purge refused to close it (it is below minActiveConns).
+// Every request arriving after an idle gap therefore dialled a brand new
+// connection, and each of those had to complete a handshake inside gRPC's
+// one-shot connect budget before the request riding on it could proceed.
+func TestConnectionPoolWarmConnection(t *testing.T) {
+	clockMock := testingclock.NewFakeClock(time.Now())
+	clock = clockMock
+	t.Cleanup(func() {
+		clock = &kclock.RealClock{}
+	})
+
+	const maxConnIdle = 3 * time.Minute
+
+	// Same shape as the local app connection pool in NewManager.
+	cp := NewConnectionPool(maxConnIdle, 1)
+
+	var created []*mockConnection
+	createFn := func() (grpc.ClientConnInterface, error) {
+		conn := new(mockConnection)
+		created = append(created, conn)
+		return conn, nil
+	}
+
+	// First request establishes the app connection.
+	first, err := cp.Get(createFn)
+	require.NoError(t, err)
+	require.Len(t, created, 1)
+	cp.Release(first)
+
+	// A second request inside the idle window reuses it, as expected.
+	second, err := cp.Get(createFn)
+	require.NoError(t, err)
+	require.Len(t, created, 1)
+	require.Same(t, first, second)
+	cp.Release(second)
+
+	// Three more requests, each arriving after an idle gap longer than
+	// maxConnIdle, as a sporadic pub/sub subscription would. Every one of them
+	// reuses the warm connection instead of dialing.
+	for range 3 {
+		clockMock.Step(maxConnIdle + time.Second)
+		cp.Purge()
+
+		conn, err := cp.Get(createFn)
+		require.NoError(t, err)
+		cp.Release(conn)
+
+		require.Len(t, created, 1)
+		require.Same(t, first, conn)
+	}
+
+	// The connection is still the only one in the pool, and still open.
+	require.Len(t, cp.connections, 1)
+	require.Same(t, created[0], cp.connections[0].conn)
+	assert.False(t, created[0].Closed)
 }
 
 // Mock that implements grpc.ClientConnInterface and the Close method

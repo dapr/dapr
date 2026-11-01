@@ -113,6 +113,11 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 			wantOp: wfaclapi.WorkflowOperationPurge,
 		},
 		{
+			name:   "RecursivePurgeWorkflowState is purge",
+			method: "RecursivePurgeWorkflowState",
+			wantOp: wfaclapi.WorkflowOperationPurge,
+		},
+		{
 			name:   "WaitForRuntimeStatus is get",
 			method: "WaitForRuntimeStatus",
 			wantOp: wfaclapi.WorkflowOperationGet,

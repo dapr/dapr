@@ -62,7 +62,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 	i.withTypes.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := i.noTypes.Placement().PlacementTables(t, ctx)
+		table := i.noTypes.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}

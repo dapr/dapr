@@ -29,9 +29,12 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring/scaling"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/placement"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -40,6 +43,12 @@ import (
 )
 
 var log = logger.NewLogger("dapr.scheduler.server")
+
+// ErrListen is returned by Run when the server cannot bind its port. The
+// default port lies inside the default ephemeral port range, so one of the
+// process's own outbound connections can hold it; a new process gets new
+// sockets.
+var ErrListen = errors.New("could not listen")
 
 // Controller is a long-lived k8s controller that must only be created
 // once per process because controller-runtime registers controller names globally in the metrics registry.
@@ -62,10 +71,18 @@ type Options struct {
 	KubeConfig                *string
 	Controller                *controller.Controller
 
+	// Scaling, when non-nil, is pointed at this server's cron so it reports
+	// its queue state.
+	Scaling *scaling.Collector
+
 	Workers uint32
 
 	Backend       *string
 	BackendConfig any
+
+	PlacementEnabled                   bool
+	PlacementDisseminateTimeout        time.Duration
+	PlacementDisseminateCoalesceWindow time.Duration
 
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
@@ -100,7 +117,8 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
-	controller *controller.Controller
+	placement  placement.Interface
+	handoff    *handoff.Handoff
 
 	hzAPIServer healthz.Target
 
@@ -159,26 +177,64 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		}
 	}
 
+	// Every scheduler runs the placement detection, whether or not it serves
+	// placement itself: during a rolling update of the placement flag a
+	// scheduler without it still elects the placement leader among its
+	// flagged peers, so it must withhold that election while a placement
+	// service is present.
+
+	// In kubernetes a placement service too old to announce itself is
+	// still detected through its service name resolving.
+	var placementDNSName string
+	if opts.Mode == modes.KubernetesMode {
+		placementDNSName = "dapr-placement-server"
+	}
+
+	hoff := handoff.New(handoff.Options{
+		PlacementDNSName: placementDNSName,
+		Security:         opts.Security,
+	})
+
+	place := placement.New(placement.Options{
+		Enabled:            opts.PlacementEnabled,
+		ID:                 opts.EtcdName,
+		Security:           opts.Security,
+		Healthz:            opts.Healthz,
+		DisseminateTimeout: opts.PlacementDisseminateTimeout,
+		CoalesceWindow:     opts.PlacementDisseminateCoalesceWindow,
+	})
+
 	cron := cron.New(cron.Options{
-		ID:            opts.EtcdName,
-		Host:          &schedulerv1pb.Host{Address: broadcastAddr},
+		ID: opts.EtcdName,
+		Host: &schedulerv1pb.Host{
+			Address:                   broadcastAddr,
+			SchedulerPlacementEnabled: opts.PlacementEnabled,
+		},
 		Etcd:          etcdServer,
 		Backend:       opts.Backend,
 		BackendConfig: opts.BackendConfig,
 		Workers:       opts.Workers,
+		Placement:     place,
+		Handoff:       hoff,
 	})
+
+	if opts.Scaling != nil {
+		opts.Scaling.SetSource(cron)
+	}
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
+		opts.Controller.SetPresenceSink(hoff)
 	}
 
 	return &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
-		controller:    opts.Controller,
 		cron:          cron,
+		placement:     place,
 		etcd:          etcdServer,
+		handoff:       hoff,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -194,15 +250,35 @@ func (s *Server) Run(ctx context.Context) error {
 
 	log.Info("Dapr Scheduler is starting...")
 
+	// On shutdown, placement closes its streams before the cron stops.
+	// Otherwise the cron teardown revokes the placement leadership first and
+	// the streams close with a lost leadership error instead of the shutdown
+	// status.
+	cronCtx, cronCancel := context.WithCancel(context.WithoutCancel(ctx))
 	runners := []concurrency.Runner{
 		s.runServer,
 		func(ctx context.Context) error {
-			err := s.cron.Run(ctx)
-			if ctx.Err() != nil {
+			defer func() {
+				// Hand off etcd leadership before cron re-election writes.
+				if s.etcd != nil {
+					s.etcd.TransferLeadership()
+				}
+				cronCancel()
+			}()
+			return s.placement.Run(ctx)
+		},
+		func(context.Context) error {
+			err := s.cron.Run(cronCtx)
+			if cronCtx.Err() != nil {
 				if err != nil {
 					log.Errorf("Error running scheduler cron: %s", err)
 				}
-				return ctx.Err()
+				return cronCtx.Err()
+			}
+			if err != nil {
+				log.Warnf("Scheduler cron exited unexpectedly, restarting server: %s", err)
+			} else {
+				log.Warn("Scheduler cron exited unexpectedly, restarting server")
 			}
 			return err
 		},
@@ -213,9 +289,7 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 	}
 
-	if s.controller != nil {
-		runners = append(runners, s.controller.Run)
-	}
+	runners = append(runners, s.handoff.Run)
 
 	if s.etcd != nil {
 		runners = append(runners, s.etcd.Run)
@@ -236,7 +310,7 @@ func (s *Server) runServer(ctx context.Context) error {
 	defer s.hzAPIServer.NotReady()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+		return fmt.Errorf("%w on port %d: %w", ErrListen, s.port, err)
 	}
 
 	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
@@ -248,6 +322,12 @@ func (s *Server) runServer(ctx context.Context) error {
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    time.Second * 3,
 			Timeout: time.Second * 5,
+		}),
+		// The placement service pings its WatchHosts connection to detect a
+		// scheduler which died mid-stream.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Second * 5,
+			PermitWithoutStream: true,
 		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)

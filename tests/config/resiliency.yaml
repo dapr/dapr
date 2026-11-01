@@ -7,6 +7,9 @@ spec:
   policies:
     timeouts:
       fast: 500ms
+      # The first publish to a topic sets up the broker connection, which can
+      # take longer than 500ms (Azure Service Bus from the Windows e2e).
+      publish: 5s
 
     retries:
       fiveRetries:
@@ -70,5 +73,5 @@ spec:
           timeout: fast
           retry: fiveRetriesWithMatch
         outbound:
-          timeout: fast
+          timeout: publish
           retry: fiveRetriesWithMatch

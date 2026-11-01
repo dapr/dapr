@@ -290,7 +290,8 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		if IsHopByHopHeader(keyName) {
 			continue
 		}
-		if _, ok := connHopByHop[keyName]; ok {
+		// daprd sets dapr- headers itself, so a caller can't nominate them away.
+		if _, ok := connHopByHop[keyName]; ok && !strings.HasPrefix(keyName, DaprHeaderPrefix) {
 			continue
 		}
 

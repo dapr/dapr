@@ -33,7 +33,7 @@ type mockCryptoProvider struct {
 func TestRegistry(t *testing.T) {
 	testRegistry := crypto.NewRegistry()
 
-	t.Run("cryto provider is registered", func(t *testing.T) {
+	t.Run("crypto provider is registered", func(t *testing.T) {
 		const (
 			cryptoProviderName   = "mockCrypto"
 			cryptoProviderNameV2 = "mockCrypto/v2"

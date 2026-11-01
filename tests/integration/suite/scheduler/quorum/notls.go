@@ -114,7 +114,7 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(port)},
-		DialTimeout: 40 * time.Second,
+		DialTimeout: 5 * time.Second,
 	})
 	require.NoError(t, err)
 	defer client.Close()

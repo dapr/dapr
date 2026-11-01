@@ -27,7 +27,7 @@ type EtcdClient struct {
 
 // Returns an adapted Etcd client for tests.
 func Etcd(t *testing.T, cfg clientv3.Config) *EtcdClient {
-	etcdClient, err := clientv3.New(cfg)
+	etcdClient, err := clientv3.New(WithEtcdLogger(t, cfg))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, etcdClient.Close()) })
 

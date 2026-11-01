@@ -245,6 +245,27 @@ func TestScaleDeploymentReplica(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(3)
 		require.NoError(t, err)
 	})
+
+	t.Run("retries on conflict", func(t *testing.T) {
+		client := newFakeKubeClient()
+		updates := 0
+		client.ClientSet.(*fake.Clientset).AddReactor(
+			"*",
+			"deployments",
+			func(action core.Action) (bool, runtime.Object, error) {
+				if action.GetVerb() == updateVerb {
+					updates++
+					if updates == 1 {
+						return true, nil, errors.NewConflict(schema.GroupResource{Resource: "deployments"}, testApp.AppName, assert.AnError)
+					}
+				}
+				return true, &autoscalingv1.Scale{Spec: autoscalingv1.ScaleSpec{Replicas: 1}}, nil
+			})
+
+		err := NewAppManager(client, testNamespace, testApp).ScaleDeploymentReplica(3)
+		require.NoError(t, err)
+		assert.Equal(t, 2, updates)
+	})
 }
 
 func TestValidateSidecar(t *testing.T) {

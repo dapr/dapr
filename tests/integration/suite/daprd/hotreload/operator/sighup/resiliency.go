@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/log"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -128,14 +129,13 @@ func (r *resiliency) Run(t *testing.T, ctx context.Context) {
 		// The SIGHUP reconciler will receive this and send SIGHUP to daprd.
 		close(r.resiliencySent)
 
-		// After SIGHUP, daprd restarts.
-		r.daprd.WaitUntilRunning(t, ctx)
-
-		// Verify daprd restarted by checking for the startup log message
-		// that appears after a SIGHUP restart.
+		// After SIGHUP, daprd restarts. Wait for the restarted runtime
+		// itself: the old one still answers health checks, and a test that
+		// ends on it has its teardown interrupt the new one mid-start.
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.True(ct, r.logOut.Contains("Resiliency"),
-				"expected log to contain resiliency loading indication after SIGHUP")
+			assert.True(ct, r.logOut.Contains(kill.HUPLogLine))
+			assert.True(ct, r.logOut.Contains("dapr initialized. Status: Running."))
 		}, 15*time.Second, 10*time.Millisecond)
+		r.daprd.WaitUntilRunning(t, ctx)
 	})
 }

@@ -47,14 +47,18 @@ var (
 type Options struct {
 	Cron          api.Interface
 	NamespaceLoop loop.Interface[loops.EventNS]
+
+	// PlacementEnabled reports whether this scheduler serves placement.
+	PlacementEnabled bool
 }
 
 // connections is a control loop that creates and manages stream connections,
 // piping trigger requests.
 type connections struct {
-	cron   api.Interface
-	nsLoop loop.Interface[loops.EventNS]
-	loop   loop.Interface[loops.EventConn]
+	cron             api.Interface
+	nsLoop           loop.Interface[loops.EventNS]
+	loop             loop.Interface[loops.EventConn]
+	placementEnabled bool
 
 	// schedulerCount and schedulerIdx are the latest view of cluster
 	// membership, updated by SchedulerInfoUpdate events. Only accessed from
@@ -76,6 +80,7 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 
 	conns.cron = opts.Cron
 	conns.nsLoop = opts.NamespaceLoop
+	conns.placementEnabled = opts.PlacementEnabled
 	conns.streamIDx = 0
 	conns.schedulerCount = 1
 	conns.schedulerIdx = 0
@@ -147,9 +152,10 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	}
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
-		Loop:       streamLoop,
-		AppID:      appID,
-		ActorTypes: add.Request.GetActorTypes(),
+		Loop:         streamLoop,
+		AppID:        appID,
+		ActorTypes:   add.Request.GetActorTypes(),
+		ActorAddress: add.Request.ActorAddress,
 	})
 
 	c.updateConcurrencyLimits(streamIDx, add.Request)
@@ -328,37 +334,50 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 // drainPending scans the pending queue to find a trigger that can acquire all
 // required gates. This avoids head-of-line blocking when the first pending
 // trigger is blocked on a different gate than the one that just released.
+// Requests skipped by the scan are returned to the front of the queue in
+// their original order, so an elder trigger is never rotated behind fresher
+// arrivals.
 func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	defer monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	defer func() {
+		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+	}()
 
 	n := gate.pendingLen()
+	var skipped []*loops.TriggerRequest
 	for range n {
 		next := gate.dequeue()
 		if next == nil {
-			return
+			break
 		}
 
-		if c.tryDispatchPending(next) {
-			return
+		dispatched, consumed := c.tryDispatchPending(next)
+		if !consumed {
+			skipped = append(skipped, next)
+		}
+		if dispatched {
+			break
 		}
 	}
+
+	gate.requeueFront(skipped)
 }
 
-// tryDispatchPending attempts to dispatch a single pending trigger. On gate
-// acquisition failure it re-queues the request (or fails it if the queue is
-// full) and releases any partially-acquired gates via defer. Returns true iff
-// the trigger was dispatched.
-func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
+// tryDispatchPending attempts to dispatch a single pending trigger. Returns
+// dispatched=true iff the trigger was handed to a stream loop, and
+// consumed=true when the caller no longer owns the request (dispatched, or
+// resolved undeliverable). On gate acquisition failure the request stays with
+// the caller to requeue at its original position, and partially-acquired
+// gates are released via defer.
+func (c *connections) tryDispatchPending(next *loops.TriggerRequest) (dispatched, consumed bool) {
 	streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
 	if !ok {
 		next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		return false
+		return false, true
 	}
 
 	gateKeys := c.gateKeysForTrigger(next)
 
 	var acquired []string
-	dispatched := false
 	defer func() {
 		if !dispatched {
 			c.releaseGates(acquired)
@@ -368,16 +387,11 @@ func (c *connections) tryDispatchPending(next *loops.TriggerRequest) bool {
 	var gotAll bool
 	acquired, gotAll = c.acquireGates(gateKeys)
 	if !gotAll {
-		primaryGate := c.concurrencyGates[gateKeys[0]]
-		if !primaryGate.enqueue(next) {
-			next.ResultFn(api.TriggerResponseResult_FAILED)
-		}
-		return false
+		return false, false
 	}
 
 	c.dispatchWithGates(streamLoop, next, gateKeys)
-	dispatched = true
-	return true
+	return true, true
 }
 
 // handleCloseStream handles a close stream request.
@@ -438,7 +452,16 @@ func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Inter
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		return c.streamPool.AppID(meta.GetAppId())
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		return c.streamPool.ActorType(t.GetActor().GetType())
+		// Owner routing is only correct when this scheduler serves
+		// placement; the placement service hashes differently.
+		if !c.placementEnabled {
+			return c.streamPool.ActorType(t.GetActor().GetType())
+		}
+		// Route the reminder to the placement owner host for this actor ID
+		// when host addresses are known; round robin otherwise. A non-owner
+		// host forwards to the owner via its own placement table, so a
+		// stale or missing table costs one extra hop, never correctness.
+		return c.streamPool.ActorHost(t.GetActor().GetType(), t.GetActor().GetId())
 	default:
 		return nil, false
 	}

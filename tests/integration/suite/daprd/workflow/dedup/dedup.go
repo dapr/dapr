@@ -14,5 +14,7 @@ limitations under the License.
 package dedup
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup/early"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup/schedulerrestart"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/dedup/stalledrecovery"
 )

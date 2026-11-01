@@ -72,20 +72,32 @@ func New(opts Options) postman.Interface {
 func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
-	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
-	if err != nil {
-		return err
-	}
-
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
-	ctx = g.channel.AddAppTokenToContext(ctx)
-
+	// The app client is acquired before the delivery span is started, so that
+	// failing to get one cannot return an error alongside a span that nothing
+	// goes on to end.
 	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
 	defer teardown(false)
+
 	clientV1 := rtv1.NewAppCallbackClient(conn)
+
+	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		// Nothing between here and the app call returns early, so this is a
+		// guarantee for future edits rather than a fix for a path that leaks
+		// today. Ending a span twice is a no-op, so the path that has a
+		// response still sets the status first.
+		defer span.End()
+	}
+
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	start := time.Now()
 	res, err := clientV1.OnTopicEvent(ctx, envelope)
@@ -155,13 +167,16 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	items := make([]*rtv1.TopicEventBulkRequestEntry, len(psm.PubSubMessages))
 
-	entryRespReceived := make(map[string]bool, len(psm.PubSubMessages))
+	// This attempt may carry only some of the bulk message's entries, so look
+	// them up by ID rather than by their index in the whole message. An entry
+	// is removed once the app answers for it, leaving those it did not.
+	attemptMsgs := make(map[string]todo.Message, len(psm.PubSubMessages))
 	for i, pubSubMsg := range psm.PubSubMessages {
 		entry := pubSubMsg.Entry
 
 		item, err := pubsub.FetchEntry(req.RawPayload, entry, psm.PubSubMessages[i].CloudEvent)
 		if err != nil {
-			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)]++
+			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 
 			todo.AddBulkResponseEntry(bulkResponses, entry.EntryId, err)
 
@@ -169,6 +184,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		}
 
 		items[i] = item
+		attemptMsgs[entry.EntryId] = pubSubMsg
 	}
 
 	uuidObj, err := uuid.NewRandom()
@@ -190,29 +206,16 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	n := 0
 
 	for _, pubSubMsg := range psm.PubSubMessages {
-		cloudEvent := pubSubMsg.CloudEvent
+		// A zero parent starts a new root span, so an entry delivered without
+		// inbound trace context is still traced.
+		sc := pubsub.ParentSpanContextFromCloudEvent(pubSubMsg.CloudEvent, log)
 
-		iTraceID := cloudEvent[contribpubsub.TraceParentField]
-		if iTraceID == nil {
-			iTraceID = cloudEvent[contribpubsub.TraceIDField]
-		}
-
-		if iTraceID != nil {
-			if traceID, ok := iTraceID.(string); ok {
-				sc, _ := diag.SpanContextFromW3CString(traceID)
-
-				// no ops if trace is off
-				var span trace.Span
-
-				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
-				if span != nil {
-					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-					spans[n] = span
-					n++
-				}
-			} else {
-				log.Warnf("ignored non-string traceid value: %v", iTraceID)
-			}
+		// no ops if trace is off. The returned context is discarded: each entry
+		// gets its own span and the batch is delivered under one call.
+		_, span := diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
+		if span != nil {
+			spans[n] = span
+			n++
 		}
 	}
 
@@ -267,8 +270,8 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
 
-			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += int64(len(psm.PubSubMessages))
-			bscData.BulkSubDiag.Elapsed = elapsed
+			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, int64(len(psm.PubSubMessages)))
+			bscData.BulkSubDiag.SetElapsed(elapsed)
 
 			todo.PopulateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 
@@ -278,8 +281,8 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		err = fmt.Errorf("error returned from app while processing bulk pub/sub event: %w", err)
 		log.Debug(err)
 
-		bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += int64(len(psm.PubSubMessages))
-		bscData.BulkSubDiag.Elapsed = elapsed
+		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(psm.PubSubMessages)))
+		bscData.BulkSubDiag.SetElapsed(elapsed)
 
 		todo.PopulateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 
@@ -298,17 +301,17 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	for _, response := range res.GetStatuses() {
 		entryID := response.GetEntryId()
-		if _, ok := (*bscData.EntryIdIndexMap)[entryID]; ok {
+		if msg, ok := attemptMsgs[entryID]; ok {
+			delete(attemptMsgs, entryID)
+
 			switch response.GetStatus() {
 			case rtv1.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Success)] += 1
-				entryRespReceived[entryID] = true
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Success, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID, nil)
 			case rtv1.TopicEventResponse_RETRY: //nolint:nosnakecase
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += 1
-				entryRespReceived[entryID] = true
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID))
 
@@ -316,12 +319,10 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", entryID)
 
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Drop)] += 1
-				entryRespReceived[entryID] = true
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID, nil)
 
 				if req.DeadLetterTopic != "" {
-					msg := psm.PubSubMessages[(*bscData.EntryIdIndexMap)[entryID]]
 					_ = g.sendToDeadLetter(ctx, bscData.PsName, &contribpubsub.NewMessage{
 						Data:        msg.Entry.Event,
 						Topic:       bscData.Topic,
@@ -331,31 +332,30 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				}
 			default:
 				// Consider unknown status field as error and retry
-				bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += 1
-				entryRespReceived[entryID] = true
+				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()))
 
 				hasAnyError = true
 			}
 		} else {
-			log.Warnf("Invalid entry id received from app while processing pub/sub event %v", entryID)
+			log.Warnf("Invalid entry id received from app while processing pub/sub event %v: not in this delivery, or already answered", entryID)
 			continue
 		}
 	}
 
 	for _, item := range psm.PubSubMessages {
-		if !entryRespReceived[item.Entry.EntryId] {
+		if _, ok := attemptMsgs[item.Entry.EntryId]; ok {
 			todo.AddBulkResponseEntry(bulkResponses, item.Entry.EntryId,
 				fmt.Errorf("response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.Entry.EntryId),
 			)
 
 			hasAnyError = true
-			bscData.BulkSubDiag.StatusWiseDiag[string(contribpubsub.Retry)] += 1
+			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 		}
 	}
 
-	bscData.BulkSubDiag.Elapsed = elapsed
+	bscData.BulkSubDiag.SetElapsed(elapsed)
 
 	if hasAnyError {
 		return errors.New("few message(s) have failed during bulk subscribe operation")

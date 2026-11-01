@@ -16,6 +16,7 @@ package http
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/middleware"
@@ -29,8 +30,21 @@ type pipeline struct {
 	name  string
 	spec  *config.PipelineSpec
 	store *store.Store[middleware.HTTP]
+	wrap  middleware.HTTP
+	gen   atomic.Uint64
+}
+
+type chain struct {
+	gen     uint64
+	handler http.Handler
+}
+
+// rootHandler caches the chain built for its root until the pipeline is rebuilt.
+type rootHandler struct {
+	p     *pipeline
 	root  http.Handler
-	chain http.Handler
+	first chain
+	chain atomic.Pointer[chain]
 }
 
 // newPipeline creates a new HTTP Middleware Pipeline.
@@ -43,6 +57,7 @@ func newPipeline(
 		name:  name,
 		spec:  spec,
 		store: store,
+		wrap:  func(next http.Handler) http.Handler { return next },
 	}
 }
 
@@ -52,19 +67,28 @@ func newPipeline(
 // effect.
 // The pipeline root handler will be set once the middleware is invoked.
 func (p *pipeline) http() middleware.HTTP {
-	return func(root http.Handler) http.Handler {
-		p.lock.Lock()
-		p.root = root
-		p.lock.Unlock()
-		p.buildChain()
+	p.buildChain()
 
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			p.lock.RLock()
-			next := p.chain
-			p.lock.RUnlock()
-			next.ServeHTTP(w, r)
-		})
+	return func(root http.Handler) http.Handler {
+		p.lock.RLock()
+		wrap, gen := p.wrap, p.gen.Load()
+		p.lock.RUnlock()
+		h := &rootHandler{p: p, root: root, first: chain{gen: gen, handler: wrap(root)}}
+		h.chain.Store(&h.first)
+		return h
 	}
+}
+
+func (h *rootHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := h.chain.Load()
+	if c.gen != h.p.gen.Load() {
+		h.p.lock.RLock()
+		wrap, gen := h.p.wrap, h.p.gen.Load()
+		h.p.lock.RUnlock()
+		c = &chain{gen: gen, handler: wrap(h.root)}
+		h.chain.Store(c)
+	}
+	c.handler.ServeHTTP(w, r)
 }
 
 // buildChain builds and updates the middleware chain from root using the set
@@ -72,27 +96,33 @@ func (p *pipeline) http() middleware.HTTP {
 func (p *pipeline) buildChain() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	p.gen.Add(1)
 
 	// If no spec or no handlers defined, use root.
 	if p.spec == nil || len(p.spec.Handlers) == 0 {
-		p.chain = p.root
+		p.wrap = func(next http.Handler) http.Handler { return next }
 		return
 	}
 
 	log.Infof("Building pipeline %s", p.name)
 
-	next := p.root
-	for i := len(p.spec.Handlers) - 1; i >= 0; i-- {
+	var handlers []middleware.HTTP
+	for _, spec := range p.spec.Handlers {
 		handler, ok := p.store.Get(store.Metadata{
-			Name:    p.spec.Handlers[i].Name,
-			Type:    p.spec.Handlers[i].Type,
-			Version: p.spec.Handlers[i].Version,
+			Name:    spec.Name,
+			Type:    spec.Type,
+			Version: spec.Version,
 		})
 		if !ok {
 			continue
 		}
-		next = handler(next)
+		handlers = append(handlers, handler)
 	}
 
-	p.chain = next
+	p.wrap = func(next http.Handler) http.Handler {
+		for i := len(handlers) - 1; i >= 0; i-- {
+			next = handlers[i](next)
+		}
+		return next
+	}
 }

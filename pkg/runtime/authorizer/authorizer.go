@@ -16,10 +16,12 @@ package authorizer
 import (
 	"os"
 	"reflect"
+	"slices"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
@@ -106,6 +108,9 @@ func (a *Authorizer) IsObjectAuthorized(object any) bool {
 				return false
 			}
 		}
+	case subapi.Subscription:
+		// Matches the processor's scope filter for declarative subscriptions.
+		return len(obj.Scopes) == 0 || slices.Contains(obj.Scopes, a.id)
 	}
 
 	return true

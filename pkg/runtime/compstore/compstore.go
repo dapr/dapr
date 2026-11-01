@@ -17,13 +17,18 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/durabletask-go/backend"
+
+	"github.com/dapr/components-contrib/binarystore"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/components-contrib/search"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/vector"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -32,7 +37,6 @@ import (
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/durabletask-go/backend"
 )
 
 // ComponentStore is a store of all components which have been configured for the
@@ -63,9 +67,17 @@ type ComponentStore struct {
 	actorStateStore         struct {
 		name  string
 		store state.Store
+		// rev increments on every mutation of the actor state store slot
+		// (set or clear), letting observers detect transitions even when
+		// notifications for a remove+add pair coalesce.
+		rev uint64
 	}
 
 	conversations map[string]conversation.Conversation
+	searches      map[string]search.Search
+	vectors       map[string]vector.Vector
+
+	binaryStores map[string]binarystore.BinaryStore
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
@@ -93,5 +105,8 @@ func New() *ComponentStore {
 			streams:      make(map[string][]*DeclarativeSubscription),
 		},
 		conversations: make(map[string]conversation.Conversation),
+		searches:      make(map[string]search.Search),
+		vectors:       make(map[string]vector.Vector),
+		binaryStores:  make(map[string]binarystore.BinaryStore),
 	}
 }

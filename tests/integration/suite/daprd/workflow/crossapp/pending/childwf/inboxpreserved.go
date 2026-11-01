@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -30,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -113,7 +113,7 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 	p.place.WaitUntilRunning(t, ctx)
 	p.daprd1.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(p.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(p.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, p.registry1))
 
 	id, err := client1.ScheduleNewWorkflow(ctx, "ParentWorkflow",
@@ -145,7 +145,7 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { p.daprd2.Cleanup(t) })
 	p.daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := client.NewTaskHubGrpcClient(p.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(p.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, p.registry2))
 
 	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))

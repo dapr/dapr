@@ -19,13 +19,18 @@ import (
 	"strings"
 )
 
-// ValidateName checks that a name (e.g. reminder or timer name) does not
-// contain characters that could cause path traversal or injection when the
-// name is embedded in a URL path. Unlike NormalizeMethod, this rejects any
-// name containing '/' or '\' since names are identifiers, not paths.
+// ValidateName checks that a name (e.g. an actor type, actor ID, reminder or
+// timer name) does not contain characters that could cause path traversal or
+// injection when the name is embedded in a URL path. Unlike NormalizeMethod,
+// this rejects any name containing '/' or '\' since names are identifiers,
+// not paths, and, like NormalizeMethod, a percent-encoded '/', '\' or '.',
+// which the app would decode into a path segment.
 func ValidateName(name string) error {
 	if strings.ContainsAny(name, "#?\x00/\\") {
 		return fmt.Errorf("name contains forbidden character: %q", name)
+	}
+	if hasEncodedSeparator(name) {
+		return fmt.Errorf("name contains percent-encoded '/', '\\' or '.': %q", name)
 	}
 	for i := range name {
 		b := name[i]
@@ -40,12 +45,21 @@ func ValidateName(name string) error {
 }
 
 // NormalizeMethod validates and cleans a service invocation method name.
-// It rejects methods containing '#', '?', null bytes, or control characters
-// (bytes 0x01-0x1f and 0x7f), then resolves path traversal via path.Clean.
+// It rejects methods containing '#', '?', '\', null bytes, control characters
+// (bytes 0x01-0x1f and 0x7f), or a percent-encoded '/', '\' or '.' (%2F, %5C,
+// %2E in any case), then resolves path traversal via path.Clean.
 // The caller is responsible for percent-decoding (for HTTP) before calling.
+// Encoded separators and dots are rejected because the ACL matches them as
+// literal characters, while an HTTP app decodes them into path segments. A
+// literal backslash is rejected because it is re-encoded to %5C on the wire
+// to the app, which decodes it back into a character the ACL did not split on.
 func NormalizeMethod(method string) (string, error) {
-	if strings.ContainsAny(method, "#?\x00") {
+	if strings.ContainsAny(method, "#?\x00\\") {
 		return "", fmt.Errorf("method contains forbidden character: %q", method)
+	}
+
+	if hasEncodedSeparator(method) {
+		return "", fmt.Errorf("method contains percent-encoded '/', '\\' or '.': %q", method)
 	}
 
 	// Reject control characters (0x01-0x1f and 0x7f DEL).
@@ -72,4 +86,11 @@ func NormalizeMethod(method string) (string, error) {
 	}
 
 	return cleaned, nil
+}
+
+// hasEncodedSeparator reports whether s contains a percent-encoded '/', '\' or
+// '.' (%2F, %5C, %2E in any case).
+func hasEncodedSeparator(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2e")
 }

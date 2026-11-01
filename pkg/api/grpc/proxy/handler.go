@@ -145,7 +145,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			pr.dispose()
 		},
 	})
-	var requestStartedAt time.Time
 	pr, cErr := policyRunner(func(ctx context.Context) (*proxyRunner, error) {
 		// Get the current iteration count
 		iter := counter.Add(1)
@@ -164,14 +163,14 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		}
 
 		// Remove the AppId from the metadata as it shouldn't be forwarded to the target gRPC service
-		md, _ = metadata.FromOutgoingContext(outgoingCtx)
-		md.Delete(diagConsts.GRPCProxyAppIDKey)
-		outgoingCtx = metadata.NewOutgoingContext(ctx, md.Copy())
+		outMD, _ := metadata.FromOutgoingContext(outgoingCtx)
+		outMD.Delete(diagConsts.GRPCProxyAppIDKey)
+		outgoingCtx = metadata.NewOutgoingContext(ctx, outMD)
 
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
-		requestStartedAt = time.Now()
+		requestStartedAt := time.Now()
 		if grpcDestinationAppID != "" {
 			if isStream {
 				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppID)

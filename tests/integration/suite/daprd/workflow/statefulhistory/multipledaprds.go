@@ -45,21 +45,12 @@ type multipledaprds struct {
 }
 
 func (m *multipledaprds) Setup(t *testing.T) []framework.Option {
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: workflowsclustereddeployment
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-`
 	appID := uuid.New().String()
 	m.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithConfigManifests(t, config)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithConfigManifests(t, config)),
+		workflow.WithClusteredDeployment(true),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
 	)
 	return []framework.Option{framework.WithProcesses(m.workflow)}
 }

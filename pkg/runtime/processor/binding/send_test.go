@@ -698,6 +698,45 @@ func TestBindingResiliency(t *testing.T) {
 	})
 }
 
+func TestStopReadingFromBindingsDoesNotHoldLockDuringDrain(t *testing.T) {
+	b := &binding{}
+
+	// Simulate an output-binding send still in flight when
+	// StopReadingFromBindings is called. Nothing calls Done on this until
+	// after the lock-acquisition check below, so if the lock is held across
+	// the wait, acquiring it will hang.
+	b.wg.Add(1)
+
+	stopDone := make(chan struct{})
+	go func() {
+		b.StopReadingFromBindings(false)
+		close(stopDone)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	lockAcquired := make(chan struct{})
+	go func() {
+		b.lock.Lock()
+		b.lock.Unlock() //nolint:staticcheck // SA2001: intentional lock-acquisition probe
+		close(lockAcquired)
+	}()
+
+	select {
+	case <-lockAcquired:
+	case <-time.After(time.Second):
+		t.Fatal("lock still held while StopReadingFromBindings waits on an in-flight send")
+	}
+
+	b.wg.Done()
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("StopReadingFromBindings did not return after the in-flight send completed")
+	}
+}
+
 func matchDaprRequestMethod(method string) any {
 	return mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
 		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {

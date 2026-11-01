@@ -20,7 +20,9 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/cert"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	procinjector "github.com/dapr/dapr/tests/integration/framework/process/injector"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -31,6 +33,7 @@ func init() {
 
 type servingcertrsa struct {
 	injector *procinjector.Injector
+	logline  *logline.LogLine
 }
 
 func (s *servingcertrsa) Setup(t *testing.T) []framework.Option {
@@ -38,16 +41,21 @@ func (s *servingcertrsa) Setup(t *testing.T) []framework.Option {
 		procsentry.WithTrustDomain("integration.test.dapr.io"),
 		procsentry.WithNamespace("dapr-system"),
 	)
+	s.logline = logline.New(t,
+		logline.WithStdoutLineContains("metrics server started on 127.0.0.1:"),
+	)
 	s.injector = procinjector.New(t,
 		procinjector.WithNamespace("dapr-system"),
 		procinjector.WithSentry(sentry),
+		procinjector.WithExecOptions(exec.WithStdout(s.logline.Stdout())),
 	)
 	return []framework.Option{
-		framework.WithProcesses(sentry, s.injector),
+		framework.WithProcesses(s.logline, sentry, s.injector),
 	}
 }
 
 func (s *servingcertrsa) Run(t *testing.T, ctx context.Context) {
 	s.injector.WaitUntilRunning(t, ctx)
+	s.logline.EventuallyFoundAll(t)
 	cert.AssertRSAServingCert(t, ctx, "localhost:"+strconv.Itoa(s.injector.Port()))
 }

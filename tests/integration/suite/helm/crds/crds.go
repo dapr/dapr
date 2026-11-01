@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -46,20 +45,10 @@ func (u *uptodate) Run(t *testing.T, ctx context.Context) {
 	rootDir := binary.RootDir(t)
 	chartDir := filepath.Join(rootDir, "charts", "dapr", "crds")
 
-	args := []string{
-		"crd:crdVersions=v1",
-		"paths=github.com/dapr/dapr/pkg/apis/...",
-		"output:stdout",
-	}
-	//nolint:gosec
-	cmd := exec.CommandContext(ctx, binary.EnvValue("controllergen"), args...)
-	cmd.Dir = rootDir
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	require.NoErrorf(t, cmd.Run(), "controller-gen failed: %s", stderr.String())
+	generated, err := os.ReadFile(binary.EnvValue("generated_crds"))
+	require.NoError(t, err)
 
-	want := parseCRDs(t, stdout.Bytes(), "controller-gen output")
+	want := parseCRDs(t, generated, "controller-gen output")
 	got := loadCRDs(t, chartDir)
 
 	assert.ElementsMatch(t, keys(want), keys(got),

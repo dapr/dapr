@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -53,9 +54,11 @@ type mcpserverchurn struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
 	logline  *logline.LogLine
+	url      string
 }
 
 func (m *mcpserverchurn) Setup(t *testing.T) []framework.Option {
+	m.url = prochttp.NotFoundURL(t) + "/mcp"
 	sentry := sentry.New(t)
 
 	m.logline = logline.New(t, logline.WithStdoutLineContains(
@@ -97,12 +100,11 @@ func (m *mcpserverchurn) Run(t *testing.T, ctx context.Context) {
 	server := mcpserverapi.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "weather-mcp", Namespace: "default"},
 		Spec: mcpserverapi.MCPServerSpec{
-			// example.com is never dialed: no in-process workflow engine is wired
-			// up here, so the connection is skipped. IgnoreErrors keeps daprd up.
+			// The URL answers 404; IgnoreErrors keeps daprd up.
 			IgnoreErrors: true,
 			Endpoint: mcpserverapi.MCPEndpoint{
 				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
-					URL: "http://example.com/mcp",
+					URL: m.url,
 					Headers: []commonapi.NameValuePair{{
 						Name:         "Authorization",
 						SecretKeyRef: commonapi.SecretKeyRef{Name: "weather-secret", Key: "token"},

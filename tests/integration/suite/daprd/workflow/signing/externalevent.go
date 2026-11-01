@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -86,7 +87,7 @@ func (e *externalevent) Run(t *testing.T, ctx context.Context) {
 		return "", nil
 	})
 
-	client := dworkflow.NewClient(e.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(e.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "sign-event")

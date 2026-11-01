@@ -77,17 +77,23 @@ func TestMain(m *testing.M) {
 			AppProtocol:    "grpc",
 		},
 		{
-			AppName:        "grpcproxyclient",
+			// The service_invocation suite deploys the same proxy apps under the
+			// unprefixed names; distinct names keep the two suites isolated when
+			// test packages run concurrently
+			AppName:        "allowlists-grpcproxyclient",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc_proxy_client",
 			Replicas:       1,
 			AppProtocol:    "grpc",
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			AppEnv: map[string]string{
+				"PROXY_SERVER_APP_ID": "allowlists-grpcproxyserver",
+			},
 		},
 		{
 			Config:         "allowlistsgrpcappconfig",
-			AppName:        "grpcproxyserver",
+			AppName:        "allowlists-grpcproxyserver",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc_proxy_server",
 			Replicas:       1,
@@ -170,7 +176,7 @@ var allowListsForServiceInvocationForProxyTests = []struct {
 	{
 		"Test allow with callee side grpc without http verb by grpc proxy",
 		"",
-		"grpcproxyclient",
+		"allowlists-grpcproxyclient",
 		"",
 		"success",
 		"grpc",
@@ -179,7 +185,7 @@ var allowListsForServiceInvocationForProxyTests = []struct {
 }
 
 func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
+	externalURL := tr.Platform.AcquireAppExternalURL("allowlists-grpcproxyclient")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	var err error
 	// This initial probe makes the test wait a little bit longer when needed,

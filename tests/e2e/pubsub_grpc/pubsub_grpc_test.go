@@ -49,7 +49,10 @@ const (
 	randomOffsetMax           = 49
 	numberOfMessagesToPublish = 60
 	publishRateLimitRPS       = 25
-	receiveMessageRetries     = 5
+	// Validation polls every 2s up to this many attempts (~50s budget); a
+	// short interval lets positive validations return as soon as the
+	// expected messages have all been recorded.
+	receiveMessageRetries = 25
 
 	metadataPrefix    = "metadata."
 	publisherAppName  = "pubsub-publisher-grpc"
@@ -370,7 +373,7 @@ func waitForSubscriberReady(t *testing.T, subscriberExternalURL, protocol string
 			conn.Close()
 			log.Printf("gRPC subscriber at %s is ready", subscriberExternalURL)
 			return true
-		}, 50*time.Second, 5*time.Second, "gRPC subscriber not ready after retries")
+		}, 50*time.Second, time.Second, "gRPC subscriber not ready after retries")
 	}
 }
 
@@ -385,7 +388,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
@@ -412,7 +415,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 	log.Printf("Test publish bulk subscribe success flow\n")
 	sentMessages := testPublishForBulkSubscribe(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
@@ -439,7 +442,9 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
-// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+// testResiliencyExhaustion verifies that messages are not delivered to the
+// app while the subscriber keeps erroring: they are retried per the
+// pubsubRetry policy (maxRetries=5 at 1s) and then dropped.
 func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	var err error
 	var code int
@@ -459,7 +464,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	var lastRetryError error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
 		if retryCount > 0 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 		lastRetryError = nil
 		_, code, err = utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
@@ -478,9 +483,13 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
 
-	// After exhaustion, messages should be ACK'd and dropped
-	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
-	time.Sleep(65 * time.Second)
+	// After exhaustion, messages should be ACK'd and dropped. The wait is
+	// comfortably longer than the pubsubRetry budget (maxRetries=5 at 1s,
+	// plus a 1-3s broker redelivery cycle per attempt); this assertion only
+	// requires that the messages are not delivered to the app, which holds
+	// whether they are still retrying or already dropped.
+	log.Printf("Waiting for resiliency policy to exhaust retries...")
+	time.Sleep(20 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
@@ -517,7 +526,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	var lastRetryError error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
 		if retryCount > 0 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 		lastRetryError = nil
 		_, code, err = utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
@@ -578,7 +587,7 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	var lastRetryError error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
 		if retryCount > 0 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 		lastRetryError = nil
 		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
@@ -618,7 +627,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -626,7 +635,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -644,7 +653,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 			len(appResp.ReceivedByTopicCEBulk) != len(sentMessages.ReceivedByTopicCEBulk) ||
 			len(appResp.ReceivedByTopicDefBulk) != len(sentMessages.ReceivedByTopicDefBulk) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}
@@ -691,7 +700,7 @@ func validateMessagesReceivedBySubscriber(
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -699,7 +708,7 @@ func validateMessagesReceivedBySubscriber(
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -716,7 +725,7 @@ func validateMessagesReceivedBySubscriber(
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}
@@ -763,7 +772,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -771,7 +780,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -788,7 +797,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(
 			len(appResp.ReceivedByTopicRawBulkSub) != len(sentMessages.ReceivedByTopicRawBulkSub) ||
 			len(appResp.ReceivedByTopicCEBulkSub) != len(sentMessages.ReceivedByTopicCEBulkSub) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}

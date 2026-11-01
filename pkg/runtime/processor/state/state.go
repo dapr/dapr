@@ -38,12 +38,19 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
+// Actors is the subset of the actor runtime which is notified when a
+// component becomes the actor state store.
+type Actors interface {
+	OnActorStateStoreChanged()
+}
+
 type Options struct {
 	Registry       *compstate.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	ActorsEnabled  bool
 	Outbox         outbox.Outbox
+	Actors         Actors
 }
 
 type state struct {
@@ -52,9 +59,9 @@ type state struct {
 	meta      *meta.Meta
 	lock      sync.RWMutex
 
-	actorStateStoreName *string
-	actorsEnabled       bool
-	outbox              outbox.Outbox
+	actorsEnabled bool
+	outbox        outbox.Outbox
+	actors        Actors
 }
 
 func New(opts Options) *state {
@@ -64,6 +71,7 @@ func New(opts Options) *state {
 		meta:          opts.Meta,
 		actorsEnabled: opts.ActorsEnabled,
 		outbox:        opts.Outbox,
+		actors:        opts.Actors,
 	}
 }
 
@@ -129,14 +137,21 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		}
 
 		if actorStoreSpecified {
-			if s.actorStateStoreName == nil {
-				log.Info("Using '" + comp.Name + "' as actor state store")
-				s.actorStateStoreName = &comp.Name
-			} else if *s.actorStateStoreName != comp.Name {
-				return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.Name)
+			if err = s.compStore.AddStateStoreActor(comp.Name, store); err != nil {
+				diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 			}
+			log.Info("Using '" + comp.Name + "' as actor state store")
 
-			s.compStore.AddStateStoreActor(comp.Name, store)
+			// Notify the actor runtime directly on the add side: components
+			// parked behind a not-yet-loaded secret store are initialized
+			// outside the hot reload reconciler, so its notification does not
+			// cover them. Notifications coalesce, so double notification via
+			// the reconciler is harmless. The remove side is only notified by
+			// the reconciler, once a remove or update has fully settled.
+			if s.actors != nil {
+				s.actors.OnActorStateStoreChanged()
+			}
 		}
 	}
 
@@ -178,12 +193,6 @@ func (s *state) Close(comp compapi.Component) error {
 }
 
 func (s *state) ActorStateStoreName() (string, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if s.actorStateStoreName == nil {
-		return "", false
-	}
-
-	return *s.actorStateStoreName, true
+	_, name, ok := s.compStore.GetStateStoreActor()
+	return name, ok
 }

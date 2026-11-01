@@ -83,6 +83,7 @@ type assertingService struct {
 	pingCallCount              *atomic.Int32
 	simulateDelay              *atomic.Int32
 	simulateRandomFailures     *atomic.Bool
+	randomlyFailed             *sync.Map
 	simulateConnectionFailures *atomic.Int32
 }
 
@@ -107,11 +108,15 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	} else {
 		s.simulatePingFailures.Store(0)
 	}
-	if s.simulateRandomFailures.Load() {
-		if count%14 == 0 {
-			time.Sleep(800 * time.Millisecond)
-		} else if count%12 == 0 {
-			return nil, status.Errorf(codes.Internal, "Simulated random failure")
+	// A message fails at most once, so its retry always gets through whatever
+	// the other concurrent callers do to the counter.
+	if s.simulateRandomFailures.Load() && (count%14 == 0 || count%12 == 0) {
+		if _, failed := s.randomlyFailed.LoadOrStore(ping.GetValue(), true); !failed {
+			if count%14 == 0 {
+				time.Sleep(800 * time.Millisecond)
+			} else {
+				return nil, status.Errorf(codes.Internal, "Simulated random failure")
+			}
 		}
 	}
 
@@ -441,6 +446,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
+		s.service.randomlyFailed.Clear()
 
 		res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
 		require.NoError(t, err, "Ping should succeed after retrying")
@@ -470,6 +476,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
+		s.service.randomlyFailed.Clear()
 
 		meter := setupMetrics(s)
 		t.Cleanup(func() {
@@ -496,6 +503,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 	s.T().Run("multiple threads", func(t *testing.T) {
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
+		s.service.randomlyFailed.Clear()
 
 		// Simulate random failures during this test
 		// Note that because failures are simulated based on the counter, they're not really "random", although they impact "random" operations since they're parallelized
@@ -516,15 +524,16 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		for i := range numGoroutines {
 			wg.Add(1)
 			go func(i int) {
+				defer wg.Done()
 				for j := range numOperations {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
 					ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
-					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
-					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
-					require.Equalf(t, pingMsg, res.GetValue(), "Value should match for operation %d:%d", i, j)
+					if !assert.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j) ||
+						!assert.Equalf(t, pingMsg, res.GetValue(), "Value should match for operation %d:%d", i, j) {
+						return
+					}
 				}
-				wg.Done()
 			}(i)
 		}
 
@@ -799,6 +808,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		pingCallCount:              &atomic.Int32{},
 		simulateDelay:              &atomic.Int32{},
 		simulateRandomFailures:     &atomic.Bool{},
+		randomlyFailed:             &sync.Map{},
 	}
 
 	s.initServer()

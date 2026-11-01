@@ -93,7 +93,7 @@ func (c *Category) Handle(ctx context.Context, e loops.EventCategory) error {
 	return nil
 }
 
-// ActorStateStoreName is read directly from the sub-processor's atomic field.
+// ActorStateStoreName is read directly from the component store.
 // Safe to call from any goroutine without going through the loop.
 func (c *Category) ActorStateStoreName() (string, bool) {
 	return c.state.ActorStateStoreName()

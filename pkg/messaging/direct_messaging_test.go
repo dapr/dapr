@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,6 +71,32 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 		assert.Equal(t, callerNamespace, actualCallerNamespace.GetValues()[0])
 		assert.Equal(t, callerAppID, actualCallerAppID.GetValues()[0])
 		assert.Equal(t, calleeAppID, actualCalleeAppID.GetValues()[0])
+	})
+
+	t.Run("strips caller-supplied headers in any casing", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{
+				"Dapr-Caller-Namespace": {"spoofed-ns"},
+				"Dapr-Caller-App-Id":    {"spoofed-app"},
+				"Dapr-Callee-App-Id":    {"spoofed-callee"},
+				"DAPR-CALLER-APP-ID":    {"spoofed-app"},
+				"dapr-caller-app-id":    {"spoofed-app"},
+				"Other":                 {"kept"},
+			})
+		defer req.Close()
+
+		dm := &directMessaging{}
+		dm.addCallerAndCalleeAppIDHeaderToMetadata("caller-namespace", "caller-app", "callee-app", req)
+		got := make(map[string][]string)
+		for k, v := range req.Metadata() {
+			got[k] = v.GetValues()
+		}
+		assert.Equal(t, map[string][]string{
+			invokev1.CallerNamespaceHeader: {"caller-namespace"},
+			invokev1.CallerIDHeader:        {"caller-app"},
+			invokev1.CalleeIDHeader:        {"callee-app"},
+			"Other":                        {"kept"},
+		}, got)
 	})
 }
 
@@ -336,6 +363,40 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+	})
+
+	t.Run("streaming keeps the connection checked out until the response body is fully drained", func(t *testing.T) {
+		// Regression test for https://github.com/dapr/dapr/issues/10291: the connection must not be
+		// released back to the pool while the background goroutine is still streaming the response
+		// body, otherwise a long-lived response (e.g. SSE) can have its connection closed mid-stream
+		// once the pool purges it as idle.
+		messaging, teardown := prepareEnvironment(t, true, []string{"🐱"})
+		defer teardown()
+
+		var released atomic.Bool
+		orig := messaging.connectionCreatorFn
+		messaging.connectionCreatorFn = func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
+			conn, _, err := orig(ctx, address, id, namespace, customOpts...)
+			return conn, func(destroy bool) { released.Store(true) }, err
+		}
+
+		request := invokev1.
+			NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, releaseFn, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+		// Mirrors what invokeWithRetry does immediately after invokeRemote returns.
+		releaseFn(false)
+
+		assert.False(t, released.Load(), "connection was released before the response body was drained")
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
+
+		assert.Eventually(t, released.Load, time.Second, 10*time.Millisecond, "connection was never released after the response body was drained")
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {

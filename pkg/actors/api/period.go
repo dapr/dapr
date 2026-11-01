@@ -81,6 +81,21 @@ func (p ReminderPeriod) String() string {
 	return p.value
 }
 
+// Schedule returns the period in the same form the Scheduler service reports
+// for reminders: "@every <duration>" for a plain interval, with any repetition
+// count omitted. Periods with a calendar component (years, months or days)
+// have no Scheduler equivalent and are returned as the raw value. An empty
+// period returns "".
+func (p ReminderPeriod) Schedule() string {
+	if p.value == "" {
+		return ""
+	}
+	if p.years != 0 || p.months != 0 || p.days != 0 {
+		return p.value
+	}
+	return "@every " + p.period.String()
+}
+
 func (p ReminderPeriod) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.value)
 }

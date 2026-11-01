@@ -57,14 +57,18 @@ func (h *HTTP) Add(spec Spec) {
 		},
 		Middleware: spec.Implementation,
 	})
-	for _, p := range h.pipelines {
-		p.buildChain()
-	}
+	h.rebuildPipelines()
 }
 
 // Remove removes a middleware from the store.
 func (h *HTTP) Remove(name string) {
 	h.store.Remove(name)
+	h.rebuildPipelines()
+}
+
+func (h *HTTP) rebuildPipelines() {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 	for _, p := range h.pipelines {
 		p.buildChain()
 	}

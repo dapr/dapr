@@ -41,7 +41,7 @@ type keycollision struct {
 }
 
 func (k *keycollision) Setup(t *testing.T) []framework.Option {
-	k.workflow = newClusteredDeployment(t, 2)
+	k.workflow = workflow.NewClustered(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(k.workflow),

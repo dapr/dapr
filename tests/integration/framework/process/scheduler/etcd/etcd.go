@@ -26,6 +26,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -114,7 +116,7 @@ func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*20, time.Millisecond*10)
 
-		t.Logf("Running etcd with config: %+v", etcd.Config())
+		iowriter.Eventf(t, "running etcd with config: %+v", etcd.Config())
 
 		e.etcds = append(e.etcds, etcd)
 	}
@@ -150,10 +152,10 @@ func (e *Etcd) setupUserPass(t *testing.T, ctx context.Context) {
 		return
 	}
 
-	client, err := clientv3.New(clientv3.Config{
+	client, err := clientv3.New(fclient.WithEtcdLogger(t, clientv3.Config{
 		Endpoints:   e.endpoints,
 		DialTimeout: 5 * time.Second,
-	})
+	}))
 	require.NoError(t, err)
 	defer client.Close()
 

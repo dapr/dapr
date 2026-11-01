@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
@@ -70,8 +71,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 
-	client1 := dworkflow.NewClient(r.workflow.DaprN(0).GRPCConn(t, cctx))
-	client2 := dworkflow.NewClient(r.workflow.DaprN(1).GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(r.workflow.DaprN(0).GRPCConn(t, cctx), logger.New(t))
+	client2 := dworkflow.NewClientWithLogger(r.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(cctx, reg1))
 	require.NoError(t, client2.StartWorker(ctx, reg2))
 
@@ -94,16 +95,31 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	appID := r.workflow.DaprN(0).AppID()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		list := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs/actorreminder")
-		if !assert.Len(c, list, 1) {
+		var janitors, results []string
+		for _, key := range list {
+			if strings.Contains(key, "new-event-janitor") {
+				janitors = append(janitors, key)
+			} else {
+				results = append(results, key)
+			}
+		}
+		// Under fast path the running instance also owns its repeating
+		// new-event-janitor reminder alongside the activity-result reminder.
+		if r.workflow.FastPath() {
+			assert.Len(c, janitors, 1)
+		} else {
+			assert.Empty(c, janitors)
+		}
+		if !assert.Len(c, results, 1) {
 			return
 		}
 		exp := "dapr/jobs/actorreminder||default||dapr.internal.default." + appID + ".workflow||" + id + "||"
-		assert.Truef(c, strings.HasPrefix(list[0], exp), "reminder key should have correct prefid, expected prefix: %s, actual key: %s", exp, list[0])
+		assert.Truef(c, strings.HasPrefix(results[0], exp), "reminder key should have correct prefix, expected prefix: %s, actual key: %s", exp, results[0])
 	}, time.Second*20, time.Millisecond*10)
 
 	r.workflow.DaprN(0).Restart(t, ctx)
 
-	client1 = dworkflow.NewClient(r.workflow.DaprN(0).GRPCConn(t, ctx))
+	client1 = dworkflow.NewClientWithLogger(r.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, reg1))
 
 	meta, err := client1.WaitForWorkflowCompletion(ctx, id)

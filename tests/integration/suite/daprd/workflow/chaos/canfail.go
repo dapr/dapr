@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -26,8 +27,10 @@ import (
 	"github.com/dapr/durabletask-go/task"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/proxy"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -49,16 +52,27 @@ type canfail struct {
 }
 
 func (c *canfail) Setup(t *testing.T) []framework.Option {
-	c.scheduler = scheduler.New(t)
-	c.proxy = proxy.New(t, c.scheduler)
+	if workflow.FastPathFromEnv() {
+		t.Skip("WorkflowsFastPath drives the activity-result wake-up locally and never issues the per-event ScheduleJob this test arms a failure on")
+	}
+
+	appID := uuid.New().String()
+	sen := sentry.New(t)
+	c.scheduler = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
+	c.proxy = proxy.New(t, c.scheduler, proxy.WithSentry(t, sen, "default", appID))
 
 	c.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 		workflow.WithSchedulerInstance(c.scheduler),
 		workflow.WithSchedulerAddress(c.proxy.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(c.scheduler, c.proxy, c.workflow),
+		framework.WithProcesses(sen, c.scheduler, c.proxy, c.workflow),
 	}
 }
 
@@ -111,9 +125,10 @@ func (c *canfail) Run(t *testing.T, ctx context.Context) {
 	}
 
 	failedCh := make(chan struct{})
-	// codes.Internal is non-transient so daprd's CreateReminderWithRetry
-	// does not mask it; the orchestrator's error path runs.
-	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.Internal, failedCh)
+	// codes.InvalidArgument is a permanent create error so daprd's
+	// CreateReminderWithRetry does not mask it; the orchestrator's error
+	// path runs.
+	c.proxy.ArmFailures(proxy.MethodScheduleJob, 1, codes.InvalidArgument, failedCh)
 
 	close(releaseActivity)
 

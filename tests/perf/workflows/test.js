@@ -86,6 +86,9 @@ function execute() {
         headers: {
             'Content-Type': 'application/json',
         },
+        // At 500 VUs the slowest delay_wf completions reach k6's 60s default,
+        // which would fail requests that are only slow.
+        timeout: __ENV.SCENARIO === 't_500_10000' ? '300s' : '60s',
     }
     const res = http.post(
         `${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`,

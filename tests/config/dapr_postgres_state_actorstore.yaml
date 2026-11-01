@@ -19,6 +19,7 @@ scopes:
 - actor1
 - actor2
 - actorapp
+- placementcutoverapp
 - actorfeatures
 - reentrantactor
 - actorreminder
@@ -47,5 +48,9 @@ scopes:
 - workflowsapp-retention
 - perf-workflowsapp
 - perf-workflowsapp-actors
+- perf-workflowsapp-scaled
+- perf-workflowsapp-scaled-actors
 - wfacl-caller
 - wfacl-target
+- wfxapp-caller
+- wfxapp-target

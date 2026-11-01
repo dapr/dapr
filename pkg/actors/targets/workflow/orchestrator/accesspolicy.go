@@ -101,9 +101,13 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 
 // workflowNameForOperation returns the workflow name for the policy check
 // and (when available) the propagated history that should gate `requires`.
-// Only schedule (CreateWorkflowInstance) carries propagated history; for all
-// other operations history is nil and any rule with a `requires` block will
-// fail-closed.
+// Schedule (CreateWorkflowInstance) carries the name and propagated history
+// on the request itself; every other operation resolves the name from the
+// target instance's recorded state. An operation on a nonexistent instance
+// resolves to an empty name, so only `name: "*"` rules can match it
+// (fail-closed by construction). Only schedule carries propagated history;
+// for all other operations history is nil and any rule with a `requires`
+// block will fail-closed.
 func (o *orchestrator) workflowNameForOperation(ctx context.Context, method string, data []byte, preLoadedMeta *backend.WorkflowMetadata) (string, *protos.PropagatedHistory, error) {
 	if method == todo.CreateWorkflowInstanceMethod {
 		return workflowacl.WorkflowNameFromCreateRequest(data)

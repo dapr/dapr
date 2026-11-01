@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -22,9 +23,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -919,4 +922,77 @@ func TestNoInvalidTraceContext(t *testing.T) {
 		assert.NotEqual(t, "00-00000000000000000000000000000000-0000000000000000-00", traceparent)
 	}
 	testServer.Close()
+}
+
+func TestConstructRequestInjectsBaggage(t *testing.T) {
+	bag, err := baggage.Parse("key=value")
+	require.NoError(t, err)
+
+	ctx := baggage.ContextWithBaggage(t.Context(), bag)
+
+	c := Channel{baseAddress: "http://localhost", compStore: compstore.New()}
+	req := invokev1.NewInvokeMethodRequest("method").WithHTTPExtension(http.MethodPost, "")
+	defer req.Close()
+
+	channelReq, err := c.constructRequest(ctx, req, "")
+	require.NoError(t, err)
+	assert.Equal(t, "key=value", channelReq.Header.Get("baggage"))
+}
+
+func TestConcurrencyLimiterContext(t *testing.T) {
+	t.Run("invokeMethodV1 acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{
+			baseAddress: "http://localhost:0",
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			ch:          make(chan struct{}, 1),
+		}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodGet, "")
+		defer req.Close()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.InvokeMethod(ctx, req, "")
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("InvokeMethod did not return after context cancellation while the limiter was full")
+		}
+	})
+
+	t.Run("sendJob acquire respects context cancellation", func(t *testing.T) {
+		c := Channel{
+			baseAddress: "http://localhost:0",
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			ch:          make(chan struct{}, 1),
+		}
+		c.ch <- struct{}{}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := c.TriggerJob(ctx, "job", nil)
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second * 5):
+			t.Fatal("TriggerJob did not return after context cancellation while the limiter was full")
+		}
+	})
 }

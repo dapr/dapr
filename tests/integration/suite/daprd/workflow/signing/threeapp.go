@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -138,13 +139,13 @@ func (a *threeapp) Run(t *testing.T, ctx context.Context) {
 
 	// All three instances register the same workflow and activities so that
 	// placement can route activities across the cluster.
-	client1 := dworkflow.NewClient(a.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(a.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, reg))
 
-	client2 := dworkflow.NewClient(a.daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(a.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorker(ctx, reg))
 
-	client3 := dworkflow.NewClient(a.daprd3.GRPCConn(t, ctx))
+	client3 := dworkflow.NewClientWithLogger(a.daprd3.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client3.StartWorker(ctx, reg))
 
 	// Schedule on the orchestrator instance (app A).

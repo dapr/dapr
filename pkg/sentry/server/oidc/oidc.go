@@ -345,19 +345,26 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	discovery := s.discovery
+	cacheControl := "public, max-age=3600"
 	if discovery.Issuer == "" || (s.jwksURI == nil && discovery.JwksURI == "") {
 		// if we are going to edit the discovery document, make a copy
 		discovery = s.discovery.DeepCopy()
+		// The document depends on the request host, so shared caches must not
+		// serve it to other clients.
+		cacheControl = "no-store"
 
 		host := r.Host
-		// Only trust X-Forwarded-Host once the allowed-hosts middleware has
-		// matched it against a concrete entry in the allowlist. A wildcard
-		// allowlist (`*`) lets any host through the middleware, so the header
-		// is still attacker-controlled in that case and would poison the
-		// issuer / jwks_uri (CWE-346).
+		// Only trust X-Forwarded-Host once it has been validated and matched
+		// against a concrete entry in the allowlist. A wildcard allowlist (`*`)
+		// lets any host through the middleware, so the header is still
+		// attacker-controlled in that case and would poison the issuer /
+		// jwks_uri (CWE-346).
 		if len(s.allowedHosts) > 0 && !slices.Contains(s.allowedHosts, "*") {
-			if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-				host = forwardedHost
+			var err error
+			if host, err = s.allowedHost(r); err != nil {
+				log.Warnf("Rejecting OIDC discovery request: %v", err)
+				http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
+				return
 			}
 		}
 
@@ -398,7 +405,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Cache-Control", cacheControl)
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(*discovery); err != nil {
@@ -409,36 +416,39 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 // allowedHostsValidationHandler wraps a handler with allowed host validation logic
 func (s *Server) allowedHostsValidationHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if len(s.allowedHosts) == 0 {
+		if len(s.allowedHosts) == 0 || slices.Contains(s.allowedHosts, "*") {
 			next(w, r)
 			return
 		}
 
-		host := r.Host
-
-		// If X-Forwarded-Host header is present, use that instead
-		if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-			host = forwardedHost
-		}
-
-		if slices.Contains(s.allowedHosts, "*") {
-			next(w, r)
+		if _, err := s.allowedHost(r); err != nil {
+			log.Warnf("Rejecting OIDC request: %v", err)
+			http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
 			return
 		}
 
-		if slices.Contains(s.allowedHosts, host) {
-			next(w, r)
-			return
-		}
-
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			if slices.Contains(s.allowedHosts, h) {
-				next(w, r)
-				return
-			}
-		}
-
-		log.Warnf("Request from unauthorized domain: %s", host)
-		http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
+		next(w, r)
 	}
+}
+
+// allowedHost returns the request host (X-Forwarded-Host if set, otherwise
+// Host) as host[:port]. It errors unless the value is a bare host with an
+// optional numeric port whose host or host:port is in the allowlist.
+func (s *Server) allowedHost(r *http.Request) (string, error) {
+	host := r.Host
+	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+		host = forwardedHost
+	}
+
+	// url.Parse also rejects non-numeric ports.
+	u, err := url.Parse("//" + host)
+	if err != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Hostname() == "" {
+		return "", fmt.Errorf("invalid host %q", host)
+	}
+
+	if !slices.Contains(s.allowedHosts, u.Host) && !slices.Contains(s.allowedHosts, u.Hostname()) {
+		return "", fmt.Errorf("unauthorized domain %q", host)
+	}
+
+	return u.Host, nil
 }

@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +26,12 @@ import (
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func Test_GetOrCreate(t *testing.T) {
@@ -140,6 +147,89 @@ func Test_HaltNonHosted(t *testing.T) {
 		return pl.IsActorHosted(t.Context(), r.ActorType, r.ActorID)
 	}))
 	assert.Equal(t, 4, mapLen(ff))
+}
+
+func Test_Deactivate_concurrentInvokeNoWaitGroupRace(t *testing.T) {
+	ff := newTestFactory(t)
+
+	req := &internalsv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "unknown"}}
+	noStream := func(*internalsv1pb.InternalInvokeResponse) (bool, error) { return false, nil }
+
+	for i := range 50 {
+		id := "foo" + strconv.Itoa(i)
+		o := ff.GetOrCreate(id).(*orchestrator)
+		unlock, err := o.lock.ContextLock(t.Context())
+		require.NoError(t, err)
+		// releaseCh closes once Deactivate is about to retry the lock.
+		releaseCh, _ := o.lock.Stall()
+
+		var wg sync.WaitGroup
+		wg.Go(func() { assert.NoError(t, o.Deactivate(t.Context())) })
+		<-releaseCh
+
+		for range 4 {
+			wg.Go(func() {
+				err := o.InvokeReminder(t.Context(), &api.Reminder{Name: "unknown"})
+				assertClosedOrRanBefore(t, err, "unknown reminder type")
+			})
+			wg.Go(func() {
+				_, err := o.InvokeMethod(t.Context(), req)
+				assertClosedOrRanBefore(t, err, "no such method")
+			})
+			wg.Go(func() {
+				err := o.InvokeStream(t.Context(), req, noStream)
+				assertClosedOrRanBefore(t, err, "unsupported stream method")
+			})
+		}
+		unlock()
+		wg.Wait()
+
+		assert.False(t, ff.Exists(id))
+	}
+}
+
+func Test_Deactivate_refusesLateInvocations(t *testing.T) {
+	ff := newTestFactory(t)
+
+	req := &internalsv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "unknown"}}
+	noStream := func(*internalsv1pb.InternalInvokeResponse) (bool, error) { return false, nil }
+
+	for i := range 100 {
+		o := ff.GetOrCreate("foo" + strconv.Itoa(i)).(*orchestrator)
+		require.NoError(t, o.Deactivate(t.Context()))
+
+		err := o.InvokeReminder(t.Context(), &api.Reminder{Name: "unknown"})
+		require.Truef(t, targeterrors.IsClosed(err), "reminder on a retired instance must fail closed, got: %v", err)
+		_, err = o.InvokeMethod(t.Context(), req)
+		require.Truef(t, targeterrors.IsClosed(err), "method on a retired instance must fail closed, got: %v", err)
+		err = o.InvokeStream(t.Context(), req, noStream)
+		require.Truef(t, targeterrors.IsClosed(err), "stream on a retired instance must fail closed, got: %v", err)
+	}
+}
+
+// A caller that took the lock before Deactivate ran a normal turn; any other
+// must fail closed. Called from goroutines, so it must not FailNow.
+func assertClosedOrRanBefore(t *testing.T, err error, ranBefore string) {
+	t.Helper()
+	if !targeterrors.IsClosed(err) {
+		assert.ErrorContains(t, err, ranBefore)
+	}
+}
+
+func newTestFactory(t *testing.T) *factory {
+	t.Helper()
+	fact, err := New(t.Context(), Options{
+		AppID:             "appID",
+		ActivityActorType: "activity",
+		WorkflowActorType: "workflow",
+		Resiliency:        resiliency.New(logger.NewLogger("test")),
+		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
+			return nil
+		},
+		Actors: fake.New(),
+	})
+	require.NoError(t, err)
+	return fact.(*factory)
 }
 
 func mapLen(ff *factory) int {

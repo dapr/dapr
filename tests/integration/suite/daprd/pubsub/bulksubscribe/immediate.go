@@ -178,24 +178,28 @@ func (im *immediate) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
+	// Assert on the number of entries delivered rather than the number
+	// of deliveries. "Immediate" describes when the buffer is flushed,
+	// not how large the flush is: siblings that are already queued when
+	// a flush happens are coalesced into it by drainChannel, so the
+	// three messages may arrive as anything between one and three
+	// deliveries depending on how the concurrent dispatch interleaves.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		im.mu.Lock()
 		defer im.mu.Unlock()
-		require.Len(c, im.deliveries, numMessages, "expected one delivery per injected message")
+		entries := 0
+		for _, d := range im.deliveries {
+			entries += d.entries
+		}
+		assert.Equal(c, numMessages, entries, "expected every injected message to be delivered")
 	}, 10*time.Second, 50*time.Millisecond)
 
 	elapsed := time.Since(start)
 
-	// All three deliveries must arrive far below the 5 s batching
-	// timer. 3 s leaves comfortable margin for daprd's own
-	// scheduling overhead while still failing if the immediate path
-	// were not selected.
+	// All three messages must arrive far below the 5 s batching timer.
+	// 3 s leaves comfortable margin for daprd's own scheduling overhead
+	// while still failing if the immediate path were not selected. This
+	// is what makes it a regression test for #9727.
 	require.Less(t, elapsed, 3*time.Second,
 		"deliveries under FeatureBulkSubscribeImmediate should not wait for the 5s timer; got %v", elapsed)
-
-	im.mu.Lock()
-	defer im.mu.Unlock()
-	for i, d := range im.deliveries {
-		require.Equal(t, 1, d.entries, "delivery %d should carry exactly one entry", i)
-	}
 }

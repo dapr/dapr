@@ -25,6 +25,9 @@ const (
 	CategorySecret            Category = "secret"
 	CategoryPubsub            Category = "pubsub"
 	CategoryConversation      Category = "conversation"
+	CategorySearch            Category = "search"
+	CategoryVector            Category = "vector"
+	CategoryBinaryStore       Category = "binarystore"
 	CategoryServiceInvocation Category = "service-invocation"
 	CategoryBinding           Category = "binding"
 	CategoryLock              Category = "lock"
@@ -59,6 +62,12 @@ var (
 	ActorReminderNotFound         = ErrorCode{"ERR_ACTOR_REMINDER_NOT_FOUND", "", CategoryActor}      // Actor reminder not found
 	ActorReminderAlreadyExists    = ErrorCode{"ERR_ACTOR_REMINDER_ALREADY_EXISTS", "", CategoryActor} // Actor reminder already exists
 	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}            // Error creating actor timer
+	ActorTimerDelete              = ErrorCode{"ERR_ACTOR_TIMER_DELETE", "", CategoryActor}            // Error deleting actor timer
+	ActorTimerNotOwned            = ErrorCode{"ERR_ACTOR_TIMER_NOT_OWNED", "", CategoryActor}         // Timer operation on an actor not owned by this host
+	ActorTimerList                = ErrorCode{"ERR_ACTOR_TIMER_LIST", "", CategoryActor}              // Error listing actor timers
+	ActorTimerNonHosted           = ErrorCode{"ERR_ACTOR_TIMER_NON_HOSTED", "", CategoryActor}        // Timer operation on an actor type not hosted by this host
+	ActorTimerGet                 = ErrorCode{"ERR_ACTOR_TIMER_GET", "", CategoryActor}               // Error getting actor timer
+	ActorTimerNotFound            = ErrorCode{"ERR_ACTOR_TIMER_NOT_FOUND", "", CategoryActor}         // Actor timer not found
 	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", "", CategoryActor}          // App channel not initialized
 	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", "", CategoryActor}             // Maximum actor call stack depth exceeded
 	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", "", CategoryActor}            // Placement service not configured
@@ -82,6 +91,7 @@ var (
 	WorkflowInstanceIDNotFound        = ErrorCode{"ERR_INSTANCE_ID_NOT_FOUND", "", CategoryWorkflow}        // Workflow instance ID not found
 	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID
 	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "", CategoryWorkflow}         // Workflow instance ID too long
+	WorkflowAppIDInvalid              = ErrorCode{"ERR_WORKFLOW_APP_ID_INVALID", "", CategoryWorkflow}      // Invalid workflow app ID. (Only alphanumeric, dash and underscore characters are allowed)
 
 	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction
@@ -138,6 +148,27 @@ var (
 	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
 	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
+
+	// ### Search API
+	SearchStoreNotFound      = ErrorCode{"ERR_SEARCH_STORE_NOT_FOUND", "DAPR_SEARCH_STORE_NOT_FOUND", CategorySearch}           // Search store not found
+	SearchStoreNotConfigured = ErrorCode{"ERR_SEARCH_STORE_NOT_CONFIGURED", "DAPR_SEARCH_STORE_NOT_CONFIGURED", CategorySearch} // Search store not configured
+	SearchInvalidRequest     = ErrorCode{"ERR_SEARCH_INVALID_REQUEST", "DAPR_SEARCH_INVALID_REQUEST", CategorySearch}           // Invalid search request
+
+	// ### Vector API
+	VectorStoreNotFound      = ErrorCode{"ERR_VECTOR_STORE_NOT_FOUND", "DAPR_VECTOR_STORE_NOT_FOUND", CategoryVector}           // Vector store not found
+	VectorStoreNotConfigured = ErrorCode{"ERR_VECTOR_STORE_NOT_CONFIGURED", "DAPR_VECTOR_STORE_NOT_CONFIGURED", CategoryVector} // Vector store not configured
+	VectorInvalidRequest     = ErrorCode{"ERR_VECTOR_INVALID_REQUEST", "DAPR_VECTOR_INVALID_REQUEST", CategoryVector}           // Invalid vector request
+
+	// ### Binary Store API
+	BinaryStoreNotFound     = ErrorCode{"ERR_BINARY_STORE_NOT_FOUND", "", CategoryBinaryStore}           // Binary store component not found
+	BinaryStoreNameMissing  = ErrorCode{"ERR_BINARY_STORE_NAME_MISSING", "", CategoryBinaryStore}        // Binary file name missing
+	BinaryStoreSet          = ErrorCode{"ERR_BINARY_STORE_SET", "", CategoryBinaryStore}                 // Error storing binary file
+	BinaryStoreGet          = ErrorCode{"ERR_BINARY_STORE_GET", "", CategoryBinaryStore}                 // Error retrieving binary file
+	BinaryStoreDelete       = ErrorCode{"ERR_BINARY_STORE_DELETE", "", CategoryBinaryStore}              // Error deleting binary file
+	BinaryStoreFileNotFound = ErrorCode{"ERR_BINARY_STORE_FILE_NOT_FOUND", "", CategoryBinaryStore}      // Binary file not found
+	BinaryStoreFileExists   = ErrorCode{"ERR_BINARY_STORE_FILE_ALREADY_EXISTS", "", CategoryBinaryStore} // Binary file already exists
+	BinaryStoreFileTooLarge = ErrorCode{"ERR_BINARY_STORE_FILE_TOO_LARGE", "", CategoryBinaryStore}      // Binary file exceeds maximum size
+	BinaryStoreFull         = ErrorCode{"ERR_BINARY_STORE_FULL", "", CategoryBinaryStore}                // Binary store is full
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service

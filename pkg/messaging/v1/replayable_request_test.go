@@ -216,6 +216,27 @@ func TestReplayableRequest(t *testing.T) {
 			assert.Nil(t, rr.replay)
 		})
 	})
+
+	// A resiliency attempt that timed out keeps running and can call RawData() after the next attempt has read the body,
+	// then return without reading because its context is canceled.
+	t.Run("read in full, then RawData not read", func(t *testing.T) {
+		rr := newReplayable()
+		defer rr.Close()
+
+		t.Run("first read in full", func(t *testing.T) {
+			read, err := io.ReadAll(rr.RawData())
+			require.NoError(t, err)
+			assert.Equal(t, message, read)
+		})
+
+		_ = rr.RawData()
+
+		t.Run("third read in full", func(t *testing.T) {
+			read, err := io.ReadAll(rr.RawData())
+			require.NoError(t, err)
+			assert.Equal(t, message, read)
+		})
+	})
 }
 
 // readerCloser is a io.Reader that can be closed. Once the stream is closed, reading from it returns an error.

@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
@@ -107,7 +108,7 @@ func (c *customstatus) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(c.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(c.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	const instanceID = "customstatus-instance"

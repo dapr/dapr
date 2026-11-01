@@ -72,6 +72,7 @@ const (
 	KeyAppBindingOptionsTimeout         = "dapr.io/app-binding-options-timeout"
 	KeyPlacementHostAddresses           = "dapr.io/placement-host-address"
 	KeyActorsDisseminateTimeout         = "dapr.io/actors-disseminate-timeout"
+	KeyActorsPlacementStartupTimeout    = "dapr.io/actors-placement-startup-timeout"
 	KeySchedulerHostAddresses           = "dapr.io/scheduler-host-address"
 	KeyPluggableComponents              = "dapr.io/pluggable-components"
 	KeyPluggableComponentsSocketsFolder = "dapr.io/pluggable-components-sockets-folder"

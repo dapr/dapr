@@ -15,10 +15,14 @@ package authz
 
 import (
 	"context"
+	"slices"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/hostauthz"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/security"
@@ -40,12 +44,80 @@ func New(opts Options) *Authz {
 	return &Authz{sec: opts.Security}
 }
 
-func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.JobMetadata) error {
-	return a.authz(ctx, meta.GetNamespace(), meta.GetAppId())
+// Request is a named job request.
+type Request interface {
+	GetName() string
+	GetMetadata() *schedulerv1pb.JobMetadata
 }
 
+func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.JobMetadata) error {
+	return a.job(ctx, "", meta, false)
+}
+
+// Job authorizes a request for a named job. An actor targeted job on a
+// reserved internal actor type (dapr.internal.<namespace>.<appid>.*) must
+// belong to the requesting app. The one exception is scheduling, without
+// overwrite, an activity result reminder on a workflow actor in the same
+// namespace, which is how an activity host delivers a result to the
+// workflow's app: reading, deleting or replacing such a job stays with the
+// owner.
+func (a *Authz) Job(ctx context.Context, req Request) error {
+	schedule, ok := req.(*schedulerv1pb.ScheduleJobRequest)
+	return a.job(ctx, req.GetName(), req.GetMetadata(), ok && !schedule.GetOverwrite())
+}
+
+func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMetadata, createOnly bool) error {
+	if err := a.authz(ctx, meta.GetNamespace(), meta.GetAppId()); err != nil {
+		return err
+	}
+
+	actor := meta.GetTarget().GetActor()
+	if actor == nil {
+		return nil
+	}
+
+	internal, owned := hostauthz.InternalActorType(actor.GetType(), meta.GetNamespace(), meta.GetAppId())
+	if !internal || owned {
+		return nil
+	}
+
+	activityResult := createOnly &&
+		strings.HasPrefix(name, common.ReminderPrefixActivityResult) &&
+		strings.HasPrefix(actor.GetType(), "dapr.internal."+meta.GetNamespace()+".") &&
+		strings.HasSuffix(actor.GetType(), ".workflow")
+	if !activityResult {
+		log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actor.GetType(), meta.GetNamespace(), meta.GetAppId())
+		monitoring.RecordSidecarAuthError()
+		return status.Errorf(codes.PermissionDenied, "actor type %s is not allowed for app ID %s in namespace %s", actor.GetType(), meta.GetAppId(), meta.GetNamespace())
+	}
+
+	return nil
+}
+
+// WatchInitial authorizes a WatchJobs stream. Declared actor types and the
+// actor types of concurrency limits must not be another app's reserved
+// internal actor types, else the stream would receive, or throttle, that
+// app's reminder triggers.
 func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {
-	return a.authz(ctx, initial.GetNamespace(), initial.GetAppId())
+	ns, appID := initial.GetNamespace(), initial.GetAppId()
+	if err := a.authz(ctx, ns, appID); err != nil {
+		return err
+	}
+
+	actorTypes := slices.Clone(initial.GetActorTypes())
+	for _, limit := range initial.GetConcurrencyLimits() {
+		actorTypes = append(actorTypes, limit.GetActor().GetType())
+	}
+
+	for _, actorType := range actorTypes {
+		if internal, owned := hostauthz.InternalActorType(actorType, ns, appID); internal && !owned {
+			log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actorType, ns, appID)
+			monitoring.RecordSidecarAuthError()
+			return status.Errorf(codes.PermissionDenied, "actor type %s is not allowed for app ID %s in namespace %s", actorType, appID, ns)
+		}
+	}
+
+	return nil
 }
 
 func (a *Authz) authz(ctx context.Context, ns, appID string) error {

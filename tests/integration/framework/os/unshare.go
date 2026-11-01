@@ -25,6 +25,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 // InUnshareNamespace reports whether the current process is running inside an
@@ -95,11 +97,31 @@ func ReexecInUserNamespace(t *testing.T, ctx context.Context) bool {
 		"-test.v",
 		"-focus", "^"+regexp.QuoteMeta(focus)+"$",
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+
+	// The child is a whole second test binary. Captured like any other process,
+	// its output is reported with this test's rather than printed straight to
+	// the terminal, where it collides with the parent run's own output.
+	iow := iowriter.New(t, "unshare")
+	cmd.Stdout = iow
+	cmd.Stderr = iow
+
+	cmd.Env = append(os.Environ(),
+		// The parent owns the terminal; a second progress line would fight it.
+		"DAPR_INTEGRATION_PROGRESS=false",
+		// Fold the child's own report into the output captured above, so there
+		// is one place to read rather than a file the parent never mentions.
+		"DAPR_INTEGRATION_LOGS_INLINE=true",
+		// Without its own directory the child's start of run reset would delete
+		// the reports of every other test in the parent run.
+		"DAPR_INTEGRATION_LOGS_DIR="+t.TempDir(),
+	)
+
+	err = cmd.Run()
+	iow.Close()
+	if err != nil {
 		t.Fatalf("re-exec under unshare failed: %v", err)
 	}
+
 	return true
 }
 

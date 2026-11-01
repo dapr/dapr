@@ -111,6 +111,51 @@ func (s *suite) expectEvent(t *testing.T, e loops.EventNS) {
 	}
 }
 
+func (s *suite) expectNoEvent(t *testing.T) {
+	t.Helper()
+
+	select {
+	case ev := <-s.nsLoop.Events():
+		require.Failf(t, "unexpected namespace event", "%v", ev)
+	default:
+	}
+}
+
+// roundTrip drives one trigger through the stream and asserts it resolves
+// with the given ack status, proving the stream loop is still processing
+// both directions.
+func (s *suite) roundTrip(t *testing.T, name string, id uint64, status schedulerv1pb.WatchJobsRequestResultStatus, exp api.TriggerResponseResult) {
+	t.Helper()
+
+	var called atomic.Pointer[api.TriggerResponseResult]
+	s.streamLoop.Enqueue(&loops.TriggerRequest{
+		Job: &internalsv1pb.JobEvent{
+			Key: name, Name: name,
+		},
+		ResultFn: func(res api.TriggerResponseResult) { called.Store(&res) },
+	})
+
+	req, err := s.clientstream.Recv()
+	require.NoError(t, err)
+	assert.True(t, proto.Equal(&schedulerv1pb.WatchJobsResponse{Name: name, Id: id}, req), "unexpected delivery: %v", req)
+
+	require.NoError(t, s.clientstream.Send(&schedulerv1pb.WatchJobsRequest{
+		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+			Result: &schedulerv1pb.WatchJobsRequestResult{
+				Id:     id,
+				Status: status,
+			},
+		},
+	}))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		ptr := called.Load()
+		if assert.NotNil(c, ptr) {
+			assert.Equal(c, exp, *ptr)
+		}
+	}, time.Second*10, time.Millisecond*10)
+}
+
 func Test_Stream(t *testing.T) {
 	t.Parallel()
 
@@ -127,7 +172,7 @@ func Test_Stream(t *testing.T) {
 		suite.streamLoop.Close(new(loops.StreamShutdown))
 	})
 
-	t.Run("receiving from stream with no in-flights should close stream", func(t *testing.T) {
+	t.Run("result for unknown id is dropped and the stream stays alive", func(t *testing.T) {
 		t.Parallel()
 
 		suite := newSuite(t)
@@ -141,11 +186,39 @@ func Test_Stream(t *testing.T) {
 			},
 		}))
 
-		suite.expectEvent(t, &loops.ConnCloseStream{
-			StreamIDx: 123, Namespace: "ns",
-		})
+		// A later trigger still resolves through the same stream: the
+		// unknown result was dropped instead of tearing the stream down.
+		suite.roundTrip(t, "job-alive", 1, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, api.TriggerResponseResult_SUCCESS)
+		suite.expectNoEvent(t)
 
+		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
+	})
+
+	t.Run("duplicate ack is dropped and the stream stays alive", func(t *testing.T) {
+		t.Parallel()
+
+		suite := newSuite(t)
+
+		suite.roundTrip(t, "job-1", 1, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, api.TriggerResponseResult_SUCCESS)
+
+		// Client retries the ack for the already-resolved trigger.
+		require.NoError(t, suite.clientstream.Send(&schedulerv1pb.WatchJobsRequest{
+			WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+				Result: &schedulerv1pb.WatchJobsRequestResult{
+					Id:     1,
+					Status: schedulerv1pb.WatchJobsRequestResultStatus_FAILED,
+				},
+			},
+		}))
+
+		suite.roundTrip(t, "job-2", 2, schedulerv1pb.WatchJobsRequestResultStatus_FAILED, api.TriggerResponseResult_FAILED)
+		suite.expectNoEvent(t)
+
+		suite.closeserver()
+		suite.streamLoop.Close(new(loops.StreamShutdown))
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 	})
 
 	t.Run("receiving an initial request from client should close stream", func(t *testing.T) {
@@ -253,7 +326,7 @@ func Test_Stream(t *testing.T) {
 		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 	})
 
-	t.Run("receiving client request for no in-flight request should be a fatal stream error", func(t *testing.T) {
+	t.Run("result for unknown id leaves an existing inflight resolvable", func(t *testing.T) {
 		t.Parallel()
 
 		suite := newSuite(t)
@@ -274,6 +347,7 @@ func Test_Stream(t *testing.T) {
 		}
 		assert.True(t, proto.Equal(exp, req), "%v != %v", exp, req)
 
+		// Ack an id that was never delivered while job 1 is still inflight.
 		require.NoError(t, suite.clientstream.Send(
 			&schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
@@ -285,7 +359,30 @@ func Test_Stream(t *testing.T) {
 			}),
 		)
 
+		// The real inflight is untouched by the dropped result and still
+		// resolves from its own ack.
+		require.NoError(t, suite.clientstream.Send(
+			&schedulerv1pb.WatchJobsRequest{
+				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+					Result: &schedulerv1pb.WatchJobsRequestResult{
+						Id:     1,
+						Status: schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS,
+					},
+				},
+			}),
+		)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			ptr := called.Load()
+			if assert.NotNil(c, ptr) {
+				assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr)
+			}
+		}, time.Second*10, time.Millisecond*10)
+		suite.expectNoEvent(t)
+
+		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 	})
 
 	t.Run("shutdown stream, all inflight should be marked as undeliverable", func(t *testing.T) {

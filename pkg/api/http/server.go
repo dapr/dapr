@@ -101,7 +101,8 @@ func NewServer(opts NewServerOpts) Server {
 func (s *server) StartNonBlocking(ctx context.Context) error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
-	s.useMaxBodySize(r)
+	apiEndpoints := s.allowedEndpoints(s.api.APIEndpoints())
+	s.useMaxBodySize(r, apiEndpoints)
 	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
@@ -112,7 +113,7 @@ func (s *server) StartNonBlocking(ctx context.Context) error {
 	s.useAPILogging(r)
 
 	// Add all routes
-	s.setupRoutes(r, s.api.APIEndpoints())
+	s.setupRoutes(r, apiEndpoints)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -289,14 +290,38 @@ func (s *server) useMetrics(r chi.Router) {
 	r.Use(diag.DefaultHTTPMonitoring.HTTPMiddleware)
 }
 
-func (s *server) useMaxBodySize(r chi.Router) {
+// useMaxBodySize limits the size of request bodies before any other
+// middleware runs, so the middleware pipeline is never invoked with an
+// unbounded body. Endpoints that opt out via SkipRequestBodySizeLimit (for
+// example streaming uploads) are registered on a separate chi.Mux that the
+// middleware consults, so exemptions follow the router's own route matching.
+//
+// apiEndpoints must already be filtered by the API allowlist/denylist (see
+// allowedEndpoints) so that a disallowed endpoint can never be used to bypass
+// the limit.
+func (s *server) useMaxBodySize(r chi.Router, apiEndpoints []endpoints.Endpoint) {
 	if s.config.MaxRequestBodySize <= 0 {
 		return
 	}
 
+	exempt := chi.NewRouter()
+	for _, e := range apiEndpoints {
+		if !e.Settings.SkipRequestBodySizeLimit {
+			continue
+		}
+		path := "/" + e.Version + "/" + e.Route
+		if len(e.Methods) == 0 {
+			exempt.Handle(path, http.NotFoundHandler())
+			continue
+		}
+		for _, m := range e.Methods {
+			exempt.Method(m, path, http.NotFoundHandler())
+		}
+	}
+
 	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
 
-	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize)))
+	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize), exempt))
 }
 
 func (s *server) useContextSetup(mux chi.Router) {
@@ -415,7 +440,12 @@ func (s *server) unescapeRequestParametersHandler(next http.Handler) http.Handle
 
 func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err error) {
 	for i, key := range chiCtx.URLParams.Keys {
-		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
+		unescape := url.QueryUnescape
+		if key == binaryStoreFileNameParam {
+			unescape = url.PathUnescape
+		}
+
+		chiCtx.URLParams.Values[i], err = unescape(chiCtx.URLParams.Values[i])
 		if err != nil {
 			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
 		}
@@ -424,18 +454,25 @@ func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err er
 	return nil
 }
 
-func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
-	parameterFinder, _ := regexp.Compile("/{.*}")
-
-	// Build the API allowlist and denylist
+// allowedEndpoints returns the subset of eps permitted by the API
+// allowlist/denylist configured for HTTP.
+func (s *server) allowedEndpoints(eps []endpoints.Endpoint) []endpoints.Endpoint {
 	allowedAPIs := s.apiSpec.Allowed.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 	deniedAPIs := s.apiSpec.Denied.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
-	for _, e := range endpoints {
-		if !e.IsAllowed(allowedAPIs, deniedAPIs) {
-			continue
+	allowed := make([]endpoints.Endpoint, 0, len(eps))
+	for _, e := range eps {
+		if e.IsAllowed(allowedAPIs, deniedAPIs) {
+			allowed = append(allowed, e)
 		}
+	}
+	return allowed
+}
 
+func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
+	parameterFinder, _ := regexp.Compile("/{.*}")
+
+	for _, e := range s.allowedEndpoints(endpoints) {
 		path := "/" + e.Version + "/" + e.Route
 		s.handle(
 			e, path, r,
@@ -459,7 +496,7 @@ func (s *server) addEndpointCtx(e endpoints.Endpoint, next http.Handler) http.Ha
 }
 
 func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
-	handler := e.Handler
+	var handler http.Handler = e.Handler
 
 	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(handler)
@@ -467,18 +504,20 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 
 	handler = s.addEndpointCtx(e, handler)
 
+	handlerFunc := http.HandlerFunc(handler.ServeHTTP)
+
 	// If no method is defined, match any method
 	if len(e.Methods) == 0 {
-		r.Handle(path, handler)
+		r.Handle(path, handlerFunc)
 	} else {
 		for _, m := range e.Methods {
-			r.Method(m, path, handler)
+			r.Method(m, path, handlerFunc)
 		}
 	}
 
 	// Set as fallback method
 	if e.Settings.IsFallback {
-		r.NotFound(handler)
-		r.MethodNotAllowed(handler)
+		r.NotFound(handlerFunc)
+		r.MethodNotAllowed(handlerFunc)
 	}
 }

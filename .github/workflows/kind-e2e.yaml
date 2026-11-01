@@ -57,36 +57,43 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
-      # Container registry where to cache e2e test images
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.18.4"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.17.14"
+      # Container registry where to cache e2e test images. The packages under
+      # this path are public, so pull requests (including from forks) can read
+      # the cache anonymously. Only the e2e-cache-populate workflow writes to
+      # it; this job runs with DAPR_CACHE_READONLY=true.
+      DAPR_CACHE_REGISTRY: "ghcr.io/dapr/e2e-cache"
+      DAPR_CACHE_READONLY: "true"
       PULL_POLICY: IfNotPresent
+      # Most e2e cases wait on sleeps and redeliveries, not CPU.
+      DAPR_E2E_PARALLEL: 5
+      DAPR_E2E_SCHEDULER_PLACEMENT_PARALLEL: 3
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.34.0
-        - v1.33.4
-        - v1.32.8
+        - v1.37.0
+        - v1.36.4
+        - v1.35.8
         mode:
         - ha
         - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
-        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.30.0
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0
         include:
-        - k8s-version: v1.34.0
-          kind-version: v0.30.0
-          kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
+        - k8s-version: v1.37.0
+          kind-version: v0.33.0
+          kind-image-sha: sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
           dapr-test-config-store: "postgres"
-        - k8s-version: v1.33.4
-          kind-version: v0.30.0
-          kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
+        - k8s-version: v1.36.4
+          kind-version: v0.33.0
+          kind-image-sha: sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
           dapr-test-config-store: "redis"
-        - k8s-version: v1.32.8
-          kind-version: v0.30.0
-          kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
+        - k8s-version: v1.35.8
+          kind-version: v0.33.0
+          kind-image-sha: sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
           dapr-test-config-store: "redis"
     steps:
     - name: Check out code
@@ -135,12 +142,19 @@ jobs:
         mkdir -p "$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" \
                  "$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}"
 
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.13.0
       with:
         config: kind.yaml
         cluster_name: kind
         version: ${{ matrix.kind-version }}
+        kubectl_version: ${{ matrix.k8s-version }}
 
     - name: Get KinD info
       run: |
@@ -170,18 +184,12 @@ jobs:
         version: v3.3.4
 
     - name: Free disk space
-      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space
+      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space.
+      # The runner starts with about 75GB free, so this is only headroom and
+      # runs in the background instead of holding up the job for 2 to 3 min.
       run: |
-        df -h
-        docker system prune -af || true
-        docker volume prune -f || true
-        sudo rm -rf /usr/local/lib/android || true
-        sudo rm -rf /opt/ghc || true
-        sudo rm -rf /usr/share/dotnet || true
-        sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/* || true
-        df -h
+        df -h /
+        nohup sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache/CodeQL > /dev/null 2>&1 &
 
     - name: Build and push Dapr
       run: |
@@ -189,11 +197,25 @@ jobs:
         make docker-build
         make docker-push-retry
 
-    - name: Build and push test apps
+    - name: Precompile e2e test binaries in the background
+      # Warms the Go build cache for the Run tests step while the app images
+      # and the cluster are being prepared. -exec=true in the target means the
+      # binaries are built but nothing executes.
       run: |
-        make build-push-e2e-app-all
+        nohup make build-e2e-tests > /tmp/build-e2e-tests.log 2>&1 &
+        echo $! > /tmp/build-e2e-tests.pid
 
-    - name: Setup Dapr
+    - name: Build and push test apps
+      # Compile the build tool once instead of `go run` per app, and build the
+      # apps in parallel. On a warm cache each app is a direct registry-to-registry
+      # copy from the cache into the local KinD registry.
+      run: |
+        make compile-build-tools
+        make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
+
+    - name: Setup Dapr, Redis, Kafka, Zipkin, postgres and Meilisearch
+      # The installs are independent, so they run at once. -O keeps each
+      # one's output together.
       run: |
         make setup-helm-init
         make create-test-namespace
@@ -203,29 +225,19 @@ jobs:
         else
           export HA_MODE=false
         fi
-        make docker-deploy-k8s
-
-    - name: Setup Redis
-      run: |
-        make setup-test-env-redis
-
-    - name: Setup Kafka
-      run: |
-        make setup-test-env-kafka
-
-    - name: Setup Zipkin
-      run: |
-        make setup-test-env-zipkin
-
-    - name: Setup postgres
-      run: |
-        make setup-test-env-postgres
+        make -j6 -O docker-deploy-k8s setup-test-env-redis setup-test-env-kafka \
+          setup-test-env-zipkin setup-test-env-postgres setup-test-env-meilisearch
 
     - name: Setup test components
       run: |
         make setup-test-components
       env:
         DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
+
+    - name: Wait for e2e test binary precompile
+      run: |
+        while kill -0 "$(cat /tmp/build-e2e-tests.pid)" 2>/dev/null; do sleep 1; done
+        tail -5 /tmp/build-e2e-tests.log || true
 
     - name: Run tests
       run: |
@@ -268,4 +280,18 @@ jobs:
       with:
         #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+        # Also matches the _e2e_serial.json/.xml reports from the serial pass
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
+
+  # Branch protection requires this job instead of each matrix leg, because
+  # leg names change whenever a matrix value does. always() makes it report
+  # failure, not skipped, when a needed job fails (skipped counts as passing).
+  required:
+    name: e2e passed
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fail if a needed job failed or was cancelled
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: exit 1

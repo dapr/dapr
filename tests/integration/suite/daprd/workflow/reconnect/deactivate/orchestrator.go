@@ -70,7 +70,7 @@ func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, a.workflow.ActorTypesCount())
 	}, time.Second*10, time.Millisecond*10)
 
 	// scheduling a workflow with a provided start time
@@ -93,11 +93,12 @@ func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
-	assert.Equal(t, int64(3), a.called.Load())
+	// The first run, the replay after the reconnect, and the replay after the
+	// activity. A turn cancelled by a dissemination round runs again, so
+	// there can be more.
+	assert.GreaterOrEqual(t, a.called.Load(), int64(3))
 }

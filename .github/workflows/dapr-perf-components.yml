@@ -89,7 +89,7 @@ jobs:
           hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            # Dapr perf test
+            # Dapr components perf test
 
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
 

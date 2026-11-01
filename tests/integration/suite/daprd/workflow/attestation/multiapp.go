@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -117,10 +118,10 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 		return "from-child-app", nil
 	})
 
-	client1 := dworkflow.NewClient(m.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(m.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, regParent))
 
-	client2 := dworkflow.NewClient(m.daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(m.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorker(ctx, regChild))
 
 	id, err := client1.ScheduleWorkflow(ctx, "attest-xapp-parent")

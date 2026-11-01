@@ -78,7 +78,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		case "second":
 			// Second generation: spawn the detached workflow, then return.
-			_, err := ctx.ScheduleNewWorkflow("Spawned",
+			_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 				task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 				task.WithDetachedWorkflowInput("payload"),
 			)

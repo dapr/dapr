@@ -179,3 +179,25 @@ func TestReminderPeriodJSON(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestReminderPeriodSchedule(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"":              "",
+		"10s":           "@every 10s",
+		"1h30m":         "@every 1h30m0s",
+		"PT10S":         "@every 10s",
+		"R5/PT10S":      "@every 10s",
+		"P1D":           "P1D",
+		"R2/P1Y2M3DT4H": "R2/P1Y2M3DT4H",
+	}
+
+	for value, expect := range tests {
+		t.Run(value, func(t *testing.T) {
+			p, err := NewReminderPeriod(value)
+			require.NoError(t, err)
+			assert.Equal(t, expect, p.Schedule())
+		})
+	}
+}

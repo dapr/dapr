@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -62,7 +63,13 @@ func run(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "grpcproxyserver")
+	// The target app id is overridable so that test suites can deploy this app
+	// and the proxy server under names that do not collide with other suites
+	serverAppID := os.Getenv("PROXY_SERVER_APP_ID")
+	if serverAppID == "" {
+		serverAppID = "grpcproxyserver"
+	}
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", serverAppID)
 
 	var name string
 	if request.Method == "maxsize" {

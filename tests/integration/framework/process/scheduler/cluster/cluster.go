@@ -83,6 +83,8 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 				scheduler.WithOverrideBroadcastHostPort(opts.overrideBroadcastHostPorts[i]),
 			)
 		}
+		sopts = append(sopts, opts.schedulerOptions...)
+		sopts = append(sopts, opts.schedulerNOptions[i]...)
 
 		schedulers[i] = scheduler.New(t, sopts...)
 	}
@@ -122,8 +124,9 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 
 	for _, sched := range c.schedulers {
+		client := sched.Client(t, ctx)
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
-			stream, err := sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+			stream, err := client.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 			require.NoError(t, err)
 			resp, err := stream.Recv()
 			stream.CloseSend()
@@ -142,6 +145,12 @@ func (c *Cluster) ClientN(t *testing.T, ctx context.Context, n int) schedulerv1p
 	t.Helper()
 	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
 	return c.schedulers[n].Client(t, ctx)
+}
+
+func (c *Cluster) SchedulerN(t *testing.T, n int) *scheduler.Scheduler {
+	t.Helper()
+	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
+	return c.schedulers[n]
 }
 
 func (c *Cluster) EtcdClientPortN(t *testing.T, n int) int {

@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
@@ -37,20 +36,8 @@ type executor struct {
 }
 
 func (e *executor) Setup(t *testing.T) []framework.Option {
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-    name: workflowsclustereddeployment
-spec:
-    features:
-    - name: WorkflowsClusteredDeployment
-      enabled: true
-`
 	e.workflow = workflow.New(t,
-		workflow.WithDaprdOptions(0,
-			daprd.WithConfigManifests(t, config),
-		),
+		workflow.WithClusteredDeployment(true),
 	)
 	return []framework.Option{
 		framework.WithProcesses(e.workflow),

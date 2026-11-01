@@ -16,10 +16,15 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -51,6 +56,72 @@ func InjectInboxEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, dapr
 	updated, err := proto.Marshal(&metadata)
 	require.NoError(t, err)
 	db.WriteStateValue(t, ctx, key, updated)
+}
+
+// InboxLength returns the number of inbox events the workflow actor's
+// persisted metadata records.
+func InboxLength(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) uint64 {
+	t.Helper()
+
+	_, metaRaw := db.ReadStateValue(t, ctx, instanceID, "metadata")
+	var metadata backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(metaRaw, &metadata))
+	return metadata.GetInboxLength()
+}
+
+// InsertHistoryEvent inserts evt into the workflow actor's persisted history
+// immediately before the first event matching pred, shifting that event and
+// all later history-* keys up by one. The metadata's HistoryLength is
+// incremented by one. The caller is responsible for invalidating the actor's
+// in-memory cache (e.g. via daprd.Restart) before relying on the injection.
+func InsertHistoryEvent(t *testing.T, ctx context.Context, db *sqlite.SQLite, daprd *daprd.Daprd, instanceID string, evt *protos.HistoryEvent, pred func(*protos.HistoryEvent) bool) {
+	t.Helper()
+
+	keyPrefix := workflowActorKeyPrefix(daprd, instanceID)
+
+	values := db.ReadStateValues(t, ctx, instanceID, "history")
+	target := -1
+	for i, raw := range values {
+		var ev protos.HistoryEvent
+		require.NoError(t, proto.Unmarshal(raw, &ev))
+		if pred(&ev) {
+			target = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, target, 0, "no history event matched the predicate")
+
+	conn := db.GetConnection(t)
+	tableName := db.TableName()
+
+	for i := len(values) - 1; i >= target; i-- {
+		oldKey := fmt.Sprintf("%shistory-%06d", keyPrefix, i)
+		newKey := fmt.Sprintf("%shistory-%06d", keyPrefix, i+1)
+		//nolint:gosec
+		_, err := conn.ExecContext(ctx, "UPDATE "+tableName+" SET key = ? WHERE key = ?", newKey, oldKey)
+		require.NoError(t, err)
+	}
+
+	raw, err := proto.Marshal(evt)
+	require.NoError(t, err)
+	db.WriteStateValue(t, ctx, fmt.Sprintf("%shistory-%06d", keyPrefix, target), raw)
+
+	key, metaRaw := db.ReadStateValue(t, ctx, instanceID, "metadata")
+	var metadata backend.BackendWorkflowStateMetadata
+	require.NoError(t, proto.Unmarshal(metaRaw, &metadata))
+	metadata.HistoryLength++
+	updatedMeta, err := proto.Marshal(&metadata)
+	require.NoError(t, err)
+	db.WriteStateValue(t, ctx, key, updatedMeta)
+}
+
+// IsEventRaisedFor returns a predicate that matches an EventRaised event with
+// the given name.
+func IsEventRaisedFor(name string) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		er := e.GetEventRaised()
+		return er != nil && er.GetName() == name
+	}
 }
 
 // RemoveHistoryEvent deletes the first history event matching pred and
@@ -114,6 +185,26 @@ func CountHistoryEventsMatching(t *testing.T, ctx context.Context, cl *client.Ta
 	return count
 }
 
+// WaitForHistoryEvent waits until the workflow's persisted history holds an
+// event matching pred and returns that event. A turn dispatches its work
+// before it saves, so seeing an activity or child start does not mean its
+// scheduling is in the history yet.
+func WaitForHistoryEvent(t *testing.T, ctx context.Context, cl *client.TaskHubGrpcClient, id api.InstanceID, pred func(*protos.HistoryEvent) bool) *protos.HistoryEvent {
+	t.Helper()
+	var found *protos.HistoryEvent
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		hist, err := cl.GetInstanceHistory(ctx, id)
+		if !assert.NoError(c, err) {
+			return
+		}
+		i := slices.IndexFunc(hist.GetEvents(), pred)
+		if assert.GreaterOrEqual(c, i, 0, "no matching event in the persisted history yet") {
+			found = hist.GetEvents()[i]
+		}
+	}, 20*time.Second, 10*time.Millisecond)
+	return found
+}
+
 // IsTaskCompletedFor returns a predicate that matches a TaskCompleted event
 // for the given TaskScheduledId.
 func IsTaskCompletedFor(taskScheduledID int32) func(*protos.HistoryEvent) bool {
@@ -155,6 +246,62 @@ func IsTaskScheduledFor(eventID int32) func(*protos.HistoryEvent) bool {
 	return func(e *protos.HistoryEvent) bool {
 		return e.GetTaskScheduled() != nil && e.GetEventId() == eventID
 	}
+}
+
+func IsTimerCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetTimerCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+func IsChildCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetChildWorkflowInstanceCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+func IsDetachedCreatedFor(eventID int32) func(*protos.HistoryEvent) bool {
+	return func(e *protos.HistoryEvent) bool {
+		return e.GetDetachedWorkflowInstanceCreated() != nil && e.GetEventId() == eventID
+	}
+}
+
+// TaskCompletedEvent returns a TaskCompleted resolution for the activity
+// scheduled at taskScheduledID, as a sender would deliver it (EventId -1),
+// for planting into an inbox or a history.
+func TaskCompletedEvent(taskScheduledID int32, result string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{
+		TaskScheduledId: taskScheduledID,
+		Result:          wrapperspb.String(result),
+	}}}
+}
+
+func TaskFailedEvent(taskScheduledID int32, message string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{
+		TaskScheduledId: taskScheduledID,
+		FailureDetails:  &protos.TaskFailureDetails{ErrorType: "TestError", ErrorMessage: message},
+	}}}
+}
+
+func TimerFiredEvent(timerID int32) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_TimerFired{TimerFired: &protos.TimerFiredEvent{
+		TimerId: timerID,
+		FireAt:  timestamppb.Now(),
+	}}}
+}
+
+func ChildCompletedEvent(taskScheduledID int32, result string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+		TaskScheduledId: taskScheduledID,
+		Result:          wrapperspb.String(result),
+	}}}
+}
+
+func ChildFailedEvent(taskScheduledID int32, message string) *protos.HistoryEvent {
+	return &protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
+		TaskScheduledId: taskScheduledID,
+		FailureDetails:  &protos.TaskFailureDetails{ErrorType: "TestError", ErrorMessage: message},
+	}}}
 }
 
 func workflowActorKeyPrefix(daprd *daprd.Daprd, instanceID string) string {

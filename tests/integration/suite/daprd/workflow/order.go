@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -71,8 +71,8 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 	o.daprd1.WaitUntilRunning(t, ctx)
 	o.daprd2.WaitUntilRunning(t, ctx)
 
-	backendClient1 := client.NewTaskHubGrpcClient(o.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	backendClient2 := client.NewTaskHubGrpcClient(o.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	backendClient1 := client.NewTaskHubGrpcClient(o.daprd1.GRPCConn(t, ctx), logger.New(t))
+	backendClient2 := client.NewTaskHubGrpcClient(o.daprd1.GRPCConn(t, ctx), logger.New(t))
 
 	t.Run("schedule_workflow_before_worker_connected", func(t *testing.T) {
 		r := task.NewTaskRegistry()

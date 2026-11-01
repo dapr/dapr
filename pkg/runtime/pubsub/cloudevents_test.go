@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 )
 
 func TestNewCloudEvent(t *testing.T) {
@@ -120,6 +122,7 @@ func TestNewCloudEvent(t *testing.T) {
 			DataContentType: "application/cloudevents+json",
 			Topic:           "topic1",
 			TraceID:         "trace1",
+			Baggage:         "key1=value1,key2=value2",
 			Pubsub:          "pubsub",
 			Subject:         "subject1",
 		}, map[string]string{})
@@ -131,6 +134,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "trace1", ce["traceid"].(string))
 		assert.Equal(t, "pubsub", ce["pubsubname"].(string))
 		assert.Equal(t, "subject1", ce["subject"].(string))
+		assert.Equal(t, "key1=value1,key2=value2", ce[diagConsts.BaggageHeader].(string))
 	})
 }
 

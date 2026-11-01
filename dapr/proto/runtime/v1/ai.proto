@@ -128,10 +128,17 @@ message ConversationRequestAlpha2 {
   // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3030
   optional google.protobuf.Duration prompt_cache_retention = 11;
 
+  // Maximum number of tokens the model may generate for the completion.
+  // Mapped to each provider's equivalent parameter (e.g. OpenAI
+  // max_completion_tokens, Anthropic max_tokens). Overrides the component-level
+  // maxTokens metadata default when set.
+  // inspired by openai.ChatCompletionNewParams.MaxCompletionTokens
+  // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2131
+  optional int64 max_tokens = 12;
+
   /* TODO: the rest of the fields to bring in from openai.ChatCompletionNewParams are optional, so we can add later.
   Note: They can be within the other messages, not necessarily top level here.
   ...
-  MaxCompletionTokens: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2131
   ReasoningEffort: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2224
   Stop: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2249 <----------------should we bring this in?
   StreamOptions: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2251

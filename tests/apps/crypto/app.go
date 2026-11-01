@@ -115,8 +115,16 @@ func grpcTestRouter(r chi.Router) {
 			return
 		}
 
+		// The SDK reads r.Body in the background and net/http closes an unread
+		// body once the response header is flushed, so read everything first.
+		out, err := io.ReadAll(enc)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error encrypting data: %v", err), http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
-		n, err := io.Copy(w, enc)
+		n, err := w.Write(out)
 
 		log.Printf("Encrypted %d bytes. Error: %v", n, err)
 	})
@@ -131,8 +139,14 @@ func grpcTestRouter(r chi.Router) {
 			return
 		}
 
+		out, err := io.ReadAll(dec)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error decrypting data: %v", err), http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
-		n, err := io.Copy(w, dec)
+		n, err := w.Write(out)
 
 		log.Printf("Decrypted %d bytes. Error: %v", n, err)
 	})

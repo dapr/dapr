@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -130,27 +130,27 @@ func (p *partialauthbypass) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(p.partial.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	partialDaprClient := runtimev1pb.NewDaprClient(p.partial.GRPCConn(t, ctx))
+	// The public actor invoke API rejects reserved actor types, so send the
+	// crafted calls to the target's internal API with the caller's identity.
+	partialInternalClient := p.target.InternalGRPCClient(t, ctx, p.sentry, p.partial.AppID(), p.partial.Namespace())
 	targetWorkflowActorType := "dapr.internal.default.partialauth-target.workflow"
 
 	t.Run("AddWorkflowEvent on denied workflow instance is denied", func(t *testing.T) {
-		_, err := partialDaprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   "denied-wf-instance",
-			Method:    "AddWorkflowEvent",
-			Data:      []byte{},
-		})
+		_, err := partialInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+				WithActor(targetWorkflowActorType, "denied-wf-instance").
+				WithData([]byte{}),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
 
 	t.Run("PurgeWorkflowState on denied workflow instance is denied", func(t *testing.T) {
-		_, err := partialDaprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-			ActorType: targetWorkflowActorType,
-			ActorId:   "denied-wf-instance",
-			Method:    "PurgeWorkflowState",
-			Data:      []byte{},
-		})
+		_, err := partialInternalClient.CallActor(ctx,
+			internalv1pb.NewInternalInvokeRequest("PurgeWorkflowState").
+				WithActor(targetWorkflowActorType, "denied-wf-instance").
+				WithData([]byte{}),
+		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})

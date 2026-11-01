@@ -72,8 +72,13 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 			Namespace: "default",
 		},
 	}
-	table := l.withTypes.Placement().PlacementTables(t, ctx)
-	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := l.withTypes.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Equal(c, expHosts, table.Tables["default"].Hosts)
+	}, time.Second*10, time.Millisecond*10)
 
 	// Now start the no-types daprd.
 	l.noTypes.Run(t, ctx)
@@ -82,7 +87,8 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 
 	// Wait for the no-types daprd to settle, then record the version.
 	time.Sleep(time.Millisecond * 500)
-	table = l.withTypes.Placement().PlacementTables(t, ctx)
+	table := l.withTypes.PlacementTables(t, ctx)
+	require.Contains(t, table.Tables, "default")
 	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
 	versionAfterJoin := table.Tables["default"].Version
 
@@ -101,7 +107,8 @@ func (l *lateJoin) Run(t *testing.T, ctx context.Context) {
 	// no entities and its disconnection should not trigger dissemination.
 	l.noTypes.Daprd().Cleanup(t)
 	time.Sleep(time.Millisecond * 500)
-	table = l.withTypes.Placement().PlacementTables(t, ctx)
+	table = l.withTypes.PlacementTables(t, ctx)
+	require.Contains(t, table.Tables, "default")
 	assert.Equal(t, expHosts, table.Tables["default"].Hosts)
 	assert.Equal(t, versionAfterJoin, table.Tables["default"].Version)
 }

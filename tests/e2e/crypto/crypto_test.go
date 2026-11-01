@@ -163,8 +163,9 @@ func TestCrypto(t *testing.T) {
 
 				// Read the response
 				h := sha256.New()
-				_, err = io.Copy(h, res.Body)
+				n, err := io.Copy(h, res.Body)
 				require.NoError(t, err)
+				require.Equal(t, int64(len(testFileData)), n, "length of decrypted file does not match")
 
 				// Compare the checksum
 				require.Equal(t, testFileHash, h.Sum(nil), "checksum of decrypted file does not match")

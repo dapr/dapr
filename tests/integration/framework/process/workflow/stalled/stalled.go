@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -62,7 +63,13 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	wfOpts := make([]workflow.Option, 0, 2+len(opts.activities))
 	wfOpts = append(wfOpts,
 		workflow.WithAddOrchestrator(t, "Orchestrator", fw.workflowWrapper),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
+		// Under WorkflowsFastPath the post-recovery re-drive falls to the
+		// janitor backstop; shorten its period so stalled-recovery assertions
+		// land inside their windows. Unused in default mode.
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID),
+			daprd.WithExecOptions(exec.WithEnvVars(t,
+				"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+			))),
 	)
 	for name, activity := range opts.activities {
 		wfOpts = append(wfOpts, workflow.WithAddActivity(t, name, activity))
@@ -89,6 +96,13 @@ func (f *Stalled) workflowWrapper(ctx *task.WorkflowContext) (any, error) {
 	}
 }
 
+// FastPath reports whether the underlying workflow harness runs its daprds
+// with the WorkflowsFastPath feature flag enabled. Tests use this to branch
+// assertions which differ between the two modes.
+func (f *Stalled) FastPath() bool {
+	return f.workflows.FastPath()
+}
+
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
@@ -106,6 +120,18 @@ func (f *Stalled) RestartAsReplica(t *testing.T, ctx context.Context, name strin
 	t.Helper()
 	f.runWorkflowReplica = name
 	f.restart(t, ctx)
+}
+
+// ReconnectAsReplica switches the workflow replica by disconnecting the
+// current client and connecting a new one, without restarting daprd.
+func (f *Stalled) ReconnectAsReplica(t *testing.T, ctx context.Context, name string) {
+	t.Helper()
+	f.runWorkflowReplica = name
+	f.currentClientCancel()
+	f.workflows.WaitForNoConnectedWorkers(t, ctx)
+	clientCtx, cancel := context.WithCancel(ctx)
+	f.currentClientCancel = cancel
+	f.CurrentClient = f.workflows.BackendClient(t, clientCtx)
 }
 
 func (f *Stalled) restart(t *testing.T, ctx context.Context) {

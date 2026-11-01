@@ -15,8 +15,10 @@ package disk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -36,6 +38,11 @@ import (
 )
 
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
+
+// rescanDelay is how long to wait before scanning again after a resource
+// file was found held by another process. Releasing a handle raises no
+// filesystem event, so the retry has to be scheduled here.
+const rescanDelay = time.Second
 
 type Options struct {
 	AppID          string
@@ -150,6 +157,18 @@ func (d *disk) Run(ctx context.Context) error {
 					// same files, which causes file handle contention on
 					// Windows.
 					dirData, err := dirdata.ReadDirs(d.dirs)
+					if errors.Is(err, dirdata.ErrLocked) {
+						// A partial scan would unload the resources of the
+						// locked file, so drop it and try again shortly.
+						log.Warnf("Resource scan incomplete, retrying in %s: %s", rescanDelay, err)
+						time.AfterFunc(rescanDelay, func() {
+							select {
+							case eventCh <- struct{}{}:
+							case <-ctx.Done():
+							}
+						})
+						continue
+					}
 					if err != nil {
 						return fmt.Errorf("failed to read resource directories: %w", err)
 					}

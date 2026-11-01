@@ -267,6 +267,13 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 	return operations, nil
 }
 
+// isOutboxStateKey reports whether key has the form of the outbox state keys
+// created by transaction.
+func isOutboxStateKey(key string) bool {
+	id, ok := strings.CutPrefix(key, outboxStatePrefix+"-")
+	return ok && uuid.Validate(id) == nil
+}
+
 func outboxTopic(appID, topic, namespace string) string {
 	return namespace + appID + topic + "outbox"
 }
@@ -298,6 +305,10 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			stateKey := o.cloudEventExtractorFn(cloudEvent, contribPubsub.IDField)
+			if !isOutboxStateKey(stateKey) {
+				outboxLogger.Warnf("dropping message on internal outbox topic %s: id is not an outbox state key", msg.Topic)
+				return nil
+			}
 
 			store, ok := o.getStateFn(stateStore)
 			if !ok {
@@ -349,7 +360,10 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
+			contentType, ok := cloudEvent[contribPubsub.DataContentTypeField].(string)
+			if !ok {
+				contentType = contribPubsub.DefaultCloudEventDataContentType
+			}
 
 			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,

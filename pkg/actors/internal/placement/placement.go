@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -28,15 +29,21 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/dnslookup"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/leader"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/static"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	loopsplacement "github.com/dapr/dapr/pkg/actors/internal/placement/loops/placement"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
+	transportv1 "github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport/v1"
+	transportv2 "github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport/v2"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/leadership"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
@@ -53,6 +60,17 @@ type Interface interface {
 	Ready() bool
 	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 	SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration)
+
+	// WatchRemoteHosts returns a channel which receives whether a daprd
+	// other than this one hosts actorType in the placement tables: at the end
+	// of the next dissemination round, then whenever that changes. Every
+	// daprd receives the tables of its namespace whether or not it hosts
+	// actors. The last answer is kept while the placement stream is down.
+	// It blocks until the placement loop handles the watch, or ctx is done.
+	// The channel is closed once ctx is done, or when placement stops. A
+	// watch made after placement stopped is never handled: it returns a
+	// closed channel once ctx is done.
+	WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool
 }
 
 type Options struct {
@@ -72,6 +90,20 @@ type Options struct {
 	// LOCK -> UPDATE -> UNLOCK round. If the round exceeds this, daprd
 	// resets its placement stream and halts hosted actors.
 	DisseminationTimeout time.Duration
+
+	// SchedulerPlacement asks the scheduler whether it serves placement and,
+	// if so, uses it as this sidecar's placement authority. Otherwise the
+	// standalone placement service is used when Addresses are configured.
+	// The choice is made once on startup.
+	SchedulerPlacement bool
+
+	// SchedulerLeadership tracks the scheduler placement leader. Required
+	// when SchedulerPlacement is set.
+	SchedulerLeadership *leadership.Leadership
+
+	// PlacementStartupTimeout bounds the wait for a scheduler placement
+	// advertisement at startup while Addresses provides a fallback.
+	PlacementStartupTimeout time.Duration
 }
 
 type placement struct {
@@ -84,48 +116,117 @@ type placement struct {
 }
 
 func New(opts Options) (Interface, error) {
-	if len(opts.Addresses) == 0 {
+	hasAddresses := len(opts.Addresses) > 0 &&
+		(len(opts.Addresses) != 1 || strings.TrimSpace(strings.Trim(opts.Addresses[0], `"'`)) != "")
+
+	if !opts.SchedulerPlacement && !hasAddresses {
 		return nil, errors.New("no placement addresses provided")
 	}
 
-	placementID, err := spiffeid.FromSegments(
-		opts.Security.ControlPlaneTrustDomain(),
-		"ns", opts.Security.ControlPlaneNamespace(), "dapr-placement",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var gopts []grpc.DialOption
-	gopts = append(gopts, opts.Security.GRPCDialOptionMTLS(placementID))
-
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		gopts = append(
-			gopts,
-			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+	// v1Setup builds the connector and stream factory speaking to the
+	// standalone placement service.
+	v1Setup := func() (connector.Interface, streamFactory, error) {
+		placementID, err := spiffeid.FromSegments(
+			opts.Security.ControlPlaneTrustDomain(),
+			"ns", opts.Security.ControlPlaneNamespace(), "dapr-placement",
 		)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		gopts := grpcOptions(opts.Security, placementID)
+
+		var conn connector.Interface
+		switch opts.Mode {
+		case modes.KubernetesMode:
+			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
+			// With round robin load balancer, Dapr can find the leader automatically.
+			conn, err = dnslookup.New(dnslookup.Options{
+				Address:     opts.Addresses[0],
+				GRPCOptions: gopts,
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+			}
+		default:
+			// In non-Kubernetes environment, will round robin over the provided addresses
+			conn, err = static.New(static.Options{
+				Addresses:   opts.Addresses,
+				GRPCOptions: gopts,
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+			}
+		}
+
+		factory := func(ctx context.Context, cc *grpc.ClientConn) (transport.Transport, error) {
+			channel, err := v1pb.NewPlacementClient(cc).ReportDaprStatus(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return transportv1.New(transportv1.Options{
+				Channel:   channel,
+				AppID:     opts.AppID,
+				Namespace: opts.Namespace,
+			}), nil
+		}
+
+		return conn, factory, nil
 	}
 
 	var conn connector.Interface
-	switch opts.Mode {
-	case modes.KubernetesMode:
-		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
-		// With round robin load balancer, Dapr can find the leader automatically.
-		conn, err = dnslookup.New(dnslookup.Options{
-			Address:     opts.Addresses[0],
-			GRPCOptions: gopts,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+	var factory streamFactory
+	var fallback *loopsplacement.Fallback
+	var err error
+
+	if opts.SchedulerPlacement {
+		if opts.SchedulerLeadership == nil {
+			return nil, errors.New("scheduler leadership tracker is required for SchedulerPlacement")
 		}
-	default:
-		// In non-Kubernetes environment, will round robin over the provided addresses
-		conn, err = static.New(static.Options{
-			Addresses:   opts.Addresses,
-			GRPCOptions: gopts,
-		})
+
+		var schedulerID spiffeid.ID
+		schedulerID, err = spiffeid.FromSegments(
+			opts.Security.ControlPlaneTrustDomain(),
+			"ns", opts.Security.ControlPlaneNamespace(), "dapr-scheduler",
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+			return nil, err
+		}
+
+		conn = leader.New(leader.Options{
+			Leadership:  opts.SchedulerLeadership,
+			GRPCOptions: grpcOptions(opts.Security, schedulerID),
+		})
+		factory = func(ctx context.Context, cc *grpc.ClientConn) (transport.Transport, error) {
+			channel, cerr := schedulerv1pb.NewSchedulerClient(cc).ReportActorTypes(ctx)
+			if cerr != nil {
+				return nil, cerr
+			}
+			return transportv2.New(transportv2.Options{
+				Channel: channel,
+			}), nil
+		}
+
+		// The placement service is the startup fallback for scheduler
+		// clusters which do not serve placement. It is dropped once an
+		// authority is chosen.
+		if hasAddresses {
+			fconn, ffactory, ferr := v1Setup()
+			if ferr != nil {
+				return nil, ferr
+			}
+			fallback = &loopsplacement.Fallback{
+				Connector:          fconn,
+				StreamFactory:      ffactory,
+				SchedulerPlacement: false,
+			}
+		}
+
+		log.Info("Scheduler address configured; asking the scheduler whether it serves actor placement")
+	} else {
+		conn, factory, err = v1Setup()
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -146,19 +247,39 @@ func New(opts Options) (Interface, error) {
 			Namespace:  opts.Namespace,
 			Healthz:    opts.Healthz,
 			Connector:  conn,
-			InitialHost: &v1pb.Host{
-				Name:      net.JoinHostPort(opts.Hostname, strconv.Itoa(opts.Port)),
-				Id:        opts.AppID,
-				ApiLevel:  20,
+			InitialReport: &loops.Report{
+				Address:   net.JoinHostPort(opts.Hostname, strconv.Itoa(opts.Port)),
+				AppID:     opts.AppID,
 				Namespace: opts.Namespace,
 			},
+			StreamFactory:        factory,
+			SchedulerPlacement:   opts.SchedulerPlacement,
+			Fallback:             fallback,
+			Leadership:           opts.SchedulerLeadership,
+			StartupTimeout:       opts.PlacementStartupTimeout,
 			DisseminationTimeout: opts.DisseminationTimeout,
 		}),
 	}, nil
 }
 
+type streamFactory = func(ctx context.Context, conn *grpc.ClientConn) (transport.Transport, error)
+
+func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
+	gopts := []grpc.DialOption{sec.GRPCDialOptionMTLS(id)}
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		gopts = append(
+			gopts,
+			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+		)
+	}
+
+	return gopts
+}
+
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
+	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -179,6 +300,8 @@ func (p *placement) Run(ctx context.Context) error {
 					p.loop.Enqueue(&loops.UpdateTypes{
 						ActorTypes: atypes,
 					})
+				case <-reminderCh:
+					p.loop.Enqueue(new(loops.ReloadReminderTypes))
 				case <-ctx.Done():
 					log.Info("Placement client shutting down")
 					p.loop.Close(&loops.Shutdown{Error: ctx.Err()})
@@ -253,6 +376,27 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 		Drain:   drain,
 		Timeout: timeout,
 	})
+}
+
+func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
+	resp := make(chan chan bool, 1)
+	p.loop.Enqueue(&loops.WatchRemoteHosts{
+		ActorType: actorType,
+		Ctx:       ctx,
+		Resp:      resp,
+	})
+
+	select {
+	case ch := <-resp:
+		return ch
+	case <-ctx.Done():
+		// The loop has not handled the watch, and may never: it has stopped.
+		// Should it handle it still, it closes the channel it replies with,
+		// as ctx is done.
+		ch := make(chan bool)
+		close(ch)
+		return ch
+	}
 }
 
 func (p *placement) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {

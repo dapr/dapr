@@ -20,6 +20,7 @@ package activation
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -116,8 +117,12 @@ func TestActorActivation(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Wait until runtime finds the leader of placements.
-	time.Sleep(15 * time.Second)
+	// Wait until the actor runtime is ready (placement leader found) by
+	// polling an actor invocation with a throwaway actor ID
+	require.Eventually(t, func() bool {
+		_, code, errp := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, "warmup-probe"), []byte{})
+		return errp == nil && code == http.StatusOK
+	}, 60*time.Second, time.Second, "actor invocation was not ready in time")
 
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
 		actorID := "100"

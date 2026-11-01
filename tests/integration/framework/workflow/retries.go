@@ -39,3 +39,28 @@ func ChildWorkflowRetryChains(events []*protos.HistoryEvent) map[string][]*proto
 	}
 	return chains
 }
+
+// ScheduledExecIDs returns the execution id of every TaskScheduled event for
+// the named activity, in history order. A retry chain schedules every attempt
+// with the same id.
+func ScheduledExecIDs(events []*protos.HistoryEvent, name string) []string {
+	var ids []string
+	for _, ev := range events {
+		if ts := ev.GetTaskScheduled(); ts != nil && ts.GetName() == name {
+			ids = append(ids, ts.GetTaskExecutionId())
+		}
+	}
+	return ids
+}
+
+// ActivityRetryTimerExecIDs returns the execution id carried by every
+// activity retry backoff timer, in history order.
+func ActivityRetryTimerExecIDs(events []*protos.HistoryEvent) []string {
+	var ids []string
+	for _, ev := range events {
+		if ar := ev.GetTimerCreated().GetActivityRetry(); ar != nil {
+			ids = append(ids, ar.GetTaskExecutionId())
+		}
+	}
+	return ids
+}

@@ -78,8 +78,6 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	APIListenAddress                    string
-	HealthzPort                         int
-	HealthzListenAddress                string
 	WebhookServerPort                   int
 	WebhookServerListenAddress          string
 	Healthz                             healthz.Healthz
@@ -236,6 +234,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
 			PodReader:     podMetaCache,
+			PodAPIReader:  mgr.GetAPIReader(),
 			Security:      secProvider,
 			Port:          opts.APIPort,
 			ListenAddress: opts.APIListenAddress,

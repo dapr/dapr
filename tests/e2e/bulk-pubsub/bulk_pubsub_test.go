@@ -51,7 +51,8 @@ const (
 	numberOfMessagesToPublish = 60
 	publishRateLimitRPS       = 25
 
-	receiveMessageRetries = 5
+	// Validation polls every 2s up to this many attempts (~50s budget)
+	receiveMessageRetries = 25
 
 	publisherAppName      = "pubsub-publisher-bulk-subscribe"
 	bulkSubscriberAppName = "pubsub-bulk-subscriber"
@@ -219,7 +220,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 	log.Printf("Test publish bulk subscribe success flow\n")
 	sentMessages := testPublishForBulkSubscribe(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, bulkSubscriberAppName, protocol, false, sentMessages)
 	return subscriberExternalURL
 }
@@ -301,7 +302,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t *testing.T, publishe
 		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
 			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -309,7 +310,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t *testing.T, publishe
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -326,7 +327,7 @@ func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t *testing.T, publishe
 			len(appResp.ReceivedByTopicRawBulkSub) != len(sentMessages.ReceivedByTopicRawBulkSub) ||
 			len(appResp.ReceivedByTopicCEBulkSub) != len(sentMessages.ReceivedByTopicCEBulkSub) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}

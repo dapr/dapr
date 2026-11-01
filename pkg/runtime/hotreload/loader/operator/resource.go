@@ -38,6 +38,7 @@ type resource[T differ.Resource] struct {
 	streamer streamer[T]
 	store    store.Store[T]
 
+	lock    sync.Mutex
 	wg      sync.WaitGroup
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -88,11 +89,27 @@ func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T]
 }
 
 func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	if r.closed.Load() {
 		return nil, errors.New("stream is closed")
 	}
 
+	// All streams, including the first, use a context that close cancels.
+	ctx, cancel := context.WithCancel(ctx)
+
+	r.wg.Go(func() {
+		select {
+		case <-r.closeCh:
+		case <-ctx.Done():
+		}
+
+		cancel()
+	})
+
 	if err := r.streamer.establish(ctx, r.opClient, r.namespace); err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -102,25 +119,10 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		EventCh:     make(chan *loader.Event[T]),
 		ReconcileCh: make(chan struct{}),
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
-	r.wg.Add(2)
-
-	go func() {
-		defer r.wg.Done()
-
-		select {
-		case <-r.closeCh:
-		case <-ctx.Done():
-		}
-
-		cancel()
-	}()
-	go func() {
-		defer r.wg.Done()
-
+	r.wg.Go(func() {
 		r.stream(ctx, conn)
-	}()
+	})
 
 	return conn, nil
 }
@@ -170,12 +172,19 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 	}
 }
 
+// close waits for the stream goroutine, which replaces the stream on
+// reconnect, before closing the streamer.
 func (r *resource[T]) close() error {
-	defer r.wg.Wait()
-
 	if r.closed.CompareAndSwap(false, true) {
 		close(r.closeCh)
 	}
+
+	// Wait for any in-progress Stream before wg.Wait.
+	r.lock.Lock()
+	//nolint:staticcheck
+	r.lock.Unlock()
+
+	r.wg.Wait()
 
 	return r.streamer.close()
 }
