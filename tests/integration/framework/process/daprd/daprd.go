@@ -94,6 +94,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		fopt(&opts)
 	}
 
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
+	}
+
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
@@ -201,6 +207,9 @@ spec:
 	}
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
+	if opts.readBufferSize != nil {
+		args = append(args, "--read-buffer-size="+*opts.readBufferSize)
 	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)

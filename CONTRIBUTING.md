@@ -2,10 +2,10 @@
 
 Thank you for your interest in Dapr!
 
-This project welcomes contributions and suggestions. Most contributions require you to signoff on your commits via 
-the Developer Certificate of Origin (DCO). When you submit a pull request, a DCO-bot will automatically determine 
-whether you need to provide signoff for your commit. Please follow the instructions provided by DCO-bot, as pull 
-requests cannot be merged until the author(s) have provided signoff to fulfill the DCO requirement.
+This project welcomes contributions and suggestions. Most contributions require you to sign off on your commits via
+the Developer Certificate of Origin (DCO). When you submit a pull request, a DCO-bot will automatically determine
+whether you need to sign off on your commits. Please follow the instructions provided by DCO-bot, as pull
+requests cannot be merged until the author(s) have fulfilled the DCO requirement.
 You may find more information on the DCO requirements [below](#developer-certificate-of-origin-signing-your-work).
 
 This project has adopted the [Contributor Covenant Code of Conduct](https://github.com/dapr/community/blob/master/CODE-OF-CONDUCT.md).
@@ -100,7 +100,7 @@ Git even has a `-s` command line option to append this automatically to your com
 git commit -s -m 'This is my commit message'
 ```
 
-Each Pull Request is checked  whether or not commits in a Pull Request do contain a valid Signed-off-by line.
+Each Pull Request is checked to ensure commits contain a valid Signed-off-by line.
 
 #### I didn't sign my commit, now what?!
 
