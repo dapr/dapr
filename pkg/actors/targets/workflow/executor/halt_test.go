@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -458,6 +460,54 @@ func Test_haltAllHandOffRetriesUntilKeyMoves(t *testing.T) {
 	require.Eventually(t, func() bool { return parkedOn(f, key) }, 5*time.Second, 10*time.Millisecond,
 		"the handoff did not retry until the key moved")
 	assert.GreaterOrEqual(t, attempts.Load(), int32(4))
+}
+
+// Test_haltAllHandOffWaitsWhileTypeUnhosted covers the last executor of an
+// app leaving: no daprd hosts the type, so the router's lookup has no address
+// for the key. The handoff backs off on that error, calling the router without
+// its actor-not-found retries, and goes through once a host shows up within
+// forwardTimeout, as when a worker reconnects.
+func Test_haltAllHandOffWaitsWhileTypeUnhosted(t *testing.T) {
+	t.Parallel()
+
+	var (
+		f        *factory
+		hosted   atomic.Bool
+		attempts atomic.Int32
+		retried  atomic.Int32
+	)
+	routerFake := routerfake.New().
+		WithCallFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			retried.Add(1)
+			return nil, errors.New("the handoff called the router with its retries")
+		}).
+		WithCallWithoutRetriesFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			attempts.Add(1)
+			if !hosted.Load() {
+				return nil, fmt.Errorf("failed to lookup actor: %w", messages.ErrActorNoAddress.WithFormat(req.GetActor().GetActorId()))
+			}
+			return f.GetOrCreate(req.GetActor().GetActorId()).InvokeMethod(ctx, req)
+		})
+	f = &factory{
+		actorType: haltTestActorType,
+		actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+			return routerFake, nil
+		}),
+		deactivateCh: make(chan *executor, 10),
+		pending:      pending.New(),
+	}
+	const key = "wf9"
+
+	_, err := f.GetOrCreate(key).InvokeMethod(t.Context(), completeReq(TaskTypeWorkflow, []byte("genuine")))
+	require.NoError(t, err)
+
+	require.NoError(t, f.HaltAll(t.Context()))
+	require.Eventually(t, func() bool { return attempts.Load() >= 3 }, 5*time.Second, 10*time.Millisecond)
+
+	hosted.Store(true)
+	require.Eventually(t, func() bool { return parkedOn(f, key) }, 5*time.Second, 10*time.Millisecond,
+		"the handoff did not go through once a host showed up")
+	assert.Zero(t, retried.Load())
 }
 
 // Test_cancelAfterRetirementIsRetried covers a cancellation that reaches an

@@ -159,5 +159,6 @@ spec:
       url: ftp://example.com/mcp
 `), 0o600))
 		m.logline.EventuallyFoundAll(t)
+		m.daprd.WaitUntilExit(t, 15*time.Second)
 	})
 }

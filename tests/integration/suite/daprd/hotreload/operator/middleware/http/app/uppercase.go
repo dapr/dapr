@@ -56,13 +56,14 @@ type uppercase struct {
 
 func (u *uppercase) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
+	nameResolution := daprd.NameResolutionJSON(t)
 
 	u.operator = operator.New(t,
 		operator.WithSentry(sentry),
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": {"component": "mdns"},
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": ` + nameResolution + `,
 					"appHttpPipeline":{"handlers":[{"name":"uppercase","type":"middleware.http.uppercase"},{"name":"uppercase2","type":"middleware.http.uppercase"}]}}}`,
 				),
 			}, nil
