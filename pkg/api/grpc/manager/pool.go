@@ -14,6 +14,7 @@ limitations under the License.
 package manager
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -204,6 +205,34 @@ func (p *ConnectionPool) DestroyAll() {
 	p.connections = p.connections[:0]
 }
 
+// CloseIdle closes and removes every connection that no caller currently
+// holds, whatever its idle time, returning the number closed. Connections with
+// a caller holding them are left alone.
+func (p *ConnectionPool) CloseIdle() int {
+	// Need a write lock as we modify the slice, and so that doShare cannot
+	// hand out a connection that is being closed.
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	n := 0
+	closed := 0
+	for i := 0; i < len(p.connections); i++ {
+		el := p.connections[i]
+		if atomic.LoadInt32(&el.referenceCount) <= 0 {
+			if closer, ok := el.conn.(interface{ Close() error }); ok {
+				_ = closer.Close()
+			}
+			closed++
+			continue
+		}
+
+		p.connections[n] = el
+		n++
+	}
+	p.connections = p.connections[:n]
+	return closed
+}
+
 // Purge connections that have been idle for longer than maxConnIdle.
 // Note that this method should not be called by multiple goroutines at the same time.
 func (p *ConnectionPool) Purge() {
@@ -307,6 +336,21 @@ func (p *RemoteConnectionPool) Destroy(address string, conn grpc.ClientConnInter
 func (p *RemoteConnectionPool) Purge() {
 	p.pool.Range(func(_ any, item any) bool {
 		item.(*ConnectionPool).Purge()
+		return true
+	})
+}
+
+// CloseIdleWithPrefix closes the idle connections of every pool whose key starts
+// with prefix, except the pool stored under except.
+func (p *RemoteConnectionPool) CloseIdleWithPrefix(prefix, except string) {
+	p.pool.Range(func(key any, item any) bool {
+		k, ok := key.(string)
+		if !ok || k == except || !strings.HasPrefix(k, prefix) {
+			return true
+		}
+		if closed := item.(*ConnectionPool).CloseIdle(); closed > 0 {
+			log.Debugf("Closed %d idle gRPC connection(s) to %s", closed, k)
+		}
 		return true
 	})
 }
