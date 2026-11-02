@@ -46,7 +46,10 @@ import (
 	"github.com/dapr/kit/crypto/spiffe"
 )
 
-const identityTestTrustDomain = "public"
+const (
+	identityTestTrustDomain = "public"
+	testAddr                = "h:1"
+)
 
 type identityTestCA struct {
 	cert *x509.Certificate
@@ -166,16 +169,23 @@ func newIdentityServer(t *testing.T) *identityServer {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	s := &identityServer{real: l, ch: make(chan net.Conn)}
+	done := make(chan struct{})
 	go func() {
 		for {
 			c, aerr := l.Accept()
 			if aerr != nil {
 				return
 			}
-			s.ch <- c
+			select {
+			case s.ch <- c:
+			case <-done:
+				_ = c.Close()
+				return
+			}
 		}
 	}()
 	t.Cleanup(func() {
+		close(done)
 		_ = l.Close()
 		s.stop()
 	})
@@ -381,12 +391,12 @@ func TestGetGRPCConnection_KeyFieldsAreSeparated(t *testing.T) {
 func TestRemoteConnKey_Injective(t *testing.T) {
 	tests := map[string][2][3]string{
 		"address digits move into namespace": {{"h:5000", "1x", "b"}, {"h:50001", "x", "b"}},
-		"namespace suffix moves into app ID": {{"h:1", "n", "sb"}, {"h:1", "ns", "b"}},
-		"same app ID, other namespace":       {{"h:1", "ns1", "b"}, {"h:1", "ns2", "b"}},
-		"same app ID, empty namespace":       {{"h:1", "", "b"}, {"h:1", "ns", "b"}},
-		"same namespace, other app ID":       {{"h:1", "ns", "b"}, {"h:1", "ns", "c"}},
-		"same identity, other address":       {{"h:1", "ns", "b"}, {"h:2", "ns", "b"}},
-		"empty field swapped":                {{"h:1", "", "x"}, {"h:1", "x", ""}},
+		"namespace suffix moves into app ID": {{testAddr, "n", "sb"}, {testAddr, "ns", "b"}},
+		"same app ID, other namespace":       {{testAddr, "ns1", "b"}, {testAddr, "ns2", "b"}},
+		"same app ID, empty namespace":       {{testAddr, "", "b"}, {testAddr, "ns", "b"}},
+		"same namespace, other app ID":       {{testAddr, "ns", "b"}, {testAddr, "ns", "c"}},
+		"same identity, other address":       {{testAddr, "ns", "b"}, {"h:2", "ns", "b"}},
+		"empty field swapped":                {{testAddr, "", "x"}, {testAddr, "x", ""}},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
