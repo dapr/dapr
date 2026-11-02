@@ -302,4 +302,7 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
+{{- with include "dapr.topologySpreadConstraints" (dict "constraints" .Values.global.topologySpreadConstraints "app" "dapr-sidecar-injector") }}
+{{ . | indent 6 }}
+{{- end }}
 {{- end }}
