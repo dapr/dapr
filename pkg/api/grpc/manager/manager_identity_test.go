@@ -345,11 +345,12 @@ func TestGetGRPCConnection_StaleIdentityPurged(t *testing.T) {
 	connC, releaseC, err := mgr.GetGRPCConnection(ctx, srv.address(), "c", ns)
 	require.NoError(t, err)
 	require.NoError(t, checkIdentityConn(ctx, connC))
-	releaseC(false)
 
+	// C stays held while B is dialed, so only the idle purge can close it.
 	srv.serveAs(ca.handler(t, ns, "b"))
 	connB, releaseB, err := mgr.GetGRPCConnection(ctx, srv.address(), "b", ns)
 	require.NoError(t, err)
+	releaseC(false)
 	releaseB(false)
 
 	clockMock.Step(maxConnIdle + time.Second)
@@ -444,4 +445,135 @@ func TestGetGRPCConnection_DestroyIsolatedPerIdentity(t *testing.T) {
 		require.NotEqual(t, connectivity.Shutdown.String(), connB.GetState().String(), "destroying identity c closed identity b's connection")
 		releaseB(false)
 	}
+}
+
+func TestGetGRPCConnection_NewIdentityClosesIdleOldIdentity(t *testing.T) {
+	const ns = "ns"
+	ca := newIdentityTestCA(t)
+	srv := newIdentityServer(t)
+	mgr := newIdentityManager(t, ca, ns)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	srv.serveAs(ca.handler(t, ns, "c"))
+	connC, releaseC, err := mgr.GetGRPCConnection(ctx, srv.address(), "c", ns)
+	require.NoError(t, err)
+	require.NoError(t, checkIdentityConn(ctx, connC))
+	releaseC(false)
+
+	srv.serveAs(ca.handler(t, ns, "b"))
+	connB, releaseB, err := mgr.GetGRPCConnection(ctx, srv.address(), "b", ns)
+	require.NoError(t, err)
+	require.NoError(t, checkIdentityConn(ctx, connB))
+	releaseB(false)
+
+	assert.Equal(t, connectivity.Shutdown.String(), connC.GetState().String(), "the previous identity's idle connection must be closed when the address goes to another app")
+
+	// The previous app gets the address back: it dials afresh instead of
+	// waiting on the reconnect backoff of the connection that was closed.
+	srv.serveAs(ca.handler(t, ns, "c"))
+	connC2, releaseC2, err := mgr.GetGRPCConnection(ctx, srv.address(), "c", ns)
+	require.NoError(t, err)
+	defer releaseC2(false)
+	assert.NotSame(t, connC, connC2)
+	require.NoError(t, checkIdentityConn(ctx, connC2))
+	assert.Equal(t, connectivity.Shutdown.String(), connB.GetState().String(), "the idle connection of the app that left must be closed in turn")
+}
+
+func TestGetGRPCConnection_NewIdentityKeepsHeldOldIdentity(t *testing.T) {
+	const ns = "ns"
+	ca := newIdentityTestCA(t)
+	srv := newIdentityServer(t)
+	mgr := newIdentityManager(t, ca, ns)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	srv.serveAs(ca.handler(t, ns, "c"))
+	connC, releaseC, err := mgr.GetGRPCConnection(ctx, srv.address(), "c", ns)
+	require.NoError(t, err)
+	require.NoError(t, checkIdentityConn(ctx, connC))
+
+	// A caller still holds C's connection, as for an in-flight call.
+	srv.serveAs(ca.handler(t, ns, "b"))
+	_, releaseB, err := mgr.GetGRPCConnection(ctx, srv.address(), "b", ns)
+	require.NoError(t, err)
+	defer releaseB(false)
+
+	assert.NotEqual(t, connectivity.Shutdown.String(), connC.GetState().String(), "a connection a caller still holds must not be closed")
+	releaseC(false)
+}
+
+func TestGetGRPCConnection_NewIdentityKeepsOtherAddress(t *testing.T) {
+	const ns = "ns"
+	ca := newIdentityTestCA(t)
+	srvC := newIdentityServer(t)
+	srvB := newIdentityServer(t)
+	mgr := newIdentityManager(t, ca, ns)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	srvC.serveAs(ca.handler(t, ns, "c"))
+	connC, releaseC, err := mgr.GetGRPCConnection(ctx, srvC.address(), "c", ns)
+	require.NoError(t, err)
+	require.NoError(t, checkIdentityConn(ctx, connC))
+	releaseC(false)
+
+	srvB.serveAs(ca.handler(t, ns, "b"))
+	_, releaseB, err := mgr.GetGRPCConnection(ctx, srvB.address(), "b", ns)
+	require.NoError(t, err)
+	defer releaseB(false)
+
+	assert.NotEqual(t, connectivity.Shutdown.String(), connC.GetState().String(), "a connection to another address must not be closed")
+	assert.NoError(t, checkIdentityConn(ctx, connC))
+}
+
+// An address that merely starts with another one (":1" and ":10") is another
+// address, so its connections must not be touched.
+func TestGetGRPCConnection_NewIdentityKeepsAddressSharingPrefix(t *testing.T) {
+	mgr := newIdentityManager(t, newIdentityTestCA(t), "ns")
+	// Never served: dialing is non-blocking, the connections only have to exist.
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	connC, releaseC, err := mgr.GetGRPCConnection(ctx, "127.0.0.1:10", "c", "ns")
+	require.NoError(t, err)
+	releaseC(false)
+
+	_, releaseB, err := mgr.GetGRPCConnection(ctx, "127.0.0.1:1", "b", "ns")
+	require.NoError(t, err)
+	defer releaseB(false)
+
+	assert.NotEqual(t, connectivity.Shutdown.String(), connC.GetState().String(), "a connection to a different address must not be closed")
+}
+
+// Only dialing a new connection closes the idle connections of other
+// identities. Reusing the pooled one must not, or two identities that use one
+// address (for example with mTLS off) would close each other's connections.
+func TestGetGRPCConnection_SharedHitDoesNotCloseOtherIdentities(t *testing.T) {
+	mgr := newIdentityManager(t, newIdentityTestCA(t), "ns")
+	const addr = "127.0.0.1:1"
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	_, releaseC, err := mgr.GetGRPCConnection(ctx, addr, "c", "ns")
+	require.NoError(t, err)
+	releaseC(false)
+
+	// B is dialed: C is idle, so it is closed.
+	connB, releaseB, err := mgr.GetGRPCConnection(ctx, addr, "b", "ns")
+	require.NoError(t, err)
+
+	// C is dialed again while B is held, then goes idle.
+	connC2, releaseC2, err := mgr.GetGRPCConnection(ctx, addr, "c", "ns")
+	require.NoError(t, err)
+	releaseC2(false)
+
+	// B's pooled connection is shared, not dialed, so C's idle one stays.
+	connB2, releaseB2, err := mgr.GetGRPCConnection(ctx, addr, "b", "ns")
+	require.NoError(t, err)
+	defer releaseB2(false)
+	defer releaseB(false)
+
+	assert.Same(t, connB, connB2)
+	assert.NotEqual(t, connectivity.Shutdown.String(), connC2.GetState().String(), "reusing a pooled connection must not close another identity's")
 }

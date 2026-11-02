@@ -206,14 +206,28 @@ func (g *Manager) GetGRPCConnection(
 	key := remoteConnKey(address, namespace, id)
 
 	// Load or create a connection
-	var connI grpc.ClientConnInterface
+	var (
+		connI   grpc.ClientConnInterface
+		created bool
+	)
 	connI, err = g.remoteConns.Get(key, func() (grpc.ClientConnInterface, error) {
-		return g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+		c, cerr := g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+		created = cerr == nil
+		return c, cerr
 	})
 	if err != nil {
 		return nil, nopTeardown, err
 	}
 	conn = connI.(*grpc.ClientConn)
+
+	// Another identity at this address means it was handed to a different app,
+	// so connections pinned to the previous one can only fail their handshakes
+	// and keep redialing. Close those nobody is using; the rest are left to
+	// their callers and the idle purge. This must run after Get returns, as Get
+	// holds the lock of this key's pool while it creates the connection.
+	if created {
+		g.remoteConns.CloseIdleWithPrefix(address+"/", key)
+	}
 	return conn, g.connTeardownFactory(key, conn), nil
 }
 
