@@ -44,19 +44,25 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 		return false
 	}
 
-	dispatched, throttledKey := d.tryDispatch(req)
-	if dispatched {
-		return true
+	if dispatched, throttledKey := d.tryDispatch(req); !dispatched {
+		d.park(req, throttledKey, false)
 	}
+	return true
+}
 
+// park queues req until a sidecar has a free slot. A new trigger beyond
+// MaxParked is resolved FAILED, so its failure policy retries it later; an
+// admitted one, which a sidecar refused, is parked regardless.
+func (d *Dispatcher) park(req *loops.TriggerRequest, throttledKey string, admitted bool) {
+	actor := req.Job.GetMetadata().GetTarget().GetActor()
 	q, ok := d.pending[actor.GetType()]
 	if !ok {
 		q = newQueue(d.opts.MaxParked)
 		d.pending[actor.GetType()] = q
 	}
-	if !q.enqueue(req) {
+	if !q.enqueue(req, admitted) {
 		req.ResultFn(api.TriggerResponseResult_FAILED)
-		return true
+		return
 	}
 	log.Debugf("Parked pull trigger %s for actor %s: no free slot on %d eligible sidecars (%d waiting)", req.Job.GetName(), actor.GetId(), len(d.pools[actor.GetType()]), q.len())
 	// Waiting for a sidecar slot is the backlog gauge's job; only a shared
@@ -65,7 +71,6 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 		monitoring.RecordConcurrencyThrottled(throttledKey)
 	}
 	d.backlog.add(req, 1)
-	return true
 }
 
 // tryDispatch hands req to the eligible sidecar with the most free slots once
@@ -155,6 +160,10 @@ func (d *Dispatcher) pickPool(actorType string) (*pool, bool) {
 	return best, best != nil
 }
 
+func (d *Dispatcher) hasCredit(actorType string) bool {
+	return slices.ContainsFunc(d.pools[actorType], func(p *pool) bool { return p.credit > 0 })
+}
+
 func (d *Dispatcher) poolOf(actorType, id string) *pool {
 	for _, p := range d.pools[actorType] {
 		if p.sidecar == id {
@@ -165,7 +174,8 @@ func (d *Dispatcher) poolOf(actorType, id string) *pool {
 }
 
 // Drain dispatches as many parked pull triggers as capacity allows, one
-// instance-fair rotation at a time per actor type.
+// group-fair rotation at a time per actor type, until no sidecar has a free
+// slot.
 // ponytail: while a shared gate is full and a sidecar has a free slot, every
 // release retries the head of each parked instance, O(instances) per
 // release; index parked triggers by the gate blocking them if that shows up.
@@ -185,10 +195,7 @@ func (d *Dispatcher) Drain() {
 			delete(d.pending, actorType)
 			continue
 		}
-		if !slices.ContainsFunc(d.pools[actorType], func(p *pool) bool { return p.credit > 0 }) {
-			continue
-		}
-		for q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
+		for d.hasCredit(actorType) && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
 			dispatched, _ := d.tryDispatch(req)
 			if dispatched {
 				d.backlog.add(req, -1)

@@ -44,7 +44,14 @@ func (d *Dispatcher) repark(f *flight, cronFn func(api.TriggerResponseResult), g
 	d.opts.ReleaseGates(gateKeys)
 	// A fresh request: a closed stream may still hold the refused one, whose
 	// hooks are now no-ops.
-	d.opts.Requeue(&loops.TriggerRequest{Job: f.req.Job, ResultFn: cronFn})
+	req := &loops.TriggerRequest{Job: f.req.Job, ResultFn: cronFn}
+	if len(d.pools[f.actorType]) == 0 {
+		d.opts.Requeue(req)
+		return
+	}
+	if dispatched, throttledKey := d.tryDispatch(req); !dispatched {
+		d.park(req, throttledKey, true)
+	}
 }
 
 func (d *Dispatcher) isCurrent(f *flight) bool {

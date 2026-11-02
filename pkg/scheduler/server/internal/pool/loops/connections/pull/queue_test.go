@@ -45,7 +45,7 @@ func TestQueue_TryDispatchOneRotates(t *testing.T) {
 	}
 	a1, a2, a3, b1, c1 := mk("a::1::0"), mk("a::2::0"), mk("a::3::0"), mk("b::1::0"), mk("c::1::0")
 	for _, r := range []*loops.TriggerRequest{a1, a2, a3, b1, c1} {
-		require.True(t, q.enqueue(r))
+		require.True(t, q.enqueue(r, false))
 	}
 	require.Equal(t, 5, q.len())
 
@@ -62,8 +62,8 @@ func TestQueue_TryDispatchOneRotates(t *testing.T) {
 
 	// A rejected head is skipped for this rotation; another instance's head
 	// may still go.
-	require.True(t, q.enqueue(a1))
-	require.True(t, q.enqueue(b1))
+	require.True(t, q.enqueue(a1, false))
+	require.True(t, q.enqueue(b1, false))
 	order = nil
 	require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
 		order = append(order, r)
@@ -80,7 +80,7 @@ func TestQueue_DrainAll(t *testing.T) {
 	q := newQueue(10)
 	h := newHarness(t, 0, 0)
 	req := h.trigger("wf::1::0", "act")
-	require.True(t, q.enqueue(req))
+	require.True(t, q.enqueue(req, false))
 	var drained []*loops.TriggerRequest
 	q.drainAll(func(r *loops.TriggerRequest) { drained = append(drained, r) })
 	assert.Equal(t, []*loops.TriggerRequest{req}, drained)
@@ -91,7 +91,16 @@ func TestQueue_Bound(t *testing.T) {
 	t.Parallel()
 	q := newQueue(1)
 	h := newHarness(t, 0, 0)
-	require.True(t, q.enqueue(h.trigger("wf::1::0", "act")))
-	assert.False(t, q.enqueue(h.trigger("wf::2::0", "act")), "a full queue refuses the trigger")
-	assert.Equal(t, 1, q.len())
+	require.True(t, q.enqueue(h.trigger("wf::1::0", "act"), false))
+	assert.False(t, q.enqueue(h.trigger("wf::2::0", "act"), false), "a full queue refuses a new trigger")
+	assert.True(t, q.enqueue(h.trigger("wf::3::0", "act"), true), "an admitted trigger parks past the bound")
+	assert.Equal(t, 2, q.len())
+}
+
+func TestQueue_GroupsByInstanceAndName(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 0, 0)
+	assert.Equal(t, groupKey(h.trigger("wf::1::0", "act")), groupKey(h.trigger("wf::2::0", "act")))
+	assert.NotEqual(t, groupKey(h.trigger("wf::1::0", "act")), groupKey(h.trigger("wf::2::0", "other")), "another activity name is another group")
+	assert.NotEqual(t, groupKey(h.trigger("wf-a::1::0", "act")), groupKey(h.trigger("wf-b::1::0", "act")), "another instance is another group")
 }

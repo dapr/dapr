@@ -197,3 +197,34 @@ func TestDispatcher_ThrottledKeyIsSharedGateOnly(t *testing.T) {
 	assert.False(t, dispatched)
 	assert.Empty(t, key, "no free slot is not a concurrency throttle")
 }
+
+func TestDispatcher_FullNameGateDoesNotHoldBackOtherNames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 0)
+	h.gates[testActorType+":slow"] = &gate{limit: 1, current: 1}
+
+	// One instance parks a Slow activity, whose gate is full, then a Fast one.
+	slow := h.trigger("wf::1::0", "slow")
+	fast := h.trigger("wf::2::0", "fast")
+	h.handle(slow)
+	h.handle(fast)
+	require.Equal(t, 2, h.d.pending[testActorType].len())
+
+	h.report(0, 1)
+	require.Len(t, h.dispatched[0], 1)
+	assert.Same(t, fast, h.dispatched[0][0], "Fast is not held back by Slow's gate")
+}
+
+func TestDispatcher_DrainStopsWhenSlotsRunOut(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 0)
+	for i := range 5 {
+		h.handle(h.trigger("wf-"+strconv.Itoa(i)+"::1::0", "act"))
+	}
+	require.Equal(t, 5, h.d.pending[testActorType].len())
+
+	before := h.d.rotate
+	h.report(0, 1)
+	require.Len(t, h.dispatched[0], 1)
+	assert.Equal(t, 1, h.d.rotate-before, "with the only slot taken, no other parked instance is tried")
+}

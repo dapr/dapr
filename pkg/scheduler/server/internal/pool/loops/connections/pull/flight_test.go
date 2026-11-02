@@ -55,3 +55,23 @@ func TestDispatcher_NoCapacityReparks(t *testing.T) {
 	h.pump(t)
 	assert.Equal(t, api.TriggerResponseResult_SUCCESS, h.resultOf(t, req), "the cron callback travels with the requeued trigger")
 }
+
+func TestDispatcher_NoCapacityAtTheBoundStillParks(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 1)
+	h.d.opts.MaxParked = 1
+
+	running := h.trigger("wf-a::1::0", "act")
+	h.handle(running)
+	parked := h.trigger("wf-b::1::0", "act")
+	h.handle(parked)
+	require.Len(t, h.dispatched[0], 1)
+	require.Equal(t, 1, h.d.pending[testActorType].len(), "the queue is at its bound")
+
+	// The sidecar refuses the dispatched trigger.
+	running.Repark()
+	h.pump(t)
+
+	assert.NotContains(t, h.results, running, "a refused trigger never reaches its failure policy, even with the queue full")
+	assert.Equal(t, 2, h.d.pending[testActorType].len())
+}

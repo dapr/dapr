@@ -114,7 +114,9 @@ func (d *Dispatcher) CloseStream(streamIDx uint64) {
 // HandleSlots applies the free slots a sidecar reported.
 func (d *Dispatcher) HandleSlots(e *loops.PullSlotsUpdate) {
 	p := d.poolOf(e.ActorType, sidecarID(e.StreamIDx, e.AppID, e.ActorAddress))
-	if p == nil {
+	// A report from a stream that has since closed is older than what the
+	// sidecar's live streams report.
+	if p == nil || !slices.Contains(p.streams, e.StreamIDx) {
 		return
 	}
 	grew := e.Free > p.credit

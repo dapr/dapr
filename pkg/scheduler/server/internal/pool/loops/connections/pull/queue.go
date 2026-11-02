@@ -21,18 +21,25 @@ import (
 
 // queue parks pull-dispatched triggers of one actor type while no
 // sidecar has a free slot. Triggers are grouped by workflow instance and
-// served round robin across instances, so one instance with a large fan-out
-// cannot starve the others.
+// activity name and served round robin across groups, so one instance with a
+// large fan-out cannot starve the others, and a full per-name gate does not
+// hold back the instance's other activities.
 type queue struct {
-	max        int
-	byInstance map[string][]*loops.TriggerRequest
-	ring       []string
-	next       int
-	n          int
+	max    int
+	groups map[string][]*loops.TriggerRequest
+	ring   []string
+	next   int
+	n      int
 }
 
 func newQueue(maxLen int) *queue {
-	return &queue{max: maxLen, byInstance: make(map[string][]*loops.TriggerRequest)}
+	return &queue{max: maxLen, groups: make(map[string][]*loops.TriggerRequest)}
+}
+
+// groupKey is the workflow instance and activity name of a parked trigger.
+func groupKey(req *loops.TriggerRequest) string {
+	meta := req.Job.GetMetadata()
+	return instanceKey(meta.GetTarget().GetActor().GetId()) + "||" + meta.GetConcurrencyKey()
 }
 
 // instanceKey returns the workflow instance ID encoded in an activity
@@ -52,35 +59,38 @@ func (q *queue) len() int {
 	return q.n
 }
 
-func (q *queue) enqueue(req *loops.TriggerRequest) bool {
-	if q.n >= q.max {
+// enqueue parks req, refusing it at the bound unless admitted: a trigger a
+// sidecar already accepted and refused is parked past the bound, so a refusal
+// never reaches its failure policy.
+func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) bool {
+	if !admitted && q.n >= q.max {
 		return false
 	}
-	key := instanceKey(req.Job.GetMetadata().GetTarget().GetActor().GetId())
-	if _, ok := q.byInstance[key]; !ok {
+	key := groupKey(req)
+	if _, ok := q.groups[key]; !ok {
 		q.ring = append(q.ring, key)
 	}
-	q.byInstance[key] = append(q.byInstance[key], req)
+	q.groups[key] = append(q.groups[key], req)
 	q.n++
 	return true
 }
 
-// tryDispatchOne offers the head trigger of each instance, in ring order
-// starting after the last served instance, to fn until one is accepted. The
-// accepted trigger is removed and the rotation advances past its instance.
+// tryDispatchOne offers the head trigger of each group, in ring order
+// starting after the last served group, to fn until one is accepted. The
+// accepted trigger is removed and the rotation advances past its group.
 // Returns false when no head was accepted in a full rotation.
 func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	for i := range len(q.ring) {
 		pos := (q.next + i) % len(q.ring)
 		key := q.ring[pos]
-		reqs := q.byInstance[key]
+		reqs := q.groups[key]
 		if !fn(reqs[0]) {
 			continue
 		}
 
 		reqs[0] = nil
 		if len(reqs) == 1 {
-			delete(q.byInstance, key)
+			delete(q.groups, key)
 			q.ring = append(q.ring[:pos], q.ring[pos+1:]...)
 			if len(q.ring) == 0 {
 				q.next = 0
@@ -88,7 +98,7 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 				q.next = pos % len(q.ring)
 			}
 		} else {
-			q.byInstance[key] = reqs[1:]
+			q.groups[key] = reqs[1:]
 			q.next = (pos + 1) % len(q.ring)
 		}
 		q.n--
@@ -100,11 +110,11 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 // drainAll removes every parked trigger, passing each to fn.
 func (q *queue) drainAll(fn func(*loops.TriggerRequest)) {
 	for _, key := range q.ring {
-		for _, req := range q.byInstance[key] {
+		for _, req := range q.groups[key] {
 			fn(req)
 		}
 	}
-	q.byInstance = make(map[string][]*loops.TriggerRequest)
+	q.groups = make(map[string][]*loops.TriggerRequest)
 	q.ring = nil
 	q.next = 0
 	q.n = 0

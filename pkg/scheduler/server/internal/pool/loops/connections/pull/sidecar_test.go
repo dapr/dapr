@@ -137,3 +137,21 @@ func TestDispatcher_ReportsApplyPerSidecar(t *testing.T) {
 	h.report(0, 3)
 	assert.Equal(t, uint32(3), h.pool(0).credit)
 }
+
+func TestDispatcher_ReportFromClosedStreamIsIgnored(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 1)
+
+	// The sidecar reconnects; its old stream's last report arrives after the
+	// old stream has closed.
+	h.dispatched = append(h.dispatched, nil)
+	h.addStreamFor(t, 1, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		PullSlots: []*schedulerv1pb.PullSlots{{ActorType: testActorType, Free: 1}},
+	})
+	h.closeStream(t, 0)
+	h.reportOn(0, 0, 0)
+	assert.Equal(t, uint32(1), h.pool(0).credit, "a stale report from a closed stream is ignored")
+
+	h.report(0, 2)
+	assert.Equal(t, uint32(2), h.pool(0).credit)
+}

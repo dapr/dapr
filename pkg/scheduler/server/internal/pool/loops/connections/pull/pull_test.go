@@ -235,9 +235,18 @@ func (h *harness) ack(t *testing.T, req *loops.TriggerRequest) {
 	h.pump(t)
 }
 
-// report delivers a free slot count reported by sidecar i.
+// report delivers a free slot count reported on sidecar i's newest stream.
 func (h *harness) report(i int, free uint32) {
-	h.d.HandleSlots(&loops.PullSlotsUpdate{AppID: testAppID, ActorAddress: addr(i), ActorType: testActorType, Free: free})
+	var idx uint64
+	if p := h.pool(i); p != nil {
+		idx = p.streams[len(p.streams)-1]
+	}
+	h.reportOn(idx, i, free)
+}
+
+// reportOn delivers a free slot count reported by sidecar i on stream idx.
+func (h *harness) reportOn(idx uint64, i int, free uint32) {
+	h.d.HandleSlots(&loops.PullSlotsUpdate{StreamIDx: idx, AppID: testAppID, ActorAddress: addr(i), ActorType: testActorType, Free: free})
 }
 
 // resultOf returns req's result, failing if the trigger was never resolved:
