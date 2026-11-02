@@ -1074,6 +1074,10 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "extra slashes are removed", path: "///foo//bar", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		// Trailing slash preservation (issue #7686)
+		{name: "dapr-app-id header preserves trailing slash", path: "/foo/bar/", headers: http.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar/"},
+		{name: "basic auth preserves trailing slash", path: "/foo/bar/", headers: http.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar/"},
+		{name: "path with trailing slash in method", path: "/v1.0/invoke/myapp/method/foo/bar/", wantTargetID: "myapp", wantMethod: "foo/bar/"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
