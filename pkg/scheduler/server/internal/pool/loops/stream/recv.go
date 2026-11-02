@@ -78,6 +78,9 @@ func (s *stream) recv() error {
 	case schedulerv1pb.WatchJobsRequestResultStatus_FAILED:
 		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
 	default:
+		// Already removed from inflight: resolve it, or the trigger and the
+		// gates it holds leak.
+		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
 		return fmt.Errorf("unknown trigger response status: %s", result.GetStatus())
 	}
 
