@@ -52,6 +52,7 @@ type stream struct {
 	nsLoop  loop.Interface[loops.EventNS]
 	appID   string
 	ns      string
+	address string
 	loop    loop.Interface[loops.EventStream]
 	cancel  context.CancelCauseFunc
 
@@ -68,7 +69,7 @@ type stream struct {
 	// single client.
 	triggerIDx uint64
 
-	inflight sync.Map // map[uint64]func(api.TriggerResponseResult)
+	inflight sync.Map // map[uint64]*loops.TriggerRequest
 
 	wg sync.WaitGroup
 }
@@ -85,6 +86,7 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.EventStream], 
 	stream.channel = opts.Add.Channel
 	stream.ns = opts.Add.Request.GetNamespace()
 	stream.appID = opts.Add.Request.GetAppId()
+	stream.address = opts.Add.Request.GetActorAddress()
 	stream.triggerIDx = 0
 	// The cron prefix deregistration returned by handleAdd is not idempotent:
 	// a second invocation releases a reference which may belong to a
@@ -140,7 +142,7 @@ func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 // the job to the stream and stores the result function in the inflight map.
 func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 	s.triggerIDx++
-	s.inflight.Store(s.triggerIDx, req.ResultFn)
+	s.inflight.Store(s.triggerIDx, req)
 
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     req.Job.GetName(),
@@ -155,8 +157,8 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 		// Resolve the trigger promptly so the cron engine redelivers it to a
 		// live stream instead of parking it until this stream is reaped.
 		// LoadAndDelete guarantees the shutdown drain cannot double-resolve.
-		if fn, ok := s.inflight.LoadAndDelete(s.triggerIDx); ok {
-			fn.(func(api.TriggerResponseResult))(api.TriggerResponseResult_UNDELIVERABLE)
+		if inf, ok := s.inflight.LoadAndDelete(s.triggerIDx); ok {
+			inf.(*loops.TriggerRequest).ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 		}
 		s.closeStream(err)
 	}
@@ -171,8 +173,8 @@ func (s *stream) handleShutdown() {
 	log.Infof("Closing connection to %s/%s", s.ns, s.appID)
 	s.cancel(errStreamShutdown)
 	s.wg.Wait()
-	s.inflight.Range(func(_, fn any) bool {
-		fn.(func(api.TriggerResponseResult))(api.TriggerResponseResult_UNDELIVERABLE)
+	s.inflight.Range(func(_, inf any) bool {
+		inf.(*loops.TriggerRequest).ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 		return true
 	})
 	s.inflight.Clear()

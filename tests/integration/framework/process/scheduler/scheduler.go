@@ -619,6 +619,13 @@ func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID strin
 	}
 }
 
+// JobNowPull is an actor reminder due now, flagged for pull dispatch.
+func (s *Scheduler) JobNowPull(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
+	req := s.JobNowActor(name, namespace, appID, actorType, actorID)
+	req.Metadata.Pull = new(true)
+	return req
+}
+
 func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
 	t.Helper()
 	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{

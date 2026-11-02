@@ -25,6 +25,7 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
 
 // recvLoop is the main loop for receiving messages from the stream. It
@@ -56,6 +57,18 @@ func (s *stream) recv() error {
 		return err
 	}
 
+	if ps := resp.GetPullSlots(); ps != nil {
+		s.nsLoop.Enqueue(&loops.PullSlotsUpdate{
+			Namespace:    s.ns,
+			StreamIDx:    s.idx,
+			AppID:        s.appID,
+			ActorAddress: s.address,
+			ActorType:    ps.GetActorType(),
+			Free:         ps.GetFree(),
+		})
+		return nil
+	}
+
 	result := resp.GetResult()
 	if result == nil {
 		return errors.New("received nil result from stream")
@@ -72,15 +85,22 @@ func (s *stream) recv() error {
 		return nil
 	}
 
+	req := inf.(*loops.TriggerRequest)
 	switch result.GetStatus() {
 	case schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS:
-		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_SUCCESS)
+		req.ResultFn(api.TriggerResponseResult_SUCCESS)
 	case schedulerv1pb.WatchJobsRequestResultStatus_FAILED:
-		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
+		req.ResultFn(api.TriggerResponseResult_FAILED)
+	case schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY:
+		if req.Repark != nil {
+			req.Repark()
+		} else {
+			req.ResultFn(api.TriggerResponseResult_FAILED)
+		}
 	default:
 		// Already removed from inflight: resolve it, or the trigger and the
 		// gates it holds leak.
-		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
+		req.ResultFn(api.TriggerResponseResult_FAILED)
 		return fmt.Errorf("unknown trigger response status: %s", result.GetStatus())
 	}
 
