@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/addressreuse"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/call"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/deactivation"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination"
