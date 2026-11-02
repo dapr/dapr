@@ -60,7 +60,13 @@ with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
         sys.exit(0)
 
     if gitRef is None or not gitRef.startswith(tagRefPrefix):
-        githubEnv.write("REL_VERSION=edge\n")
+        branch = (gitRef or "").removeprefix("refs/heads/")
+        if branch in ("master", "main"):
+            relVersion = "edge"
+        else:
+            # Release branches must not overwrite the master edge image.
+            relVersion = "edge-" + re.sub(r"[^A-Za-z0-9_.-]", "-", branch)
+        githubEnv.write("REL_VERSION={}\n".format(relVersion))
         print ("This is daily build from {}...".format(gitRef))
         sys.exit(0)
 
