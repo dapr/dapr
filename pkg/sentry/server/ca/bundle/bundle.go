@@ -28,6 +28,38 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
+// RotationPhase represents the current phase of a root CA rotation.
+type RotationPhase string
+
+const (
+	// RotationPhaseDistributing means the new root CA is being distributed alongside the old one.
+	RotationPhaseDistributing RotationPhase = "distributing"
+	// RotationPhaseSigning means signing has switched to the new issuer cert.
+	RotationPhaseSigning RotationPhase = "signing"
+)
+
+// RotationState tracks an in-progress root CA rotation.
+type RotationState struct {
+	// Phase is the current rotation phase.
+	Phase RotationPhase
+	// NewTrustAnchors is the PEM-encoded new root CA certificate only (not combined).
+	NewTrustAnchors []byte
+	// NewIssChainPEM is the PEM-encoded new issuer certificate chain.
+	NewIssChainPEM []byte
+	// NewIssKeyPEM is the PEM-encoded new issuer private key.
+	NewIssKeyPEM []byte
+	// NewIssChain is the parsed new issuer certificate chain.
+	NewIssChain []*x509.Certificate
+	// NewIssKey is the new issuer private key.
+	NewIssKey any
+	// DistributedAt is when the dual trust anchors were first distributed.
+	DistributedAt time.Time
+	// SigningAt is when signing switched to the new issuer cert.
+	SigningAt time.Time
+	// OldRootNotAfter is the expiry of the old root CA, used to determine when cleanup is safe.
+	OldRootNotAfter time.Time
+}
+
 const (
 	// DefaultKeyThumbprintAlgorithm
 	DefaultKeyThumbprintAlgorithm = crypto.SHA256
@@ -37,8 +69,9 @@ const (
 
 // Bundle is the bundle of certificates and keys used by the CA.
 type Bundle struct {
-	X509 *X509
-	JWT  *JWT
+	X509     *X509
+	JWT      *JWT
+	Rotation *RotationState
 }
 
 type OptionsX509 struct {
