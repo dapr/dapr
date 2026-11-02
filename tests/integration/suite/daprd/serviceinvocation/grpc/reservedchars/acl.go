@@ -87,7 +87,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 		ObjectMeta: metav1.ObjectMeta{Name: "acl-config", Namespace: "default"},
 		Spec: configapi.ConfigurationSpec{
-			NameResolutionSpec: &configapi.NameResolutionSpec{Component: "mdns"},
+			NameResolutionSpec: procdaprd.NameResolutionSpec(t),
 			MTLSSpec: &configapi.MTLSSpec{
 				ControlPlaneTrustDomain: "localhost",
 				SentryAddress:           sen.Address(),
