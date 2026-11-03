@@ -17,12 +17,19 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -30,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
@@ -39,6 +47,10 @@ import (
 )
 
 var log = logger.NewLogger("dapr.sentry.server")
+
+// defaultFetchJWTSVIDTTL is the lifetime of a JWT SVID minted by FetchJWTSVID
+// when the request does not set one.
+const defaultFetchJWTSVIDTTL = 5 * time.Minute
 
 // Options is the configuration for the server.
 type Options struct {
@@ -280,4 +292,91 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		Jwt:                    jwtToken,
 		PerAudienceJwts:        perJWTToken,
 	}, nil
+}
+
+// FetchJWTSVID implements the FetchJWTSVID gRPC method.
+func (s *Server) FetchJWTSVID(ctx context.Context, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
+	id, err := s.peerID(ctx)
+	if err != nil {
+		log.Debugf("Rejected FetchJWTSVID request: %s", err)
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+
+	return s.fetchJWTSVID(ctx, id, req)
+}
+
+// peerID returns the SPIFFE ID of the X.509 SVID the client presented, after
+// verifying it against the CA trust anchors.
+func (s *Server) peerID(ctx context.Context) (spiffeid.ID, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return spiffeid.ID{}, errors.New("client certificate required")
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
+		return spiffeid.ID{}, errors.New("client certificate required")
+	}
+
+	certs := tlsInfo.State.PeerCertificates
+	leafID, err := x509svid.IDFromCert(certs[0])
+	if err != nil {
+		return spiffeid.ID{}, fmt.Errorf("invalid client certificate: %w", err)
+	}
+
+	// Apps may be issued identities in different trust domains, all signed by
+	// the same CA.
+	bundle, err := x509bundle.Parse(leafID.TrustDomain(), s.ca.TrustAnchors())
+	if err != nil {
+		return spiffeid.ID{}, fmt.Errorf("failed to parse trust anchors: %w", err)
+	}
+
+	id, _, err := x509svid.Verify(certs, bundle)
+	if err != nil {
+		return spiffeid.ID{}, fmt.Errorf("failed to verify client certificate: %w", err)
+	}
+
+	return id, nil
+}
+
+func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
+	if !s.jwtEnabled {
+		return nil, status.Error(codes.FailedPrecondition, "JWT issuing is not enabled")
+	}
+
+	if len(req.GetAudiences()) == 0 || slices.Contains(req.GetAudiences(), "") {
+		return nil, status.Error(codes.InvalidArgument, "at least one audience is required, and audiences must not be empty")
+	}
+
+	ttl := defaultFetchJWTSVIDTTL
+	if req.GetTtl() != nil {
+		if err := req.GetTtl().CheckValid(); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid ttl: %v", err)
+		}
+		ttl = req.GetTtl().AsDuration()
+		if ttl <= 0 {
+			return nil, status.Error(codes.InvalidArgument, "ttl must be positive")
+		}
+	}
+	ttl = min(ttl, s.jwtTTL)
+
+	parsed, err := spiffe.FromID(id)
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	tkn, err := s.ca.Generate(ctx, &jwt.Request{
+		TrustDomain: parsed.TrustDomain(),
+		Audiences:   req.GetAudiences(),
+		Namespace:   parsed.Namespace(),
+		AppID:       parsed.AppID(),
+		TTL:         ttl,
+	})
+	if err != nil {
+		log.Errorf("Error generating JWT SVID for %s: %v", id, err)
+		return nil, status.Error(codes.Internal, "failed to generate JWT SVID")
+	}
+
+	log.Debugf("Successfully issued JWT SVID for %s", id)
+
+	return &sentryv1pb.FetchJWTSVIDResponse{Jwt: tkn}, nil
 }

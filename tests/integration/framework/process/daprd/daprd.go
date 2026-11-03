@@ -172,6 +172,9 @@ spec:
 	if len(opts.sentryRequestJwtAudiences) > 0 {
 		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
 	}
+	if opts.workloadKeyAlgorithm != "" {
+		args = append(args, "--workload-key-algorithm="+opts.workloadKeyAlgorithm)
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}

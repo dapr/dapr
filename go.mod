@@ -12,9 +12,9 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.19.0
+	github.com/dapr/components-contrib v1.19.1-0.20261103154313-082784e9d723
 	github.com/dapr/durabletask-go v0.15.1
-	github.com/dapr/kit v0.19.0
+	github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4
 	github.com/diagridio/go-etcd-cron v0.12.11-0.20261027123650-5a19e4812a75
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.3.2
