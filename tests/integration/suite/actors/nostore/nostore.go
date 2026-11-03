@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -76,19 +75,17 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	// The actor type is never advertised so invocation consistently fails to
-	// resolve a host, even after giving dissemination time to settle.
+	// The actor type is never advertised so invocation fails to resolve a host.
+	// The call retries the lookup for 5s (DaprBuiltInActorNotFoundRetries),
+	// which gives dissemination time to settle.
 	url := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactor1/method/foo", n.daprd.HTTPAddress())
-	for range 5 {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, resp.Body.Close())
-		require.NoError(t, err)
-		assert.NotEqual(t, http.StatusOK, resp.StatusCode)
-		assert.Contains(t, strings.ToLower(string(body)), "did not find address for actor")
-		time.Sleep(time.Millisecond * 200)
-	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	require.NoError(t, err)
+	resp, err := httpClient.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, resp.Body.Close())
+	require.NoError(t, err)
+	assert.NotEqual(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, strings.ToLower(string(body)), "did not find address for actor")
 }

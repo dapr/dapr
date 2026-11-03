@@ -379,6 +379,16 @@ test-integration-deps: test-deps
 # it, and its tests fatal when run without DAPR_E2E_PLACEMENT_CUTOVER.
 DAPR_E2E_SERIAL_PACKAGES ?= hotreloading scheduler job
 
+# The longest packages in the parallel pass. go test starts packages in the
+# order given, so these go first instead of ending the pass on their own.
+# Any that are also in DAPR_E2E_SERIAL_PACKAGES run only in the serial pass.
+DAPR_E2E_FIRST_PACKAGES ?= pubsub pubsub_grpc resiliency actor_features healthcheck
+
+# Packages run at once in the parallel and scheduler placement passes. KinD
+# raises these; the defaults suit AKS.
+DAPR_E2E_PARALLEL ?= 3
+DAPR_E2E_SCHEDULER_PLACEMENT_PARALLEL ?= 2
+
 # Compile the e2e test binaries without running them, so that a later
 # test-e2e-all gets a warm build cache. -exec=true builds and links each test
 # binary but replaces its execution with /bin/true, so no TestMain runs and
@@ -393,11 +403,11 @@ E2E_TEST_ENV_VARS := DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TES
 test-e2e-all: check-e2e-env test-deps
 	# The packages in DAPR_E2E_SERIAL_PACKAGES share cluster-wide state with the
 	# rest of the suite, so they run in a second, fully serial pass. Everything
-	# else runs at -p 3. Both passes always run; the target fails if either did.
+	# else runs at -p $(DAPR_E2E_PARALLEL). Both passes always run; the target fails if either did.
 	# Note: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
 	ret=0; \
-	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 3 -count=1 -v -tags=e2e $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) placementcutover | tr ' ' '|'))$$") || ret=$$?; \
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p $(DAPR_E2E_PARALLEL) -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(filter-out $(DAPR_E2E_SERIAL_PACKAGES) placementcutover,$(DAPR_E2E_FIRST_PACKAGES))) $$(go list -tags=e2e ./tests/e2e/... | grep -vE "/tests/e2e/($$(echo $(DAPR_E2E_SERIAL_PACKAGES) $(DAPR_E2E_FIRST_PACKAGES) placementcutover | tr ' ' '|'))$$") || ret=$$?; \
 	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e_serial.xml --format standard-quiet -- -timeout 20m -p 1 -count=1 -v -tags=e2e $(addprefix ./tests/e2e/,$(DAPR_E2E_SERIAL_PACKAGES)) || ret=$$?; \
 	exit $$ret
      ifneq ($(DAPR_E2E_SKIP_SCHEDULER_PLACEMENT),true)
@@ -405,7 +415,7 @@ test-e2e-all: check-e2e-env test-deps
 	# live, re-run the actor and workflow suites against it, then roll the
 	# cluster back. Set DAPR_E2E_SKIP_SCHEDULER_PLACEMENT=true to skip.
 	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_cutover.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestPlacementToScheduler ./tests/e2e/placementcutover/...
-	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.xml --format standard-quiet -- -timeout 40m -p 2 -count=1 -v -tags=e2e ./tests/e2e/actor_activation/... ./tests/e2e/actor_features/... ./tests/e2e/actor_invocation/... ./tests/e2e/actor_reentrancy/... ./tests/e2e/actor_reminder/... ./tests/e2e/actor_sdks/... ./tests/e2e/actor_state/... ./tests/e2e/workflow_accesspolicy/... ./tests/e2e/workflow_crossapp/... ./tests/e2e/workflow_retention/... ./tests/e2e/workflows/...
+	$(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement.xml --format standard-quiet -- -timeout 40m -p $(DAPR_E2E_SCHEDULER_PLACEMENT_PARALLEL) -count=1 -v -tags=e2e ./tests/e2e/actor_activation/... ./tests/e2e/actor_features/... ./tests/e2e/actor_invocation/... ./tests/e2e/actor_reentrancy/... ./tests/e2e/actor_reminder/... ./tests/e2e/actor_sdks/... ./tests/e2e/actor_state/... ./tests/e2e/workflow_accesspolicy/... ./tests/e2e/workflow_crossapp/... ./tests/e2e/workflow_retention/... ./tests/e2e/workflows/...
 	DAPR_E2E_PLACEMENT_CUTOVER=true $(E2E_TEST_ENV_VARS) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.scheduler_placement_rollback.xml --format standard-quiet -- -timeout 20m -count=1 -v -tags=e2e -run TestSchedulerToPlacement ./tests/e2e/placementcutover/...
      endif
      else

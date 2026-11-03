@@ -66,6 +66,9 @@ jobs:
       DAPR_CACHE_REGISTRY: "ghcr.io/dapr/e2e-cache"
       DAPR_CACHE_READONLY: "true"
       PULL_POLICY: IfNotPresent
+      # Most e2e cases wait on sleeps and redeliveries, not CPU.
+      DAPR_E2E_PARALLEL: 5
+      DAPR_E2E_SCHEDULER_PLACEMENT_PARALLEL: 3
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -139,6 +142,12 @@ jobs:
         mkdir -p "$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" \
                  "$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}"
 
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.13.0
       with:
@@ -175,18 +184,12 @@ jobs:
         version: v3.3.4
 
     - name: Free disk space
-      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space
+      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space.
+      # The runner starts with about 75GB free, so this is only headroom and
+      # runs in the background instead of holding up the job for 2 to 3 min.
       run: |
-        df -h
-        docker system prune -af || true
-        docker volume prune -f || true
-        sudo rm -rf /usr/local/lib/android || true
-        sudo rm -rf /opt/ghc || true
-        sudo rm -rf /usr/share/dotnet || true
-        sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/* || true
-        df -h
+        df -h /
+        nohup sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache/CodeQL > /dev/null 2>&1 &
 
     - name: Build and push Dapr
       run: |
@@ -210,7 +213,9 @@ jobs:
         make compile-build-tools
         make -j 6 USE_BUILD_TOOLS_BIN=true build-push-e2e-app-all
 
-    - name: Setup Dapr
+    - name: Setup Dapr, Redis, Kafka, Zipkin, postgres and Meilisearch
+      # The installs are independent, so they run at once. -O keeps each
+      # one's output together.
       run: |
         make setup-helm-init
         make create-test-namespace
@@ -220,27 +225,8 @@ jobs:
         else
           export HA_MODE=false
         fi
-        make docker-deploy-k8s
-
-    - name: Setup Redis
-      run: |
-        make setup-test-env-redis
-
-    - name: Setup Kafka
-      run: |
-        make setup-test-env-kafka
-
-    - name: Setup Zipkin
-      run: |
-        make setup-test-env-zipkin
-
-    - name: Setup postgres
-      run: |
-        make setup-test-env-postgres
-
-    - name: Setup Meilisearch
-      run: |
-        make setup-test-env-meilisearch
+        make -j6 -O docker-deploy-k8s setup-test-env-redis setup-test-env-kafka \
+          setup-test-env-zipkin setup-test-env-postgres setup-test-env-meilisearch
 
     - name: Setup test components
       run: |
@@ -296,3 +282,16 @@ jobs:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
         # Also matches the _e2e_serial.json/.xml reports from the serial pass
         path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e*
+
+  # Branch protection requires this job instead of each matrix leg, because
+  # leg names change whenever a matrix value does. always() makes it report
+  # failure, not skipped, when a needed job fails (skipped counts as passing).
+  required:
+    name: e2e passed
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fail if a needed job failed or was cancelled
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: exit 1

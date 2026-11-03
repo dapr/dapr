@@ -43,13 +43,14 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds          int
-	skipDB          bool
-	mtls            bool
-	signingDisabled []int
-	clustered       *bool
-	fastPath        *bool
-	signing         *bool
+	daprds           int
+	skipDB           bool
+	mtls             bool
+	signingDisabled  []int
+	clustered        *bool
+	fastPath         *bool
+	stagedOperations bool
+	signing          *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -184,6 +185,14 @@ func WithClusteredDeployment(enabled bool) Option {
 func WithFastPath(enabled bool) Option {
 	return func(o *options) {
 		o.fastPath = &enabled
+	}
+}
+
+// WithStagedOperations enables the WorkflowsStagedOperations feature flag on every
+// daprd in the workflow.
+func WithStagedOperations() Option {
+	return func(o *options) {
+		o.stagedOperations = true
 	}
 }
 

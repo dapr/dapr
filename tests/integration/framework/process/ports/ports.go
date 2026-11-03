@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -180,7 +182,12 @@ func (p *Ports) Listener(t *testing.T) net.Listener {
 
 func (p *Ports) Free(t *testing.T) {
 	t.Helper()
-	if p.freed.CompareAndSwap(false, true) {
+	if !p.freed.CompareAndSwap(false, true) {
+		return
+	}
+
+	freed := make([]int, 0, p.end-p.start)
+	func() {
 		lock.Lock()
 		defer lock.Unlock()
 		for i := p.start; i < p.end; i++ {
@@ -189,6 +196,34 @@ func (p *Ports) Free(t *testing.T) {
 				require.NoError(t, err)
 			}
 			recentlyFreed[resvP[i].port] = time.Now()
+			freed = append(freed, resvP[i].port)
+		}
+	}()
+
+	// A child forked while the listeners were open holds copies of them until
+	// its exec has finished, and the process the ports go to fails to bind
+	// them meanwhile. forkExec holds ForkLock until its vfork child has
+	// started to exec, so taking it waits for those children; the probes then
+	// wait out the rest of their exec, and no fork can copy a probe while
+	// ForkLock is held. Linux only: darwin releases ForkLock before its child
+	// execs, and its net.Listen takes ForkLock itself.
+	if runtime.GOOS != "linux" {
+		return
+	}
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	for _, port := range freed {
+		waitBindable(port)
+	}
+}
+
+// waitBindable waits, for up to 2s, until port can be bound.
+func waitBindable(port int) {
+	for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(time.Millisecond) {
+		ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		if err == nil {
+			ln.Close()
+			return
 		}
 	}
 }

@@ -94,6 +94,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		fopt(&opts)
 	}
 
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
+	}
+
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
@@ -201,6 +207,9 @@ spec:
 	}
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
+	if opts.readBufferSize != nil {
+		args = append(args, "--read-buffer-size="+*opts.readBufferSize)
 	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
@@ -718,9 +727,14 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 }
 
 // ActiveActorCount returns the number of live actors of actorType reported by
-// the actor runtime, and whether the type is hosted at all.
+// the actor runtime, and whether the type is hosted at all. A failed metadata
+// read fails t and reports the type as not hosted.
 func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
-	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return 0, false
+	}
+	for _, a := range rt.ActiveActors {
 		if a.Type == actorType {
 			return a.Count, true
 		}

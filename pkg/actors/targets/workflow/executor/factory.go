@@ -61,10 +61,18 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	// The worker exits with ctx: a factory is built on every registration of
+	// the workflow actor types. Actors still queued stay in the table until
+	// HaltAll or HaltNonHosted reaps them.
 	deactivateCh := make(chan *executor, 100)
 	go func() {
-		for executor := range deactivateCh {
-			executor.Deactivate(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case executor := <-deactivateCh:
+				executor.Deactivate(ctx)
+			}
 		}
 	}()
 

@@ -59,6 +59,12 @@ jobs:
         mode:
         - control-plane-master
         - dapr-sidecar-master
+    env:
+      # Integration-test-only components that some tests need in daprd. The
+      # framework compiles them in when it builds daprd itself; here daprd is
+      # prebuilt, so build it with them. Passed through the environment, so
+      # the Makefile still adds the component flavor.
+      DAPR_PROBE_TAGS: state_spiffeprobe,secretstores_spiffeprobe,bindings_metadataprobe,middleware_http_bodyprobe
     steps:
     - name: Set up for Dapr lastest release
       env:
@@ -160,7 +166,7 @@ jobs:
     - name: Build & download binaries
       run: |
         go mod tidy -v
-        make build
+        DAPR_GO_BUILD_TAGS=${{ env.DAPR_PROBE_TAGS }} make build
         mkdir -p downloads && cd downloads
         curl -so daprd_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/daprd_linux_amd64.tar.gz
         curl -so sentry_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/sentry_linux_amd64.tar.gz
@@ -175,10 +181,14 @@ jobs:
         tar xvf operator_linux_amd64.tar.gz
         tar xvf scheduler_linux_amd64.tar.gz
 
+    - name: Build the latest release daprd with the test-only components - control-plane master
+      if: matrix.mode == 'control-plane-master'
+      run: cd latest-release && DAPR_GO_BUILD_TAGS=${{ env.DAPR_PROBE_TAGS }} make build BINARIES=daprd REL_VERSION=${{ env.DAPR_PREV_VERSION }}
+
     - name: Setup DAPR_INTEGRATION_X_PATH - control-plane master
       if: matrix.mode == 'control-plane-master'
       run: |
-        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/downloads/daprd" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/latest-release/dist/linux_amd64/release/daprd" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/dist/linux_amd64/release/placement" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
@@ -196,9 +206,9 @@ jobs:
         echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      # The v1.18.2 suite takes over 45 minutes to run, so give plenty of
-      # headroom before the go test binary panics on timeout.
-      run: cd latest-release && make test-integration ARGS="-timeout=70m"
+      # Run in parallel, as master's own integration jobs do: run serially,
+      # the v1.19.0 suite takes about 70 minutes.
+      run: cd latest-release && make test-integration-parallel ARGS="-timeout=70m"
 
     - name: Upload test results
       if: always()
@@ -389,6 +399,12 @@ jobs:
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/v1.25.3_ha" >> $GITHUB_ENV
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
 
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.5.0
       with:
@@ -467,6 +483,10 @@ jobs:
         make setup-test-env-kafka
         make setup-test-env-zipkin
         make setup-test-env-postgres
+        # Releases before v1.19 have no meilisearch tests or target.
+        if grep -q '^setup-test-env-meilisearch:' tests/dapr_tests.mk; then
+          make setup-test-env-meilisearch
+        fi
         make setup-test-components
 
     - name: Free up some diskspace

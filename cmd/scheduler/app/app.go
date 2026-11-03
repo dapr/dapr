@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring/scaling"
 	"github.com/dapr/dapr/pkg/scheduler/server"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -54,6 +56,7 @@ func Run() {
 
 	healthz := healthz.New()
 
+	scalingMetrics := scaling.New()
 	metricsExporter := metrics.New(metrics.Options{
 		Log:           log,
 		Enabled:       opts.Metrics.Enabled(),
@@ -61,6 +64,9 @@ func Run() {
 		Port:          opts.Metrics.Port(),
 		Healthz:       healthz,
 		ListenAddress: opts.ListenAddress,
+		Handlers: map[string]http.Handler{
+			scaling.Path: scalingMetrics.Handler(),
+		},
 	})
 
 	if merr := monitoring.InitMetrics(); merr != nil {
@@ -125,6 +131,7 @@ func Run() {
 					Security:   secHandler,
 					Healthz:    healthz,
 					Controller: ctrl,
+					Scaling:    scalingMetrics,
 
 					KubeConfig:                     opts.KubeConfig,
 					EtcdEmbed:                      opts.EtcdEmbed,

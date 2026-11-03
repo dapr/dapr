@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
@@ -104,6 +103,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
+	// see fallback.go.
+	WorkflowsStagedOperations bool
+
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
@@ -143,6 +146,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 	workflowsFastPath               bool
+	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	pendingCompletions              *pending.Pending
 
@@ -172,7 +176,21 @@ type Actors struct {
 	detachedLock         sync.Mutex
 	detached             *detached.Runner
 
+	// regCancel ends the context the actor factories of the current
+	// registration were built with. UnRegisterActors calls it once the types
+	// are unregistered, and Stop calls it so that their background work never
+	// outlives the backend.
+	regLock   sync.Mutex
+	regCancel context.CancelFunc
+
 	stopped atomic.Bool
+
+	// hostedCancel and executorCancel end the background work of the
+	// workflow and executor factories registered last under
+	// WorkflowsStagedOperations; see replaceCancel and retireTogether.
+	// Guarded by the engine's actor registration lock.
+	hostedCancel   context.CancelFunc
+	executorCancel context.CancelFunc
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -237,6 +255,11 @@ func New(opts Options) (*Actors, error) {
 	// Wrapped so pending completions can be cancelled while no executor is
 	// connected; see the pendingtracker package.
 	trackedPendingTasksBackend := pendingtracker.New(pendingTasksBackend)
+	if opts.WorkflowsStagedOperations {
+		// The engine reports every executor count change under the
+		// feature, and a fallback host registers with none.
+		trackedPendingTasksBackend.SetExecutorAvailable(false)
+	}
 
 	return &Actors{
 		appID:                     opts.AppID,
@@ -261,6 +284,7 @@ func New(opts Options) (*Actors, error) {
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		workflowsFastPath:               opts.WorkflowsFastPath,
+		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		pendingCompletions:              pendingCompletions,
 	}, nil
@@ -272,6 +296,38 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	// The factories' background work lives as long as this registration, not
+	// as long as the worker stream or call that triggered it: the types stay
+	// registered while any other worker is connected. It takes no values from
+	// ctx, which can be that stream's. The runtime is ready once Table has
+	// returned, so the factories do not wait on the uncancelled context.
+	regCtx, regCancel := context.WithCancel(context.Background())
+	factories, err := workflow.Factories(regCtx, abe.factoryOptions())
+	if err != nil {
+		regCancel()
+		return err
+	}
+
+	if abe.enableClusteredDeployment {
+		ef, eerr := abe.executorFactory(regCtx)
+		if eerr != nil {
+			regCancel()
+			return eerr
+		}
+		factories = append(factories, ef)
+	}
+	abe.swapRegCancel(regCancel)
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
+
+	return nil
+}
+
+// factoryOptions returns the options of the workflow actor factories. The
+// executor actor's factory is built apart, by executorFactory.
+func (abe *Actors) factoryOptions() workflow.Options {
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:                  abe.appID,
@@ -286,9 +342,14 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		MaxRequestBodySize:     abe.maxRequestBodySize,
 		WorkflowAccessPolicies: abe.workflowAccessPolicies,
 		FastPath:               abe.workflowsFastPath,
+		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
 
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
@@ -314,6 +375,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
 
+			if err := abe.requireLocalExecutor(); err != nil {
+				return err
+			}
+
 			select {
 			case <-ctx.Done(): // engine is shutting down
 				return ctx.Err()
@@ -327,12 +392,13 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Signer:                          abe.signer,
 		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 		FastPath:                        abe.workflowsFastPath,
+		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
 
-	opts := workflow.Options{
+	return workflow.Options{
 		Orchestrator: oopts,
 		Activity:     aopts,
 		Retentioner: retentioner.Options{
@@ -343,45 +409,52 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		WorkflowActorType:  abe.workflowActorType,
 		ActivityActorType:  abe.activityActorType,
 		RetentionActorType: abe.retentionerActorType,
-		ExecutorActorType:  abe.executorActorType,
 	}
-
-	if abe.enableClusteredDeployment {
-		opts.Executor = &executor.Options{
-			ActorType: abe.executorActorType,
-			Actors:    abe.actors,
-			Pending:   abe.pendingCompletions,
-		}
-	}
-
-	factories, err := workflow.Factories(ctx, opts)
-	if err != nil {
-		return err
-	}
-
-	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
-		Factories: factories,
-	})
-
-	return nil
 }
 
 func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	table, err := abe.actors.Table(ctx)
 	if err != nil {
+		// The types are still registered: keep their background work, Stop
+		// or the next registration ends it.
 		return err
 	}
+
+	// Stop the factories' background work once the types are unregistered,
+	// so it still serves the turns HaltAll waits on.
+	defer abe.swapRegCancel(nil)
 
 	actorTypes := []string{
 		abe.workflowActorType,
 		abe.activityActorType,
 		abe.retentionerActorType,
 	}
-	if abe.enableClusteredDeployment {
+	// Under WorkflowsStagedOperations the executor actor type is registered
+	// apart from the others; the table ignores it if it is not registered.
+	if abe.enableClusteredDeployment || abe.fallbackHosts {
 		actorTypes = append(actorTypes, abe.executorActorType)
 	}
 
 	return table.UnRegisterActorTypes(actorTypes...)
+}
+
+// swapRegCancel installs the cancel func of the current registration and
+// ends the previous registration's context, if any. A registration that
+// lands after Stop is ended at once: nothing else would cancel it. Stop sets
+// stopped before it takes regLock, so checking it under the lock cannot miss
+// it.
+func (abe *Actors) swapRegCancel(cancel context.CancelFunc) {
+	abe.regLock.Lock()
+	prev := abe.regCancel
+	abe.regCancel = cancel
+	if cancel != nil && abe.stopped.Load() {
+		abe.regCancel = nil
+		defer cancel()
+	}
+	abe.regLock.Unlock()
+	if prev != nil {
+		prev()
+	}
 }
 
 // requireActorStateStore gates the externally driven workflow operations
@@ -1041,6 +1114,7 @@ func (abe *Actors) Start(ctx context.Context) error {
 // Stop implements backend.Backend
 func (abe *Actors) Stop(context.Context) error {
 	abe.stopped.Store(true)
+	abe.swapRegCancel(nil)
 	abe.detachedLock.Lock()
 	runner := abe.detached
 	abe.detached = nil
@@ -1127,6 +1201,12 @@ func (abe *Actors) WorkflowActorType() string {
 
 func (abe *Actors) SetExecutorAvailable(available bool) {
 	abe.pendingTasksBackend.SetExecutorAvailable(available)
+}
+
+// StartSweep flips executor connectivity to false and starts the sweep of
+// the pending tasks, which settled waits for; see the pendingtracker package.
+func (abe *Actors) StartSweep() (settled func()) {
+	return abe.pendingTasksBackend.StartSweep()
 }
 
 // CancelActivityTask implements backend.Backend.
