@@ -81,6 +81,7 @@ type Options struct {
 	BackendConfig any
 
 	PlacementEnabled                   bool
+	AdaptiveConcurrencyLimits          bool
 	PlacementDisseminateTimeout        time.Duration
 	PlacementDisseminateCoalesceWindow time.Duration
 
@@ -215,7 +216,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		BackendConfig: opts.BackendConfig,
 		Workers:       opts.Workers,
 		Placement:     place,
-		Handoff:       hoff,
+
+		AdaptiveConcurrencyLimits: opts.AdaptiveConcurrencyLimits,
+		Handoff:                   hoff,
 	})
 
 	if opts.Scaling != nil {

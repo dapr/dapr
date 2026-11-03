@@ -125,6 +125,8 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 
 	req.GetInitial().AcceptJobTypes = acceptJobTypes
 	req.GetInitial().ConcurrencyLimits = c.buildConcurrencyLimits()
+	req.GetInitial().Niceness = c.buildNiceness()
+	req.GetInitial().HostConcurrencyLimits = c.buildHostConcurrencyLimits()
 
 	if len(c.clients) == 0 {
 		log.Debug("No scheduler clients available, not watching jobs")
@@ -195,6 +197,70 @@ func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
 			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: activityActor},
 			Name:          l.Name,
 			MaxConcurrent: *l.MaxConcurrent,
+		})
+	}
+
+	return limits
+}
+
+func (c *Cluster) buildNiceness() *schedulerv1pb.WorkflowNiceness {
+	if c.workflowSpec == nil || c.workflowSpec.Niceness == nil {
+		return nil
+	}
+	niceness := c.workflowSpec.Niceness
+
+	named := func(kind string, ls []config.NamedNiceness) map[string]int32 {
+		if len(ls) == 0 {
+			return nil
+		}
+		m := make(map[string]int32, len(ls))
+		for _, n := range ls {
+			if n.Name == "" {
+				log.Warnf("Ignoring %s niceness %d without a name", kind, n.Niceness)
+				continue
+			}
+			m[n.Name] = clampNiceness(kind+" "+n.Name, n.Niceness)
+		}
+		return m
+	}
+
+	n := &schedulerv1pb.WorkflowNiceness{
+		Workflows:  named("workflow", niceness.Workflows),
+		Activities: named("activity", niceness.Activities),
+	}
+	if niceness.Default != nil {
+		n.Default = clampNiceness("default", *niceness.Default)
+	}
+	return n
+}
+
+func clampNiceness(target string, value int32) int32 {
+	clamped := min(max(value, -20), 19)
+	if clamped != value {
+		log.Warnf("Workflow niceness %d for %s is outside the range [-20, 19], using %d", value, target, clamped)
+	}
+	return clamped
+}
+
+// buildHostConcurrencyLimits advertises the per-sidecar limits this daprd
+// enforces itself, so the scheduler does not keep more triggers in flight
+// than the app's sidecars can run.
+func (c *Cluster) buildHostConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
+	if c.workflowSpec == nil || c.wfengine == nil {
+		return nil
+	}
+
+	var limits []*schedulerv1pb.ConcurrencyLimit
+	if v := c.workflowSpec.GetMaxConcurrentWorkflowInvocations(); v != nil {
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: &schedulerv1pb.ConcurrencyLimitActor{Type: c.wfengine.WorkflowActorType()}},
+			MaxConcurrent: *v,
+		})
+	}
+	if v := c.workflowSpec.GetMaxConcurrentActivityInvocations(); v != nil {
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: &schedulerv1pb.ConcurrencyLimitActor{Type: c.wfengine.ActivityActorType()}},
+			MaxConcurrent: *v,
 		})
 	}
 

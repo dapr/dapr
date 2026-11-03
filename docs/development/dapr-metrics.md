@@ -75,6 +75,13 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_scheduler_concurrency_inflight: The number of job triggers currently in flight.
 * dapr_scheduler_concurrency_pending: The number of job triggers waiting on a concurrency slot.
 * dapr_scheduler_concurrency_throttled_total: The total number of job triggers throttled by concurrency limits.
+* dapr_scheduler_concurrency_limit: The current effective concurrency limit of a gate on this scheduler instance, 0 when unlimited.
+* dapr_scheduler_concurrency_overload_total: The total number of times an adaptive concurrency limit was created or lowered because of overload.
+* dapr_scheduler_concurrency_dispatched_total: The total number of job triggers dispatched through a concurrency gate, or for a workflow or activity name.
+* dapr_scheduler_concurrency_wait_latency: How long job triggers subject to concurrency limits waited for a slot before dispatch, by actor type and by actor type and name.
+* dapr_scheduler_concurrency_latency_ratio: The latency ratio an adaptive concurrency limit is decided on, 0 when too few triggers completed to measure.
+* dapr_scheduler_concurrency_uncongested_latency: The round trip time an adaptive concurrency limit expects a trigger to take when nothing is queued.
+* dapr_scheduler_concurrency_niceness: The configured niceness of an app, or of a workflow or activity name.
 * dapr_scheduler_placement_leader: Leadership status of the scheduler's placement service (1 for leader, 0 for not leader).
 * dapr_scheduler_placement_streams_connected: The number of sidecar placement streams connected to the scheduler.
 * dapr_scheduler_placement_disseminations_total: The total number of placement table disseminations.

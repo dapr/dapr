@@ -76,6 +76,22 @@ func (s *Store) ActorType(actorType string) (loop.Interface[loops.EventStream], 
 	return s.actorTypes.get(actorType)
 }
 
+// HasActorType reports whether any stream hosts the actor type.
+func (s *Store) HasActorType(actorType string) bool {
+	_, ok := s.actorTypes.entries[actorType]
+	return ok
+}
+
+// Hosts returns how many daprd hosts serve the actor type. Streams which did
+// not report an address count as one host each.
+func (s *Store) Hosts(actorType string) int {
+	en, ok := s.actorTypes.entries[actorType]
+	if !ok {
+		return 0
+	}
+	return len(en.hosts) + en.addrless
+}
+
 // ActorHost returns a stream of the host owning the given actor ID per the
 // rendezvous hash over the actor type's reported host addresses. Falls back
 // to round robin when any host did not report an address.

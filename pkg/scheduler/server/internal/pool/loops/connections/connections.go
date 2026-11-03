@@ -17,9 +17,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"k8s.io/utils/clock"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -35,12 +38,7 @@ var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
 var (
 	loopFactory = loop.New[loops.EventConn](1024)
 	connsCache  = sync.Pool{New: func() any {
-		return &connections{
-			streams:          make(map[uint64]context.CancelFunc),
-			streamPool:       store.New(),
-			concurrencyGates: make(map[string]*concurrencyGate),
-			streamGateKeys:   make(map[uint64][]string),
-		}
+		return new(connections)
 	}}
 )
 
@@ -50,6 +48,16 @@ type Options struct {
 
 	// PlacementEnabled reports whether this scheduler serves placement.
 	PlacementEnabled bool
+
+	// Namespace is the namespace this loop serves.
+	Namespace string
+
+	// Adaptive enables adaptive concurrency limits for the namespace and for
+	// its workflow and activity actor types.
+	Adaptive bool
+
+	// Clock is used for adaptive limits. Defaults to the real clock.
+	Clock clock.PassiveClock
 }
 
 // connections is a control loop that creates and manages stream connections,
@@ -67,29 +75,95 @@ type connections struct {
 	schedulerCount uint32
 	schedulerIdx   uint32
 
+	adaptive bool
+	clock    clock.PassiveClock
+	now      time.Time
+	nextEval time.Time
+
+	// internalPrefix is the prefix of this namespace's internal actor types,
+	// and nsKey names the namespace gate. The namespace gate is held apart
+	// from concurrencyGates so no actor type can collide with it.
+	internalPrefix string
+	nsKey          string
+	nsGate         *concurrencyGate
+
 	streams          map[uint64]context.CancelFunc
 	streamIDx        uint64
 	streamPool       *store.Store
 	concurrencyGates map[string]*concurrencyGate
 	streamGateKeys   map[uint64][]string
-	wg               sync.WaitGroup
+
+	// niceness is keyed by app, or by actor type and flow name.
+	niceness           map[string]int32
+	streamNicenessKeys map[uint64][]string
+
+	// hostLimits holds the per-sidecar limit each host advertised, by actor
+	// type then host address.
+	hostLimits  map[string]map[string]*hostLimit
+	streamHosts map[uint64]streamHost
+
+	pending    pendingNode
+	pendingSeq uint64
+
+	wg sync.WaitGroup
+}
+
+type hostLimit struct {
+	limit uint32
+	refs  int
+}
+
+type streamHost struct {
+	addr       string
+	actorTypes []string
 }
 
 func New(opts Options) loop.Interface[loops.EventConn] {
 	conns := connsCache.Get().(*connections)
-
-	conns.cron = opts.Cron
-	conns.nsLoop = opts.NamespaceLoop
-	conns.placementEnabled = opts.PlacementEnabled
-	conns.streamIDx = 0
-	conns.schedulerCount = 1
-	conns.schedulerIdx = 0
-
+	conns.reset(opts)
 	conns.loop = loopFactory.NewLoop(conns)
 	return conns.loop
 }
 
+func (c *connections) reset(opts Options) {
+	c.cron = opts.Cron
+	c.nsLoop = opts.NamespaceLoop
+	c.placementEnabled = opts.PlacementEnabled
+	c.streamIDx = 0
+	c.schedulerCount = 1
+	c.schedulerIdx = 0
+
+	c.adaptive = opts.Adaptive
+	c.clock = opts.Clock
+	if c.clock == nil {
+		c.clock = clock.RealClock{}
+	}
+	c.now = c.clock.Now()
+	c.nextEval = time.Time{}
+	c.internalPrefix = "dapr.internal." + opts.Namespace + "."
+	c.nsKey = "dapr.internal." + opts.Namespace
+	c.nsGate = nil
+	if opts.Adaptive {
+		c.nsGate = &concurrencyGate{est: newEstimator(c.now, 2)}
+	}
+
+	c.streams = make(map[uint64]context.CancelFunc)
+	c.streamPool = store.New()
+	c.concurrencyGates = make(map[string]*concurrencyGate)
+	c.streamGateKeys = make(map[uint64][]string)
+	c.niceness = make(map[string]int32)
+	c.streamNicenessKeys = make(map[uint64][]string)
+	c.hostLimits = make(map[string]map[string]*hostLimit)
+	c.streamHosts = make(map[uint64]streamHost)
+	c.pending = pendingNode{}
+	c.pendingSeq = 0
+}
+
 func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
+	if c.clock != nil {
+		c.now = c.clock.Now()
+	}
+
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return c.handleAdd(ctx, e)
@@ -111,7 +185,7 @@ func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 }
 
 // handleSchedulerInfoUpdate applies a new cluster view and drains pending
-// queues so newly-available capacity (on an idx rebalance or a shrink) is
+// triggers so newly-available capacity (on an idx rebalance or a shrink) is
 // used without waiting for the next release.
 func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 	//nolint:gosec // count is guarded to be non-negative by the caller
@@ -119,11 +193,8 @@ func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 	//nolint:gosec // idx is non-negative
 	c.schedulerIdx = uint32(e.Idx)
 
-	for key, gate := range c.concurrencyGates {
-		if gate.pendingLen() > 0 {
-			c.drainPending(key, gate)
-		}
-	}
+	c.recordLimits()
+	c.drain()
 }
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
@@ -158,80 +229,267 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorAddress: add.Request.ActorAddress,
 	})
 
-	c.updateConcurrencyLimits(streamIDx, add.Request)
+	c.registerStream(streamIDx, add.Request)
+	c.drain()
 
 	return nil
 }
 
-func (c *connections) updateConcurrencyLimits(streamIDx uint64, req *schedulerv1pb.WatchJobsRequestInitial) {
+// registerStream applies the concurrency limits, adaptive gates, advertised
+// per-sidecar limits and niceness a stream declares. A value declared by the
+// most recently connected stream wins.
+func (c *connections) registerStream(streamIDx uint64, req *schedulerv1pb.WatchJobsRequestInitial) {
 	var keys []string
+
 	for _, limit := range req.GetConcurrencyLimits() {
-		if limit.GetMaxConcurrent() <= 0 {
-			continue
-		}
 		actor := limit.GetActor()
-		if actor == nil {
+		if limit.GetMaxConcurrent() <= 0 || actor == nil {
 			continue
 		}
 		key := actor.GetType()
 		if limit.Name != nil {
 			key += ":" + limit.GetName()
 		}
-		keys = append(keys, key)
+		gate := c.ensureGate(key)
+		if gate == nil {
+			continue
+		}
 		//nolint:gosec // guarded by <= 0 check above
-		if gate, ok := c.concurrencyGates[key]; ok {
-			gate.globalLimit = uint32(limit.GetMaxConcurrent())
-		} else {
-			c.concurrencyGates[key] = &concurrencyGate{globalLimit: uint32(limit.GetMaxConcurrent())}
+		gate.globalLimit = uint32(limit.GetMaxConcurrent())
+		keys = append(keys, key)
+	}
+
+	if c.adaptive {
+		for _, actorType := range req.GetActorTypes() {
+			if _, ok := c.workflowApp(actorType); !ok {
+				continue
+			}
+			gate := c.ensureGate(actorType)
+			if gate == nil {
+				continue
+			}
+			if gate.est == nil {
+				gate.est = newEstimator(c.now, 1)
+				c.nextEval = time.Time{}
+			}
+			keys = append(keys, actorType)
 		}
 	}
+
+	if addr := req.GetActorAddress(); addr != "" {
+		sh := streamHost{addr: addr}
+		for _, limit := range req.GetHostConcurrencyLimits() {
+			actor := limit.GetActor()
+			if limit.GetMaxConcurrent() <= 0 || actor == nil || limit.Name != nil {
+				continue
+			}
+			actorType := actor.GetType()
+			if c.ensureGate(actorType) == nil {
+				continue
+			}
+			hosts, ok := c.hostLimits[actorType]
+			if !ok {
+				hosts = make(map[string]*hostLimit)
+				c.hostLimits[actorType] = hosts
+			}
+			hl, ok := hosts[addr]
+			if !ok {
+				hl = new(hostLimit)
+				hosts[addr] = hl
+			}
+			//nolint:gosec // guarded by <= 0 check above
+			hl.limit = uint32(limit.GetMaxConcurrent())
+			hl.refs++
+			sh.actorTypes = append(sh.actorTypes, actorType)
+			keys = append(keys, actorType)
+		}
+		c.streamHosts[streamIDx] = sh
+	}
+
 	c.streamGateKeys[streamIDx] = keys
 
-	c.removeOrphanedGates()
+	c.streamNicenessKeys[streamIDx] = c.registerNiceness(req)
+
+	c.refreshHostLimits()
+	c.removeOrphans()
+	c.recordLimits()
 }
 
-// removeOrphanedGates deletes gates that no active stream references.
-func (c *connections) removeOrphanedGates() {
+// registerNiceness records a stream's workflow niceness, keyed by its app and
+// by its workflow and activity actor types joined with each name, and returns
+// the keys it set.
+func (c *connections) registerNiceness(req *schedulerv1pb.WatchJobsRequestInitial) []string {
+	niceness := req.GetNiceness()
+	if niceness == nil || req.GetAppId() == "" {
+		return nil
+	}
+
+	app := c.internalPrefix + req.GetAppId()
+	keys := make([]string, 0, 1+len(niceness.GetWorkflows())+len(niceness.GetActivities()))
+	set := func(key string, value int32) {
+		c.niceness[key] = value
+		keys = append(keys, key)
+		monitoring.RecordConcurrencyNiceness(key, value)
+	}
+
+	set(app, niceness.GetDefault())
+	for name, value := range niceness.GetWorkflows() {
+		set(app+".workflow:"+name, value)
+	}
+	for name, value := range niceness.GetActivities() {
+		set(app+".activity:"+name, value)
+	}
+	return keys
+}
+
+func (c *connections) unregisterStream(streamIDx uint64) {
+	delete(c.streamGateKeys, streamIDx)
+	delete(c.streamNicenessKeys, streamIDx)
+
+	if sh, ok := c.streamHosts[streamIDx]; ok {
+		for _, actorType := range sh.actorTypes {
+			hosts := c.hostLimits[actorType]
+			if hl, ok := hosts[sh.addr]; ok {
+				hl.refs--
+				if hl.refs <= 0 {
+					delete(hosts, sh.addr)
+				}
+			}
+			if len(hosts) == 0 {
+				delete(c.hostLimits, actorType)
+			}
+		}
+		delete(c.streamHosts, streamIDx)
+	}
+
+	c.refreshHostLimits()
+	c.removeOrphans()
+	c.recordLimits()
+}
+
+// ensureGate returns the gate for key, creating it. The namespace gate key
+// is reserved, so a gate is never created for it.
+func (c *connections) ensureGate(key string) *concurrencyGate {
+	if key == c.nsKey {
+		log.Warnf("Ignoring concurrency limit for %q: the key is reserved for the namespace", key)
+		return nil
+	}
+	gate, ok := c.concurrencyGates[key]
+	if !ok {
+		gate = new(concurrencyGate)
+		c.concurrencyGates[key] = gate
+	}
+	return gate
+}
+
+func (c *connections) gate(key string) *concurrencyGate {
+	if c.nsGate != nil && key == c.nsKey {
+		return c.nsGate
+	}
+	return c.concurrencyGates[key]
+}
+
+func (c *connections) refreshHostLimits() {
+	for key, gate := range c.concurrencyGates {
+		var sum uint32
+		for _, hl := range c.hostLimits[key] {
+			sum += hl.limit
+		}
+		gate.hostLimit = sum
+	}
+}
+
+// removeOrphans deletes gates and niceness no active stream references, and
+// resolves the pending triggers of actor types no stream hosts any more.
+func (c *connections) removeOrphans() {
 	referenced := make(map[string]struct{})
 	for _, keys := range c.streamGateKeys {
 		for _, key := range keys {
 			referenced[key] = struct{}{}
 		}
 	}
-
 	for key, gate := range c.concurrencyGates {
 		if _, ok := referenced[key]; !ok {
-			for req := gate.dequeue(); req != nil; req = gate.dequeue() {
-				req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-			}
 			delete(c.concurrencyGates, key)
+			monitoring.RecordConcurrencyLimit(key, 0)
+			if gate.est != nil {
+				monitoring.RecordConcurrencyEstimate(key, 0, 0)
+			}
 		}
 	}
+
+	clear(referenced)
+	for _, keys := range c.streamNicenessKeys {
+		for _, key := range keys {
+			referenced[key] = struct{}{}
+		}
+	}
+	for key := range c.niceness {
+		if _, ok := referenced[key]; !ok {
+			delete(c.niceness, key)
+			// Without an entry the niceness in effect is the default.
+			monitoring.RecordConcurrencyNiceness(key, 0)
+		}
+	}
+
+	c.failPending(c.streamPool.HasActorType, api.TriggerResponseResult_UNDELIVERABLE)
 }
 
-// acquireGates attempts to acquire all gates for the given keys. It returns
-// the keys successfully acquired and whether all were acquired. On partial
-// success (acquired != nil && !ok) the caller must release the acquired gates.
-func (c *connections) acquireGates(gateKeys []string) (acquired []string, ok bool) {
-	for _, key := range gateKeys {
-		gate := c.concurrencyGates[key]
-		if !gate.tryAcquire(c.schedulerCount, c.schedulerIdx) {
-			return acquired, false
-		}
-		acquired = append(acquired, key)
+// workflowApp returns the app key of one of this namespace's internal
+// workflow or activity actor types, "dapr.internal.<ns>.<appID>". App IDs
+// cannot contain dots, so the parse is unambiguous.
+func (c *connections) workflowApp(actorType string) (string, bool) {
+	rest, ok := strings.CutPrefix(actorType, c.internalPrefix)
+	if !ok {
+		return "", false
 	}
-	return acquired, true
+	app, ok := strings.CutSuffix(rest, ".workflow")
+	if !ok {
+		app, ok = strings.CutSuffix(rest, ".activity")
+	}
+	if !ok || app == "" || strings.Contains(app, ".") {
+		return "", false
+	}
+	return c.internalPrefix + app, true
+}
+
+// appKey groups an actor type under its app in the pending tree. Actor types
+// other than workflows and activities are their own app.
+func (c *connections) appKey(actorType string) string {
+	if app, ok := c.workflowApp(actorType); ok {
+		return app
+	}
+	return actorType
+}
+
+// acquireGates takes a slot on every gate or on none. On refusal it marks the
+// first refusing gate as binding and returns its key.
+func (c *connections) acquireGates(gateKeys []string) (string, bool) {
+	for i, key := range gateKeys {
+		gate := c.gate(key)
+		if gate == nil {
+			continue
+		}
+		if !gate.tryAcquire(c.schedulerCount, c.schedulerIdx) {
+			c.releaseGates(gateKeys[:i])
+			gate.markBound(c.now)
+			return key, false
+		}
+	}
+	return "", true
 }
 
 func (c *connections) releaseGates(keys []string) {
 	for _, key := range keys {
-		if gate, ok := c.concurrencyGates[key]; ok {
+		if gate := c.gate(key); gate != nil {
 			gate.release()
 		}
 	}
 }
 
 func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
+	c.evaluate()
+
 	streamLoop, ok := c.getStreamLoop(req.Job.GetMetadata())
 	if !ok {
 		req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
@@ -244,36 +502,21 @@ func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
 		return
 	}
 
-	// Gates are released either by the ConcurrencyRelease event wired in
-	// dispatchWithGates (happy path), or by the deferred releaseGates call
-	// below on any early return. dispatched is set to true only when we hand
-	// the request off to the stream loop.
-	var acquired []string
-	dispatched := false
-	defer func() {
-		if !dispatched {
-			c.releaseGates(acquired)
-		}
-	}()
-
-	var gotAll bool
-	acquired, gotAll = c.acquireGates(gateKeys)
-	if !gotAll {
-		throttledKey := gateKeys[len(acquired)]
-		monitoring.RecordConcurrencyThrottled(throttledKey)
-		primaryGate := c.concurrencyGates[gateKeys[0]]
-		if !primaryGate.enqueue(req) {
-			req.ResultFn(api.TriggerResponseResult_FAILED)
-		} else {
-			monitoring.RecordConcurrencyPending(gateKeys[0], int64(primaryGate.pendingLen()))
-		}
+	// A trigger never overtakes earlier triggers of its own flow.
+	if c.pendingFlow(c.flowPath(req)) != nil {
+		monitoring.RecordConcurrencyThrottled(gateKeys[0])
+	} else if refused, ok := c.acquireGates(gateKeys); ok {
+		c.dispatchWithGates(streamLoop, req, gateKeys, 0)
 		return
+	} else {
+		monitoring.RecordConcurrencyThrottled(refused)
 	}
 
-	c.dispatchWithGates(streamLoop, req, gateKeys)
-	dispatched = true
+	c.enqueuePending(req)
 }
 
+// gateKeysForTrigger returns the gates a trigger must pass, in order: the
+// namespace gate, the actor type gate, and the actor type and name gate.
 func (c *connections) gateKeysForTrigger(req *loops.TriggerRequest) []string {
 	meta := req.Job.GetMetadata()
 
@@ -286,6 +529,12 @@ func (c *connections) gateKeysForTrigger(req *loops.TriggerRequest) []string {
 	}
 
 	var keys []string
+
+	if c.nsGate != nil {
+		if _, ok := c.workflowApp(typeKey); ok {
+			keys = append(keys, c.nsKey)
+		}
+	}
 
 	if _, ok := c.concurrencyGates[typeKey]; ok {
 		keys = append(keys, typeKey)
@@ -301,97 +550,211 @@ func (c *connections) gateKeysForTrigger(req *loops.TriggerRequest) []string {
 	return keys
 }
 
-func (c *connections) dispatchWithGates(streamLoop loop.Interface[loops.EventStream], req *loops.TriggerRequest, gateKeys []string) {
+// dispatchWithGates hands a trigger holding its gates to its stream. wait is
+// how long it waited for them.
+func (c *connections) dispatchWithGates(streamLoop loop.Interface[loops.EventStream], req *loops.TriggerRequest, gateKeys []string, wait time.Duration) {
+	meta := req.Job.GetMetadata()
+	actorType := meta.GetTarget().GetActor().GetType()
+	name := meta.GetConcurrencyKey()
+
 	for _, key := range gateKeys {
-		if gate, ok := c.concurrencyGates[key]; ok {
+		if gate := c.gate(key); gate != nil {
 			monitoring.RecordConcurrencyInflight(key, int64(gate.current))
 		}
+		monitoring.RecordConcurrencyDispatched(key)
 	}
+	if name != "" && !slices.Contains(gateKeys, actorType+":"+name) {
+		monitoring.RecordConcurrencyDispatched(actorType + ":" + name)
+	}
+	monitoring.RecordConcurrencyWait(actorType, wait)
+	if name != "" {
+		monitoring.RecordConcurrencyWait(actorType+":"+name, wait)
+	}
+
+	sent := c.now
 	originalResultFn := req.ResultFn
 	req.ResultFn = func(result api.TriggerResponseResult) {
 		originalResultFn(result)
 		c.loop.Enqueue(&loops.ConcurrencyRelease{
-			GateKeys: gateKeys,
+			GateKeys:  gateKeys,
+			ActorType: actorType,
+			Name:      name,
+			Sent:      sent,
+			Result:    result,
 		})
 	}
 	streamLoop.Enqueue(req)
 }
 
 func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
+	success := rel.Result == api.TriggerResponseResult_SUCCESS
+
 	for _, key := range rel.GateKeys {
-		gate, ok := c.concurrencyGates[key]
-		if !ok {
+		gate := c.gate(key)
+		if gate == nil {
 			continue
 		}
 
 		gate.release()
+		if gate.est != nil && success {
+			gate.est.acks++
+		}
 		monitoring.RecordConcurrencyInflight(key, int64(gate.current))
+	}
 
-		c.drainPending(key, gate)
+	// Fast failures say nothing about capacity, so only successful
+	// acknowledgements contribute round trip times.
+	if gate := c.concurrencyGates[rel.ActorType]; success && gate != nil && gate.est != nil {
+		gate.est.record(rel.Name, rel.Sent, c.now)
+	}
+
+	c.evaluate()
+	c.drain()
+}
+
+// evaluate runs, at most once per minEvalPeriod, every adaptive estimator
+// whose window has elapsed. Every actor type's current latency ratio is
+// computed first so the namespace sees all apps at once; the namespace votes
+// by app. While the namespace is overloaded (most of its apps slowed
+// together, which points at something they share) or holds a limit, the
+// actor type estimators stand down and the namespace gate, divided by app
+// niceness, takes the load off.
+func (c *connections) evaluate() {
+	if !c.adaptive || c.now.Before(c.nextEval) {
+		return
+	}
+	c.nextEval = c.now.Add(minEvalPeriod)
+
+	var nsChangedAt time.Time
+	if c.nsGate != nil {
+		nsChangedAt = c.nsGate.est.changedAt
+	}
+
+	// Each app votes once, with the slower of its workflow and activity
+	// ratios, so one app cannot make the namespace look shared.
+	appRatios := make(map[string]float64)
+	var maxPeriod time.Duration
+	var typeGates uint32
+	var serviceSum float64
+	var serviceAcks uint32
+	for key, gate := range c.concurrencyGates {
+		est := gate.est
+		if est == nil {
+			continue
+		}
+		typeGates++
+		maxPeriod = max(maxPeriod, est.period)
+		est.ratio, est.voters = est.latencyRatio(latest(est.changedAt, nsChangedAt))
+		if est.voters > 0 {
+			app := c.appKey(key)
+			appRatios[app] = max(appRatios[app], est.ratio)
+		}
+		if est.serviceTime = est.uncongested(); est.serviceTime > 0 {
+			serviceSum += float64(est.acks) * float64(est.serviceTime)
+			serviceAcks += est.acks
+		}
+		monitoring.RecordConcurrencyEstimate(key, est.ratio, est.serviceTime)
+	}
+	var nsServiceTime time.Duration
+	if serviceAcks > 0 {
+		nsServiceTime = time.Duration(serviceSum / float64(serviceAcks))
+	}
+
+	ratios := make([]float64, 0, len(appRatios))
+	for _, ratio := range appRatios {
+		ratios = append(ratios, ratio)
+	}
+	var nsRatio float64
+	if len(ratios) > 0 {
+		nsRatio = median(ratios)
+	}
+	if c.nsGate != nil {
+		monitoring.RecordConcurrencyEstimate(c.nsKey, nsRatio, nsServiceTime)
+	}
+	nsOverloaded := c.nsGate != nil && len(ratios) >= c.nsGate.est.minVoters && nsRatio >= overloadRatio
+	// Under a namespace limit an app's throughput is its share of what the
+	// apps share, not its own capacity, so a limit derived from it would
+	// freeze the current split in place of niceness.
+	nsLimited := c.nsGate != nil && c.nsGate.est.limit > 0
+
+	changed := false
+	for key, gate := range c.concurrencyGates {
+		est := gate.est
+		if est == nil || !est.due(c.now) {
+			continue
+		}
+		ratio := est.ratio
+		if nsOverloaded || nsLimited {
+			ratio = 0
+		}
+		ch, overload := est.control(evalInput{
+			now:      c.now,
+			ratio:    ratio,
+			voters:   est.voters,
+			inflight: gate.current,
+			//nolint:gosec // a host count is never negative
+			floor:       uint32(c.streamPool.Hosts(key)),
+			ceiling:     gate.ceiling(c.schedulerCount, c.schedulerIdx),
+			serviceTime: est.serviceTime,
+		})
+		if rtt, ok := est.roll(); ok {
+			est.period = evalPeriod(rtt)
+		}
+		c.recordEstimate(key, gate, ch, overload)
+		changed = changed || ch
+	}
+
+	if ns := c.nsGate; ns != nil && ns.est.due(c.now) {
+		ch, overload := ns.est.control(evalInput{
+			now:         c.now,
+			ratio:       nsRatio,
+			voters:      len(ratios),
+			inflight:    ns.current,
+			floor:       typeGates,
+			serviceTime: nsServiceTime,
+		})
+		ns.est.period = min(max(maxPeriod, minEvalPeriod), maxEvalPeriod)
+		c.recordEstimate(c.nsKey, ns, ch, overload)
+		changed = changed || ch
+
+		// An app that noticed the shared slowdown a pass before the namespace
+		// did may hold an adaptive limit of its own. Left in place, those
+		// limits rather than niceness would decide each app's share, so the
+		// namespace takes over.
+		if overload {
+			for key, gate := range c.concurrencyGates {
+				if gate.est != nil && gate.est.limit > 0 {
+					gate.est.clear(c.now)
+					c.recordEstimate(key, gate, true, false)
+					changed = true
+				}
+			}
+		}
+	}
+
+	if changed {
+		c.drain()
 	}
 }
 
-// drainPending scans the pending queue to find a trigger that can acquire all
-// required gates. This avoids head-of-line blocking when the first pending
-// trigger is blocked on a different gate than the one that just released.
-// Requests skipped by the scan are returned to the front of the queue in
-// their original order, so an elder trigger is never rotated behind fresher
-// arrivals.
-func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	defer func() {
-		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
-	}()
-
-	n := gate.pendingLen()
-	var skipped []*loops.TriggerRequest
-	for range n {
-		next := gate.dequeue()
-		if next == nil {
-			break
-		}
-
-		dispatched, consumed := c.tryDispatchPending(next)
-		if !consumed {
-			skipped = append(skipped, next)
-		}
-		if dispatched {
-			break
-		}
+func (c *connections) recordEstimate(key string, gate *concurrencyGate, changed, overload bool) {
+	if overload {
+		monitoring.RecordConcurrencyOverload(key)
 	}
-
-	gate.requeueFront(skipped)
+	if changed {
+		limit := gate.localLimit(c.schedulerCount, c.schedulerIdx)
+		log.Debugf("Adaptive concurrency limit for %s is now %d (in-flight %d)", key, limit, gate.current)
+		monitoring.RecordConcurrencyLimit(key, int64(limit))
+	}
 }
 
-// tryDispatchPending attempts to dispatch a single pending trigger. Returns
-// dispatched=true iff the trigger was handed to a stream loop, and
-// consumed=true when the caller no longer owns the request (dispatched, or
-// resolved undeliverable). On gate acquisition failure the request stays with
-// the caller to requeue at its original position, and partially-acquired
-// gates are released via defer.
-func (c *connections) tryDispatchPending(next *loops.TriggerRequest) (dispatched, consumed bool) {
-	streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
-	if !ok {
-		next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		return false, true
+func (c *connections) recordLimits() {
+	for key, gate := range c.concurrencyGates {
+		monitoring.RecordConcurrencyLimit(key, int64(gate.localLimit(c.schedulerCount, c.schedulerIdx)))
 	}
-
-	gateKeys := c.gateKeysForTrigger(next)
-
-	var acquired []string
-	defer func() {
-		if !dispatched {
-			c.releaseGates(acquired)
-		}
-	}()
-
-	var gotAll bool
-	acquired, gotAll = c.acquireGates(gateKeys)
-	if !gotAll {
-		return false, false
+	if c.nsGate != nil {
+		monitoring.RecordConcurrencyLimit(c.nsKey, int64(c.nsGate.localLimit(c.schedulerCount, c.schedulerIdx)))
 	}
-
-	c.dispatchWithGates(streamLoop, next, gateKeys)
-	return true, true
 }
 
 // handleCloseStream handles a close stream request.
@@ -406,10 +769,10 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
-	delete(c.streamGateKeys, closeStream.StreamIDx)
 	cancel()
 
-	c.removeOrphanedGates()
+	c.unregisterStream(closeStream.StreamIDx)
+	c.drain()
 
 	// This loop owns the authoritative stream set: confirm emptiness to the
 	// namespaces loop so it can delete the namespace. Deleting on the
@@ -431,13 +794,13 @@ func (c *connections) handleShutdown() {
 
 	clear(c.streams)
 
-	for _, gate := range c.concurrencyGates {
-		for req := gate.dequeue(); req != nil; req = gate.dequeue() {
-			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		}
-	}
+	c.failPending(func(string) bool { return false }, api.TriggerResponseResult_UNDELIVERABLE)
 	clear(c.concurrencyGates)
 	clear(c.streamGateKeys)
+	clear(c.niceness)
+	clear(c.streamNicenessKeys)
+	clear(c.hostLimits)
+	clear(c.streamHosts)
 
 	// The loop object is deliberately NOT returned to the factory cache:
 	// this handler runs inside the loop's own drain, before Close observes

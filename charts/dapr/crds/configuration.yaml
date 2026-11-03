@@ -636,6 +636,69 @@ spec:
                       If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
+                  niceness:
+                    description: |-
+                      niceness sets how this app and its workflows and activities are
+                      weighted when capacity is saturated.
+                    properties:
+                      activities:
+                        description: activities overrides default for specific activity
+                          names.
+                        items:
+                          description: NamedNiceness defines the niceness of a specific
+                            workflow or activity name.
+                          properties:
+                            name:
+                              description: Name is the workflow or activity name.
+                              minLength: 1
+                              type: string
+                            niceness:
+                              description: |-
+                                Niceness is the scheduling weight of the name, in the range -20 to 19.
+                                Lower values are served more often.
+                              format: int32
+                              maximum: 19
+                              minimum: -20
+                              type: integer
+                          required:
+                          - name
+                          - niceness
+                          type: object
+                        type: array
+                      default:
+                        description: |-
+                          default is the niceness of this app against the other apps in its
+                          namespace, and of every workflow and activity of this app without its
+                          own entry. If omitted, 0 is used.
+                        format: int32
+                        maximum: 19
+                        minimum: -20
+                        type: integer
+                      workflows:
+                        description: workflows overrides default for specific workflow
+                          names.
+                        items:
+                          description: NamedNiceness defines the niceness of a specific
+                            workflow or activity name.
+                          properties:
+                            name:
+                              description: Name is the workflow or activity name.
+                              minLength: 1
+                              type: string
+                            niceness:
+                              description: |-
+                                Niceness is the scheduling weight of the name, in the range -20 to 19.
+                                Lower values are served more often.
+                              format: int32
+                              maximum: 19
+                              minimum: -20
+                              type: integer
+                          required:
+                          - name
+                          - niceness
+                          type: object
+                        type: array
+                    type: object
                   stateRetentionPolicy:
                     description: |-
                       StateRetentionPolicy defines the retention configuration for workflow

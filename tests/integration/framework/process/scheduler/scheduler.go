@@ -164,6 +164,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.placementEnabled != nil {
 		args = append(args, "--placement-enabled="+strconv.FormatBool(*opts.placementEnabled))
 	}
+	if opts.adaptiveConcurrencyLimits != nil {
+		args = append(args, "--adaptive-concurrency-limits="+strconv.FormatBool(*opts.adaptiveConcurrencyLimits))
+	}
 	if opts.placementDisseminateTimeout != nil {
 		args = append(args, "--placement-disseminate-timeout="+opts.placementDisseminateTimeout.String())
 	}

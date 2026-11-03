@@ -64,6 +64,10 @@ type Options struct {
 
 	Workers uint32
 
+	// AdaptiveConcurrencyLimits enables deriving workflow concurrency limits
+	// from trigger acknowledgement latency and throughput.
+	AdaptiveConcurrencyLimits bool
+
 	// Placement, when non-nil, is notified whether this scheduler is the
 	// current placement leader on every leadership table change.
 	Placement PlacementLeader
@@ -107,6 +111,7 @@ type cron struct {
 	backend         *string
 	backendConfig   any
 	workers         uint32
+	adaptive        bool
 
 	readyCh chan struct{}
 	closeCh chan struct{}
@@ -125,6 +130,7 @@ func New(opts Options) Interface {
 		etcd:            opts.Etcd,
 		backend:         opts.Backend,
 		backendConfig:   opts.BackendConfig,
+		adaptive:        opts.AdaptiveConcurrencyLimits,
 	}
 }
 
@@ -166,8 +172,9 @@ func (c *cron) Run(ctx context.Context) error {
 
 	var leaderLoop loop.Interface[[]*anypb.Any]
 	c.connectionPool = pool.New(pool.Options{
-		Cron:             c.etcdcron,
-		PlacementEnabled: c.host.GetSchedulerPlacementEnabled(),
+		Cron:                      c.etcdcron,
+		PlacementEnabled:          c.host.GetSchedulerPlacementEnabled(),
+		AdaptiveConcurrencyLimits: c.adaptive,
 		// A nil event re-broadcasts the last leadership table with its
 		// placement fields recomputed under the new capability state.
 		OnSchedulerPlacementCapabilityChange: func() {

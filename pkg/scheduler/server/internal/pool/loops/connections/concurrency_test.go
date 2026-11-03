@@ -22,8 +22,6 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
-	loopfake "github.com/dapr/kit/events/loop/fake"
 )
 
 func TestLocalLimitFromGlobal(t *testing.T) {
@@ -200,32 +198,6 @@ func TestConcurrencyGate_DynamicSchedulerCount(t *testing.T) {
 	assert.True(t, gate.tryAcquire(1, 0))
 }
 
-func TestConcurrencyGate_EnqueueDequeue(t *testing.T) {
-	t.Parallel()
-
-	gate := &concurrencyGate{globalLimit: 1}
-
-	assert.Nil(t, gate.dequeue(), "empty queue returns nil")
-
-	req1 := &loops.TriggerRequest{}
-	req2 := &loops.TriggerRequest{}
-
-	gate.enqueue(req1)
-	gate.enqueue(req2)
-	assert.Equal(t, 2, gate.pendingLen())
-
-	got := gate.dequeue()
-	require.NotNil(t, got)
-	assert.Same(t, req1, got, "FIFO order")
-
-	got = gate.dequeue()
-	require.NotNil(t, got)
-	assert.Same(t, req2, got)
-
-	assert.Nil(t, gate.dequeue())
-	assert.Equal(t, 0, gate.pendingLen())
-}
-
 func TestConcurrencyGate_ReleaseNeverNegative(t *testing.T) {
 	t.Parallel()
 
@@ -286,55 +258,43 @@ func makeTriggerRequest(actorType, actorID, concurrencyKey string) *loops.Trigge
 	}
 }
 
-// TestDrainPending_PreservesSeniority asserts that a pending trigger skipped
-// by the drain scan (blocked on a secondary gate) keeps its position at the
-// front of the queue rather than being rotated behind fresher arrivals.
-func TestDrainPending_PreservesSeniority(t *testing.T) {
+func TestConcurrencyGate_Sources(t *testing.T) {
 	t.Parallel()
 
-	const actorType = "dapr.internal.default.myapp.workflow"
-
-	var dispatched []loops.EventStream
-	streamLoop := loopfake.New[loops.EventStream]().WithEnqueue(func(e loops.EventStream) {
-		dispatched = append(dispatched, e)
+	t.Run("no source is unlimited", func(t *testing.T) {
+		t.Parallel()
+		gate := &concurrencyGate{}
+		for range 1000 {
+			require.True(t, gate.tryAcquire(3, 0))
+		}
+		assert.Equal(t, uint32(0), gate.localLimit(3, 0))
 	})
 
-	pool := store.New()
-	pool.Add(store.Options{
-		Loop:       streamLoop,
-		ActorTypes: []string{actorType},
+	t.Run("smallest set source wins", func(t *testing.T) {
+		t.Parallel()
+		gate := &concurrencyGate{globalLimit: 30, hostLimit: 12}
+		assert.Equal(t, uint32(4), gate.localLimit(3, 0), "host limit share")
+		gate.est = &estimator{limit: 2}
+		assert.Equal(t, uint32(2), gate.localLimit(3, 0), "adaptive limit")
+		gate.est.limit = 0
+		assert.Equal(t, uint32(4), gate.localLimit(3, 0), "an unset adaptive limit leaves the ceiling")
+		assert.Equal(t, uint32(4), gate.ceiling(3, 0))
 	})
+}
 
-	primary := &concurrencyGate{globalLimit: 5}
-	named := &concurrencyGate{globalLimit: 1, current: 1}
+func TestWeightOf(t *testing.T) {
+	t.Parallel()
 
-	c := &connections{
-		streamPool: pool,
-		concurrencyGates: map[string]*concurrencyGate{
-			actorType:          primary,
-			actorType + ":act": named,
-		},
-		streamGateKeys: make(map[uint64][]string),
-		schedulerCount: 1,
+	assert.Equal(t, uint64(88761), weightOf(-20))
+	assert.Equal(t, uint64(9548), weightOf(-10))
+	assert.Equal(t, uint64(1024), weightOf(0))
+	assert.Equal(t, uint64(110), weightOf(10))
+	assert.Equal(t, uint64(15), weightOf(19))
+	assert.Equal(t, uint64(88761), weightOf(-100), "clamped")
+	assert.Equal(t, uint64(15), weightOf(100), "clamped")
+
+	for n := int32(-20); n < 19; n++ {
+		ratio := float64(weightOf(n)) / float64(weightOf(n+1))
+		assert.InDelta(t, 1.25, ratio, 0.06, "niceness %d", n)
 	}
-
-	elder := makeTriggerRequest(actorType, "a1", "act")
-	mid := makeTriggerRequest(actorType, "a2", "")
-	fresh := makeTriggerRequest(actorType, "a3", "")
-
-	require.True(t, primary.enqueue(elder))
-	require.True(t, primary.enqueue(mid))
-	require.True(t, primary.enqueue(fresh))
-
-	c.drainPending(actorType, primary)
-
-	require.Len(t, dispatched, 1)
-	assert.Same(t, mid, dispatched[0].(*loops.TriggerRequest))
-
-	require.Equal(t, 2, primary.pendingLen())
-	assert.Same(t, elder, primary.dequeue(), "skipped elder must stay at the front of the pending queue")
-	assert.Same(t, fresh, primary.dequeue())
-
-	assert.Equal(t, uint32(1), primary.current, "only the dispatched trigger holds the primary gate")
-	assert.Equal(t, uint32(1), named.current, "partial acquisition must be rolled back")
 }

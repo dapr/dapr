@@ -169,6 +169,11 @@ type WorkflowSpec struct {
 	// +optional
 	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
 
+	// niceness sets how this app and its workflows and activities are
+	// weighted when capacity is saturated.
+	// +optional
+	Niceness *WorkflowNiceness `json:"niceness,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
@@ -186,6 +191,36 @@ type NamedConcurrencyLimit struct {
 	// replicas.
 	// +optional
 	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+}
+
+// WorkflowNiceness defines scheduling weights in the range -20 to 19, where
+// lower values are served more often when capacity is saturated.
+type WorkflowNiceness struct {
+	// default is the niceness of this app against the other apps in its
+	// namespace, and of every workflow and activity of this app without its
+	// own entry. If omitted, 0 is used.
+	// +kubebuilder:validation:Minimum=-20
+	// +kubebuilder:validation:Maximum=19
+	// +optional
+	Default *int32 `json:"default,omitempty"`
+	// workflows overrides default for specific workflow names.
+	// +optional
+	Workflows []NamedNiceness `json:"workflows,omitempty"`
+	// activities overrides default for specific activity names.
+	// +optional
+	Activities []NamedNiceness `json:"activities,omitempty"`
+}
+
+// NamedNiceness defines the niceness of a specific workflow or activity name.
+type NamedNiceness struct {
+	// Name is the workflow or activity name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Niceness is the scheduling weight of the name, in the range -20 to 19.
+	// Lower values are served more often.
+	// +kubebuilder:validation:Minimum=-20
+	// +kubebuilder:validation:Maximum=19
+	Niceness int32 `json:"niceness"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state

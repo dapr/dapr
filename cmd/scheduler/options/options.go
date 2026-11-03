@@ -50,6 +50,7 @@ type Options struct {
 	ID string
 
 	PlacementEnabled                   bool
+	AdaptiveConcurrencyLimits          bool
 	PlacementDisseminateTimeout        time.Duration
 	PlacementDisseminateCoalesceWindow time.Duration
 
@@ -114,6 +115,7 @@ func New(origArgs []string) (*Options, error) {
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 
+	fs.BoolVar(&opts.AdaptiveConcurrencyLimits, "adaptive-concurrency-limits", true, "When enabled, the scheduler derives a concurrency limit for each app's workflows and activities, and for each namespace, from how quickly triggers are acknowledged, so workflow niceness takes effect without configured limits.")
 	fs.BoolVar(&opts.PlacementEnabled, "placement-enabled", false, "When enabled, this scheduler serves actor placement to daprd sidecars, replacing the standalone placement service. All scheduler replicas in the cluster must set the same value.")
 	fs.DurationVar(&opts.PlacementDisseminateTimeout, "placement-disseminate-timeout", time.Second*8, "The timeout for a placement dissemination round to daprd sidecars. Sidecars which fail to acknowledge within the timeout have their placement stream closed.")
 	fs.DurationVar(&opts.PlacementDisseminateCoalesceWindow, "placement-disseminate-coalesce-window", 0, "The window in which placement membership changes are coalesced into a single dissemination round. 0 disseminates immediately.")
