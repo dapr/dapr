@@ -32,6 +32,7 @@ func (s *suite) deliver(t *testing.T, req *loops.TriggerRequest) uint64 {
 	s.streamLoop.Enqueue(req)
 	resp, err := s.clientstream.Recv()
 	require.NoError(t, err)
+	assert.Equal(t, req.Repark != nil, resp.GetPull(), "only a pull dispatch is delivered as pull")
 	return resp.GetId()
 }
 

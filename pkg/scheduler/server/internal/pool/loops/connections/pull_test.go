@@ -57,5 +57,4 @@ func TestPullDispatch_FallsBackToRegularRouting(t *testing.T) {
 
 	require.Len(t, dispatched, 1, "a pull trigger with no sidecar reporting slots uses the regular actor routing")
 	assert.Same(t, req, dispatched[0].(*loops.TriggerRequest))
-	assert.False(t, req.Job.GetMetadata().GetPull(), "the receiving sidecar must route it like any reminder")
 }

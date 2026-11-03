@@ -38,9 +38,6 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 	}
 	if len(d.pools[actor.GetType()]) == 0 {
 		log.Debugf("Pull trigger %s has no eligible sidecar for its actor type; using regular routing", req.Job.GetName())
-		// Delivered as a regular reminder, the receiving sidecar forwards it
-		// to the placement owner instead of running it as a pull delivery.
-		meta.Pull = nil
 		return false
 	}
 

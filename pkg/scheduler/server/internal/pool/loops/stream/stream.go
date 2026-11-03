@@ -150,6 +150,11 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 		Data:     req.Job.GetData(),
 		Metadata: req.Job.GetMetadata(),
 	}
+	// Only the pull dispatcher sets Repark, on a delivery it made against
+	// a free slot.
+	if req.Repark != nil {
+		job.Pull = new(true)
+	}
 
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)

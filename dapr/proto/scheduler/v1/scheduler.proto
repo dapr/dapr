@@ -114,9 +114,9 @@ message JobMetadata {
 
   // pull requests pull dispatch for an actor reminder trigger: the scheduler
   // delivers it to a sidecar hosting the actor type that reported free slots
-  // (see PullSlots), and the receiving sidecar executes it locally instead of
-  // forwarding to the placement owner. When no connected sidecar reports slots
-  // for the actor type the trigger falls back to the regular actor routing.
+  // (see PullSlots) and marks the delivery with WatchJobsResponse.pull. A
+  // scheduler without pull dispatch, or with no connected sidecar reporting
+  // slots for the actor type, routes the trigger as a regular actor reminder.
   optional bool pull = 5;
 }
 
@@ -270,6 +270,13 @@ message WatchJobsResponse {
 
   // The metadata associated with the job.
   JobMetadata metadata = 4;
+
+  // pull marks a delivery the scheduler made against a free slot the sidecar
+  // reported (see PullSlots): the sidecar executes it locally instead of
+  // forwarding it to the placement owner, and answers NO_CAPACITY if the slot
+  // is gone. The stored JobMetadata.pull alone does not make a delivery pull:
+  // a scheduler without pull dispatch passes it through unchanged.
+  optional bool pull = 5;
 }
 
 message ScheduleJobRequest {

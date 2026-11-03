@@ -70,7 +70,7 @@ func (f *fallback) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	trigger := stream.Recv()
 	require.Equal(t, "pull-1", trigger.GetName())
-	assert.False(t, trigger.GetMetadata().GetPull(), "a regularly routed trigger must not be executed as a pull delivery")
+	assert.False(t, trigger.GetPull(), "a regularly routed trigger must not be executed as a pull delivery")
 	stream.Result(trigger.GetId(), schedulerv1.WatchJobsRequestResultStatus_SUCCESS)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -155,7 +155,6 @@ func TestDispatcher_FallsBackWithoutSlots(t *testing.T) {
 
 	assert.Equal(t, []*loops.TriggerRequest{req}, h.routed, "with no sidecar reporting slots the trigger takes the regular route")
 	assert.Nil(t, req.Repark, "a regularly routed trigger is not tracked as a pull delivery")
-	assert.False(t, req.Job.GetMetadata().GetPull(), "the receiving sidecar must route it like any reminder")
 	assert.Empty(t, h.d.pending)
 }
 
