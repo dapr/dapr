@@ -62,3 +62,24 @@ func Test_RetryForeverPolicy(t *testing.T) {
 	// Draws must actually decorrelate across creates.
 	assert.Greater(t, len(seen), 1)
 }
+
+func Test_RejectedTurnBackoff(t *testing.T) {
+	t.Parallel()
+
+	assert.Zero(t, RejectedTurnBackoff(0))
+	assert.Equal(t, RetryBackoffBase, RejectedTurnBackoff(1))
+
+	// Each rejection doubles the hold, until the cap.
+	prev := RejectedTurnBackoff(1)
+	for n := 2; n <= 10; n++ {
+		d := RejectedTurnBackoff(n)
+		assert.Equal(t, 2*prev, d, "rejection %d", n)
+		prev = d
+	}
+
+	// The hold stops at the cap and stays there, for any count.
+	assert.Equal(t, RejectedTurnBackoffCap, RejectedTurnBackoff(11))
+	for _, n := range []int{12, 40, 1000, 1 << 30} {
+		assert.Equal(t, RejectedTurnBackoffCap, RejectedTurnBackoff(n), "rejection %d", n)
+	}
+}

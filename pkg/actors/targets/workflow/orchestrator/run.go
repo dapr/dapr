@@ -347,12 +347,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// response, and converges on the real one. ContinueAsNew turns are exempt:
 	// the generation's history was replaced and IDs restart.
 	if !rs.GetContinuedAsNew() {
-		if kind, id, stale := staleTurnDuplicate(state, rs); stale {
-			log.Warnf("Workflow actor '%s': rejecting turn whose response re-creates committed %s operation '%d' (stale completion delivery adopted across turns); retrying the turn", o.actorID, kind, id)
+		if dup, stale := staleTurnDuplicate(state, rs); stale {
 			diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusStaleTurnRejected)
 			o.invalidateCachedState()
 			diagnoseStatus = diag.StatusRecoverable
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("turn response re-creates committed %s operation %d; stale completion delivery rejected", kind, id))
+			return todo.RunCompletedFalse, o.rejectTurn(state, dup)
 		}
 	}
 
@@ -918,45 +917,82 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	return err
 }
 
+// staleDuplicate describes an operation that a turn response re-creates
+// although its creation event is already in the committed history.
+type staleDuplicate struct {
+	// kind is operationTask, operationTimer or operationChild.
+	kind string
+	// id is the event ID both creation events carry.
+	id int32
+	// committed and recreated are the names of the committed operation and of
+	// the one the turn response creates. Both are empty for a timer.
+	committed string
+	recreated string
+}
+
+const (
+	operationTask  = "task"
+	operationTimer = "timer"
+	operationChild = "child"
+)
+
+// operationKind returns the kind of operation e creates, or "" when e does
+// not create one.
+func operationKind(e *backend.HistoryEvent) string {
+	switch {
+	case e.GetTaskScheduled() != nil:
+		return operationTask
+	case e.GetTimerCreated() != nil:
+		return operationTimer
+	case e.GetChildWorkflowInstanceCreated() != nil:
+		return operationChild
+	default:
+		return ""
+	}
+}
+
+// operationName returns the task, activity or workflow name of the operation e
+// creates, or "" for a timer.
+func operationName(e *backend.HistoryEvent) string {
+	switch {
+	case e.GetTaskScheduled() != nil:
+		return e.GetTaskScheduled().GetName()
+	case e.GetChildWorkflowInstanceCreated() != nil:
+		return e.GetChildWorkflowInstanceCreated().GetName()
+	default:
+		return ""
+	}
+}
+
 // staleTurnDuplicate reports whether rs.NewEvents re-creates an operation
 // (task, timer, or child workflow) whose creation event already exists in the
 // committed history with the same event ID.
-func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) (string, int32, bool) {
-	kindOf := func(e *backend.HistoryEvent) string {
-		switch {
-		case e.GetTaskScheduled() != nil:
-			return "task"
-		case e.GetTimerCreated() != nil:
-			return "timer"
-		case e.GetChildWorkflowInstanceCreated() != nil:
-			return "child"
-		default:
-			return ""
-		}
-	}
-
-	created := make(map[string]struct{})
-	var have bool
+func staleTurnDuplicate(state *wfenginestate.State, rs *backend.WorkflowRuntimeState) (staleDuplicate, bool) {
+	created := make(map[string]*backend.HistoryEvent)
 	for _, e := range rs.GetNewEvents() {
-		if k := kindOf(e); k != "" {
-			created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)] = struct{}{}
-			have = true
+		if k := operationKind(e); k != "" {
+			created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)] = e
 		}
 	}
-	if !have {
-		return "", 0, false
+	if len(created) == 0 {
+		return staleDuplicate{}, false
 	}
 
 	for _, e := range state.History {
-		k := kindOf(e)
+		k := operationKind(e)
 		if k == "" {
 			continue
 		}
-		if _, ok := created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)]; ok {
-			return k, e.GetEventId(), true
+		if n, ok := created[k+"/"+strconv.FormatInt(int64(e.GetEventId()), 10)]; ok {
+			return staleDuplicate{
+				kind:      k,
+				id:        e.GetEventId(),
+				committed: operationName(e),
+				recreated: operationName(n),
+			}, true
 		}
 	}
-	return "", 0, false
+	return staleDuplicate{}, false
 }
 
 // stripUnmatchedResolutions removes from rs.NewEvents any resolution that

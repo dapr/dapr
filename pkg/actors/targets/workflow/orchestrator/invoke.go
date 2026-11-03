@@ -353,6 +353,7 @@ func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *ac
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	switch {
 	case err == nil:
+		o.rejectedTurns = 0
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", o.actorID, err)
