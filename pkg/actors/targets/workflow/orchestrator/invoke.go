@@ -103,7 +103,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		// daprd with an executor, so it does not wait for a state change.
 		if fallback {
 			common.SetFallback(res)
-			o.fallbackServed(ctx, method, parsedAddEvent)
+			o.fallbackServed(ctx, method, data, parsedAddEvent)
 		}
 
 		return res, nil

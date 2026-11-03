@@ -174,4 +174,8 @@ func (c *crossapp) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
 	assert.JSONEq(t, `"raised"`, meta.GetOutput().GetValue())
+
+	// Y staged two starts, and only the one from X's client is a user start:
+	// the child's start comes from the parent's progress.
+	assert.InDelta(t, 1.0, c.workflow.StagedStarts(t, ctx, 1), 0)
 }

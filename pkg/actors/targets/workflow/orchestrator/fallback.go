@@ -16,6 +16,8 @@ package orchestrator
 import (
 	"context"
 
+	"google.golang.org/protobuf/proto"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
@@ -61,10 +63,17 @@ func (o *orchestrator) localFastPath() bool {
 }
 
 // fallbackOperation returns the diagnostics operation of a workflow actor
-// method served on a fallback host. ev is the parsed AddWorkflowEvent event.
-func fallbackOperation(method string, ev *backend.HistoryEvent) string {
+// method served on a fallback host. data is the request payload, and ev the
+// parsed AddWorkflowEvent event.
+func fallbackOperation(method string, data []byte, ev *backend.HistoryEvent) string {
 	switch method {
 	case todo.CreateWorkflowInstanceMethod:
+		// A parent workflow starts its child workflows with this method too.
+		// A child's start comes from the parent's progress, not from a user.
+		var req backend.CreateWorkflowInstanceRequest
+		if proto.Unmarshal(data, &req) == nil && req.GetStartEvent().GetExecutionStarted().GetParentInstance() != nil {
+			return ""
+		}
 		return diag.CreateWorkflow
 	case todo.RerunWorkflowInstance:
 		// A rerun forks the source instance's history (ForkWorkflowHistory,
@@ -95,8 +104,8 @@ func fallbackOperation(method string, ev *backend.HistoryEvent) string {
 // fallbackServed records an operation staged on a fallback host. Reads, such
 // as a status query, are not operations on the instance, and a purge
 // completes at once, so neither is recorded.
-func (f *factory) fallbackServed(ctx context.Context, method string, ev *backend.HistoryEvent) {
-	if operation := fallbackOperation(method, ev); operation != "" {
+func (f *factory) fallbackServed(ctx context.Context, method string, data []byte, ev *backend.HistoryEvent) {
+	if operation := fallbackOperation(method, data, ev); operation != "" {
 		diag.DefaultWorkflowMonitoring.WorkflowStagedOperation(ctx, operation)
 	}
 }

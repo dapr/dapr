@@ -110,29 +110,39 @@ func TestFallback(t *testing.T) {
 
 func TestFallbackOperation(t *testing.T) {
 	event := func(e *protos.HistoryEvent) *backend.HistoryEvent { return e }
+	create := func(parent *protos.ParentInstanceInfo) []byte {
+		b, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{StartEvent: &protos.HistoryEvent{
+			EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{ParentInstance: parent}},
+		}})
+		require.NoError(t, err)
+		return b
+	}
 	for _, tc := range []struct {
 		method string
+		data   []byte
 		ev     *backend.HistoryEvent
 		want   string
 	}{
-		{todo.CreateWorkflowInstanceMethod, nil, diag.CreateWorkflow},
-		{todo.PurgeWorkflowStateMethod, nil, ""},
-		{todo.RecursivePurgeWorkflowStateMethod, nil, ""},
-		{todo.RerunWorkflowInstance, nil, diag.RerunWorkflow},
+		{todo.CreateWorkflowInstanceMethod, create(nil), nil, diag.CreateWorkflow},
+		// A child workflow's start comes from its parent's progress.
+		{todo.CreateWorkflowInstanceMethod, create(&protos.ParentInstanceInfo{}), nil, ""},
+		{todo.PurgeWorkflowStateMethod, nil, nil, ""},
+		{todo.RecursivePurgeWorkflowStateMethod, nil, nil, ""},
+		{todo.RerunWorkflowInstance, nil, nil, diag.RerunWorkflow},
 		// Counted once, as the rerun on the new instance.
-		{todo.ForkWorkflowHistory, nil, ""},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}), diag.RaiseEvent},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}), diag.TerminateWorkflow},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}}), diag.SuspendWorkflow},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionResumed{ExecutionResumed: &protos.ExecutionResumedEvent{}}}), diag.ResumeWorkflow},
+		{todo.ForkWorkflowHistory, nil, nil, ""},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}), diag.RaiseEvent},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}), diag.TerminateWorkflow},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}}}), diag.SuspendWorkflow},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionResumed{ExecutionResumed: &protos.ExecutionResumedEvent{}}}), diag.ResumeWorkflow},
 		// An event from the workflow's own progress is not an operation a
 		// user made.
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{}}}), ""},
-		{todo.AddWorkflowEventMethod, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{}}}), ""},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{}}}), ""},
+		{todo.AddWorkflowEventMethod, nil, event(&protos.HistoryEvent{EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{}}}), ""},
 		// A read is not an operation on the instance.
-		{todo.WaitForRuntimeStatus, nil, ""},
+		{todo.WaitForRuntimeStatus, nil, nil, ""},
 	} {
-		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.ev), tc.method)
+		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.data, tc.ev), tc.method)
 	}
 }
 
