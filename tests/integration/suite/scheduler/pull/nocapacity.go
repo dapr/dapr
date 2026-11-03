@@ -65,12 +65,19 @@ func (n *nocapacity) Run(t *testing.T, ctx context.Context) {
 
 	job := n.scheduler.JobNowPull("pull-1", namespace, appID, actorType, "instance1::0")
 	job.Job.FailurePolicy = drop
+	job.Metadata.ConcurrencyKey = new("act")
 	_, err := client.ScheduleJob(ctx, job)
 	require.NoError(t, err)
 	resp := stream.Recv()
 	require.Equal(t, "pull-1", resp.GetName())
 	stream.Result(resp.GetId(), schedulerv1.WatchJobsRequestResultStatus_NO_CAPACITY)
 
+	refused := func(c assert.TestingT) float64 {
+		return n.scheduler.Metrics(c, ctx).SumWithLabels("dapr_scheduler_workflow_activity_refused_total", "app_id:"+appID, "activity_name:act")
+	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, 1.0, refused(c), 0)
+	}, time.Second*10, time.Millisecond*10)
 	stream.NoRecv(time.Second * 3)
 	assert.Len(t, n.scheduler.EtcdJobs(t, ctx), 1, "a refused pull trigger must not be dropped by its failure policy")
 
@@ -93,4 +100,5 @@ func (n *nocapacity) Run(t *testing.T, ctx context.Context) {
 		assert.Empty(c, n.scheduler.EtcdJobs(t, ctx), "NO_CAPACITY for a regular trigger resolves it as failed")
 	}, time.Second*10, time.Millisecond*10)
 	stream.NoRecv(time.Second)
+	assert.InDelta(t, 1.0, refused(t), 0, "a regular trigger's NO_CAPACITY is a failure, not a refusal")
 }

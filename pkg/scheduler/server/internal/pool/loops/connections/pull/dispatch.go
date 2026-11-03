@@ -176,8 +176,8 @@ func (d *Dispatcher) poolOf(actorType, id string) *pool {
 // Drain dispatches as many parked pull triggers as capacity allows, one
 // group-fair rotation at a time per actor type, until no sidecar has a free
 // slot.
-// ponytail: while a shared gate is full and a sidecar has a free slot, every
-// release retries the head of each parked instance, O(instances) per
+// ponytail: while a per-name gate is full and a sidecar has a free slot,
+// every release retries the head of each parked group, O(groups) per
 // release; index parked triggers by the gate blocking them if that shows up.
 func (d *Dispatcher) Drain() {
 	for actorType, q := range d.pending {
@@ -195,11 +195,18 @@ func (d *Dispatcher) Drain() {
 			delete(d.pending, actorType)
 			continue
 		}
-		for d.hasCredit(actorType) && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
-			dispatched, _ := d.tryDispatch(req)
+		typeFull := false
+		for d.hasCredit(actorType) && !typeFull && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
+			if typeFull {
+				return false
+			}
+			dispatched, full := d.tryDispatch(req)
 			if dispatched {
 				d.backlog.add(req, -1)
 			}
+			// Every group needs the actor type gate, so once it is full
+			// the rest of the rotation cannot dispatch either.
+			typeFull = full == actorType
 			return dispatched
 		}) {
 		}

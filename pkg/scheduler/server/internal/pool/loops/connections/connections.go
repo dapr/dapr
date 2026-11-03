@@ -106,6 +106,11 @@ func (c *connections) newPull() *pull.Dispatcher {
 		},
 		AcquireGates: c.acquireTriggerGates,
 		ReleaseGates: func(keys []string) {
+			// A pull trigger without gates frees nothing on its way out:
+			// only a slot report does.
+			if len(keys) == 0 {
+				return
+			}
 			c.handleConcurrencyRelease(&loops.ConcurrencyRelease{GateKeys: keys})
 		},
 		Requeue:   c.handleTriggerRequest,
@@ -383,9 +388,9 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 	}
 
 	// A pull trigger may be parked behind a type or per-name gate. Hashed
-	// pending is drained first, so behind a shared gate pull work waits until
-	// the hashed queue for that gate is empty. Pull workloads are low rate by
-	// design, so the bias is accepted over interleaving the two queues.
+	// pending is drained first, so behind a shared gate, such as a global
+	// activity limit over activities with mixed dispatch modes, pull work
+	// waits until the hashed queue for that gate is empty.
 	c.pull.Drain()
 }
 

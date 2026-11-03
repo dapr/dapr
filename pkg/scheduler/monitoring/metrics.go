@@ -74,6 +74,10 @@ var (
 		"scheduler/workflow_activity_inflight",
 		"Current number of pull-dispatched workflow activities this scheduler instance handed to a sidecar and that have not finished, by namespace, app_id and activity_name.",
 		stats.UnitDimensionless)
+	workflowActivityRefusedTotal = stats.Int64(
+		"scheduler/workflow_activity_refused_total",
+		"Total number of pull-dispatched workflow activities a sidecar refused with NO_CAPACITY, by namespace, app_id and activity_name.",
+		stats.UnitDimensionless)
 	jobsDeletedTotal = stats.Int64(
 		"scheduler/jobs_deleted_total",
 		"The total number of deleted jobs.",
@@ -343,14 +347,20 @@ func RecordWorkflowActivityInflight(namespace, appID, activityName string, count
 	recordWorkflowActivity(workflowActivityInflightGauge, namespace, appID, activityName, count)
 }
 
-func recordWorkflowActivity(gauge *stats.Int64Measure, namespace, appID, activityName string, count int64) {
+// RecordWorkflowActivityRefused counts a pull-dispatched activity a sidecar
+// refused with NO_CAPACITY because another scheduler took its last slot.
+func RecordWorkflowActivityRefused(namespace, appID, activityName string) {
+	recordWorkflowActivity(workflowActivityRefusedTotal, namespace, appID, activityName, 1)
+}
+
+func recordWorkflowActivity(measure *stats.Int64Measure, namespace, appID, activityName string, count int64) {
 	stats.RecordWithTags(context.Background(),
-		utils.WithTags(gauge.Name(),
+		utils.WithTags(measure.Name(),
 			tagNamespace, namespace,
 			tagAppID, appID,
 			tagActivityName, activityName,
 		),
-		gauge.M(count),
+		measure.M(count),
 	)
 }
 
@@ -438,6 +448,7 @@ func InitMetrics() error {
 		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
 		utils.NewMeasureView(workflowActivityBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
 		utils.NewMeasureView(workflowActivityInflightGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
+		utils.NewMeasureView(workflowActivityRefusedTotal, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.Count()),
 		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),

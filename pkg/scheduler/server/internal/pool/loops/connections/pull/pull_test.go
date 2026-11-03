@@ -47,6 +47,8 @@ type harness struct {
 	gates      map[string]*gate
 	// routed holds the triggers handed back for regular routing.
 	routed []*loops.TriggerRequest
+	// acquires counts gate acquisition attempts.
+	acquires int
 }
 
 type gate struct {
@@ -101,6 +103,7 @@ func (h *harness) gateKeys(req *loops.TriggerRequest) []string {
 }
 
 func (h *harness) acquire(req *loops.TriggerRequest) ([]string, string, bool) {
+	h.acquires++
 	keys := h.gateKeys(req)
 	for _, key := range keys {
 		if g := h.gates[key]; g.current >= g.limit {

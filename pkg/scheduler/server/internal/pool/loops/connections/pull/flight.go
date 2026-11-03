@@ -18,6 +18,7 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
 
@@ -42,6 +43,8 @@ func (d *Dispatcher) repark(f *flight, cronFn func(api.TriggerResponseResult), g
 		p.credit = 0
 	}
 	d.opts.ReleaseGates(gateKeys)
+	meta := f.req.Job.GetMetadata()
+	monitoring.RecordWorkflowActivityRefused(meta.GetNamespace(), meta.GetAppId(), meta.GetConcurrencyKey())
 	// A fresh request: a closed stream may still hold the refused one, whose
 	// hooks are now no-ops.
 	req := &loops.TriggerRequest{Job: f.req.Job, ResultFn: cronFn}

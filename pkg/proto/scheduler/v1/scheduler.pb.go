@@ -741,6 +741,11 @@ func (x *WatchJobsRequestInitial) GetPullSlots() []*PullSlots {
 // PullSlots reports the number of pull-dispatched actor reminder triggers of
 // actor_type a sidecar can accept right now. It is the sidecar's activity cap
 // minus all activity work it holds, so every scheduler sees the same count.
+// A scheduler takes a slot off its copy of the count for every delivery and
+// only puts one back on the next report, so the sidecar must send its current
+// count after every change (an activity accepted, finished or refused), even
+// when it equals the last count sent. Reports may be coalesced as long as the
+// latest count always goes out.
 type PullSlots struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

@@ -228,3 +228,26 @@ func TestDispatcher_DrainStopsWhenSlotsRunOut(t *testing.T) {
 	require.Len(t, h.dispatched[0], 1)
 	assert.Equal(t, 1, h.d.rotate-before, "with the only slot taken, no other parked instance is tried")
 }
+
+func TestDispatcher_DrainStopsWhenTypeGateFull(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 10)
+	h.gates[testActorType] = &gate{limit: 1}
+
+	running := h.trigger("wf-0::1::0", "act")
+	h.handle(running)
+	for i := 1; i <= 5; i++ {
+		h.handle(h.trigger("wf-"+strconv.Itoa(i)+"::1::0", "act"))
+	}
+	require.Len(t, h.dispatched[0], 1)
+	require.Equal(t, 5, h.d.pending[testActorType].len())
+
+	h.acquires = 0
+	h.d.Drain()
+	assert.Equal(t, 1, h.acquires, "with the type gate full, the first refusal ends the rotation")
+	assert.Len(t, h.dispatched[0], 1)
+
+	h.ack(t, running)
+	assert.Len(t, h.dispatched[0], 2, "the released gate admits one parked instance")
+	assert.Equal(t, 4, h.d.pending[testActorType].len())
+}
