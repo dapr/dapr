@@ -363,6 +363,11 @@ func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, req *sentryv1
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
+	// The JWT subject is rebuilt from the namespace and app ID only, so a
+	// longer path would be issued a JWT for a different identity.
+	if id.Path() != "/ns/"+parsed.Namespace()+"/"+parsed.AppID() {
+		return nil, status.Errorf(codes.PermissionDenied, "SPIFFE ID %s is not a Dapr app identity", id)
+	}
 
 	tkn, err := s.ca.Generate(ctx, &jwt.Request{
 		TrustDomain: parsed.TrustDomain(),

@@ -471,6 +471,12 @@ func TestFetchJWTSVID(t *testing.T) {
 				req:        &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}},
 				expCode:    codes.PermissionDenied,
 			},
+			"extra path segments": {
+				jwtEnabled: true,
+				id:         spiffeid.RequireFromString("spiffe://example.org/ns/my-ns/my-app/extra"),
+				req:        &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}},
+				expCode:    codes.PermissionDenied,
+			},
 		}
 
 		for name, test := range tests {

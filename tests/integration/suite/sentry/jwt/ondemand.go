@@ -163,6 +163,13 @@ func (o *ondemand) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, codes.Unauthenticated, status.Code(err), "%v", err)
 	})
 
+	t.Run("SPIFFE IDs with extra path segments are rejected", func(t *testing.T) {
+		ca := o.sentry.CABundle().X509
+		client := sentryv1pb.NewCAClient(o.sentry.DialGRPCMTLS(t, sentryID, cert.IssuedSVID(t, spiffeid.RequireFromString(appID+"/extra"), ca.IssChain, ca.IssKey)))
+		_, err := client.FetchJWTSVID(ctx, &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err), "%v", err)
+	})
+
 	t.Run("sentry without JWT issuing reports a failed precondition", func(t *testing.T) {
 		client := sentryv1pb.NewCAClient(o.sentryNoJWT.DialGRPCMTLS(t, sentryID, o.sentryNoJWT.SignSVID(t, ctx, sentryID, "default", "my-app")))
 		_, err := client.FetchJWTSVID(ctx, &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}})

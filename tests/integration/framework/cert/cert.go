@@ -103,6 +103,14 @@ func AssertRSAServingCert(t *testing.T, ctx context.Context, addr string) {
 // SelfSignedSVID returns an X.509 SVID for id that is not signed by any CA.
 func SelfSignedSVID(t *testing.T, id spiffeid.ID) *x509svid.SVID {
 	t.Helper()
+	return IssuedSVID(t, id, nil, nil)
+}
+
+// IssuedSVID returns an X.509 SVID for id, signed by the first certificate of
+// issChain with issKey, for any SPIFFE ID, including IDs Sentry would not
+// issue. The SVID is self-signed when issChain is empty.
+func IssuedSVID(t *testing.T, id spiffeid.ID, issChain []*x509.Certificate, issKey any) *x509svid.SVID {
+	t.Helper()
 
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -114,10 +122,14 @@ func SelfSignedSVID(t *testing.T, id spiffeid.ID) *x509svid.SVID {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
+	parent, parentKey := tmpl, any(key)
+	if len(issChain) > 0 {
+		parent, parentKey = issChain[0], issKey
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, key.Public(), parentKey)
 	require.NoError(t, err)
 	cert, err := x509.ParseCertificate(der)
 	require.NoError(t, err)
 
-	return &x509svid.SVID{ID: id, Certificates: []*x509.Certificate{cert}, PrivateKey: key}
+	return &x509svid.SVID{ID: id, Certificates: append([]*x509.Certificate{cert}, issChain...), PrivateKey: key}
 }
