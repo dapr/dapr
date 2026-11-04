@@ -115,9 +115,9 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 				policyName = name
 			}
 			if to == gobreaker.StateOpen {
-				log.Warnf("Resiliency circuit breaker %s: %q changed state from %s to %s", policyName, name, from, to)
+				log.Warnf("Resiliency circuit breaker (%s): %q changed state from %s to %s", policyName, name, from, to)
 			} else {
-				log.Infof("Resiliency circuit breaker %s: %q changed state from %s to %s", policyName, name, from, to)
+				log.Infof("Resiliency circuit breaker (%s): %q changed state from %s to %s", policyName, name, from, to)
 			}
 		},
 	})

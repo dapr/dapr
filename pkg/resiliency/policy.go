@@ -104,7 +104,7 @@ func (p PolicyDefinition) policyName(name string) string {
 }
 
 func (p PolicyDefinition) logTimeout() {
-	p.log.Warnf("Resiliency timeout policy %s: operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
+	p.log.Warnf("Resiliency timeout (%s): operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -368,12 +368,12 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				if retried.CompareAndSwap(false, true) && def.addRetryActivatedMetric != nil {
 					def.addRetryActivatedMetric()
 				}
-				def.log.Warnf("Resiliency retry policy %s: error processing operation %s (attempt %d). Retrying in %v…", retryName, def.name, attempts.Load(), d)
+				def.log.Warnf("Resiliency retry (%s): error processing operation %s. Retrying in %v…", retryName, def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 		)
 		if err == nil && retried.Load() {
-			def.log.Infof("Resiliency retry policy %s: recovered processing operation %s after %d attempts", retryName, def.name, attempts.Load())
+			def.log.Infof("Resiliency retry (%s): recovered processing operation %s after %d attempts", retryName, def.name, attempts.Load())
 		}
 		return res, err
 	}

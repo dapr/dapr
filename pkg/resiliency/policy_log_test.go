@@ -62,9 +62,9 @@ func (c *logCapture) lines(t *testing.T, withDebug bool) []logLine {
 		}
 		var l logLine
 		require.NoError(t, json.Unmarshal([]byte(raw), &l))
-		if !strings.HasPrefix(l.Msg, "Resiliency retry policy ") &&
-			!strings.HasPrefix(l.Msg, "Resiliency timeout policy ") &&
-			!strings.HasPrefix(l.Msg, "Resiliency circuit breaker ") &&
+		if !strings.HasPrefix(l.Msg, "Resiliency retry (") &&
+			!strings.HasPrefix(l.Msg, "Resiliency timeout (") &&
+			!strings.HasPrefix(l.Msg, "Resiliency circuit breaker (") &&
 			!strings.HasPrefix(l.Msg, "Error for operation ") {
 			continue
 		}
@@ -166,9 +166,9 @@ func TestPolicyLogsRetry(t *testing.T) {
 		assert.Equal(t, int32(3), calls.Load())
 
 		assert.Equal(t, []logLine{
-			{Level: "warning", Msg: "Resiliency retry policy threeTimes: error processing operation " + op + " (attempt 1). Retrying in 5ms…"},
-			{Level: "warning", Msg: "Resiliency retry policy threeTimes: error processing operation " + op + " (attempt 2). Retrying in 5ms…"},
-			{Level: "info", Msg: "Resiliency retry policy threeTimes: recovered processing operation " + op + " after 3 attempts"},
+			{Level: "warning", Msg: "Resiliency retry (threeTimes): error processing operation " + op + ". Retrying in 5ms…"},
+			{Level: "warning", Msg: "Resiliency retry (threeTimes): error processing operation " + op + ". Retrying in 5ms…"},
+			{Level: "info", Msg: "Resiliency retry (threeTimes): recovered processing operation " + op + " after 3 attempts"},
 		}, c.lines(t, false))
 
 		// The error detail is kept at debug level.
@@ -194,10 +194,10 @@ func TestPolicyLogsRetry(t *testing.T) {
 
 		lines := c.lines(t, false)
 		require.Len(t, lines, 3)
-		for i, line := range lines {
+		for _, line := range lines {
 			assert.Equal(t, logLine{
 				Level: "warning",
-				Msg:   fmt.Sprintf("Resiliency retry policy threeTimes: error processing operation %s (attempt %d). Retrying in 5ms…", op, i+1),
+				Msg:   fmt.Sprintf("Resiliency retry (threeTimes): error processing operation %s. Retrying in 5ms…", op),
 			}, line)
 		}
 	})
@@ -227,7 +227,7 @@ func TestPolicyLogsTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: "Resiliency timeout policy downstream: operation endpoint[slow-app, slow-app:persons/1] timed out after 50ms"},
+		{Level: "warning", Msg: "Resiliency timeout (downstream): operation endpoint[slow-app, slow-app:persons/1] timed out after 50ms"},
 	}, c.lines(t, false))
 }
 
@@ -246,7 +246,7 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 		return err
 	}
 
-	opened := logLine{Level: "warning", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from closed to open`}
+	opened := logLine{Level: "warning", Msg: `Resiliency circuit breaker (registryCB): "flaky-app:persons/1" changed state from closed to open`}
 
 	require.Error(t, run(true))
 	require.Error(t, run(true))
@@ -259,15 +259,15 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 
 	assert.Equal(t, []logLine{
 		opened,
-		{Level: "info", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from open to half-open`},
-		{Level: "info", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from half-open to closed`},
+		{Level: "info", Msg: `Resiliency circuit breaker (registryCB): "flaky-app:persons/1" changed state from open to half-open`},
+		{Level: "info", Msg: `Resiliency circuit breaker (registryCB): "flaky-app:persons/1" changed state from half-open to closed`},
 	}, c.lines(t, false))
 }
 
 // TestPolicyLogPolicyNames checks that every kind of target logs the name of
 // the policy from the Resiliency spec.
 func TestPolicyLogPolicyNames(t *testing.T) {
-	const retryLine = "Resiliency retry policy threeTimes: error processing operation %s (attempt 1). Retrying in 5ms…"
+	const retryLine = "Resiliency retry (threeTimes): error processing operation %s. Retrying in 5ms…"
 
 	tests := map[string]struct {
 		def func(r *Resiliency) *PolicyDefinition
@@ -289,7 +289,7 @@ func TestPolicyLogPolicyNames(t *testing.T) {
 		},
 		"actor post-lock": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ActorPostLockPolicy("myactor", "a1") },
-			wantLine: "Resiliency timeout policy downstream: operation actor[myactor, a1] timed out after 50ms",
+			wantLine: "Resiliency timeout (downstream): operation actor[myactor, a1] timed out after 50ms",
 		},
 		"component outbound": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ComponentOutboundPolicy("statestore", Statestore) },
@@ -301,8 +301,8 @@ func TestPolicyLogPolicyNames(t *testing.T) {
 		},
 		"built-in": {
 			def: func(r *Resiliency) *PolicyDefinition { return r.BuiltInPolicy(BuiltInServiceRetries) },
-			wantLine: "Resiliency retry policy DaprBuiltInServiceRetries: error processing operation " +
-				"DaprBuiltInServiceRetries (attempt 1). Retrying in 1s…",
+			wantLine: "Resiliency retry (DaprBuiltInServiceRetries): error processing operation " +
+				"DaprBuiltInServiceRetries. Retrying in 1s…",
 		},
 	}
 
