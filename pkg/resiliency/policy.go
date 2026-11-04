@@ -103,8 +103,14 @@ func (p PolicyDefinition) policyName(name string) string {
 	return p.name
 }
 
-func (p PolicyDefinition) logTimeout() {
-	p.log.Warnf("Resiliency timeout (%s): operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
+// logTimeout logs a timeout at warning level the first time it fires for an
+// operation, and at debug level after that, to keep log volume down.
+func (p PolicyDefinition) logTimeout(first bool) {
+	logf := p.log.Debugf
+	if first {
+		logf = p.log.Warnf
+	}
+	logf("Resiliency timeout (%s): operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -230,6 +236,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 	var zero T
 	timeoutMetricsActivated := atomic.Bool{}
+	timeoutLogged := atomic.Bool{}
 	return func(oper Operation[T]) (T, error) {
 		operation := oper
 		if def.t > 0 {
@@ -263,7 +270,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 						if opts.Disposer != nil && !isZero(v.res) {
 							opts.Disposer(v.res)
 						}
-						def.logTimeout()
+						def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
 						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 							def.addTimeoutActivatedMetric()
 						}
@@ -286,7 +293,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 							opts.Disposer(v.res)
 						}
 					}
-					def.logTimeout()
+					def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
@@ -362,13 +369,18 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				return rRes, rErr
 			},
 			b,
-			// Called before every retry, not just the first one.
+			// Called before every retry. The first retry of an operation is logged
+			// at warning level and the rest at debug level, to keep log volume down.
 			func(opErr error, d time.Duration) {
-				// The activation metric counts operations that needed a retry, not retries.
-				if retried.CompareAndSwap(false, true) && def.addRetryActivatedMetric != nil {
-					def.addRetryActivatedMetric()
+				logf := def.log.Debugf
+				if retried.CompareAndSwap(false, true) {
+					logf = def.log.Warnf
+					// The activation metric counts operations that needed a retry, not retries.
+					if def.addRetryActivatedMetric != nil {
+						def.addRetryActivatedMetric()
+					}
 				}
-				def.log.Warnf("Resiliency retry (%s): error processing operation %s. Retrying in %v…", retryName, def.name, d)
+				logf("Resiliency retry (%s): error processing operation %s. Retrying in %v…", retryName, def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 		)
