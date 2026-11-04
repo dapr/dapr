@@ -116,7 +116,7 @@ func (p PolicyDefinition) policyName(name string) string {
 }
 
 func (p PolicyDefinition) logTimeout() {
-	p.log.Warnf("Timeout policy %s: %s timed out after %v", p.policyName(p.timeoutName), p.policyTarget(), p.t)
+	p.log.Warnf("Resiliency timeout policy %s: %s timed out after %v", p.policyName(p.timeoutName), p.policyTarget(), p.t)
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -381,15 +381,15 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 					def.addRetryActivatedMetric()
 				}
 				attempt := attempts.Load()
-				def.log.Warnf("Retry policy %s: attempt %d failed for %s, retrying in %v", retryName, attempt, def.policyTarget(), d)
-				def.log.Debugf("Retry policy %s: attempt %d failed for %s: %v", retryName, attempt, def.policyTarget(), opErr)
+				def.log.Warnf("Resiliency retry policy %s: attempt %d failed for %s, retrying in %v", retryName, attempt, def.policyTarget(), d)
+				def.log.Debugf("Resiliency retry policy %s: attempt %d failed for %s: %v", retryName, attempt, def.policyTarget(), opErr)
 			},
 		)
 		if retried.Load() {
 			if err == nil {
-				def.log.Infof("Retry policy %s: %s recovered after %d attempts", retryName, def.policyTarget(), attempts.Load())
+				def.log.Infof("Resiliency retry policy %s: %s recovered after %d attempts", retryName, def.policyTarget(), attempts.Load())
 			} else {
-				def.log.Warnf("Retry policy %s: %s failed after %d attempts", retryName, def.policyTarget(), attempts.Load())
+				def.log.Warnf("Resiliency retry policy %s: %s failed after %d attempts", retryName, def.policyTarget(), attempts.Load())
 			}
 		}
 		return res, err

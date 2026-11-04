@@ -129,11 +129,11 @@ func (c *CircuitBreaker) logStateChange(log logger.Logger, to gobreaker.State) {
 	}
 	switch to {
 	case gobreaker.StateOpen:
-		log.Warnf("Circuit breaker %s: opened for %s", policyName, target)
+		log.Warnf("Resiliency circuit breaker %s: opened for %s", policyName, target)
 	case gobreaker.StateHalfOpen:
-		log.Infof("Circuit breaker %s: half-open for %s", policyName, target)
+		log.Infof("Resiliency circuit breaker %s: half-open for %s", policyName, target)
 	default:
-		log.Infof("Circuit breaker %s: closed for %s", policyName, target)
+		log.Infof("Resiliency circuit breaker %s: closed for %s", policyName, target)
 	}
 }
 
