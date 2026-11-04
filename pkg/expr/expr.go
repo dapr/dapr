@@ -31,6 +31,7 @@ func (e *Expr) DecodeString(value string) (err error) {
 		var iss *cel.Issues
 		ast, iss = env.Compile(value)
 		if iss.Err() != nil {
+			added := false
 			for _, e := range iss.Errors() {
 				if strings.HasPrefix(e.Message, missingVariableMessage) {
 					msg := e.Message[len(missingVariableMessage):]
@@ -40,9 +41,15 @@ func (e *Expr) DecodeString(value string) (err error) {
 					}
 					variables = append(variables, decls.NewVar(msg, decls.Any))
 					found[msg] = struct{}{}
+					added = true
 				} else {
 					return iss.Err()
 				}
+			}
+			// An undeclared function reports the same error as an undeclared
+			// variable, but declaring a variable does not resolve it.
+			if !added {
+				return iss.Err()
 			}
 		} else {
 			break
