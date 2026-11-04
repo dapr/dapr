@@ -64,7 +64,8 @@ func (c *logCapture) lines(t *testing.T, withDebug bool) []logLine {
 		require.NoError(t, json.Unmarshal([]byte(raw), &l))
 		if !strings.HasPrefix(l.Msg, "Resiliency retry policy ") &&
 			!strings.HasPrefix(l.Msg, "Resiliency timeout policy ") &&
-			!strings.HasPrefix(l.Msg, "Resiliency circuit breaker ") {
+			!strings.HasPrefix(l.Msg, "Resiliency circuit breaker ") &&
+			!strings.HasPrefix(l.Msg, "Error for operation ") {
 			continue
 		}
 		if l.Level == "debug" && !withDebug {
@@ -147,6 +148,8 @@ func newLogTestResiliency(t *testing.T, l logger.Logger) *Resiliency {
 }
 
 func TestPolicyLogsRetry(t *testing.T) {
+	const op = "endpoint[party-registry, party-registry:persons/1]"
+
 	t.Run("one line per retry and a recovery line", func(t *testing.T) {
 		l, c := newCapturingLogger(t)
 		r := newLogTestResiliency(t, l)
@@ -163,9 +166,9 @@ func TestPolicyLogsRetry(t *testing.T) {
 		assert.Equal(t, int32(3), calls.Load())
 
 		assert.Equal(t, []logLine{
-			{Level: "warning", Msg: `Resiliency retry policy threeTimes: attempt 1 failed for app party-registry (persons/1), retrying in 5ms`},
-			{Level: "warning", Msg: `Resiliency retry policy threeTimes: attempt 2 failed for app party-registry (persons/1), retrying in 5ms`},
-			{Level: "info", Msg: `Resiliency retry policy threeTimes: app party-registry (persons/1) recovered after 3 attempts`},
+			{Level: "warning", Msg: "Resiliency retry policy threeTimes: error processing operation " + op + " (attempt 1). Retrying in 5ms…"},
+			{Level: "warning", Msg: "Resiliency retry policy threeTimes: error processing operation " + op + " (attempt 2). Retrying in 5ms…"},
+			{Level: "info", Msg: "Resiliency retry policy threeTimes: recovered processing operation " + op + " after 3 attempts"},
 		}, c.lines(t, false))
 
 		// The error detail is kept at debug level.
@@ -173,29 +176,30 @@ func TestPolicyLogsRetry(t *testing.T) {
 		for _, line := range c.lines(t, true) {
 			if line.Level == "debug" {
 				debug++
-				assert.Contains(t, line.Msg, "for app party-registry (persons/1): boom")
+				assert.Equal(t, "Error for operation "+op+" was: boom", line.Msg)
 			}
 		}
 		assert.Equal(t, 2, debug)
 	})
 
-	t.Run("gave up after retries are exhausted", func(t *testing.T) {
+	t.Run("one line per retry when retries are exhausted", func(t *testing.T) {
 		l, c := newCapturingLogger(t)
 		r := newLogTestResiliency(t, l)
 
-		policy := NewRunner[any](t.Context(), r.EndpointPolicy("party-registry", "party-registry/persons/1"))
+		policy := NewRunner[any](t.Context(), r.EndpointPolicy("party-registry", "party-registry:persons/1"))
 		_, err := policy(func(ctx context.Context) (any, error) {
 			return nil, errors.New("boom")
 		})
 		require.Error(t, err)
 
 		lines := c.lines(t, false)
-		require.Len(t, lines, 4)
-		for i, line := range lines[:3] {
-			assert.Equal(t, "warning", line.Level)
-			assert.Contains(t, line.Msg, `Resiliency retry policy threeTimes: attempt `+string(rune('1'+i))+` failed for app party-registry (persons/1)`)
+		require.Len(t, lines, 3)
+		for i, line := range lines {
+			assert.Equal(t, logLine{
+				Level: "warning",
+				Msg:   fmt.Sprintf("Resiliency retry policy threeTimes: error processing operation %s (attempt %d). Retrying in 5ms…", op, i+1),
+			}, line)
 		}
-		assert.Equal(t, logLine{Level: "warning", Msg: `Resiliency retry policy threeTimes: app party-registry (persons/1) failed after 4 attempts`}, lines[3])
 	})
 
 	t.Run("nothing is logged when the first attempt succeeds", func(t *testing.T) {
@@ -223,7 +227,7 @@ func TestPolicyLogsTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency timeout policy downstream: app slow-app (persons/1) timed out after 50ms`},
+		{Level: "warning", Msg: "Resiliency timeout policy downstream: operation endpoint[slow-app, slow-app:persons/1] timed out after 50ms"},
 	}, c.lines(t, false))
 }
 
@@ -242,11 +246,11 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 		return err
 	}
 
+	opened := logLine{Level: "warning", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from closed to open`}
+
 	require.Error(t, run(true))
 	require.Error(t, run(true))
-	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency circuit breaker registryCB: opened for app flaky-app (persons/1)`},
-	}, c.lines(t, false))
+	assert.Equal(t, []logLine{opened}, c.lines(t, false))
 
 	// Once the breaker's timeout elapses, the next call is let through.
 	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
@@ -254,59 +258,51 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency circuit breaker registryCB: opened for app flaky-app (persons/1)`},
-		{Level: "info", Msg: `Resiliency circuit breaker registryCB: half-open for app flaky-app (persons/1)`},
-		{Level: "info", Msg: `Resiliency circuit breaker registryCB: closed for app flaky-app (persons/1)`},
+		opened,
+		{Level: "info", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from open to half-open`},
+		{Level: "info", Msg: `Resiliency circuit breaker registryCB: "flaky-app:persons/1" changed state from half-open to closed`},
 	}, c.lines(t, false))
 }
 
-func TestPolicyLogTargets(t *testing.T) {
-	const retryLine = `Resiliency retry policy threeTimes: attempt 1 failed for %s, retrying in 5ms`
+// TestPolicyLogPolicyNames checks that every kind of target logs the name of
+// the policy from the Resiliency spec.
+func TestPolicyLogPolicyNames(t *testing.T) {
+	const retryLine = "Resiliency retry policy threeTimes: error processing operation %s (attempt 1). Retrying in 5ms…"
 
 	tests := map[string]struct {
 		def func(r *Resiliency) *PolicyDefinition
 		// wantLine is the first line logged when the operation fails once (or,
 		// for timeout-only policies, times out).
 		wantLine string
-		cbTarget string
+		wantCB   bool
 	}{
-		"app endpoint with method": {
+		"app": {
 			def: func(r *Resiliency) *PolicyDefinition {
 				return r.EndpointPolicy("party-registry", "party-registry:persons/1")
 			},
-			wantLine: fmt.Sprintf(retryLine, "app party-registry (persons/1)"),
-		},
-		"app endpoint with HTTP path": {
-			def: func(r *Resiliency) *PolicyDefinition {
-				return r.EndpointPolicy("party-registry", "party-registry/v1/persons")
-			},
-			wantLine: fmt.Sprintf(retryLine, "app party-registry (v1/persons)"),
-		},
-		"app endpoint without method": {
-			def:      func(r *Resiliency) *PolicyDefinition { return r.EndpointPolicy("slow-app", "slow-app") },
-			wantLine: `Resiliency timeout policy downstream: app slow-app timed out after 50ms`,
+			wantLine: fmt.Sprintf(retryLine, "endpoint[party-registry, party-registry:persons/1]"),
 		},
 		"actor pre-lock": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ActorPreLockPolicy("myactor", "a1") },
-			wantLine: fmt.Sprintf(retryLine, "actor myactor (id a1)"),
-			cbTarget: "actor myactor (id a1)",
+			wantLine: fmt.Sprintf(retryLine, "actor[myactor, a1]"),
+			wantCB:   true,
 		},
 		"actor post-lock": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ActorPostLockPolicy("myactor", "a1") },
-			wantLine: `Resiliency timeout policy downstream: actor myactor (id a1) timed out after 50ms`,
+			wantLine: "Resiliency timeout policy downstream: operation actor[myactor, a1] timed out after 50ms",
 		},
 		"component outbound": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ComponentOutboundPolicy("statestore", Statestore) },
-			wantLine: fmt.Sprintf(retryLine, "component statestore (outbound)"),
+			wantLine: fmt.Sprintf(retryLine, "component[statestore] output"),
 		},
 		"component inbound": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ComponentInboundPolicy("statestore", Pubsub) },
-			wantLine: fmt.Sprintf(retryLine, "component statestore (inbound)"),
+			wantLine: fmt.Sprintf(retryLine, "component[statestore] input"),
 		},
 		"built-in": {
 			def: func(r *Resiliency) *PolicyDefinition { return r.BuiltInPolicy(BuiltInServiceRetries) },
-			wantLine: `Resiliency retry policy DaprBuiltInServiceRetries: attempt 1 failed for built-in operation, ` +
-				`retrying in 1s`,
+			wantLine: "Resiliency retry policy DaprBuiltInServiceRetries: error processing operation " +
+				"DaprBuiltInServiceRetries (attempt 1). Retrying in 1s…",
 		},
 	}
 
@@ -332,10 +328,9 @@ func TestPolicyLogTargets(t *testing.T) {
 			require.NotEmpty(t, lines)
 			assert.Equal(t, logLine{Level: "warning", Msg: tc.wantLine}, lines[0])
 
-			if tc.cbTarget != "" {
+			if tc.wantCB {
 				require.NotNil(t, def.cb)
 				assert.Equal(t, "registryCB", def.cb.PolicyName)
-				assert.Equal(t, tc.cbTarget, def.cb.Target)
 			}
 		})
 	}

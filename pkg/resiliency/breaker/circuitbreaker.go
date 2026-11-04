@@ -32,9 +32,6 @@ type CircuitBreaker struct {
 	// PolicyName is the name of the circuit breaker policy in the Resiliency
 	// spec, for log lines. Defaults to Name.
 	PolicyName string
-	// Target describes what the circuit breaker protects, for log lines.
-	// Defaults to Name.
-	Target string
 	// The maximum number of requests allowed to pass through when
 	// the circuit breaker is half-open.
 	// Default is 1.
@@ -112,29 +109,18 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		Interval:    c.Interval,
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
-		OnStateChange: func(_ string, _, to gobreaker.State) {
-			c.logStateChange(log, to)
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			policyName := c.PolicyName
+			if policyName == "" {
+				policyName = name
+			}
+			if to == gobreaker.StateOpen {
+				log.Warnf("Resiliency circuit breaker %s: %q changed state from %s to %s", policyName, name, from, to)
+			} else {
+				log.Infof("Resiliency circuit breaker %s: %q changed state from %s to %s", policyName, name, from, to)
+			}
 		},
 	})
-}
-
-func (c *CircuitBreaker) logStateChange(log logger.Logger, to gobreaker.State) {
-	policyName := c.PolicyName
-	if policyName == "" {
-		policyName = c.Name
-	}
-	target := c.Target
-	if target == "" {
-		target = c.Name
-	}
-	switch to {
-	case gobreaker.StateOpen:
-		log.Warnf("Resiliency circuit breaker %s: opened for %s", policyName, target)
-	case gobreaker.StateHalfOpen:
-		log.Infof("Resiliency circuit breaker %s: half-open for %s", policyName, target)
-	default:
-		log.Infof("Resiliency circuit breaker %s: closed for %s", policyName, target)
-	}
 }
 
 // Execute invokes `oper` if the circuit breaker is in a closed state

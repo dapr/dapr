@@ -622,9 +622,8 @@ func (r *Resiliency) addMetricsToPolicy(policyDef *PolicyDefinition, target stri
 // EndpointPolicy returns the policy for a service endpoint.
 func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:    r.log,
-		name:   "endpoint[" + app + ", " + endpoint + "]",
-		target: endpointTarget(app, endpoint),
+		log:  r.log,
+		name: "endpoint[" + app + ", " + endpoint + "]",
 	}
 	policyNames, ok := r.apps[app]
 	if ok {
@@ -644,7 +643,7 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 				if ok {
 					policyDef.cb, ok = cache.Get(endpoint)
 					if !ok || policyDef.cb == nil {
-						policyDef.cb = newCB(endpoint, policyDef.target, template, r.log)
+						policyDef.cb = newCB(endpoint, template, r.log)
 						cache.Add(endpoint, policyDef.cb)
 					}
 				}
@@ -669,7 +668,7 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 					if err != nil {
 						r.log.Errorf("error getting default circuit breaker cache for app %s: %s", app, err)
 					}
-					policyDef.cb = r.getCBFromCache(serviceCBCache, endpoint, policyDef.target, template)
+					policyDef.cb = r.getCBFromCache(serviceCBCache, endpoint, template)
 				}
 			}
 		}
@@ -679,40 +678,10 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 	return policyDef
 }
 
-// endpointTarget describes a service invocation endpoint for log lines. The
-// endpoint is prefixed with the app ID, which is dropped to avoid repeating it.
-func endpointTarget(app string, endpoint string) string {
-	method := endpoint
-	if endpoint == app {
-		method = ""
-	} else if len(endpoint) > len(app) && endpoint[:len(app)] == app && (endpoint[len(app)] == ':' || endpoint[len(app)] == '/') {
-		method = endpoint[len(app)+1:]
-	}
-	if method == "" {
-		return "app " + app
-	}
-	return "app " + app + " (" + method + ")"
-}
-
-// actorTarget describes an actor for log lines. id is empty for policies
-// scoped to the whole actor type.
-func actorTarget(actorType string, id string) string {
-	if id == "" {
-		return "actor type " + actorType
-	}
-	return "actor " + actorType + " (id " + id + ")"
-}
-
-// componentTarget describes a component and the direction of the operation for log lines.
-func componentTarget(name string, direction string) string {
-	return "component " + name + " (" + direction + ")"
-}
-
-func newCB(cbName string, target string, template *breaker.CircuitBreaker, l logger.Logger) *breaker.CircuitBreaker {
+func newCB(cbName string, template *breaker.CircuitBreaker, l logger.Logger) *breaker.CircuitBreaker {
 	cb := &breaker.CircuitBreaker{
 		Name:        cbName,
 		PolicyName:  template.Name,
-		Target:      target,
 		MaxRequests: template.MaxRequests,
 		Interval:    template.Interval,
 		Timeout:     template.Timeout,
@@ -772,9 +741,9 @@ func (r *Resiliency) getActorCBCache(app string) (*lru.Cache[string, *breaker.Ci
 	return cache, nil
 }
 
-func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBreaker], key string, target string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
+func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBreaker], key string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
 	if cache == nil {
-		return newCB(key, target, template, r.log)
+		return newCB(key, template, r.log)
 	}
 	cb, ok := cache.Get(key)
 	if !ok || cb == nil {
@@ -786,7 +755,7 @@ func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBre
 			return cb
 		}
 
-		cb = newCB(key, target, template, r.log)
+		cb = newCB(key, template, r.log)
 		cache.Add(key, cb)
 	}
 	return cb
@@ -795,9 +764,8 @@ func (r *Resiliency) getCBFromCache(cache *lru.Cache[string, *breaker.CircuitBre
 // ActorPreLockPolicy returns the policy for an actor instance to be used before an actor lock is acquired.
 func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:    r.log,
-		name:   "actor[" + actorType + ", " + id + "]",
-		target: actorTarget(actorType, id),
+		log:  r.log,
+		name: "actor[" + actorType + ", " + id + "]",
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PreLockPolicies; ok {
@@ -811,18 +779,16 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 			if ok {
 				cache, ok := r.actorCBCaches[actorType]
 				if ok {
-					var key, target string
+					var key string
 					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
 						key = actorType
-						target = actorTarget(actorType, "")
 					} else {
 						key = actorType + "-" + id
-						target = policyDef.target
 					}
 
 					policyDef.cb, ok = cache.Get(key)
 					if !ok || policyDef.cb == nil {
-						policyDef.cb = newCB(key, target, template, r.log)
+						policyDef.cb = newCB(key, template, r.log)
 						cache.Add(key, policyDef.cb)
 					}
 				}
@@ -842,7 +808,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 					if err != nil {
 						r.log.Errorf("error getting default circuit breaker cache for actor type %s: %v", actorType, err)
 					}
-					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, actorTarget(actorType, ""), template)
+					policyDef.cb = r.getCBFromCache(actorCBCache, actorType, template)
 				}
 			}
 		}
@@ -855,9 +821,8 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 // ActorPostLockPolicy returns the policy for an actor instance to be used after an actor lock is acquired.
 func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDefinition {
 	policyDef := &PolicyDefinition{
-		log:    r.log,
-		name:   "actor[" + actorType + ", " + id + "]",
-		target: actorTarget(actorType, id),
+		log:  r.log,
+		name: "actor[" + actorType + ", " + id + "]",
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PostLockPolicies; ok {
@@ -885,7 +850,6 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 	policyDef := &PolicyDefinition{
 		log:            r.log,
 		name:           "component[" + name + "] output",
-		target:         componentTarget(name, "outbound"),
 		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
@@ -930,7 +894,6 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 	policyDef := &PolicyDefinition{
 		log:            r.log,
 		name:           "component[" + name + "] input",
-		target:         componentTarget(name, "inbound"),
 		componentCtxFn: r.componentCtxFn,
 	}
 	componentPolicies, ok := r.components[name]
@@ -974,11 +937,9 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 func (r *Resiliency) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
 	nameStr := string(name)
 	return &PolicyDefinition{
-		log:       r.log,
-		name:      nameStr,
-		target:    "built-in operation",
-		retryName: nameStr,
-		r:         r.retries[nameStr],
+		log:  r.log,
+		name: nameStr,
+		r:    r.retries[nameStr],
 	}
 }
 
@@ -1119,7 +1080,7 @@ func (e *circuitBreakerInstances) Get(log logger.Logger, instanceName string, te
 		return cb
 	}
 
-	cb = newCB(template.Name+"-"+instanceName, "component "+instanceName, template, log)
+	cb = newCB(template.Name+"-"+instanceName, template, log)
 
 	e.cbs[instanceName] = cb
 
