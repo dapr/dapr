@@ -453,6 +453,70 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
 	})
+	t.Run("flushOutstandingComponents fails if a component references an unready secret store", func(t *testing.T) {
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, err)
+		defer stopRuntime(t, rt)
+
+		go rt.processor.Process(t.Context())
+
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "orphanComponent",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "a",
+						SecretKeyRef: commonapi.SecretKeyRef{
+							Key:  "key1",
+							Name: "name1",
+						},
+					},
+				},
+			},
+			Auth: componentsV1alpha1.Auth{
+				SecretStore: "nonExistentSecretStore",
+			},
+		})
+		err = rt.flushOutstandingComponents(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "references unready secret store nonExistentSecretStore")
+	})
+	t.Run("flushOutstandingComponents succeeds if component references an unready secret store with ignoreErrors", func(t *testing.T) {
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, err)
+		defer stopRuntime(t, rt)
+
+		go rt.processor.Process(t.Context())
+
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "ignoredOrphanComponent",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:         "secretstores.kubernetesMock",
+				Version:      "v1",
+				IgnoreErrors: true,
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "a",
+						SecretKeyRef: commonapi.SecretKeyRef{
+							Key:  "key1",
+							Name: "name1",
+						},
+					},
+				},
+			},
+			Auth: componentsV1alpha1.Auth{
+				SecretStore: "nonExistentSecretStore",
+			},
+		})
+		err = rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, err)
+	})
 }
 
 func TestInitNameResolution(t *testing.T) {
