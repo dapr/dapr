@@ -195,7 +195,7 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 	}{
 		reminderAlias: (*reminderAlias)(r),
 	}
-	err := json.Unmarshal(data, &m)
+	err := json.Unmarshal(data, m)
 	if err != nil {
 		return err
 	}

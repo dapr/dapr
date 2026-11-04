@@ -419,3 +419,35 @@ func TestSetReminderTimesSubSecond(t *testing.T) {
 			"timer fire time must be exactly 2s after registration, even when registration time has sub-second nanos")
 	})
 }
+
+func TestUnmarshalJSONNull(t *testing.T) {
+	t.Run("CreateReminderRequest", func(t *testing.T) {
+		var req CreateReminderRequest
+		require.NotPanics(t, func() {
+			require.NoError(t, json.Unmarshal([]byte("null"), &req))
+		})
+		assert.Equal(t, CreateReminderRequest{}, req)
+	})
+
+	t.Run("CreateTimerRequest", func(t *testing.T) {
+		var req CreateTimerRequest
+		require.NotPanics(t, func() {
+			require.NoError(t, req.UnmarshalJSON([]byte("null")))
+		})
+		assert.Equal(t, CreateTimerRequest{}, req)
+	})
+
+	t.Run("Reminder", func(t *testing.T) {
+		var r Reminder
+		require.NotPanics(t, func() {
+			require.NoError(t, r.UnmarshalJSON([]byte("null")))
+		})
+	})
+
+	t.Run("ReminderTrack", func(t *testing.T) {
+		var r ReminderTrack
+		require.NotPanics(t, func() {
+			require.NoError(t, r.UnmarshalJSON([]byte("null")))
+		})
+	})
+}

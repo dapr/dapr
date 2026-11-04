@@ -59,7 +59,7 @@ func (r *ReminderTrack) UnmarshalJSON(data []byte) error {
 	}{
 		reminderTrackAlias: (*reminderTrackAlias)(r),
 	}
-	err := json.Unmarshal(data, &m)
+	err := json.Unmarshal(data, m)
 	if err != nil {
 		return err
 	}
