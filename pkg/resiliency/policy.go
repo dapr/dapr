@@ -53,8 +53,14 @@ type attemptsCtxKey struct{}
 
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
-	log                       logger.Logger
-	name                      string
+	log  logger.Logger
+	name string
+	// target describes what the policy protects, for log lines, e.g.
+	// "app orders (neworder)" or "component statestore (outbound)".
+	target string
+	// Names of the timeout and retry policies in the Resiliency spec, for log lines.
+	timeoutName               string
+	retryName                 string
 	t                         time.Duration
 	r                         *Retry
 	cb                        *breaker.CircuitBreaker
@@ -89,6 +95,28 @@ func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *Ret
 		r:    r,
 		cb:   cb,
 	}
+}
+
+// policyTarget returns the description of what the policy protects, falling
+// back to the policy definition's name.
+func (p PolicyDefinition) policyTarget() string {
+	if p.target != "" {
+		return p.target
+	}
+	return p.name
+}
+
+// policyName returns the configured policy name, falling back to the policy
+// definition's name for policies built without one.
+func (p PolicyDefinition) policyName(name string) string {
+	if name != "" {
+		return name
+	}
+	return p.name
+}
+
+func (p PolicyDefinition) logTimeout() {
+	p.log.Warnf("Resiliency timeout policy %q (%v) triggered for %s", p.policyName(p.timeoutName), p.t, p.policyTarget())
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -247,6 +275,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 						if opts.Disposer != nil && !isZero(v.res) {
 							opts.Disposer(v.res)
 						}
+						def.logTimeout()
 						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 							def.addTimeoutActivatedMetric()
 						}
@@ -269,6 +298,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 							opts.Disposer(v.res)
 						}
 					}
+					def.logTimeout()
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
@@ -321,7 +351,9 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 		// Use retry/back off
 		b := def.r.NewBackOffWithContext(ctx)
 		attempts := atomic.Int32{}
-		return retry.NotifyRecoverWithData(
+		retried := atomic.Bool{}
+		retryName := def.policyName(def.retryName)
+		res, err := backoff.RetryNotifyWithData(
 			func() (T, error) {
 				attempt := attempts.Add(1)
 				opCtx := context.WithValue(ctx, attemptsCtxKey{}, attempt)
@@ -342,17 +374,25 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				return rRes, rErr
 			},
 			b,
+			// Called before every retry, not just the first one.
 			func(opErr error, d time.Duration) {
-				if def.addRetryActivatedMetric != nil {
+				// The activation metric counts operations that needed a retry, not retries.
+				if retried.CompareAndSwap(false, true) && def.addRetryActivatedMetric != nil {
 					def.addRetryActivatedMetric()
 				}
-				def.log.Warnf("Error processing operation %s. Retrying in %v…", def.name, d)
-				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
-			},
-			func() {
-				def.log.Infof("Recovered processing operation %s after %d attempts", def.name, attempts.Load())
+				attempt := attempts.Load()
+				def.log.Warnf("Resiliency retry policy %q triggered for %s: attempt %d failed, retrying in %v", retryName, def.policyTarget(), attempt, d)
+				def.log.Debugf("Resiliency retry policy %q: attempt %d for %s failed with error: %v", retryName, attempt, def.policyTarget(), opErr)
 			},
 		)
+		if retried.Load() {
+			if err == nil {
+				def.log.Infof("Resiliency retry policy %q recovered %s after %d attempts", retryName, def.policyTarget(), attempts.Load())
+			} else {
+				def.log.Warnf("Resiliency retry policy %q gave up on %s after %d attempts", retryName, def.policyTarget(), attempts.Load())
+			}
+		}
+		return res, err
 	}
 }
 
