@@ -62,9 +62,9 @@ func (c *logCapture) lines(t *testing.T, withDebug bool) []logLine {
 		}
 		var l logLine
 		require.NoError(t, json.Unmarshal([]byte(raw), &l))
-		if !strings.HasPrefix(l.Msg, "Resiliency retry policy ") &&
-			!strings.HasPrefix(l.Msg, "Resiliency timeout policy ") &&
-			!strings.HasPrefix(l.Msg, "Resiliency circuit breaker ") {
+		if !strings.HasPrefix(l.Msg, "Retry policy ") &&
+			!strings.HasPrefix(l.Msg, "Timeout policy ") &&
+			!strings.HasPrefix(l.Msg, "Circuit breaker ") {
 			continue
 		}
 		if l.Level == "debug" && !withDebug {
@@ -163,9 +163,9 @@ func TestPolicyLogsRetry(t *testing.T) {
 		assert.Equal(t, int32(3), calls.Load())
 
 		assert.Equal(t, []logLine{
-			{Level: "warning", Msg: `Resiliency retry policy "threeTimes" triggered for app party-registry (persons/1): attempt 1 failed, retrying in 5ms`},
-			{Level: "warning", Msg: `Resiliency retry policy "threeTimes" triggered for app party-registry (persons/1): attempt 2 failed, retrying in 5ms`},
-			{Level: "info", Msg: `Resiliency retry policy "threeTimes" recovered app party-registry (persons/1) after 3 attempts`},
+			{Level: "warning", Msg: `Retry policy threeTimes: attempt 1 failed for app party-registry (persons/1), retrying in 5ms`},
+			{Level: "warning", Msg: `Retry policy threeTimes: attempt 2 failed for app party-registry (persons/1), retrying in 5ms`},
+			{Level: "info", Msg: `Retry policy threeTimes: app party-registry (persons/1) recovered after 3 attempts`},
 		}, c.lines(t, false))
 
 		// The error detail is kept at debug level.
@@ -173,7 +173,7 @@ func TestPolicyLogsRetry(t *testing.T) {
 		for _, line := range c.lines(t, true) {
 			if line.Level == "debug" {
 				debug++
-				assert.Contains(t, line.Msg, "failed with error: boom")
+				assert.Contains(t, line.Msg, "for app party-registry (persons/1): boom")
 			}
 		}
 		assert.Equal(t, 2, debug)
@@ -193,9 +193,9 @@ func TestPolicyLogsRetry(t *testing.T) {
 		require.Len(t, lines, 4)
 		for i, line := range lines[:3] {
 			assert.Equal(t, "warning", line.Level)
-			assert.Contains(t, line.Msg, `Resiliency retry policy "threeTimes" triggered for app party-registry (persons/1): attempt `+string(rune('1'+i))+` failed`)
+			assert.Contains(t, line.Msg, `Retry policy threeTimes: attempt `+string(rune('1'+i))+` failed for app party-registry (persons/1)`)
 		}
-		assert.Equal(t, logLine{Level: "warning", Msg: `Resiliency retry policy "threeTimes" gave up on app party-registry (persons/1) after 4 attempts`}, lines[3])
+		assert.Equal(t, logLine{Level: "warning", Msg: `Retry policy threeTimes: app party-registry (persons/1) failed after 4 attempts`}, lines[3])
 	})
 
 	t.Run("nothing is logged when the first attempt succeeds", func(t *testing.T) {
@@ -223,7 +223,7 @@ func TestPolicyLogsTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency timeout policy "downstream" (50ms) triggered for app slow-app (persons/1)`},
+		{Level: "warning", Msg: `Timeout policy downstream: app slow-app (persons/1) timed out after 50ms`},
 	}, c.lines(t, false))
 }
 
@@ -245,7 +245,7 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 	require.Error(t, run(true))
 	require.Error(t, run(true))
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency circuit breaker "registryCB" opened for app flaky-app (persons/1) (was closed)`},
+		{Level: "warning", Msg: `Circuit breaker registryCB: opened for app flaky-app (persons/1)`},
 	}, c.lines(t, false))
 
 	// Once the breaker's timeout elapses, the next call is let through.
@@ -254,14 +254,14 @@ func TestPolicyLogsCircuitBreaker(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	assert.Equal(t, []logLine{
-		{Level: "warning", Msg: `Resiliency circuit breaker "registryCB" opened for app flaky-app (persons/1) (was closed)`},
-		{Level: "info", Msg: `Resiliency circuit breaker "registryCB" half-open for app flaky-app (persons/1) (was open)`},
-		{Level: "info", Msg: `Resiliency circuit breaker "registryCB" closed for app flaky-app (persons/1) (was half-open)`},
+		{Level: "warning", Msg: `Circuit breaker registryCB: opened for app flaky-app (persons/1)`},
+		{Level: "info", Msg: `Circuit breaker registryCB: half-open for app flaky-app (persons/1)`},
+		{Level: "info", Msg: `Circuit breaker registryCB: closed for app flaky-app (persons/1)`},
 	}, c.lines(t, false))
 }
 
 func TestPolicyLogTargets(t *testing.T) {
-	const retryLine = `Resiliency retry policy "threeTimes" triggered for %s: attempt 1 failed, retrying in 5ms`
+	const retryLine = `Retry policy threeTimes: attempt 1 failed for %s, retrying in 5ms`
 
 	tests := map[string]struct {
 		def func(r *Resiliency) *PolicyDefinition
@@ -284,7 +284,7 @@ func TestPolicyLogTargets(t *testing.T) {
 		},
 		"app endpoint without method": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.EndpointPolicy("slow-app", "slow-app") },
-			wantLine: `Resiliency timeout policy "downstream" (50ms) triggered for app slow-app`,
+			wantLine: `Timeout policy downstream: app slow-app timed out after 50ms`,
 		},
 		"actor pre-lock": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ActorPreLockPolicy("myactor", "a1") },
@@ -293,7 +293,7 @@ func TestPolicyLogTargets(t *testing.T) {
 		},
 		"actor post-lock": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ActorPostLockPolicy("myactor", "a1") },
-			wantLine: `Resiliency timeout policy "downstream" (50ms) triggered for actor myactor (id a1)`,
+			wantLine: `Timeout policy downstream: actor myactor (id a1) timed out after 50ms`,
 		},
 		"component outbound": {
 			def:      func(r *Resiliency) *PolicyDefinition { return r.ComponentOutboundPolicy("statestore", Statestore) },
@@ -305,8 +305,8 @@ func TestPolicyLogTargets(t *testing.T) {
 		},
 		"built-in": {
 			def: func(r *Resiliency) *PolicyDefinition { return r.BuiltInPolicy(BuiltInServiceRetries) },
-			wantLine: `Resiliency retry policy "DaprBuiltInServiceRetries" triggered for built-in operation: ` +
-				`attempt 1 failed, retrying in 1s`,
+			wantLine: `Retry policy DaprBuiltInServiceRetries: attempt 1 failed for built-in operation, ` +
+				`retrying in 1s`,
 		},
 	}
 

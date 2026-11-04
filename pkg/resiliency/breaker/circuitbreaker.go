@@ -112,13 +112,13 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		Interval:    c.Interval,
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
-		OnStateChange: func(name string, from, to gobreaker.State) {
-			c.logStateChange(log, from, to)
+		OnStateChange: func(_ string, _, to gobreaker.State) {
+			c.logStateChange(log, to)
 		},
 	})
 }
 
-func (c *CircuitBreaker) logStateChange(log logger.Logger, from, to gobreaker.State) {
+func (c *CircuitBreaker) logStateChange(log logger.Logger, to gobreaker.State) {
 	policyName := c.PolicyName
 	if policyName == "" {
 		policyName = c.Name
@@ -129,11 +129,11 @@ func (c *CircuitBreaker) logStateChange(log logger.Logger, from, to gobreaker.St
 	}
 	switch to {
 	case gobreaker.StateOpen:
-		log.Warnf("Resiliency circuit breaker %q opened for %s (was %s)", policyName, target, from)
+		log.Warnf("Circuit breaker %s: opened for %s", policyName, target)
 	case gobreaker.StateHalfOpen:
-		log.Infof("Resiliency circuit breaker %q half-open for %s (was %s)", policyName, target, from)
+		log.Infof("Circuit breaker %s: half-open for %s", policyName, target)
 	default:
-		log.Infof("Resiliency circuit breaker %q closed for %s (was %s)", policyName, target, from)
+		log.Infof("Circuit breaker %s: closed for %s", policyName, target)
 	}
 }
 
