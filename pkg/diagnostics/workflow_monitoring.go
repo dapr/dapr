@@ -107,6 +107,14 @@ const (
 	GetWorkflow       = "get_workflow"
 	AddEvent          = "add_event"
 	PurgeWorkflow     = "purge_workflow"
+	// Further operations on a workflow instance, which the fallback
+	// operation count tells apart (the operation count tags them all
+	// add_event).
+	RaiseEvent        = "raise_event"
+	TerminateWorkflow = "terminate_workflow"
+	SuspendWorkflow   = "suspend_workflow"
+	ResumeWorkflow    = "resume_workflow"
+	RerunWorkflow     = "rerun_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
@@ -228,6 +236,12 @@ type workflowMetrics struct {
 	// invocation kind (method/reminder/stream). Splits observed invocation
 	// latency into lock queueing vs turn body.
 	lockWaitLatency *stats.Float64Measure
+	// stagedOperationCount records workflow operations staged under the
+	// WorkflowsStagedOperations preview feature, tagged by operation: those a
+	// fallback host served while no daprd of the app had a workflow worker. A
+	// staged start, event or rerun waits for a worker, so a rising count
+	// while no worker is connected is work piling up.
+	stagedOperationCount *stats.Int64Measure
 
 	// Cached recorders for hot-path records (built in Init): direct
 	// meter.Record through prebuilt tag maps instead of the
@@ -242,6 +256,7 @@ type workflowMetrics struct {
 	activityExecutionLatencyC *diagUtils.CachedFloat64Recorder
 	activityOperationCountC   *diagUtils.CachedInt64Counter
 	activityOperationLatencyC *diagUtils.CachedFloat64Recorder
+	stagedOperationCountC     *diagUtils.CachedInt64Counter
 
 	appID     string
 	enabled   bool
@@ -343,6 +358,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/lock_wait",
 			"The time a workflow orchestrator invocation spends queued on the per-actor turn lock, by invocation kind.",
 			stats.UnitMilliseconds),
+		stagedOperationCount: stats.Int64(
+			"runtime/workflow/staged/operation/count",
+			"The number of workflow operations staged under the WorkflowsStagedOperations preview feature while no workflow worker was connected, by operation.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -367,6 +386,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.activityExecutionLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityExecutionLatency, base...)
 	w.activityOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.activityOperationCount, base...)
 	w.activityOperationLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityOperationLatency, base...)
+	w.stagedOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.stagedOperationCount, base...)
 
 	err := meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
@@ -395,6 +415,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.localActivityDriveLatency, []tag.Key{appIDKey, namespaceKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.lockWaitLatency, []tag.Key{appIDKey, namespaceKey, operationKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.completionsFoldCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.stagedOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 		diagUtils.NewMeasureView(w.completionsFoldWait, []tag.Key{appIDKey, namespaceKey}, latencyDistribution))
 	if err != nil {
 		return err
@@ -652,4 +673,13 @@ func (w *workflowMetrics) WorkflowCompletionRoute(ctx context.Context, taskType,
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.completionRouteCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, taskTypeKey, taskType, completionRouteKey, route)...),
 		stats.WithMeasurements(w.completionRouteCount.M(1)))
+}
+
+// WorkflowStagedOperation records a workflow operation staged by a fallback
+// host under the WorkflowsStagedOperations preview feature, by operation.
+func (w *workflowMetrics) WorkflowStagedOperation(_ context.Context, operation string) {
+	if !w.IsEnabled() {
+		return
+	}
+	w.stagedOperationCountC.Record1(operationKey, operation)
 }

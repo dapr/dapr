@@ -51,20 +51,10 @@ func (p *placementrestart) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
 		workflow.WithPlacementService(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
-	place := p.workflow.Placement()
-	opts := []placement.Option{
-		placement.WithID(place.ID()),
-		placement.WithPort(place.Port()),
-		placement.WithInitialCluster(place.InitialCluster()),
-		placement.WithInitialClusterPorts(place.InitialClusterPorts()...),
-	}
-	if sen := p.workflow.Sentry(); sen != nil {
-		opts = append(opts, placement.WithSentry(t, sen))
-	}
-	p.placeBack = placement.New(t, opts...)
+	p.placeBack = p.workflow.PlacementBack(t)
 
 	return []framework.Option{
 		framework.WithProcesses(p.workflow),
@@ -75,7 +65,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	require.NoError(t, p.workflow.Registry().AddWorkflowN("wf", func(ctx *task.WorkflowContext) (any, error) {
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	workflowType := p.workflow.WorkflowActorType(0)
@@ -107,9 +97,7 @@ func (p *placementrestart) Run(t *testing.T, ctx context.Context) {
 	p.workflow.Placement().Cleanup(t)
 	placementIs("disconnected")
 
-	p.placeBack.Run(t, ctx)
-	t.Cleanup(func() { p.placeBack.Cleanup(t) })
-	p.placeBack.WaitUntilRunning(t, ctx)
+	workflow.RunPlacementBack(t, ctx, p.placeBack)
 	placementIs("connected")
 
 	// The daprd reports its types to the new placement service, the
