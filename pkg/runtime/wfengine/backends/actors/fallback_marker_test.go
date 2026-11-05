@@ -88,7 +88,7 @@ func TestFallbackMarker(t *testing.T) {
 		id, err := abe.RerunWorkflowFromEvent(ctx, rerun())
 		require.NoError(t, err)
 		assert.Equal(t, "dst", string(id))
-		assert.True(t, servedByFallback(ctx))
+		assert.True(t, ServedByFallback(ctx))
 
 		// So the executor's wait for the new instance returns at once.
 		require.NoError(t, abe.WatchWorkflowRuntimeStatus(ctx, id, nil, never))
@@ -102,7 +102,7 @@ func TestFallbackMarker(t *testing.T) {
 		require.NoError(t, abe.AddNewWorkflowEvent(ctx, "wf1", &backend.HistoryEvent{
 			EventType: &protos.HistoryEvent_ExecutionSuspended{ExecutionSuspended: &protos.ExecutionSuspendedEvent{}},
 		}))
-		assert.True(t, servedByFallback(ctx))
+		assert.True(t, ServedByFallback(ctx))
 	})
 
 	t.Run("an operation served by a host with an executor leaves the ctx unmarked", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestFallbackMarker(t *testing.T) {
 		ctx := WithFallbackMarker(t.Context())
 		_, err := abe.RerunWorkflowFromEvent(ctx, rerun())
 		require.NoError(t, err)
-		assert.False(t, servedByFallback(ctx))
+		assert.False(t, ServedByFallback(ctx))
 	})
 
 	t.Run("a create a fallback host refused and a host with an executor served leaves the ctx unmarked", func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestFallbackMarker(t *testing.T) {
 			},
 		}))
 		assert.Equal(t, int32(2), calls.Load())
-		assert.False(t, servedByFallback(ctx))
+		assert.False(t, ServedByFallback(ctx))
 	})
 
 	t.Run("a ctx without a marker is never marked", func(t *testing.T) {
@@ -144,6 +144,6 @@ func TestFallbackMarker(t *testing.T) {
 		abe := newMarkerTestBackend(t, servedBy(true))
 		_, err := abe.RerunWorkflowFromEvent(t.Context(), rerun())
 		require.NoError(t, err)
-		assert.False(t, servedByFallback(t.Context()))
+		assert.False(t, ServedByFallback(t.Context()))
 	})
 }
