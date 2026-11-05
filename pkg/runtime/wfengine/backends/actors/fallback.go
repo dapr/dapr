@@ -22,7 +22,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/marker"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 // Fallback hosts (the WorkflowsStagedOperations preview): a daprd hosts the
@@ -64,6 +66,35 @@ func (abe *Actors) fallbackFunc() func() bool {
 		return nil
 	}
 	return func() bool { return !abe.pendingTasksBackend.ExecutorAvailable() }
+}
+
+type fallbackMarkerKey struct{}
+
+// WithFallbackMarker returns ctx carrying a marker that records whether an
+// operation made with it was served by a fallback host.
+// WatchWorkflowRuntimeStatus returns at once under a marked ctx: the instance
+// does not change until it moves to a daprd with an executor, so the
+// durabletask executor's wait after a start, rerun, terminate, suspend or
+// resume would block the caller until its deadline.
+func WithFallbackMarker(ctx context.Context) context.Context {
+	return context.WithValue(ctx, fallbackMarkerKey{}, new(atomic.Bool))
+}
+
+// markFallback records on ctx's marker, if any, whether res was served by a
+// fallback host. Each call overwrites the last, so of an operation retried
+// the marker reflects the attempt which answered it: a fallback host may
+// refuse an attempt that a daprd with an executor then serves.
+func markFallback(ctx context.Context, res *internalsv1pb.InternalInvokeResponse) {
+	if m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool); ok {
+		m.Store(common.IsFallback(res))
+	}
+}
+
+// servedByFallback returns whether an operation made with ctx was served by
+// a fallback host.
+func servedByFallback(ctx context.Context) bool {
+	m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool)
+	return ok && m.Load()
 }
 
 // HasLocalExecutor reports whether this daprd has a local executor, under
