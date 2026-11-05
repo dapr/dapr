@@ -12,9 +12,9 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.19.0
+	github.com/dapr/components-contrib v1.19.1-0.20261104141951-1ce056f5e15d
 	github.com/dapr/durabletask-go v0.15.1
-	github.com/dapr/kit v0.19.0
+	github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4
 	github.com/diagridio/go-etcd-cron v0.12.11-0.20261027123650-5a19e4812a75
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.3.2
@@ -255,7 +255,7 @@ require (
 	github.com/gage-technologies/mistral-go v1.1.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect

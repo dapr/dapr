@@ -180,6 +180,7 @@ func runWithContext(ctx context.Context, opts *options.Options, internalGRPCList
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
 		JwtAudiences:            opts.SentryRequestJwtAudiences,
+		KeyAlgorithm:            opts.WorkloadKeyAlgorithm,
 	})
 	if err != nil {
 		return err

@@ -15,12 +15,18 @@ package auth
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -144,7 +150,7 @@ func TestJWTRoundTripper_InjectsHeader(t *testing.T) {
 
 	prefix := "Bearer "
 	var lastAudience string
-	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, audience string) (string, error) {
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, audience string) (string, error) {
 		lastAudience = audience
 		return "my-jwt-token", nil
 	})
@@ -170,7 +176,7 @@ func TestJWTRoundTripper_FetchError(t *testing.T) {
 	inner := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
-	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, _ string) (string, error) {
 		return "", errors.New("svid unavailable")
 	})
 	prefix := "Bearer "
@@ -186,6 +192,80 @@ func TestJWTRoundTripper_FetchError(t *testing.T) {
 	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "svid unavailable")
+}
+
+func TestJWTRoundTripper_CachesUntilHalfLife(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	var mints int
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, audience string) (string, error) {
+		mints++
+		tkn, err := jwt.NewBuilder().
+			JwtID(fmt.Sprintf("jti-%d", mints)).
+			Subject("spiffe://public/ns/default/app").
+			Audience([]string{audience}).
+			IssuedAt(time.Now()).
+			Expiration(time.Now().Add(5 * time.Minute)).
+			Build()
+		require.NoError(t, err)
+		signed, err := jwt.Sign(tkn, jwt.WithKey(jwa.ES256, key))
+		require.NoError(t, err)
+		return string(signed), nil
+	})
+
+	var captured []string
+	rt := &jwtRoundTripper{
+		header:   "X-SVID",
+		audience: "mcp://payments",
+		fetcher:  fetcher,
+		base: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			captured = append(captured, r.Header.Get("X-SVID"))
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		}),
+	}
+
+	roundTrip := func() {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+		require.NoError(t, err)
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+		resp.Body.Close()
+	}
+
+	roundTrip()
+	roundTrip()
+	assert.Equal(t, 1, mints)
+	assert.Equal(t, captured[0], captured[1])
+	assert.WithinDuration(t, time.Now().Add(150*time.Second), rt.refreshAt, 5*time.Second)
+
+	rt.refreshAt = time.Now().Add(-time.Second)
+	roundTrip()
+	assert.Equal(t, 2, mints)
+	assert.NotEqual(t, captured[1], captured[2])
+}
+
+func TestJWTRoundTripper_DoesNotCacheUnparsableTokens(t *testing.T) {
+	var mints int
+	fetcher := fakesecurity.New().WithMintJWT(func(context.Context, string) (string, error) {
+		mints++
+		return "opaque-token", nil
+	})
+	rt := &jwtRoundTripper{
+		header: "X-SVID", audience: "aud", fetcher: fetcher,
+		base: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		}),
+	}
+
+	for range 2 {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+		require.NoError(t, err)
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+		resp.Body.Close()
+	}
+	assert.Equal(t, 2, mints)
 }
 
 func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
@@ -217,7 +297,7 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 	}
 
 	var lastAudience string
-	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, audience string) (string, error) {
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, audience string) (string, error) {
 		lastAudience = audience
 		return "spiffe-svid-token", nil
 	})
@@ -260,7 +340,7 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 		},
 	}
 
-	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, _ string) (string, error) {
 		return "raw-token", nil
 	})
 	client, err := BuildHTTPClient(context.Background(), context.Background(), srv, nil, fetcher)

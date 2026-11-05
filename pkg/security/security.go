@@ -28,6 +28,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
@@ -64,7 +65,8 @@ type Handler interface {
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
 	WithSVIDContext(context.Context) context.Context
-	FetchJWT(ctx context.Context, audience string) (string, error)
+	// MintJWT mints a new JWT SVID for the audience from Sentry.
+	MintJWT(ctx context.Context, audience string) (string, error)
 
 	MTLSEnabled() bool
 	ID() spiffeid.ID
@@ -200,9 +202,9 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	// Always request certificates from Sentry if mTLS is enabled or running in
 	// Kubernetes. In Kubernetes, Daprd always communicates mTLS with the control
 	// plane.
-	var spf *spiffe.SPIFFE
+	requestCerts := opts.MTLSEnabled || opts.Mode == modes.KubernetesMode
 	var trustAnchors trustanchors.Interface
-	if opts.MTLSEnabled || opts.Mode == modes.KubernetesMode {
+	if requestCerts {
 		trustAnchors = opts.OverrideTrustAnchors
 		if trustAnchors == nil {
 			if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
@@ -242,8 +244,20 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				})
 			}
 		}
+	}
 
+	sec := &security{
+		trustAnchors:            trustAnchors,
+		mtls:                    opts.MTLSEnabled,
+		controlPlaneTrustDomain: cptd,
+		controlPlaneNamespace:   opts.ControlPlaneNamespace,
+		identityDir:             opts.WriteIdentityToFile,
+		trustAnchorsFile:        opts.TrustAnchorsFile,
+	}
+
+	if requestCerts {
 		var reqFn spiffe.RequestSVIDFn
+		var jwtReqFn spiffe.RequestJWTSVIDFn
 		if opts.OverrideCertRequestFn != nil {
 			reqFn = opts.OverrideCertRequestFn
 		} else {
@@ -251,10 +265,17 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			if err != nil {
 				return nil, err
 			}
+			// The JWT request function dials Sentry with sec's X.509 SVID, which
+			// is only read once the identity has been fetched.
+			jwtReqFn, err = newJWTRequestFn(opts, sec, cptd)
+			if err != nil {
+				return nil, err
+			}
 		}
-		spf = spiffe.New(spiffe.Options{
+		sec.spiffe = spiffe.New(spiffe.Options{
 			Log:                 log,
 			RequestSVIDFn:       reqFn,
+			RequestJWTSVIDFn:    jwtReqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
 			KeyAlgorithm:        opts.KeyAlgorithm,
@@ -266,15 +287,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	return &provider{
 		htarget: htarget,
 		readyCh: make(chan struct{}),
-		sec: &security{
-			trustAnchors:            trustAnchors,
-			spiffe:                  spf,
-			mtls:                    opts.MTLSEnabled,
-			controlPlaneTrustDomain: cptd,
-			controlPlaneNamespace:   opts.ControlPlaneNamespace,
-			identityDir:             opts.WriteIdentityToFile,
-			trustAnchorsFile:        opts.TrustAnchorsFile,
-		},
+		sec:     sec,
 	}, nil
 }
 
@@ -367,11 +380,14 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	)
 }
 
-// GRPCServerOptionNoClientAuth returns a gRPC server option which instruments
-// authentication of clients using the current trust anchors. Doesn't require
-// clients to present a certificate.
+// GRPCServerOptionNoClientAuth returns a gRPC server option which serves the
+// current signed certificate. Clients may present a certificate but are not
+// required to; a presented certificate is not verified, and is available to
+// handlers through credentials.TLSInfo for them to verify.
 func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
-	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.X509SVIDSource()))
+	cfg := tlsconfig.TLSServerConfig(s.spiffe.X509SVIDSource())
+	cfg.ClientAuth = tls.RequestClientCert
+	return grpc.Creds(credentials.NewTLS(cfg))
 }
 
 // GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
@@ -512,17 +528,17 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 	return spiffecontext.WithSpiffe(ctx, s.spiffe)
 }
 
-func (s *security) FetchJWT(ctx context.Context, audience string) (string, error) {
+func (s *security) MintJWT(ctx context.Context, audience string) (string, error) {
 	if s.spiffe == nil {
 		return "", errors.New("SPIFFE JWT auth is configured but security is disabled")
 	}
-	jwtSource := s.spiffe.JWTSVIDSource()
-	if jwtSource == nil {
-		return "", errors.New("SPIFFE JWT source not available")
+	minter := s.spiffe.JWTSVIDMinter()
+	if minter == nil {
+		return "", errors.New("minting SPIFFE JWT SVIDs is not configured")
 	}
-	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	svid, err := minter.MintJWTSVID(ctx, jwtsvid.Params{Audience: audience})
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch SPIFFE JWT SVID: %w", err)
+		return "", fmt.Errorf("failed to mint SPIFFE JWT SVID: %w", err)
 	}
 	return svid.Marshal(), nil
 }
