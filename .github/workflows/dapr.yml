@@ -655,7 +655,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push Docker images to Docker Hub
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != '' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -672,7 +672,7 @@ jobs:
           fi
         shell: bash
       - name: Build and push Docker images to GHCR
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
           TARGET_OS: ${{ matrix.target_os }}
@@ -811,10 +811,11 @@ jobs:
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
         shell: bash
+  # Only master publishes edge. Release branches would overwrite it with their own build.
   docker-publish:
     name: Publish docker images
     needs: build
-    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
       LATEST_TAG: latest
