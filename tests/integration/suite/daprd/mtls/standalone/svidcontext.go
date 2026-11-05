@@ -211,12 +211,14 @@ func (s *svidcontext) Run(t *testing.T, ctx context.Context) {
 		got := probe(t, s.mtlsDaprd)
 		assert.True(t, got["x509"], "X.509 SVID source should be in the component operation context")
 		assert.True(t, got["jwt"], "JWT SVID source should be in the component operation context")
+		assert.True(t, got["jwtMinter"], "JWT SVID minter should be in the component operation context")
 	})
 
 	t.Run("without mTLS the component sees no SVID sources", func(t *testing.T) {
 		got := probe(t, s.plainDaprd)
 		assert.False(t, got["x509"], "X.509 SVID source should be absent when mTLS is disabled")
 		assert.False(t, got["jwt"], "JWT SVID source should be absent when mTLS is disabled")
+		assert.False(t, got["jwtMinter"], "JWT SVID minter should be absent when mTLS is disabled")
 	})
 
 	t.Run("with mTLS the secret store sees the SVID sources during secret resolution", func(t *testing.T) {
