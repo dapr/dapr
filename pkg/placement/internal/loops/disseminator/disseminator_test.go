@@ -556,6 +556,77 @@ func TestDoReport_StoreChange_StartsLockRound(t *testing.T) {
 	assert.Equal(t, int32(1), fakeLoop.enqueued.Load())
 }
 
+func TestReportedHost_IgnoresAcksForOtherPhase(t *testing.T) {
+	tests := map[string]struct {
+		current v1pb.HostOperation
+		ack     v1pb.HostOperation
+	}{
+		"lock ack during report":   {current: v1pb.HostOperation_REPORT, ack: v1pb.HostOperation_LOCK},
+		"update ack during report": {current: v1pb.HostOperation_REPORT, ack: v1pb.HostOperation_UPDATE},
+		"unlock ack during report": {current: v1pb.HostOperation_REPORT, ack: v1pb.HostOperation_UNLOCK},
+		"update ack during lock":   {current: v1pb.HostOperation_LOCK, ack: v1pb.HostOperation_UPDATE},
+		"unlock ack during update": {current: v1pb.HostOperation_UPDATE, ack: v1pb.HostOperation_UNLOCK},
+		"lock ack during unlock":   {current: v1pb.HostOperation_UNLOCK, ack: v1pb.HostOperation_LOCK},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			d := newTestDisseminator(t)
+			fakeLoop := addFakeStream(d, 0, []string{"actorA"})
+			d.currentVersion = 1
+			d.currentOperation = test.current
+
+			version := uint64(1)
+			d.handleReportedHost(t.Context(), &loops.ReportedHost{
+				StreamIDx: 0,
+				Host:      &v1pb.Host{Id: "app-0", Namespace: "default", Operation: test.ack, Version: &version},
+			})
+
+			assert.Equal(t, test.current, d.currentOperation)
+			assert.Equal(t, 0, d.streamsInTargetState)
+			assert.Equal(t, v1pb.HostOperation_REPORT, d.streams[0].currentState)
+			assert.Equal(t, int32(0), fakeLoop.enqueued.Load())
+		})
+	}
+}
+
+// A daprd which declares actor types but has no actor state store reports its
+// (empty) host twice on the same stream, so it gets the one-shot table twice.
+// The acks of the second push must not complete a namespace-wide round and
+// send an UNLOCK that the other streams ignore, leaving the disseminator
+// stuck outside REPORT with no timeout armed.
+func TestReportedHost_RepeatedTablePushDoesNotStartRound(t *testing.T) {
+	d := newTestDisseminator(t)
+	actorHost := addFakeStream(d, 0, []string{"actorA"})
+	addFakeStream(d, 1, nil)
+	d.currentVersion = 17
+
+	report := func(op v1pb.HostOperation) {
+		var version *uint64
+		if op != v1pb.HostOperation_REPORT {
+			v := d.currentVersion
+			version = &v
+		}
+		d.handleReportedHost(t.Context(), &loops.ReportedHost{
+			StreamIDx: 1,
+			Host:      &v1pb.Host{Id: "no-state-store", Namespace: "default", Operation: op, Version: version},
+		})
+	}
+
+	report(v1pb.HostOperation_REPORT)
+	report(v1pb.HostOperation_REPORT)
+	for range 2 {
+		report(v1pb.HostOperation_LOCK)
+		report(v1pb.HostOperation_UPDATE)
+		report(v1pb.HostOperation_UNLOCK)
+	}
+
+	assert.Equal(t, v1pb.HostOperation_REPORT, d.currentOperation)
+	assert.Equal(t, uint64(17), d.currentVersion)
+	assert.Equal(t, 0, d.streamsInTargetState)
+	assert.Equal(t, int32(0), actorHost.enqueued.Load())
+}
+
 func TestStoreCollectOrphans(t *testing.T) {
 	s := store.New(store.Options{ReplicationFactor: 1})
 	s.Set(0, host("alive", "actorA"))
