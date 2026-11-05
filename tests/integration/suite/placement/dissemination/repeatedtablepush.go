@@ -31,6 +31,12 @@ func init() {
 	suite.Register(new(repeatedtablepush))
 }
 
+const (
+	orderLock   = "lock"
+	orderUpdate = "update"
+	orderUnlock = "unlock"
+)
+
 // repeatedtablepush verifies that a sidecar with no actors which reports its
 // host twice on the same stream does not wedge dissemination. A daprd that
 // declares actor types but has no actor state store does this: it reports an
@@ -81,11 +87,11 @@ func (r *repeatedtablepush) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 		var op v1pb.HostOperation
 		switch order.GetOperation() {
-		case "lock":
+		case orderLock:
 			op = v1pb.HostOperation_LOCK
-		case "update":
+		case orderUpdate:
 			op = v1pb.HostOperation_UPDATE
-		case "unlock":
+		case orderUnlock:
 			op = v1pb.HostOperation_UNLOCK
 		default:
 			require.Fail(t, "unexpected operation", order.GetOperation())
@@ -103,7 +109,7 @@ func (r *repeatedtablepush) Run(t *testing.T, ctx context.Context) {
 	stream1, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
 	require.NoError(t, stream1.Send(actorHost))
-	for _, want := range []string{"lock", "update", "unlock"} {
+	for _, want := range []string{orderLock, orderUpdate, orderUnlock} {
 		resp, rerr := stream1.Recv()
 		require.NoError(t, rerr)
 		require.Equal(t, want, resp.GetOperation())
@@ -128,7 +134,7 @@ func (r *repeatedtablepush) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, stream2.Send(noActorHost))
 	require.NoError(t, stream2.Send(noActorHost))
 	for range 2 {
-		for _, want := range []string{"lock", "update", "unlock"} {
+		for _, want := range []string{orderLock, orderUpdate, orderUnlock} {
 			resp, rerr := stream2.Recv()
 			require.NoError(t, rerr)
 			require.Equal(t, want, resp.GetOperation())
@@ -156,7 +162,7 @@ func (r *repeatedtablepush) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case op := <-stream1Msgs:
-		require.Equal(t, "lock", op)
+		require.Equal(t, orderLock, op)
 	case <-time.After(10 * time.Second):
 		require.Fail(t, "dissemination is stuck: stream1 received no LOCK for the new host")
 	}
