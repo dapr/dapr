@@ -48,7 +48,7 @@ type hostdeath struct {
 }
 
 func (h *hostdeath) Setup(t *testing.T) []framework.Option {
-	h.workflow = newPair(t, 2*time.Second, fallbackSettle)
+	h.workflow = workflow.New(t, workflow.WithFallbackPair(t, 2*time.Second, workflow.FallbackSettle))
 
 	return []framework.Option{
 		framework.WithProcesses(h.workflow),

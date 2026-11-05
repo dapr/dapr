@@ -80,7 +80,7 @@ func (f *forward) Run(t *testing.T, ctx context.Context) {
 			f.runs[ctx.ID] = append(f.runs[ctx.ID], time.Now())
 			f.lock.Unlock()
 		}
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	hosts := func(c assert.TestingT, index int) bool {
