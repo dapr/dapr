@@ -68,6 +68,17 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		parsedAddEvent = &ev
 	}
 
+	// Likewise a CreateWorkflowInstance request, shared by
+	// createWorkflowInstance and the staged operation metric.
+	var parsedCreate *backend.CreateWorkflowInstanceRequest
+	if method == todo.CreateWorkflowInstanceMethod {
+		var cr backend.CreateWorkflowInstanceRequest
+		if err := proto.Unmarshal(data, &cr); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
+		}
+		parsedCreate = &cr
+	}
+
 	if err := o.checkAccessPolicy(ctx, method, data, parsedAddEvent, nil, req.GetMetadata()); err != nil {
 		return nil, err
 	}
@@ -83,7 +94,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, fallback, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue(), parsedAddEvent)
+		resData, fallback, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue(), parsedAddEvent, parsedCreate)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +114,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 		// daprd with an executor, so it does not wait for a state change.
 		if fallback {
 			common.SetFallback(res)
-			o.fallbackServed(ctx, method, data, parsedAddEvent)
+			o.fallbackServed(ctx, method, parsedCreate, parsedAddEvent)
 		}
 
 		return res, nil
@@ -112,7 +123,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 
 // executeMethod runs an invoked method, and reports whether a fallback host
 // served it: this daprd, or for a fork the daprd of the rerun's new instance.
-func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent) ([]byte, bool, error) {
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent, parsedCreate *backend.CreateWorkflowInstanceRequest) ([]byte, bool, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
 	if o.actorState == nil {
@@ -125,7 +136,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 	fallback := o.isFallback()
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
-		return nil, fallback, o.createWorkflowInstance(ctx, request)
+		return nil, fallback, o.createWorkflowInstance(ctx, parsedCreate)
 
 	case todo.AddWorkflowEventMethod:
 		return nil, fallback, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))

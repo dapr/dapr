@@ -301,7 +301,7 @@ func Test_localWake_startPath(t *testing.T) {
 
 		ts := time.Now()
 		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
-			createRequestBytes(t, startEventFor(instanceID, ts, nil))))
+			createRequest(startEventFor(instanceID, ts, nil))))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			ops := h.snapshotOps()
@@ -323,7 +323,7 @@ func Test_localWake_startPath(t *testing.T) {
 		start := startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
 			es.ScheduledStartTimestamp = timestamppb.New(time.Now().Add(time.Hour))
 		})
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
 
 		time.Sleep(time.Millisecond * 100)
 		ops := h.snapshotOps()
@@ -650,7 +650,7 @@ func Test_startBackstopDueTime(t *testing.T) {
 		h := newWakeHarness(t, instanceID, true)
 		before := time.Now()
 		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
-			createRequestBytes(t, startEventFor(instanceID, before, nil))))
+			createRequest(startEventFor(instanceID, before, nil))))
 
 		due := dueOf(t, h)
 		assert.False(t, due.Before(before.Add(pendingstart.RedriveGrace()/2)),
@@ -661,7 +661,7 @@ func Test_startBackstopDueTime(t *testing.T) {
 		h := newWakeHarness(t, instanceID, true)
 		at := time.Now().Add(time.Hour).Truncate(time.Second)
 		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
-			createRequestBytes(t, startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+			createRequest(startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
 				es.ScheduledStartTimestamp = timestamppb.New(at)
 			}))))
 
@@ -672,7 +672,7 @@ func Test_startBackstopDueTime(t *testing.T) {
 		h := newWakeHarness(t, instanceID, false)
 		before := time.Now()
 		require.NoError(t, h.orch.createWorkflowInstance(t.Context(),
-			createRequestBytes(t, startEventFor(instanceID, before, nil))))
+			createRequest(startEventFor(instanceID, before, nil))))
 
 		assert.True(t, dueOf(t, h).Before(before.Add(time.Second)))
 	})

@@ -110,16 +110,14 @@ func TestFallback(t *testing.T) {
 
 func TestFallbackOperation(t *testing.T) {
 	event := func(e *protos.HistoryEvent) *backend.HistoryEvent { return e }
-	create := func(parent *protos.ParentInstanceInfo) []byte {
-		b, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{StartEvent: &protos.HistoryEvent{
+	create := func(parent *protos.ParentInstanceInfo) *backend.CreateWorkflowInstanceRequest {
+		return &backend.CreateWorkflowInstanceRequest{StartEvent: &protos.HistoryEvent{
 			EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{ParentInstance: parent}},
-		}})
-		require.NoError(t, err)
-		return b
+		}}
 	}
 	for _, tc := range []struct {
 		method string
-		data   []byte
+		create *backend.CreateWorkflowInstanceRequest
 		ev     *backend.HistoryEvent
 		want   string
 	}{
@@ -142,7 +140,7 @@ func TestFallbackOperation(t *testing.T) {
 		// A read is not an operation on the instance.
 		{todo.WaitForRuntimeStatus, nil, nil, ""},
 	} {
-		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.data, tc.ev), tc.method)
+		assert.Equal(t, tc.want, fallbackOperation(tc.method, tc.create, tc.ev), tc.method)
 	}
 }
 
