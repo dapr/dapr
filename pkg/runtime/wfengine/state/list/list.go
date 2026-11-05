@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/dapr/components-contrib/state"
+	compstate "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
@@ -44,7 +45,7 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 		return nil, errors.New("no state store with actor support found")
 	}
 
-	ks, ok := store.(state.KeysLiker)
+	ks, ok := compstate.As[state.KeysLiker](store)
 	if !ok {
 		return nil, fmt.Errorf("state store %T does not support listing keys", store)
 	}
