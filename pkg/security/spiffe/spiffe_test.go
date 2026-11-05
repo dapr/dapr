@@ -19,6 +19,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFromStrings(t *testing.T) {
@@ -60,6 +61,36 @@ func TestFromStrings(t *testing.T) {
 			id, err := FromStrings(test.td, test.ns, test.appID)
 			assert.Equal(t, test.expErr, err)
 			assert.Equal(t, test.expID, id)
+		})
+	}
+}
+
+func TestFromID(t *testing.T) {
+	tests := map[string]struct {
+		id     string
+		expErr bool
+		expNS  string
+		expApp string
+	}{
+		"valid":          {id: "spiffe://example.org/ns/my-ns/my-app", expNS: "my-ns", expApp: "my-app"},
+		"extra segments": {id: "spiffe://example.org/ns/my-ns/my-app/extra", expNS: "my-ns", expApp: "my-app"},
+		"missing app":    {id: "spiffe://example.org/ns/my-ns", expErr: true},
+		"wrong prefix":   {id: "spiffe://example.org/foo/my-ns/my-app", expErr: true},
+		"no path":        {id: "spiffe://example.org", expErr: true},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			parsed, err := FromID(spiffeid.RequireFromString(test.id))
+			if test.expErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, test.expNS, parsed.Namespace())
+			assert.Equal(t, test.expApp, parsed.AppID())
+			assert.Equal(t, "example.org", parsed.TrustDomain().String())
 		})
 	}
 }

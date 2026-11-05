@@ -393,6 +393,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		})
 	}
 
+	// Set as an env var rather than a flag, so that older daprd images, which
+	// do not know the option, still start.
+	if c.WorkloadKeyAlgorithm != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  securityConsts.WorkloadKeyAlgorithmEnvVar,
+			Value: c.WorkloadKeyAlgorithm,
+		})
+	}
+
 	if c.APITokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name: securityConsts.APITokenEnvVar,
