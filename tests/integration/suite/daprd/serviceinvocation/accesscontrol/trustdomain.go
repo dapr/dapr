@@ -73,9 +73,7 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-config", Namespace: "default"},
 		Spec: configapi.ConfigurationSpec{
-			NameResolutionSpec: &configapi.NameResolutionSpec{
-				Component: "mdns",
-			},
+			NameResolutionSpec: daprd.NameResolutionSpec(t),
 			MTLSSpec: &configapi.MTLSSpec{
 				ControlPlaneTrustDomain: "localhost",
 				SentryAddress:           e.sentry.Address(),

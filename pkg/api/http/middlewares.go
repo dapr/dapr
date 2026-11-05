@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"path"
 	"strings"
@@ -57,7 +58,7 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			v := r.Header.Get(securityConsts.APITokenHeader)
-			if v != token && !isRouteExcludedFromAPITokenAuth(r) {
+			if subtle.ConstantTimeCompare([]byte(v), []byte(token)) != 1 && !isRouteExcludedFromAPITokenAuth(r) {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
 				return
 			}

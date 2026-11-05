@@ -91,10 +91,9 @@ func (s *Serializer) KeyFromMetadata(ctx context.Context, req *schedulerv1pb.Job
 			}
 		}
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		str = joinStrings("app", req.GetNamespace(), req.GetAppId())
-		if !asPrefix {
-			str += "||"
-		}
+		// asPrefix only applies to actor IDs. An undelimited app ID would
+		// match every other app in the namespace whose ID it prefixes.
+		str = joinStrings("app", req.GetNamespace(), req.GetAppId()) + "||"
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
