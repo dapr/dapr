@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/kit/crypto/spiffe"
 )
 
 func TestAppFlag(t *testing.T) {
@@ -385,5 +386,40 @@ func TestDisableInitEndpoints(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, opts.DisableInitEndpoints)
+	})
+}
+
+func TestWorkloadKeyAlgorithm(t *testing.T) {
+	t.Run("defaults to Ed25519", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Nil(t, opts.WorkloadKeyAlgorithm)
+	})
+
+	t.Run("ecdsa", func(t *testing.T) {
+		opts, err := New([]string{"--workload-key-algorithm", "ECDSA"})
+		require.NoError(t, err)
+		require.NotNil(t, opts.WorkloadKeyAlgorithm)
+		assert.Equal(t, spiffe.KeyAlgorithmECDSA, *opts.WorkloadKeyAlgorithm)
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		_, err := New([]string{"--workload-key-algorithm", "rsa"})
+		require.ErrorContains(t, err, "workload-key-algorithm")
+	})
+
+	t.Run("from env var", func(t *testing.T) {
+		t.Setenv("DAPR_WORKLOAD_KEY_ALGORITHM", "ecdsa")
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		require.NotNil(t, opts.WorkloadKeyAlgorithm)
+		assert.Equal(t, spiffe.KeyAlgorithmECDSA, *opts.WorkloadKeyAlgorithm)
+	})
+
+	t.Run("flag overrides env var", func(t *testing.T) {
+		t.Setenv("DAPR_WORKLOAD_KEY_ALGORITHM", "ecdsa")
+		opts, err := New([]string{"--workload-key-algorithm", "ed25519"})
+		require.NoError(t, err)
+		assert.Nil(t, opts.WorkloadKeyAlgorithm)
 	})
 }

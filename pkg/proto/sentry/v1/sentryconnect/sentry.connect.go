@@ -47,6 +47,8 @@ const (
 const (
 	// CASignCertificateProcedure is the fully-qualified name of the CA's SignCertificate RPC.
 	CASignCertificateProcedure = "/dapr.proto.sentry.v1.CA/SignCertificate"
+	// CAFetchJWTSVIDProcedure is the fully-qualified name of the CA's FetchJWTSVID RPC.
+	CAFetchJWTSVIDProcedure = "/dapr.proto.sentry.v1.CA/FetchJWTSVID"
 )
 
 // CAClient is a client for the dapr.proto.sentry.v1.CA service.
@@ -56,6 +58,10 @@ type CAClient interface {
 	// The requesting side must provide an id for both loosely based
 	// And strong based identities.
 	SignCertificate(context.Context, *connect.Request[v1.SignCertificateRequest]) (*connect.Response[v1.SignCertificateResponse], error)
+	// Mints a fresh JWT SVID for the caller. The caller is authenticated by the
+	// X.509 SVID it presents as the mTLS client certificate, and the JWT subject
+	// is that SVID's SPIFFE ID.
+	FetchJWTSVID(context.Context, *connect.Request[v1.FetchJWTSVIDRequest]) (*connect.Response[v1.FetchJWTSVIDResponse], error)
 }
 
 // NewCAClient constructs a client for the dapr.proto.sentry.v1.CA service. By default, it uses the
@@ -75,17 +81,29 @@ func NewCAClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.
 			connect.WithSchema(cAMethods.ByName("SignCertificate")),
 			connect.WithClientOptions(opts...),
 		),
+		fetchJWTSVID: connect.NewClient[v1.FetchJWTSVIDRequest, v1.FetchJWTSVIDResponse](
+			httpClient,
+			baseURL+CAFetchJWTSVIDProcedure,
+			connect.WithSchema(cAMethods.ByName("FetchJWTSVID")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // cAClient implements CAClient.
 type cAClient struct {
 	signCertificate *connect.Client[v1.SignCertificateRequest, v1.SignCertificateResponse]
+	fetchJWTSVID    *connect.Client[v1.FetchJWTSVIDRequest, v1.FetchJWTSVIDResponse]
 }
 
 // SignCertificate calls dapr.proto.sentry.v1.CA.SignCertificate.
 func (c *cAClient) SignCertificate(ctx context.Context, req *connect.Request[v1.SignCertificateRequest]) (*connect.Response[v1.SignCertificateResponse], error) {
 	return c.signCertificate.CallUnary(ctx, req)
+}
+
+// FetchJWTSVID calls dapr.proto.sentry.v1.CA.FetchJWTSVID.
+func (c *cAClient) FetchJWTSVID(ctx context.Context, req *connect.Request[v1.FetchJWTSVIDRequest]) (*connect.Response[v1.FetchJWTSVIDResponse], error) {
+	return c.fetchJWTSVID.CallUnary(ctx, req)
 }
 
 // CAHandler is an implementation of the dapr.proto.sentry.v1.CA service.
@@ -95,6 +113,10 @@ type CAHandler interface {
 	// The requesting side must provide an id for both loosely based
 	// And strong based identities.
 	SignCertificate(context.Context, *connect.Request[v1.SignCertificateRequest]) (*connect.Response[v1.SignCertificateResponse], error)
+	// Mints a fresh JWT SVID for the caller. The caller is authenticated by the
+	// X.509 SVID it presents as the mTLS client certificate, and the JWT subject
+	// is that SVID's SPIFFE ID.
+	FetchJWTSVID(context.Context, *connect.Request[v1.FetchJWTSVIDRequest]) (*connect.Response[v1.FetchJWTSVIDResponse], error)
 }
 
 // NewCAHandler builds an HTTP handler from the service implementation. It returns the path on which
@@ -110,10 +132,18 @@ func NewCAHandler(svc CAHandler, opts ...connect.HandlerOption) (string, http.Ha
 		connect.WithSchema(cAMethods.ByName("SignCertificate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	cAFetchJWTSVIDHandler := connect.NewUnaryHandler(
+		CAFetchJWTSVIDProcedure,
+		svc.FetchJWTSVID,
+		connect.WithSchema(cAMethods.ByName("FetchJWTSVID")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dapr.proto.sentry.v1.CA/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CASignCertificateProcedure:
 			cASignCertificateHandler.ServeHTTP(w, r)
+		case CAFetchJWTSVIDProcedure:
+			cAFetchJWTSVIDHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -125,4 +155,8 @@ type UnimplementedCAHandler struct{}
 
 func (UnimplementedCAHandler) SignCertificate(context.Context, *connect.Request[v1.SignCertificateRequest]) (*connect.Response[v1.SignCertificateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.sentry.v1.CA.SignCertificate is not implemented"))
+}
+
+func (UnimplementedCAHandler) FetchJWTSVID(context.Context, *connect.Request[v1.FetchJWTSVIDRequest]) (*connect.Response[v1.FetchJWTSVIDResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.sentry.v1.CA.FetchJWTSVID is not implemented"))
 }
