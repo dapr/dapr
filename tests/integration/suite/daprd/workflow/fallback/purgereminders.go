@@ -15,7 +15,6 @@ package fallback
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -47,7 +46,7 @@ type purgereminders struct {
 func (p *purgereminders) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
@@ -105,18 +104,10 @@ func (p *purgereminders) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Eventually(t, inActivity.Load, time.Second*10, time.Millisecond*10)
 
-	jobs := func(instanceID api.InstanceID) []string {
-		var keys []string
-		for _, key := range p.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
-			if strings.Contains(key, string(instanceID)) {
-				keys = append(keys, key)
-			}
-		}
-		return keys
-	}
+	jobs := p.workflow.Scheduler().JobKeysLookup(t, ctx)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NotEmpty(c, jobs(doneID), "the completed workflow should hold its retention reminder")
-		assert.NotEmpty(c, jobs(parkedID), "the parked workflow should hold its timer and activity reminders")
+		assert.NotEmpty(c, jobs(c, string(doneID)), "the completed workflow should hold its retention reminder")
+		assert.NotEmpty(c, jobs(c, string(parkedID)), "the parked workflow should hold its timer and activity reminders")
 	}, time.Second*10, time.Millisecond*10)
 
 	worker.Disconnect(t)
@@ -136,7 +127,7 @@ func (p *purgereminders) Run(t *testing.T, ctx context.Context) {
 		_, err = mgmt.FetchWorkflowMetadata(octx, id)
 		require.ErrorIs(t, err, api.ErrInstanceNotFound, id)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, jobs(id))
+			assert.Empty(c, jobs(c, string(id)))
 		}, time.Second*10, time.Millisecond*10, id)
 	}
 
