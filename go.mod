@@ -552,3 +552,7 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+// Temporary, until dapr/durabletask-protobuf#60 and dapr/durabletask-go#147
+// are merged and released: the staged field on the operation responses.
+replace github.com/dapr/durabletask-go => github.com/famarting/durabletask-go v0.0.0-20261105101524-8507c32ad464
