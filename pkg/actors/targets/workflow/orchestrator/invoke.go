@@ -123,6 +123,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 
 // executeMethod runs an invoked method, and reports whether a fallback host
 // served it: this daprd, or for a fork the daprd of the rerun's new instance.
+// A purge completes at once wherever it runs, so it is never reported.
 func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte, parsedAddEvent *backend.HistoryEvent, parsedCreate *backend.CreateWorkflowInstanceRequest) ([]byte, bool, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
@@ -142,11 +143,11 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 		return nil, fallback, o.addWorkflowEvent(ctx, parsedAddEvent, senderFromMetadata(meta))
 
 	case todo.PurgeWorkflowStateMethod:
-		return nil, fallback, o.purgeWorkflowState(ctx, meta)
+		return nil, false, o.purgeWorkflowState(ctx, meta)
 
 	case todo.RecursivePurgeWorkflowStateMethod:
 		data, err := o.recursivePurgeWorkflowState(ctx, meta)
-		return data, fallback, err
+		return data, false, err
 
 	case todo.ForkWorkflowHistory:
 		// The caller waits on the new instance, which may be hosted by
