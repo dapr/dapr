@@ -43,7 +43,11 @@ func (g *global) Setup(t *testing.T) []framework.Option {
 
 	g.app = actors.New(t,
 		actors.WithActorTypes("abc", "def", "xyz"),
-		actors.WithActorIdleTimeout(2*time.Second),
+		// The second call on abc/123 must land inside this timeout, measured
+		// from the first, to reset it: 1s of sleep leaves 3s for a loaded
+		// runner. With less, abc/123 can expire and be reactivated by that
+		// call, which deactivates it twice.
+		actors.WithActorIdleTimeout(4*time.Second),
 		actors.WithActorTypeHandler("abc", func(_ http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodDelete {
 				g.called.Append(r.URL.Path)
@@ -66,7 +70,10 @@ func (g *global) Setup(t *testing.T) []framework.Option {
 func (g *global) Run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
-	_, err := g.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	// Dial once, so no connection setup lands between the timed calls.
+	client := g.app.GRPCClient(t, ctx)
+
+	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "abc",
 		ActorId:   "123",
 		Method:    "foo",
@@ -76,21 +83,21 @@ func (g *global) Run(t *testing.T, ctx context.Context) {
 	time.Sleep(time.Second)
 	assert.Equal(t, 0, g.called.Len())
 
-	_, err = g.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "abc",
 		ActorId:   "123",
 		Method:    "foo",
 	})
 	require.NoError(t, err)
 
-	_, err = g.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "abc",
 		ActorId:   "456",
 		Method:    "foo",
 	})
 	require.NoError(t, err)
 
-	_, err = g.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "def",
 		ActorId:   "456",
 		Method:    "foo",
