@@ -28,7 +28,7 @@ func init() {
 	suite.Register(new(reads))
 }
 
-// reads reads the status and the history of a completed workflow, and lists
+// reads fetches the status and the history of a completed workflow, and lists
 // the instance IDs, while no worker is connected.
 //   - off: all work.
 //   - on:  all work.

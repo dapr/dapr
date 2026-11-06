@@ -354,7 +354,7 @@ func TestFallbackCacheAfterRemotePurge(t *testing.T) {
 			h.primeRunning(t, instanceID, 7)
 			h.persist(t)
 			// The ETag the store served for the persisted rows.
-			etag := "etag"
+			etag := testETag
 			h.orch.state.SetMetadataETag(&etag)
 
 			// Another daprd force purges the instance.

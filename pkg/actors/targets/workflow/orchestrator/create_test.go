@@ -42,6 +42,9 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
+// testETag is the etag the fake state store hands back in these tests.
+const testETag = "etag"
+
 // createHarness captures every state save and reminder create in a single
 // ordered operation log so tests can assert save-before-create ordering.
 type createHarness struct {
@@ -113,7 +116,7 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 				return h.storedMeta()
 			}
 			if h.saved && req.Key == wfenginestate.MetadataKey {
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil

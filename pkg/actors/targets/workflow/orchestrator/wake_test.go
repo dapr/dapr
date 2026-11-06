@@ -124,14 +124,14 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 				if !ok {
 					return &actorapi.StateResponse{}, nil
 				}
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: data, ETag: &etag}, nil
 			}
 			// The metadata row exists once something was saved, as the
 			// post-save etag refresh expects, and describes the cache: the
 			// store is in step with it.
 			if h.saved && req.Key == wfenginestate.MetadataKey {
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: h.metadataRow(), ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
@@ -142,7 +142,7 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 			res := actorapi.BulkStateResponse{}
 			for _, key := range req.Keys {
 				if data, ok := h.store[key]; ok {
-					etag := "etag"
+					etag := testETag
 					res[key] = actorapi.BulkStateEntry{Data: data, ETag: &etag}
 				}
 			}
