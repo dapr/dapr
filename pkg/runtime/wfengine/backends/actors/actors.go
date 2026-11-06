@@ -1438,8 +1438,7 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	// Evict the resident actors first: deactivation takes the turn lock, so
 	// the purge is ordered after any in-flight turn commits and the load
-	// below covers what that turn wrote. Nothing is left serving or writing
-	// from a cache of the purged state.
+	// below covers what that turn wrote.
 	abe.haltPurgedActors(ctx, id)
 
 	astate, err := abe.actors.State(ctx)
@@ -1519,19 +1518,38 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	return concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
+	if err = concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
 		return astate.TransactionalStateOperation(ctx, true, req, false)
-	})...)
+	})...); err != nil {
+		return err
+	}
+
+	// Evict again now the rows are gone: a call that reached the actor
+	// between the first eviction and the delete loaded the instance back into
+	// a cache. An actor activated from here on finds no state.
+	abe.haltPurgedActors(ctx, id)
+
+	return nil
 }
 
-// haltPurgedActors evicts this instance's workflow actor from this host,
-// through the actor itself so no table-wide lock is held while it waits
-// for an in-flight turn. Best effort: force purge is the escape hatch for
-// wedged instances, so a halt that cannot take the turn lock in time is
-// logged and the purge proceeds. Activity actors are left alone: their
-// result lands on a cold workflow actor that finds no state, and halting
-// them spawns claim guards that would write after the purge.
+// haltPurgedActors evicts this instance's workflow actor from this host and,
+// when placement hosts it on another daprd, from that daprd too: a force
+// purge runs wherever it was received, and an owner left resident keeps
+// serving the purged instance from its cache. Best effort: force purge is
+// the escape hatch for wedged instances, so a halt that cannot take the turn
+// lock in time is logged and the purge proceeds. Activity actors are left
+// alone: their result lands on a cold workflow actor that finds no state, and
+// halting them spawns claim guards that would write after the purge.
 func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
+	abe.haltLocalActor(ctx, id)
+	abe.evictRemoteActor(ctx, id)
+}
+
+// haltLocalActor deactivates the workflow actor if it is resident on this
+// host, through the actor itself so no table-wide lock is held while it waits
+// for an in-flight turn. It runs whatever placement says: during a placement
+// change the actor can still be resident here while another daprd owns it.
+func (abe *Actors) haltLocalActor(ctx context.Context, id api.InstanceID) {
 	atable, err := abe.actors.Table(ctx)
 	if err != nil || atable == nil {
 		return
@@ -1548,5 +1566,52 @@ func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
 	defer cancel()
 	if err := target.Deactivate(hctx); err != nil {
 		log.Warnf("Force purge of '%s': failed to halt the resident actor, stale in-memory state remains until the next write or idle reap: %v", id, err)
+	}
+}
+
+// evictRemoteActor asks the daprd placement names as the workflow actor's
+// owner to deactivate it, when that is another daprd. An owner that predates
+// the eviction method refuses it, and its cache stays until the next write or
+// idle reap, as before.
+func (abe *Actors) evictRemoteActor(ctx context.Context, id api.InstanceID) {
+	placement, err := abe.actors.Placement(ctx)
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot look up the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+	if placement == nil {
+		// No placement: no other daprd can host the actor.
+		return
+	}
+
+	hctx, cancel := context.WithTimeout(ctx, forcePurgeHaltTimeout)
+	defer cancel()
+
+	lar, _, lcancel, err := placement.LookupActor(hctx, &actorsapi.LookupActorRequest{
+		ActorType: abe.workflowActorType,
+		ActorID:   id.String(),
+	})
+	if lcancel != nil {
+		lcancel(nil)
+	}
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot look up the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+	if lar.Local {
+		return
+	}
+
+	router, err := abe.actors.Router(hctx)
+	if err != nil || router == nil {
+		log.Warnf("Force purge of '%s': cannot reach the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.EvictWorkflowMethod).
+		WithActor(abe.workflowActorType, id.String())
+	if _, err := router.Call(hctx, req); err != nil {
+		log.Warnf("Force purge of '%s': failed to evict the workflow actor on the daprd that owns it, stale in-memory state remains there until the next write or idle reap: %v", id, err)
 	}
 }

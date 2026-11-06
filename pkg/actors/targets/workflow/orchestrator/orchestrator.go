@@ -134,6 +134,12 @@ type streamFn struct {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	// An eviction deactivates this actor, which waits for every registered
+	// invocation to finish, so it must not register itself as one.
+	if req.GetMessage().GetMethod() == todo.EvictWorkflowMethod {
+		return o.evict(ctx, req)
+	}
+
 	if err := o.enter("method"); err != nil {
 		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
 	}

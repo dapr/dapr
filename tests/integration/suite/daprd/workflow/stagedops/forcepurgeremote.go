@@ -37,13 +37,13 @@ func init() {
 // forcepurgeremote runs two daprds of one app with no worker, per mode. It
 // force purges a running workflow through the daprd that does not hold the
 // workflow's actor, then raises an event to it twice. A force purge stops the
-// workflow actor only on the daprd that serves the purge.
+// workflow actor on the daprd that serves the purge and asks the daprd that
+// holds it to evict it.
 //   - off: no daprd holds the actor. The force purge works and both raises
 //     fail, no worker connected.
 //   - on:  a staged raise has loaded the actor on the other daprd, which
-//     keeps it after the purge. That daprd has no worker, so the actor reads
-//     the instance from the store on every call: both raises fail with "no
-//     such instance exists".
+//     evicts it for the purge. Both raises fail with "no such instance
+//     exists".
 type forcepurgeremote struct{ stagedops.Modes }
 
 func (r *forcepurgeremote) Setup(t *testing.T) []framework.Option {
