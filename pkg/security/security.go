@@ -28,8 +28,10 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -537,6 +539,16 @@ func (s *security) MintJWT(ctx context.Context, audience string) (string, error)
 		return "", errors.New("minting SPIFFE JWT SVIDs is not configured")
 	}
 	svid, err := minter.MintJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	if status.Code(err) == codes.Unimplemented {
+		// Sentry is older than daprd and cannot mint on demand. Use the JWT SVID
+		// it issued with the X.509 SVID, for an audience requested at startup
+		// with --sentry-request-jwt-audiences.
+		cached, ferr := s.spiffe.JWTSVIDSource().FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+		if ferr != nil {
+			return "", fmt.Errorf("failed to mint SPIFFE JWT SVID: %w, and no JWT SVID was issued at startup for the audience: %w", err, ferr)
+		}
+		return cached.Marshal(), nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("failed to mint SPIFFE JWT SVID: %w", err)
 	}
