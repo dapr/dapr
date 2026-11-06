@@ -36,10 +36,9 @@ func init() {
 // workflow's actor, then starts a new workflow under the same ID.
 //   - off: no daprd holds the actor. The force purge works and the start
 //     fails, no worker connected.
-//   - on:  a staged raise has loaded the actor on the other daprd, which
-//     evicts it for the purge. Neither daprd has a worker, so the actor reads
-//     the instance from the store, finds none, and accepts the start: the
-//     new instance is PENDING.
+//   - on:  a staged raise has loaded the actor on the other daprd, and the
+//     purge evicts it there. The start activates a fresh actor, which finds
+//     no instance in the store and accepts it: the new instance is PENDING.
 type forcepurgestart struct{ stagedops.Modes }
 
 func (r *forcepurgestart) Setup(t *testing.T) []framework.Option {

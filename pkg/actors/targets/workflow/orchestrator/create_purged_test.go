@@ -121,6 +121,10 @@ func Test_createWorkflowInstance_purgedOnAnotherHost(t *testing.T) {
 			cached := tc.prime(h)
 			etag := "etag-1"
 			cached.SetMetadataETag(&etag)
+			// The purged instance had armed its janitor, which the purge
+			// deleted with its other reminders.
+			h.orch.janitorAsserted.Store(true)
+			h.orch.janitorRedispatched = map[int32]struct{}{0: {}}
 			h.storedMeta = func() (*actorapi.StateResponse, error) {
 				return &actorapi.StateResponse{}, nil
 			}
@@ -140,6 +144,8 @@ func Test_createWorkflowInstance_purgedOnAnotherHost(t *testing.T) {
 			assert.Same(t, req.GetStartEvent(), h.orch.state.Inbox[0])
 			assert.False(t, h.orch.state.ParentNotifyPending)
 			assert.False(t, h.orch.activityResultAwaited.Load(), "nothing is owed to a purged instance")
+			assert.False(t, h.orch.janitorAsserted.Load(), "the new instance must arm its own janitor")
+			assert.Nil(t, h.orch.janitorRedispatched)
 		})
 	}
 }

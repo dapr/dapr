@@ -1594,6 +1594,12 @@ func (abe *Actors) evictRemoteActor(ctx context.Context, id api.InstanceID) {
 	if lcancel != nil {
 		lcancel(nil)
 	}
+	if errors.Is(err, messages.ErrActorNoAddress) {
+		// No daprd hosts the workflow actor type, as with no worker connected
+		// and staged operations off: there is no cache to evict.
+		log.Debugf("Force purge of '%s': no daprd hosts the workflow actor, nothing to evict: %v", id, err)
+		return
+	}
 	if err != nil {
 		log.Warnf("Force purge of '%s': cannot look up the workflow actor's owner to evict it: %v", id, err)
 		return

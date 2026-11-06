@@ -50,17 +50,26 @@ func (o *orchestrator) pinFallback() (fallback bool, unpin func()) {
 	return fallback, func() { o.pinnedFallback.Store(nil) }
 }
 
-// dropFallbackCache drops the cached state at the start of a call on a
-// fallback host, so the call reads the instance from the store. A force
-// purge served by another daprd deletes the rows but evicts the actor only
-// there: an actor this daprd kept cached would go on serving the purged
-// instance, refusing a start of its ID as already existing. A fallback host
-// runs no turns, so the cache saves it little. The caller holds the turn
-// lock.
-func (o *orchestrator) dropFallbackCache() {
-	if o.isFallback() {
-		o.invalidateCachedState()
+// dropFallbackCache checks the cached state against the store's metadata
+// row at the start of a call on a fallback host, and drops it when the row no
+// longer describes it, so the call reads the instance from the store. A force
+// purge served by another daprd deletes the rows and evicts this daprd's
+// actor, but when that eviction does not land (an owner that predates it, or
+// a turn that held the lock past the purge's budget) the actor would go on
+// serving the purged instance, refusing a start of its ID as already
+// existing. The check is one Get, not a reload of the history. A cache the
+// store has never served an ETag for cannot be checked, and is dropped. The
+// caller holds the turn lock.
+func (o *orchestrator) dropFallbackCache(ctx context.Context) {
+	if !o.isFallback() {
+		return
 	}
+	if o.state != nil && o.state.MetadataETagSeen() {
+		if row, err := o.probeMetadataRow(ctx, o.state); err == nil && row == metadataRowMatches {
+			return
+		}
+	}
+	o.invalidateCachedState()
 }
 
 // localFastPath reports whether an operation served outside a turn may take

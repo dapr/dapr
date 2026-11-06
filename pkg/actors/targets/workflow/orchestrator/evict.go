@@ -34,8 +34,10 @@ func (o *orchestrator) evict(ctx context.Context, req *internalsv1pb.InternalInv
 
 	log.Debugf("Workflow actor '%s': evicting for a force purge on another daprd", o.actorID)
 
-	// An actor another call already retired is evicted: deactivating it again
-	// would wait on a closed lock.
+	// An actor another call already retired is evicted. Deactivating it again
+	// is not a no-op: its lock is closed but free, and the lock's select picks
+	// either ready case, so the teardown could run a second time, deleting
+	// whatever actor the table now holds under this ID.
 	if !o.isRetired() {
 		if err := o.Deactivate(ctx); err != nil && !o.isRetired() {
 			return nil, err

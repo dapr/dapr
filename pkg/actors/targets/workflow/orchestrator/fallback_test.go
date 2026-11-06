@@ -335,27 +335,27 @@ func TestFallbackForkFollowsNewInstance(t *testing.T) {
 	}
 }
 
-// A force purge served by another daprd deletes the instance's rows but
-// leaves this daprd's actor resident with its cache. A fallback host reads
-// the store on every call, so a start of the same ID sees the instance gone
-// and is accepted, as on a daprd that never held the actor. A daprd with a
-// local executor keeps serving from its cache.
+// A force purge served by another daprd deletes the instance's rows, and
+// its eviction of this daprd's actor may not land. The cached state has been
+// served an ETag, so a start of the same ID finds the row gone, drops the
+// cache and is accepted, as on a daprd that never held the actor, whether
+// this daprd is a fallback host or has a local executor.
 func TestFallbackCacheAfterRemotePurge(t *testing.T) {
 	const instanceID = "wf1"
 
-	for name, tc := range map[string]struct {
-		fallback bool
-		wantErr  bool
-	}{
-		"fallback host":    {fallback: true},
-		"a local executor": {fallback: false, wantErr: true},
+	for name, fallback := range map[string]bool{
+		"fallback host":    true,
+		"a local executor": false,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newWakeHarness(t, instanceID, false)
 			h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
-			h.fact.fallback = func() bool { return tc.fallback }
+			h.fact.fallback = func() bool { return fallback }
 			h.primeRunning(t, instanceID, 7)
 			h.persist(t)
+			// The ETag the store served for the persisted rows.
+			etag := "etag"
+			h.orch.state.SetMetadataETag(&etag)
 
 			// Another daprd force purges the instance.
 			h.lock.Lock()
@@ -367,10 +367,6 @@ func TestFallbackCacheAfterRemotePurge(t *testing.T) {
 			req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).WithData(data)
 
 			_, err = h.orch.InvokeMethod(t.Context(), req)
-			if tc.wantErr {
-				require.ErrorContains(t, err, "already exists")
-				return
-			}
 			require.NoError(t, err)
 			assert.Contains(t, h.snapshotOps(), "save", "the new instance must be saved")
 		})
