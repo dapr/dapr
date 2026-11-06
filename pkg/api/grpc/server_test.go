@@ -14,6 +14,8 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
@@ -22,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
@@ -217,4 +220,77 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 
 	t.Run("without user agent", runTest(""))
 	t.Run("with user agent", runTest("daprtest/1"))
+}
+
+func TestGrpcAPILoggingTraceContext(t *testing.T) {
+	logDest := &bytes.Buffer{}
+	infoLog := logger.NewLogger("test-api-logging-trace")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
+
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	defer func() { _ = tp.Shutdown(t.Context()) }()
+	prevTracerProvider := otel.GetTracerProvider()
+	defer otel.SetTracerProvider(prevTracerProvider)
+	otel.SetTracerProvider(tp)
+
+	const (
+		traceID  = "4bf92f3577b34da6a3ce929d0e0e4736"
+		emptySID = "0000000000000000"
+	)
+
+	s := &server{
+		infoLogger: infoLog,
+	}
+
+	handler := func(ctx context.Context, req any) (any, error) {
+		return nil, nil
+	}
+	logInterceptor, _ := s.getGRPCAPILoggingMiddlewares()
+	traceInterceptor := diag.GRPCTraceUnaryServerInterceptor("fakeAppID", config.TracingSpec{SamplingRate: "1"})
+
+	info := &grpcGo.UnaryServerInfo{
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+	}
+
+	dec := json.NewDecoder(logDest)
+
+	t.Run("span in the context", func(t *testing.T) {
+		md := grpcMetadata.MD{"traceparent": []string{"00-" + traceID + "-00f067aa0ba902b7-01"}}
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
+
+		_, err := metadata.SetMetadataInContextUnary(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
+			return traceInterceptor(ctx, req, info, func(ctx context.Context, req any) (any, error) {
+				return logInterceptor(ctx, req, info, handler)
+			})
+		})
+		require.NoError(t, err)
+
+		logData := map[string]any{}
+		require.NoError(t, dec.Decode(&logData))
+
+		assert.Equal(t, "gRPC API Called", logData["msg"])
+		assert.Equal(t, traceID, logData["trace_id"])
+		spanID, ok := logData["span_id"].(string)
+		require.True(t, ok)
+		assert.NotEqual(t, emptySID, spanID)
+		assert.Len(t, spanID, len(emptySID))
+	})
+
+	// Without the tracing interceptor no span is started, so the fields must be absent
+	t.Run("no span in the context", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.MD{})
+
+		_, err := metadata.SetMetadataInContextUnary(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
+			return logInterceptor(ctx, req, info, handler)
+		})
+		require.NoError(t, err)
+
+		logData := map[string]any{}
+		require.NoError(t, dec.Decode(&logData))
+
+		assert.Equal(t, "gRPC API Called", logData["msg"])
+		assert.NotContains(t, logData, "trace_id")
+		assert.NotContains(t, logData, "span_id")
+	})
 }
