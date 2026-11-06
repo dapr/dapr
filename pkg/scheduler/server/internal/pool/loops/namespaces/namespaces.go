@@ -88,6 +88,9 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 		return n.handleTriggerRequest(e)
 	case *loops.SchedulerInfoUpdate:
 		return n.handleSchedulerInfoUpdate(e)
+	case *loops.PullSlotsUpdate:
+		n.forward(e.Namespace, e)
+		return nil
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
 	default:
@@ -192,6 +195,13 @@ func (n *namespaces) handleTriggerRequest(req *loops.TriggerRequest) error {
 
 	loop.loop.Enqueue(req)
 	return nil
+}
+
+// forward hands a stream's event to its namespace's connections loop.
+func (n *namespaces) forward(namespace string, e loops.EventConn) {
+	if connLoop, ok := n.connections[namespace]; ok {
+		connLoop.loop.Enqueue(e)
+	}
 }
 
 // handleShutdown handles the shutdown of the connections.
