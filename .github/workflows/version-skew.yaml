@@ -40,8 +40,9 @@ permissions: {}
 jobs:
   # Dapr guarantees that the control plane and Dapr sidecars may have a version
   # skew of N-1 and still be fully functional. This workflow verifies this
-  # guarantee holds for master and the previous release (or overridden version
-  # reference).
+  # guarantee holds for the branch that triggered the run and the release
+  # before it (or overridden version reference). master runs against the
+  # latest release, and a release-X.Y branch against the latest X.(Y-1) patch.
 
   # This workflow runs the previous releases integration tests against the
   # matrix of master/latest-release daprd/control-plane. This ensures the
@@ -104,7 +105,7 @@ jobs:
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Setup test output
       shell: bash
@@ -326,7 +327,7 @@ jobs:
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Parse test payload
       if: github.event_name == 'repository_dispatch'
