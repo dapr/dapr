@@ -265,6 +265,8 @@ func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
+// The response has "staged": true only when a fallback host staged the start:
+// protojson leaves out a false staged, so any other response is unchanged.
 func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.StartWorkflow,
@@ -308,10 +310,13 @@ func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 }
 
 // Route: POST "workflows/{workflowComponent}/{instanceID}/terminate"
+// The terminate, raise event, pause and resume responses are {"staged":true}
+// when a fallback host staged the operation, and {} as before otherwise:
+// protojson leaves out a false staged.
 func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.TerminateWorkflow,
-		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *runtimev1pb.TerminateWorkflowResponse]{
 			InModifier:        workflowInModifier[*runtimev1pb.TerminateWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
 		})
@@ -321,7 +326,7 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.RaiseEventWorkflow,
-		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *runtimev1pb.RaiseEventWorkflowResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
 			InModifier: func(r *http.Request, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
@@ -349,7 +354,7 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 func (a *api) onPauseWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.PauseWorkflow,
-		UniversalHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *runtimev1pb.PauseWorkflowResponse]{
 			InModifier:        workflowInModifier[*runtimev1pb.PauseWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
 		})
@@ -359,7 +364,7 @@ func (a *api) onPauseWorkflowHandler() http.HandlerFunc {
 func (a *api) onResumeWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ResumeWorkflow,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *runtimev1pb.ResumeWorkflowResponse]{
 			InModifier:        workflowInModifier[*runtimev1pb.ResumeWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
 		})

@@ -75,7 +75,8 @@ type fallbackMarkerKey struct{}
 // WatchWorkflowRuntimeStatus returns at once under a marked ctx: the instance
 // does not change until it moves to a daprd with an executor, so the
 // durabletask executor's wait after a start, rerun, terminate, suspend or
-// resume would block the caller until its deadline.
+// resume would block the caller until its deadline. The workflow APIs also
+// read the marker to tell the caller that the operation was staged.
 func WithFallbackMarker(ctx context.Context) context.Context {
 	return context.WithValue(ctx, fallbackMarkerKey{}, new(atomic.Bool))
 }
@@ -90,9 +91,10 @@ func markFallback(ctx context.Context, res *internalsv1pb.InternalInvokeResponse
 	}
 }
 
-// servedByFallback returns whether an operation made with ctx was served by
-// a fallback host.
-func servedByFallback(ctx context.Context) bool {
+// ServedByFallback returns whether an operation made with ctx was served by
+// a fallback host: it was saved, and runs once a daprd with an executor
+// hosts the instance. Always false for a ctx without a marker.
+func ServedByFallback(ctx context.Context) bool {
 	m, ok := ctx.Value(fallbackMarkerKey{}).(*atomic.Bool)
 	return ok && m.Load()
 }
