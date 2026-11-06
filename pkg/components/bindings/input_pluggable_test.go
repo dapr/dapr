@@ -132,6 +132,36 @@ func TestInputBindingCalls(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, int64(1), srv.initCalled.Load())
 		})
+
+		t.Run("close should release the underlying gRPC connector", func(t *testing.T) {
+			socket := fmt.Sprintf("/tmp/%s.sock", guuid.New().String())
+			defer os.Remove(socket)
+
+			listener, err := net.Listen("unix", socket)
+			require.NoError(t, err)
+			defer listener.Close()
+			s := grpc.NewServer()
+			proto.RegisterInputBindingServer(s, &inputBindingServer{})
+			go func() {
+				if serveErr := s.Serve(listener); serveErr != nil {
+					testLogger.Debugf("Server exited with error: %v", serveErr)
+				}
+			}()
+			defer s.Stop()
+
+			connector := pluggable.NewGRPCConnector(socket, proto.NewInputBindingClient)
+			conn := inputFromConnector(testLogger, connector)
+			require.NoError(t, conn.Init(t.Context(), bindings.Metadata{
+				Base: contribMetadata.Base{},
+			}))
+			require.NoError(t, connector.Context.Err())
+
+			require.NoError(t, conn.Close())
+			require.ErrorIs(t, connector.Context.Err(), context.Canceled)
+
+			// Close must be idempotent.
+			require.NoError(t, conn.Close())
+		})
 	}
 
 	t.Run("read should callback handler when new messages are available", func(t *testing.T) {
