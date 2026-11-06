@@ -48,6 +48,9 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// pinnedFallback holds the fallback state read once at the start of an
+	// invoked method, nil outside one (see pinFallback).
+	pinnedFallback atomic.Pointer[bool]
 	// settled lets a wake-up of a completed instance ack after one read of
 	// its metadata, parent-notify and first history rows (see
 	// settledTerminal). Any save rewrites the metadata row and fails that

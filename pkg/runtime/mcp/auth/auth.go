@@ -18,8 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
@@ -249,10 +251,14 @@ type jwtRoundTripper struct {
 	audience string
 	fetcher  security.Handler
 	base     http.RoundTripper
+
+	lock      sync.Mutex
+	token     string
+	refreshAt time.Time
 }
 
 func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	token, err := rt.fetcher.FetchJWT(req.Context(), rt.audience)
+	token, err := rt.jwt(req.Context())
 	if err != nil {
 		return nil, fmt.Errorf("SPIFFE JWT fetch failed: %w", err)
 	}
@@ -266,6 +272,32 @@ func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 	r.Header.Set(rt.header, val)
 	return rt.base.RoundTrip(r)
+}
+
+// jwt returns the cached JWT SVID, minting a new one from Sentry once half of
+// the cached token's lifetime has passed, so that Sentry is not called on every
+// request. Tokens whose expiry cannot be read are not cached.
+func (rt *jwtRoundTripper) jwt(ctx context.Context) (string, error) {
+	rt.lock.Lock()
+	defer rt.lock.Unlock()
+
+	now := time.Now()
+	if rt.token != "" && now.Before(rt.refreshAt) {
+		return rt.token, nil
+	}
+
+	token, err := rt.fetcher.MintJWT(ctx, rt.audience)
+	if err != nil {
+		return "", err
+	}
+
+	rt.token = ""
+	if svid, err := jwtsvid.ParseInsecure(token, []string{rt.audience}); err == nil {
+		rt.token = token
+		rt.refreshAt = now.Add(svid.Expiry.Sub(now) / 2)
+	}
+
+	return token, nil
 }
 
 // stringDeref returns the dereferenced string or "" if nil.

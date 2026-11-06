@@ -51,7 +51,7 @@ func (c *clustered) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
 		workflow.WithClusteredDeployment(true),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
 	return []framework.Option{
@@ -84,7 +84,7 @@ func (c *clustered) Run(t *testing.T, ctx context.Context) {
 			}
 			return nil, ctx.Context().Err()
 		}
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	executorType := c.workflow.ExecutorActorType(0)
@@ -133,6 +133,6 @@ func (c *clustered) Run(t *testing.T, ctx context.Context) {
 
 	for _, id := range []api.InstanceID{waitingID, afterID} {
 		meta := fworkflow.WaitForCompleted(t, ctx, mgmt, id)
-		assert.Equal(t, `"done"`, meta.GetOutput().GetValue(), id)
+		assert.Equal(t, `"`+workflow.DoneOutput+`"`, meta.GetOutput().GetValue(), id)
 	}
 }

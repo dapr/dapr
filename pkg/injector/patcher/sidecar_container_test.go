@@ -1733,6 +1733,28 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("workload key algorithm", testSuiteGenerator([]testCase{
+		{
+			name:        "omitted when not set",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				for _, env := range container.Env {
+					assert.NotEqual(t, "DAPR_WORKLOAD_KEY_ALGORITHM", env.Name)
+				}
+			},
+		},
+		{
+			name: "set as an env var, not a flag",
+			annotations: map[string]string{
+				annotations.KeyWorkloadKeyAlgorithm: "ecdsa",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Env, corev1.EnvVar{Name: "DAPR_WORKLOAD_KEY_ALGORITHM", Value: "ecdsa"})
+				assert.NotContains(t, strings.Join(container.Args, " "), "workload-key-algorithm")
+			},
+		},
+	}))
+
 	t.Run("jwt audiences", testSuiteGenerator([]testCase{
 		{
 			name:        "omitted when not set",
