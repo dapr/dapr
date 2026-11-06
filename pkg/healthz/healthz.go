@@ -25,14 +25,16 @@ type Healthz interface {
 }
 
 type healthz struct {
-	lock      sync.RWMutex
-	targets   int64
-	unhealthy map[string]struct{}
+	lock    sync.RWMutex
+	targets int64
+	// unhealthy maps the name of each unhealthy target to the reason it is
+	// not ready. The reason is empty when the target did not set one.
+	unhealthy map[string]string
 }
 
 func New() Healthz {
 	return &healthz{
-		unhealthy: make(map[string]struct{}),
+		unhealthy: make(map[string]string),
 		targets:   0,
 	}
 }
@@ -44,12 +46,17 @@ func (h *healthz) IsReady() bool {
 	return h.targets > 0 && len(h.unhealthy) == 0
 }
 
+// GetUnhealthyTargets returns the name of each unhealthy target. A target
+// that set a reason is returned as "name: reason".
 func (h *healthz) GetUnhealthyTargets() []string {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 
 	unhealthyList := make([]string, 0, len(h.unhealthy))
-	for name := range h.unhealthy {
+	for name, reason := range h.unhealthy {
+		if reason != "" {
+			name += ": " + reason
+		}
 		unhealthyList = append(unhealthyList, name)
 	}
 	return unhealthyList
@@ -63,7 +70,7 @@ func (h *healthz) AddTarget(name string) Target {
 		healthz: h,
 	}
 	h.targets++
-	h.unhealthy[name] = struct{}{}
+	h.unhealthy[name] = ""
 	return t
 }
 
@@ -76,5 +83,15 @@ func (h *healthz) markHealthy(name string) {
 func (h *healthz) markUnhealthy(name string) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	h.unhealthy[name] = struct{}{}
+	h.unhealthy[name] = ""
+}
+
+// setNotReadyReason sets the reason of an unhealthy target. It has no effect
+// on a healthy target.
+func (h *healthz) setNotReadyReason(name, reason string) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	if _, ok := h.unhealthy[name]; ok {
+		h.unhealthy[name] = reason
+	}
 }
