@@ -317,6 +317,10 @@ func (c *connections) dispatchWithGates(streamLoop loop.Interface[loops.EventStr
 	streamLoop.Enqueue(req)
 }
 
+// handleConcurrencyRelease releases every gate the trigger held before
+// draining any of them. Pending triggers wait on their first gate, so
+// draining that gate while a later gate of the same trigger is still held
+// would fail to acquire it, and nothing would retry once it was released.
 func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 	for _, key := range rel.GateKeys {
 		gate, ok := c.concurrencyGates[key]
@@ -326,8 +330,12 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 
 		gate.release()
 		monitoring.RecordConcurrencyInflight(key, int64(gate.current))
+	}
 
-		c.drainPending(key, gate)
+	for _, key := range rel.GateKeys {
+		if gate, ok := c.concurrencyGates[key]; ok {
+			c.drainPending(key, gate)
+		}
 	}
 }
 
