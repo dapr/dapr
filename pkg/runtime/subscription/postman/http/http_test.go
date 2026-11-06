@@ -563,7 +563,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		err := h.Deliver(t.Context(), testPubSubMessage)
 
-		assert.Equal(t, runtimePubsub.ErrMessageDropped, err, "expected error to be ErrMessageDropped")
+		require.ErrorIs(t, err, runtimePubsub.ErrMessageDropped, "expected error to be ErrMessageDropped")
+		assert.Equal(t, "Not found", runtimePubsub.ErrorDetails(err))
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 

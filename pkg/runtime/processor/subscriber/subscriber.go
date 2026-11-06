@@ -53,6 +53,9 @@ type Options struct {
 	Adapter                         rtpubsub.Adapter
 	AdapterStreamer                 rtpubsub.AdapterStreamer
 	ProgrammaticSubscriptionEnabled bool
+	// DeadLetterErrorDetailsEnabled is true when the
+	// Pubsub.DeadLetterErrorDetails preview feature is enabled.
+	DeadLetterErrorDetailsEnabled bool
 }
 
 type Subscriber struct {
@@ -77,6 +80,7 @@ type Subscriber struct {
 	retryCtx                        map[string]context.Context
 	retryCancel                     map[string]context.CancelFunc
 	programmaticSubscriptionEnabled bool
+	deadLetterErrorDetailsEnabled   bool
 }
 
 type namedSubscription struct {
@@ -103,6 +107,7 @@ func New(opts Options) *Subscriber {
 		retryCtx:                        make(map[string]context.Context),
 		retryCancel:                     make(map[string]context.CancelFunc),
 		programmaticSubscriptionEnabled: opts.ProgrammaticSubscriptionEnabled,
+		deadLetterErrorDetailsEnabled:   opts.DeadLetterErrorDetailsEnabled,
 	}
 }
 
@@ -659,19 +664,20 @@ func (s *Subscriber) startSubscription(pubsub *rtpubsub.PubsubItem, comp *compst
 	}
 
 	return subscription.New(subscription.Options{
-		AppID:           s.appID,
-		Namespace:       s.namespace,
-		PubSubName:      comp.PubsubName,
-		Topic:           comp.Topic,
-		PubSub:          pubsub,
-		Resiliency:      s.resiliency,
-		TraceSpec:       s.tracingSpec,
-		Route:           comp.Subscription,
-		GRPC:            s.grpc,
-		Adapter:         s.adapter,
-		AdapterStreamer: streamer,
-		ConnectionID:    comp.ConnectionID,
-		Postman:         postman,
+		AppID:                         s.appID,
+		Namespace:                     s.namespace,
+		PubSubName:                    comp.PubsubName,
+		Topic:                         comp.Topic,
+		PubSub:                        pubsub,
+		Resiliency:                    s.resiliency,
+		TraceSpec:                     s.tracingSpec,
+		Route:                         comp.Subscription,
+		GRPC:                          s.grpc,
+		Adapter:                       s.adapter,
+		AdapterStreamer:               streamer,
+		ConnectionID:                  comp.ConnectionID,
+		Postman:                       postman,
+		DeadLetterErrorDetailsEnabled: s.deadLetterErrorDetailsEnabled,
 	})
 }
 

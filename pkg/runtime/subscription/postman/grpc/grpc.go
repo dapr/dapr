@@ -120,7 +120,12 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 			return nil
 		}
 
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
+		details := ""
+		if hasErrStatus {
+			details = errStatus.Message()
+		}
+		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField],
+			rterrors.NewRetriable(pubsub.NewMessageError(err, details)))
 		log.Debug(err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
@@ -143,19 +148,20 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		return nil
 	case rtv1.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		// TODO: add retry error info
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
+		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField],
+			rterrors.NewRetriable(pubsub.NewMessageError(nil, res.GetMessage())))
 	case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
 
-		return pubsub.ErrMessageDropped
+		return pubsub.NewMessageDroppedError(res.GetMessage())
 	}
 
 	// Consider unknown status field as error and retry
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
-	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], res.GetStatus(), rterrors.NewRetriable(nil))
+	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], res.GetStatus(),
+		rterrors.NewRetriable(pubsub.NewMessageError(nil, res.GetMessage())))
 }
 
 // DeliverBulk publishes bulk message to a subscriber using gRPC and takes care
@@ -313,7 +319,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 			case rtv1.TopicEventResponse_RETRY: //nolint:nosnakecase
 				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
-					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID))
+					pubsub.NewMessageError(fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID), response.GetMessage()))
 
 				hasAnyError = true
 			case rtv1.TopicEventResponse_DROP: //nolint:nosnakecase
@@ -328,13 +334,13 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 						Topic:       bscData.Topic,
 						Metadata:    msg.Entry.Metadata,
 						ContentType: &msg.Entry.ContentType,
-					}, req.DeadLetterTopic)
+					}, req.DeadLetterTopic, response.GetMessage(), req.RawPayload, req.DeadLetterErrorDetails)
 				}
 			default:
 				// Consider unknown status field as error and retry
 				bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 				todo.AddBulkResponseEntry(bulkResponses, entryID,
-					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()))
+					pubsub.NewMessageError(fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()), response.GetMessage()))
 
 				hasAnyError = true
 			}
@@ -364,7 +370,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	}
 }
 
-func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
+func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string, errorDetails string, rawPayload bool, cfg pubsub.DeadLetterErrorDetailsConfig) error {
 	req := &contribpubsub.PublishRequest{
 		Data:        msg.Data,
 		PubsubName:  name,
@@ -372,6 +378,7 @@ func (g *grpc) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		Metadata:    msg.Metadata,
 		ContentType: msg.ContentType,
 	}
+	pubsub.EnrichDeadLetterRequest(req, errorDetails, rawPayload, cfg)
 
 	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
 	// shutdown); detaching the deadline below would otherwise let this block
