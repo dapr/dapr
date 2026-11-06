@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
@@ -159,8 +160,26 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	success := atomic.Bool{}
+	// opDone is closed when the policy operation closure below completes.
+	// When a timeout policy is active, the resiliency runner runs the
+	// operation on its own goroutine and returns ctx.Err() as soon as the
+	// deadline expires, WITHOUT waiting for the operation goroutine to
+	// finish. If we returned from onDirectMessage at that point, the
+	// goroutine could still be streaming the response body into `w`
+	// (http.ResponseWriter) after the handler has returned — the framework
+	// may then reuse or close the writer, causing a panic like
+	// "invalid memory address or nil pointer dereference" in flushWriter
+	// (dapr#10371). Waiting on opDone before returning guarantees the
+	// handler outlives every write to `w`. The operation's context is
+	// already canceled when we get here on the timeout path, so it exits
+	// promptly and this wait is bounded. Without a timeout policy the
+	// operation runs on this same goroutine and opDone is already closed,
+	// making the wait a no-op.
+	opDone := make(chan struct{})
+	var opDoneOnce sync.Once
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		defer opDoneOnce.Do(func() { close(opDone) })
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
@@ -301,6 +320,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// If success is true, it means that headers have already been sent, so we can't send the error to the user, because:
 	// headers cannot be re-sent, and adding to response body may cause corrupted data to be sent
 	if success.Load() {
+		// The operation has started writing to `w`, and on a timeout the
+		// resiliency runner may have returned while the operation goroutine
+		// is still streaming the body into `w`. Join it so the handler never
+		// returns before every write to `w` has finished (dapr#10371).
+		<-opDone
+
 		// For streaming requests with non-2xx responses, a CodeError is
 		// returned solely for circuit breaker accounting after the
 		// response was already successfully forwarded. Use debug level
