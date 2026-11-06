@@ -20,53 +20,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(raiseoff))
-	suite.Register(new(raiseon))
-}
-
-type (
-	raiseoff struct{ raise }
-	raiseon  struct{ raise }
-)
-
-func (r *raiseon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.raise.Setup(t)
+	suite.Register(new(raise))
 }
 
 // raise raises an event to a running workflow while no worker is connected.
 //   - off: fails, no worker connected. The event is not kept.
 //   - on:  accepted. The workflow gets the event once a worker connects.
-type raise struct{ mode }
+type raise struct{ modes }
 
 func (r *raise) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("raise")
+		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("raise")
-	startWith(t, ctx, r.wf, 0, r.staged, wfEvent, statusRunning, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.RaiseEvent(ctx, id, evGo, api.WithEventPayload("raised"))
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
 
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.RaiseEvent(ctx, id, evGo, api.WithEventPayload("raised"))
+		if !m.staged {
+			return
+		}
+
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusCompleted)
+		meta, err := mgmt.FetchWorkflowMetadata(ctx, id)
+		require.NoError(t, err)
+		assert.JSONEq(t, `"raised"`, meta.GetOutput().GetValue())
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
-
-	if !r.staged {
-		return
-	}
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusCompleted)
-	meta, err := mgmt.FetchWorkflowMetadata(ctx, id)
-	require.NoError(t, err)
-	assert.JSONEq(t, `"raised"`, meta.GetOutput().GetValue())
 }

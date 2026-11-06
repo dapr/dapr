@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -242,6 +243,9 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts = append(dopts, baseDopts...)
 
 		features := baseFeatures
+		if !opts.stagedOperations && slices.Contains(opts.stagedN, i) {
+			features = baseFeatureList(clustered, fastPath, true)
+		}
 		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}

@@ -23,24 +23,12 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(retentionoff))
-	suite.Register(new(retentionon))
-}
-
-type (
-	retentionoff struct{ retention }
-	retentionon  struct{ retention }
-)
-
-func (r *retentionon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.retention.Setup(t)
+	suite.Register(new(retention))
 }
 
 // retentionPeriod is how long a completed workflow is kept.
@@ -52,11 +40,11 @@ const retentionPeriod = time.Second * 6
 //     scheduler holds the retention reminder, and the workflow is purged
 //     once a worker connects.
 //   - on:  the same.
-type retention struct{ mode }
+type retention struct{ modes }
 
 func (r *retention) Setup(t *testing.T) []framework.Option {
-	r.wf = newWorkflow(t, r.staged, 1,
-		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+	return r.setup(t, 1, func(bool, int) []daprd.Option {
+		return []daprd.Option{daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: wfpolicy
@@ -64,29 +52,26 @@ spec:
   workflow:
     stateRetentionPolicy:
       completed: "`+retentionPeriod.String()+`"
-`)),
-	)
-	return []framework.Option{framework.WithProcesses(r.wf)}
+`)}
+	})
 }
 
 func (r *retention) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("retention")
+		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
+		completed := time.Now()
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("retention")
-	startWith(t, ctx, r.wf, 0, r.staged, wfDone, statusCompleted, id)
-	completed := time.Now()
-	mgmt := r.wf.ManagementClient(t, ctx)
+		// startWith returns once the worker is gone; that must be before the
+		// retention reminder is due, or this checks nothing.
+		require.Less(t, time.Since(completed), retentionPeriod/2)
 
-	// startWith returns once the worker is gone; that must be before the
-	// retention reminder is due, or this checks nothing.
-	require.Less(t, time.Since(completed), retentionPeriod/2)
+		// Past the retention period, with a margin for the reminder to fire.
+		time.Sleep(time.Until(completed.Add(retentionPeriod + time.Second*5)))
+		assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, id))
 
-	// Past the retention period, with a margin for the reminder to fire.
-	time.Sleep(time.Until(completed.Add(retentionPeriod + time.Second*5)))
-	assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, id))
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusNotFound)
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusNotFound)
+	})
 }

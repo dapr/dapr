@@ -19,54 +19,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(readsoff))
-	suite.Register(new(readson))
-}
-
-type (
-	readsoff struct{ reads }
-	readson  struct{ reads }
-)
-
-func (r *readson) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.reads.Setup(t)
+	suite.Register(new(reads))
 }
 
 // reads reads the status and the history of a completed workflow, and lists
 // the instance IDs, while no worker is connected.
 //   - off: all work.
 //   - on:  all work.
-type reads struct{ mode }
+type reads struct{ modes }
 
 func (r *reads) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("reads")
+		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("reads")
-	startWith(t, ctx, r.wf, 0, r.staged, wfDone, statusCompleted, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
+		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+			_, err := mgmt.FetchWorkflowMetadata(ctx, id)
+			return err
+		}), "get status")
+		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+			_, err := mgmt.GetInstanceHistory(ctx, id)
+			return err
+		}), "get history")
 
-	assert.Equal(t, accepted, call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := mgmt.FetchWorkflowMetadata(ctx, id)
-		return err
-	}), "get status")
-	assert.Equal(t, accepted, call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := mgmt.GetInstanceHistory(ctx, id)
-		return err
-	}), "get history")
-
-	var ids []string
-	assert.Equal(t, accepted, call(ctx, r.staged, func(ctx context.Context) error {
-		resp, err := mgmt.ListInstanceIDs(ctx)
-		ids = resp.GetInstanceIds()
-		return err
-	}), "list instance IDs")
-	assert.Equal(t, []string{string(id)}, ids)
+		var ids []string
+		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+			resp, err := mgmt.ListInstanceIDs(ctx)
+			ids = resp.GetInstanceIds()
+			return err
+		}), "list instance IDs")
+		assert.Equal(t, []string{string(id)}, ids)
+	})
 }

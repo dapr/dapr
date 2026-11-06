@@ -20,59 +20,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(resumeoff))
-	suite.Register(new(resumeon))
-}
-
-type (
-	resumeoff struct{ resume }
-	resumeon  struct{ resume }
-)
-
-func (r *resumeon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.resume.Setup(t)
+	suite.Register(new(resume))
 }
 
 // resume resumes a suspended workflow while no worker is connected.
 //   - off: fails, no worker connected.
 //   - on:  accepted. The instance stays SUSPENDED until a worker connects,
 //     then it is RUNNING.
-type resume struct{ mode }
+type resume struct{ modes }
 
 func (r *resume) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("resume")
+		worker := m.connect(t, ctx, 0)
+		mgmt := m.mgmt(t, ctx, 0)
+		_, err := mgmt.ScheduleNewWorkflow(ctx, wfEvent, api.WithInstanceID(id))
+		require.NoError(t, err)
+		waitStatus(t, ctx, mgmt, id, statusRunning)
+		require.NoError(t, mgmt.SuspendWorkflow(ctx, id, "suspend"))
+		waitStatus(t, ctx, mgmt, id, statusSuspended)
+		worker.Disconnect(t)
+		m.waitNoWorker(t, ctx, 0)
 
-	const id = api.InstanceID("resume")
-	worker := r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	mgmt := r.wf.ManagementClient(t, ctx)
-	_, err := mgmt.ScheduleNewWorkflow(ctx, wfEvent, api.WithInstanceID(id))
-	require.NoError(t, err)
-	waitStatus(t, ctx, mgmt, id, statusRunning)
-	require.NoError(t, mgmt.SuspendWorkflow(ctx, id, "suspend"))
-	waitStatus(t, ctx, mgmt, id, statusSuspended)
-	worker.Disconnect(t)
-	waitNoWorker(t, ctx, r.wf, 0, r.staged)
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.ResumeWorkflow(ctx, id, "resume")
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, statusSuspended, statusOf(ctx, mgmt, id))
 
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.ResumeWorkflow(ctx, id, "resume")
+		if !m.staged {
+			return
+		}
+
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusRunning)
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, statusSuspended, statusOf(ctx, mgmt, id))
-
-	if !r.staged {
-		return
-	}
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusRunning)
 }

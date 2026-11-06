@@ -19,42 +19,29 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(purgeoff))
-	suite.Register(new(purgeon))
-}
-
-type (
-	purgeoff struct{ purge }
-	purgeon  struct{ purge }
-)
-
-func (p *purgeon) Setup(t *testing.T) []framework.Option {
-	p.staged = true
-	return p.purge.Setup(t)
+	suite.Register(new(purge))
 }
 
 // purge purges a completed workflow while no worker is connected.
 //   - off: fails, no worker connected. The instance is kept.
 //   - on:  works at once.
-type purge struct{ mode }
+type purge struct{ modes }
 
 func (r *purge) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("purge")
+		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("purge")
-	startWith(t, ctx, r.wf, 0, r.staged, wfDone, statusCompleted, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
-
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.PurgeWorkflowState(ctx, id)
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.PurgeWorkflowState(ctx, id)
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, want(r.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
 }

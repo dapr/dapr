@@ -19,51 +19,37 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(suspendoff))
-	suite.Register(new(suspendon))
-}
-
-type (
-	suspendoff struct{ suspend }
-	suspendon  struct{ suspend }
-)
-
-func (s *suspendon) Setup(t *testing.T) []framework.Option {
-	s.staged = true
-	return s.suspend.Setup(t)
+	suite.Register(new(suspend))
 }
 
 // suspend suspends a running workflow while no worker is connected.
 //   - off: fails, no worker connected.
 //   - on:  accepted. The instance stays RUNNING until a worker connects, then
 //     it is SUSPENDED.
-type suspend struct{ mode }
+type suspend struct{ modes }
 
 func (r *suspend) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("suspend")
+		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("suspend")
-	startWith(t, ctx, r.wf, 0, r.staged, wfEvent, statusRunning, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.SuspendWorkflow(ctx, id, "suspend")
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
 
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.SuspendWorkflow(ctx, id, "suspend")
+		if !m.staged {
+			return
+		}
+
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusSuspended)
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
-
-	if !r.staged {
-		return
-	}
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusSuspended)
 }

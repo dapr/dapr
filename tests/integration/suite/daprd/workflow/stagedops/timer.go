@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -29,18 +28,7 @@ import (
 )
 
 func init() {
-	suite.Register(new(timeroff))
-	suite.Register(new(timeron))
-}
-
-type (
-	timeroff struct{ timer }
-	timeron  struct{ timer }
-)
-
-func (r *timeron) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.timer.Setup(t)
+	suite.Register(new(timer))
 }
 
 // timerDelay is how long the workflow's timer waits.
@@ -51,28 +39,28 @@ const timerDelay = time.Second * 6
 //   - off: the workflow stays RUNNING; the scheduler holds the timer, and
 //     the workflow completes once a worker connects.
 //   - on:  the same.
-type timer struct{ mode }
+type timer struct{ modes }
 
 func (r *timer) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	require.NoError(t, r.wf.Registry().AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
-		return workflow.DoneOutput, ctx.CreateTimer(timerDelay).Await(nil)
-	}))
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		require.NoError(t, m.wf.RegistryN(m.idx(0)).AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
+			return workflow.DoneOutput, ctx.CreateTimer(timerDelay).Await(nil)
+		}))
 
-	const id = api.InstanceID("timer")
-	startWith(t, ctx, r.wf, 0, r.staged, "timer", statusRunning, id)
-	started := time.Now()
-	mgmt := r.wf.ManagementClient(t, ctx)
+		const id = api.InstanceID("timer")
+		m.startWith(t, ctx, 0, "timer", statusRunning, id)
+		started := time.Now()
+		mgmt := m.mgmt(t, ctx, 0)
 
-	// startWith returns once the worker is gone; that must be before the
-	// timer is due, or this checks nothing.
-	require.Less(t, time.Since(started), timerDelay/2)
+		// startWith returns once the worker is gone; that must be before the
+		// timer is due, or this checks nothing.
+		require.Less(t, time.Since(started), timerDelay/2)
 
-	// Past the timer, with a margin for it to fire.
-	time.Sleep(time.Until(started.Add(timerDelay + time.Second*5)))
-	assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
+		// Past the timer, with a margin for it to fire.
+		time.Sleep(time.Until(started.Add(timerDelay + time.Second*5)))
+		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
 
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusCompleted)
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusCompleted)
+	})
 }

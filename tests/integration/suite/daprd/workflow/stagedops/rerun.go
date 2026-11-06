@@ -19,24 +19,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(rerunoff))
-	suite.Register(new(rerunon))
-}
-
-type (
-	rerunoff struct{ rerun }
-	rerunon  struct{ rerun }
-)
-
-func (r *rerunon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.rerun.Setup(t)
+	suite.Register(new(rerun))
 }
 
 // rerun reruns a completed workflow from its first event, as a new instance,
@@ -44,27 +32,25 @@ func (r *rerunon) Setup(t *testing.T) []framework.Option {
 //   - off: fails, no worker connected. No new instance.
 //   - on:  accepted. The new instance reads RUNNING right away (a staged
 //     start reads PENDING), and it runs once a worker connects.
-type rerun struct{ mode }
+type rerun struct{ modes }
 
 func (r *rerun) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const (
+			id    = api.InstanceID("rerun")
+			newID = api.InstanceID("rerun-new")
+		)
+		m.startWith(t, ctx, 0, wfActivity, statusCompleted, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const (
-		id    = api.InstanceID("rerun")
-		newID = api.InstanceID("rerun-new")
-	)
-	startWith(t, ctx, r.wf, 0, r.staged, wfActivity, statusCompleted, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
+		got := m.call(ctx, func(ctx context.Context) error {
+			_, err := mgmt.RerunWorkflowFromEvent(ctx, id, 0, api.WithRerunNewInstanceID(newID))
+			return err
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, want(m.staged, statusNotFound, statusRunning), statusOf(ctx, mgmt, newID))
 
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := mgmt.RerunWorkflowFromEvent(ctx, id, 0, api.WithRerunNewInstanceID(newID))
-		return err
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, newID, want(m.staged, statusNotFound, statusCompleted))
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, want(r.staged, statusNotFound, statusRunning), statusOf(ctx, mgmt, newID))
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, newID, want(r.staged, statusNotFound, statusCompleted))
 }

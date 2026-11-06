@@ -19,25 +19,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
 func init() {
-	suite.Register(new(waitoff))
-	suite.Register(new(waiton))
-}
-
-type (
-	waitoff struct{ wait }
-	waiton  struct{ wait }
-)
-
-func (w *waiton) Setup(t *testing.T) []framework.Option {
-	w.staged = true
-	return w.wait.Setup(t)
+	suite.Register(new(wait))
 }
 
 // wait waits for a running workflow to start and to complete, and for a
@@ -47,26 +34,25 @@ func (w *waiton) Setup(t *testing.T) []framework.Option {
 //   - off: all fail, no worker connected.
 //   - on:  the wait for the running workflow to start returns at once; the
 //     others block until a worker runs the workflow or the deadline passes.
-type wait struct{ mode }
+type wait struct{ modes }
 
 func (r *wait) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = "wait"
+		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
+		sidecar := protos.NewTaskHubSidecarServiceClient(m.wf.DaprN(m.idx(0)).GRPCConn(t, ctx))
 
-	const id = "wait"
-	startWith(t, ctx, r.wf, 0, r.staged, wfEvent, statusRunning, api.InstanceID(id))
-	sidecar := protos.NewTaskHubSidecarServiceClient(r.wf.Dapr().GRPCConn(t, ctx))
-
-	assert.Equal(t, want(r.staged, noWorker, accepted), call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: id})
-		return err
-	}), "wait for start of the running workflow")
-	assert.Equal(t, want(r.staged, noWorker, blocks), call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := sidecar.WaitForInstanceCompletion(ctx, &protos.GetInstanceRequest{InstanceId: id})
-		return err
-	}), "wait for completion of the running workflow")
-	assert.Equal(t, want(r.staged, noWorker, blocks), call(ctx, r.staged, func(ctx context.Context) error {
-		_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "wait-none"})
-		return err
-	}), "wait for start of a workflow that does not exist")
+		assert.Equal(t, want(m.staged, noWorker, accepted), m.call(ctx, func(ctx context.Context) error {
+			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: id})
+			return err
+		}), "wait for start of the running workflow")
+		assert.Equal(t, want(m.staged, noWorker, blocks), m.call(ctx, func(ctx context.Context) error {
+			_, err := sidecar.WaitForInstanceCompletion(ctx, &protos.GetInstanceRequest{InstanceId: id})
+			return err
+		}), "wait for completion of the running workflow")
+		assert.Equal(t, want(m.staged, noWorker, blocks), m.call(ctx, func(ctx context.Context) error {
+			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "wait-none"})
+			return err
+		}), "wait for start of a workflow that does not exist")
+	})
 }

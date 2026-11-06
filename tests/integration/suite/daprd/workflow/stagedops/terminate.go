@@ -19,24 +19,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(terminateoff))
-	suite.Register(new(terminateon))
-}
-
-type (
-	terminateoff struct{ terminate }
-	terminateon  struct{ terminate }
-)
-
-func (r *terminateon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.terminate.Setup(t)
+	suite.Register(new(terminate))
 }
 
 // terminate terminates a running workflow while no worker is connected.
@@ -44,27 +32,25 @@ func (r *terminateon) Setup(t *testing.T) []framework.Option {
 //   - on:  accepted, but the instance stays RUNNING until a worker connects;
 //     only then is it TERMINATED. A retention policy for terminated
 //     workflows therefore starts counting from the worker's connect.
-type terminate struct{ mode }
+type terminate struct{ modes }
 
 func (r *terminate) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const id = api.InstanceID("terminate")
+		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
+		mgmt := m.mgmt(t, ctx, 0)
 
-	const id = api.InstanceID("terminate")
-	startWith(t, ctx, r.wf, 0, r.staged, wfEvent, statusRunning, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.TerminateWorkflow(ctx, id)
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
 
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.TerminateWorkflow(ctx, id)
+		if !m.staged {
+			return
+		}
+
+		m.connect(t, ctx, 0)
+		waitStatus(t, ctx, mgmt, id, statusTerminated)
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
-
-	if !r.staged {
-		return
-	}
-
-	r.wf.ConnectWorker(t, ctx, r.wf.Registry())
-	r.wf.WaitForConnectedWorkers(t, ctx, 1)
-	waitStatus(t, ctx, mgmt, id, statusTerminated)
 }

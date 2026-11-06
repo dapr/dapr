@@ -19,48 +19,35 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(recursivepurgeoff))
-	suite.Register(new(recursivepurgeon))
-}
-
-type (
-	recursivepurgeoff struct{ recursivepurge }
-	recursivepurgeon  struct{ recursivepurge }
-)
-
-func (r *recursivepurgeon) Setup(t *testing.T) []framework.Option {
-	r.staged = true
-	return r.recursivepurge.Setup(t)
+	suite.Register(new(recursivepurge))
 }
 
 // recursivepurge purges a completed parent workflow and its completed child
 // while no worker is connected.
 //   - off: fails, no worker connected. Both instances are kept.
 //   - on:  works at once; both are gone.
-type recursivepurge struct{ mode }
+type recursivepurge struct{ modes }
 
 func (r *recursivepurge) Run(t *testing.T, ctx context.Context) {
-	r.wf.WaitUntilRunning(t, ctx)
-	addWorkflows(t, r.wf.Registry())
+	r.run(t, ctx, func(t *testing.T, m mode) {
+		const (
+			id    = api.InstanceID("recursivepurge")
+			child = id + "-child"
+		)
+		m.startWith(t, ctx, 0, wfParent, statusCompleted, id)
+		mgmt := m.mgmt(t, ctx, 0)
+		assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, child))
 
-	const (
-		id    = api.InstanceID("recursivepurge")
-		child = id + "-child"
-	)
-	startWith(t, ctx, r.wf, 0, r.staged, wfParent, statusCompleted, id)
-	mgmt := r.wf.ManagementClient(t, ctx)
-	assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, child))
-
-	got := call(ctx, r.staged, func(ctx context.Context) error {
-		return mgmt.PurgeWorkflowState(ctx, id, api.WithRecursivePurge(true))
+		got := m.call(ctx, func(ctx context.Context) error {
+			return mgmt.PurgeWorkflowState(ctx, id, api.WithRecursivePurge(true))
+		})
+		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
+		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, child))
 	})
-	assert.Equal(t, want(r.staged, noWorker, accepted), got)
-	assert.Equal(t, want(r.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
-	assert.Equal(t, want(r.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, child))
 }
