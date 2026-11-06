@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
@@ -45,37 +46,37 @@ func init() {
 //     its state, and the second raise fails with "no such instance exists".
 //     The instance stays purged. Probably unwanted: the caller gets internal
 //     errors where it would get "not found" with the preview off.
-type forcepurgeremote struct{ modes }
+type forcepurgeremote struct{ stagedops.Modes }
 
 func (r *forcepurgeremote) Setup(t *testing.T) []framework.Option {
 	appIDs := map[bool]string{false: uuid.NewString(), true: uuid.NewString()}
-	return r.setup(t, 2, func(staged bool, _ int) []daprd.Option {
+	return r.SetupN(t, 2, func(staged bool, _ int) []daprd.Option {
 		return []daprd.Option{daprd.WithAppID(appIDs[staged])}
 	})
 }
 
 func (r *forcepurgeremote) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("forcepurgeremote")
-		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
-		m.waitNoWorker(t, ctx, 1)
-		mgmt := []*client.TaskHubGrpcClient{m.mgmt(t, ctx, 0), m.mgmt(t, ctx, 1)}
+		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
+		m.WaitNoWorker(t, ctx, 1)
+		mgmt := []*client.TaskHubGrpcClient{m.Mgmt(t, ctx, 0), m.Mgmt(t, ctx, 1)}
 
 		// With the preview on, a staged raise loads the workflow actor on the
 		// daprd which owns it. The event is not the one the workflow waits
 		// for.
-		got := m.call(ctx, func(ctx context.Context) error {
+		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt[0].RaiseEvent(ctx, id, "other")
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
 
 		purger := 1
-		if m.staged {
+		if m.Staged {
 			owner := -1
 			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				for i := range 2 {
-					d := m.idx(i)
-					if n, _ := m.wf.DaprN(d).ActiveActorCount(c, ctx, m.wf.WorkflowActorType(d)); n > 0 {
+					d := m.Idx(i)
+					if n, _ := m.WF.DaprN(d).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(d)); n > 0 {
 						owner = i
 					}
 				}
@@ -84,22 +85,22 @@ func (r *forcepurgeremote) Run(t *testing.T, ctx context.Context) {
 			purger = 1 - owner
 		}
 
-		got = m.call(ctx, func(ctx context.Context) error {
+		got = m.Call(ctx, func(ctx context.Context) error {
 			return mgmt[purger].PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
 		})
-		assert.Equal(t, accepted, got)
-		assert.Equal(t, statusNotFound, statusOf(ctx, mgmt[purger], id))
+		assert.Equal(t, stagedops.Accepted, got)
+		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
 
-		got = m.call(ctx, func(ctx context.Context) error {
-			return mgmt[purger].RaiseEvent(ctx, id, evGo, api.WithEventPayload("after"))
+		got = m.Call(ctx, func(ctx context.Context) error {
+			return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("after"))
 		})
-		assert.Equal(t, want(m.staged, noWorker, etagMismatch), got)
-		assert.Equal(t, statusNotFound, statusOf(ctx, mgmt[purger], id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.EtagMismatch), got)
+		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
 
-		got = m.call(ctx, func(ctx context.Context) error {
-			return mgmt[purger].RaiseEvent(ctx, id, evGo, api.WithEventPayload("again"))
+		got = m.Call(ctx, func(ctx context.Context) error {
+			return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("again"))
 		})
-		assert.Equal(t, want(m.staged, noWorker, notFound), got)
-		assert.Equal(t, statusNotFound, statusOf(ctx, mgmt[purger], id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.NotFound), got)
+		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
 	})
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -40,10 +41,10 @@ const retentionPeriod = time.Second * 6
 //     scheduler holds the retention reminder, and the workflow is purged
 //     once a worker connects.
 //   - on:  the same.
-type retention struct{ modes }
+type retention struct{ stagedops.Modes }
 
 func (r *retention) Setup(t *testing.T) []framework.Option {
-	return r.setup(t, 1, func(bool, int) []daprd.Option {
+	return r.SetupN(t, 1, func(bool, int) []daprd.Option {
 		return []daprd.Option{daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
@@ -57,21 +58,21 @@ spec:
 }
 
 func (r *retention) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("retention")
-		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
+		m.StartWith(t, ctx, 0, stagedops.WfDone, stagedops.StatusCompleted, id)
 		completed := time.Now()
-		mgmt := m.mgmt(t, ctx, 0)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		// startWith returns once the worker is gone; that must be before the
+		// StartWith returns once the worker is gone; that must be before the
 		// retention reminder is due, or this checks nothing.
 		require.Less(t, time.Since(completed), retentionPeriod/2)
 
 		// Past the retention period, with a margin for the reminder to fire.
 		time.Sleep(time.Until(completed.Add(retentionPeriod + time.Second*5)))
-		assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.StatusCompleted, stagedops.StatusOf(ctx, mgmt, id))
 
-		m.connect(t, ctx, 0)
-		waitStatus(t, ctx, mgmt, id, statusNotFound)
+		m.Connect(t, ctx, 0)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusNotFound)
 	})
 }

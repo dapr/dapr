@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -31,23 +32,23 @@ func init() {
 // while no worker is connected.
 //   - off: fails, no worker connected. Both instances are kept.
 //   - on:  works at once; both are gone.
-type recursivepurge struct{ modes }
+type recursivepurge struct{ stagedops.Modes }
 
 func (r *recursivepurge) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const (
 			id    = api.InstanceID("recursivepurge")
 			child = id + "-child"
 		)
-		m.startWith(t, ctx, 0, wfParent, statusCompleted, id)
-		mgmt := m.mgmt(t, ctx, 0)
-		assert.Equal(t, statusCompleted, statusOf(ctx, mgmt, child))
+		m.StartWith(t, ctx, 0, stagedops.WfParent, stagedops.StatusCompleted, id)
+		mgmt := m.Mgmt(t, ctx, 0)
+		assert.Equal(t, stagedops.StatusCompleted, stagedops.StatusOf(ctx, mgmt, child))
 
-		got := m.call(ctx, func(ctx context.Context) error {
+		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt.PurgeWorkflowState(ctx, id, api.WithRecursivePurge(true))
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
-		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
-		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, child))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.StatusCompleted, stagedops.StatusNotFound), stagedops.StatusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.StatusCompleted, stagedops.StatusNotFound), stagedops.StatusOf(ctx, mgmt, child))
 	})
 }

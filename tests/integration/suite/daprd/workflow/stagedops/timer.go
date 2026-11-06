@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -39,28 +40,28 @@ const timerDelay = time.Second * 6
 //   - off: the workflow stays RUNNING; the scheduler holds the timer, and
 //     the workflow completes once a worker connects.
 //   - on:  the same.
-type timer struct{ modes }
+type timer struct{ stagedops.Modes }
 
 func (r *timer) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
-		require.NoError(t, m.wf.RegistryN(m.idx(0)).AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
+		require.NoError(t, m.WF.RegistryN(m.Idx(0)).AddWorkflowN("timer", func(ctx *task.WorkflowContext) (any, error) {
 			return workflow.DoneOutput, ctx.CreateTimer(timerDelay).Await(nil)
 		}))
 
 		const id = api.InstanceID("timer")
-		m.startWith(t, ctx, 0, "timer", statusRunning, id)
+		m.StartWith(t, ctx, 0, "timer", stagedops.StatusRunning, id)
 		started := time.Now()
-		mgmt := m.mgmt(t, ctx, 0)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		// startWith returns once the worker is gone; that must be before the
+		// StartWith returns once the worker is gone; that must be before the
 		// timer is due, or this checks nothing.
 		require.Less(t, time.Since(started), timerDelay/2)
 
 		// Past the timer, with a margin for it to fire.
 		time.Sleep(time.Until(started.Add(timerDelay + time.Second*5)))
-		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.StatusRunning, stagedops.StatusOf(ctx, mgmt, id))
 
-		m.connect(t, ctx, 0)
-		waitStatus(t, ctx, mgmt, id, statusCompleted)
+		m.Connect(t, ctx, 0)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusCompleted)
 	})
 }

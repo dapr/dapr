@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -30,18 +31,18 @@ func init() {
 // purge purges a completed workflow while no worker is connected.
 //   - off: fails, no worker connected. The instance is kept.
 //   - on:  works at once.
-type purge struct{ modes }
+type purge struct{ stagedops.Modes }
 
 func (r *purge) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("purge")
-		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
-		mgmt := m.mgmt(t, ctx, 0)
+		m.StartWith(t, ctx, 0, stagedops.WfDone, stagedops.StatusCompleted, id)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		got := m.call(ctx, func(ctx context.Context) error {
+		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt.PurgeWorkflowState(ctx, id)
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
-		assert.Equal(t, want(m.staged, statusCompleted, statusNotFound), statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.StatusCompleted, stagedops.StatusNotFound), stagedops.StatusOf(ctx, mgmt, id))
 	})
 }

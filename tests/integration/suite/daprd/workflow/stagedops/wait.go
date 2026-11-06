@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
 )
@@ -34,23 +35,23 @@ func init() {
 //   - off: all fail, no worker connected.
 //   - on:  the wait for the running workflow to start returns at once; the
 //     others block until a worker runs the workflow or the deadline passes.
-type wait struct{ modes }
+type wait struct{ stagedops.Modes }
 
 func (r *wait) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = "wait"
-		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
-		sidecar := protos.NewTaskHubSidecarServiceClient(m.wf.DaprN(m.idx(0)).GRPCConn(t, ctx))
+		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
+		sidecar := protos.NewTaskHubSidecarServiceClient(m.WF.DaprN(m.Idx(0)).GRPCConn(t, ctx))
 
-		assert.Equal(t, want(m.staged, noWorker, accepted), m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), m.Call(ctx, func(ctx context.Context) error {
 			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: id})
 			return err
 		}), "wait for start of the running workflow")
-		assert.Equal(t, want(m.staged, noWorker, blocks), m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), m.Call(ctx, func(ctx context.Context) error {
 			_, err := sidecar.WaitForInstanceCompletion(ctx, &protos.GetInstanceRequest{InstanceId: id})
 			return err
 		}), "wait for completion of the running workflow")
-		assert.Equal(t, want(m.staged, noWorker, blocks), m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), m.Call(ctx, func(ctx context.Context) error {
 			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "wait-none"})
 			return err
 		}), "wait for start of a workflow that does not exist")

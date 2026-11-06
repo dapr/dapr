@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -31,26 +32,26 @@ func init() {
 // raise raises an event to a running workflow while no worker is connected.
 //   - off: fails, no worker connected. The event is not kept.
 //   - on:  accepted. The workflow gets the event once a worker connects.
-type raise struct{ modes }
+type raise struct{ stagedops.Modes }
 
 func (r *raise) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("raise")
-		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
-		mgmt := m.mgmt(t, ctx, 0)
+		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		got := m.call(ctx, func(ctx context.Context) error {
-			return mgmt.RaiseEvent(ctx, id, evGo, api.WithEventPayload("raised"))
+		got := m.Call(ctx, func(ctx context.Context) error {
+			return mgmt.RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("raised"))
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
-		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
+		assert.Equal(t, stagedops.StatusRunning, stagedops.StatusOf(ctx, mgmt, id))
 
-		if !m.staged {
+		if !m.Staged {
 			return
 		}
 
-		m.connect(t, ctx, 0)
-		waitStatus(t, ctx, mgmt, id, statusCompleted)
+		m.Connect(t, ctx, 0)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusCompleted)
 		meta, err := mgmt.FetchWorkflowMetadata(ctx, id)
 		require.NoError(t, err)
 		assert.JSONEq(t, `"raised"`, meta.GetOutput().GetValue())

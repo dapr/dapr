@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -34,24 +35,24 @@ func init() {
 //     exists": the instance stays RUNNING until a worker applies the
 //     terminate. Probably unwanted, since with a worker the same two calls
 //     both succeed.
-type terminatestart struct{ modes }
+type terminatestart struct{ stagedops.Modes }
 
 func (r *terminatestart) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("terminatestart")
-		m.startWith(t, ctx, 0, wfEvent, statusRunning, id)
-		mgmt := m.mgmt(t, ctx, 0)
+		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		got := m.call(ctx, func(ctx context.Context) error {
+		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt.TerminateWorkflow(ctx, id)
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
 
-		got = m.call(ctx, func(ctx context.Context) error {
-			_, err := mgmt.ScheduleNewWorkflow(ctx, wfDone, api.WithInstanceID(id))
+		got = m.Call(ctx, func(ctx context.Context) error {
+			_, err := mgmt.ScheduleNewWorkflow(ctx, stagedops.WfDone, api.WithInstanceID(id))
 			return err
 		})
-		assert.Equal(t, want(m.staged, noWorker, alreadyExists), got)
-		assert.Equal(t, statusRunning, statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.AlreadyExists), got)
+		assert.Equal(t, stagedops.StatusRunning, stagedops.StatusOf(ctx, mgmt, id))
 	})
 }

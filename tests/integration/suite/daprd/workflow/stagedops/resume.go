@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -32,32 +33,32 @@ func init() {
 //   - off: fails, no worker connected.
 //   - on:  accepted. The instance stays SUSPENDED until a worker connects,
 //     then it is RUNNING.
-type resume struct{ modes }
+type resume struct{ stagedops.Modes }
 
 func (r *resume) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("resume")
-		worker := m.connect(t, ctx, 0)
-		mgmt := m.mgmt(t, ctx, 0)
-		_, err := mgmt.ScheduleNewWorkflow(ctx, wfEvent, api.WithInstanceID(id))
+		worker := m.Connect(t, ctx, 0)
+		mgmt := m.Mgmt(t, ctx, 0)
+		_, err := mgmt.ScheduleNewWorkflow(ctx, stagedops.WfEvent, api.WithInstanceID(id))
 		require.NoError(t, err)
-		waitStatus(t, ctx, mgmt, id, statusRunning)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusRunning)
 		require.NoError(t, mgmt.SuspendWorkflow(ctx, id, "suspend"))
-		waitStatus(t, ctx, mgmt, id, statusSuspended)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusSuspended)
 		worker.Disconnect(t)
-		m.waitNoWorker(t, ctx, 0)
+		m.WaitNoWorker(t, ctx, 0)
 
-		got := m.call(ctx, func(ctx context.Context) error {
+		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt.ResumeWorkflow(ctx, id, "resume")
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
-		assert.Equal(t, statusSuspended, statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
+		assert.Equal(t, stagedops.StatusSuspended, stagedops.StatusOf(ctx, mgmt, id))
 
-		if !m.staged {
+		if !m.Staged {
 			return
 		}
 
-		m.connect(t, ctx, 0)
-		waitStatus(t, ctx, mgmt, id, statusRunning)
+		m.Connect(t, ctx, 0)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.StatusRunning)
 	})
 }

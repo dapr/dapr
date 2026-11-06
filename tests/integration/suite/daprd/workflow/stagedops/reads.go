@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -31,25 +32,25 @@ func init() {
 // the instance IDs, while no worker is connected.
 //   - off: all work.
 //   - on:  all work.
-type reads struct{ modes }
+type reads struct{ stagedops.Modes }
 
 func (r *reads) Run(t *testing.T, ctx context.Context) {
-	r.run(t, ctx, func(t *testing.T, m mode) {
+	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("reads")
-		m.startWith(t, ctx, 0, wfDone, statusCompleted, id)
-		mgmt := m.mgmt(t, ctx, 0)
+		m.StartWith(t, ctx, 0, stagedops.WfDone, stagedops.StatusCompleted, id)
+		mgmt := m.Mgmt(t, ctx, 0)
 
-		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Accepted, m.Call(ctx, func(ctx context.Context) error {
 			_, err := mgmt.FetchWorkflowMetadata(ctx, id)
 			return err
 		}), "get status")
-		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Accepted, m.Call(ctx, func(ctx context.Context) error {
 			_, err := mgmt.GetInstanceHistory(ctx, id)
 			return err
 		}), "get history")
 
 		var ids []string
-		assert.Equal(t, accepted, m.call(ctx, func(ctx context.Context) error {
+		assert.Equal(t, stagedops.Accepted, m.Call(ctx, func(ctx context.Context) error {
 			resp, err := mgmt.ListInstanceIDs(ctx)
 			ids = resp.GetInstanceIds()
 			return err

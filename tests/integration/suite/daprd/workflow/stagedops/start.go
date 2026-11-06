@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 )
@@ -31,22 +32,22 @@ func init() {
 //   - off: fails, no worker connected. Nothing is kept.
 //   - on:  accepted at once. The instance is PENDING and runs once a worker
 //     connects.
-type start struct{ modes }
+type start struct{ stagedops.Modes }
 
 func (s *start) Run(t *testing.T, ctx context.Context) {
-	s.run(t, ctx, func(t *testing.T, m mode) {
-		m.waitNoWorker(t, ctx, 0)
-		mgmt := m.mgmt(t, ctx, 0)
+	s.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
+		m.WaitNoWorker(t, ctx, 0)
+		mgmt := m.Mgmt(t, ctx, 0)
 
 		const id = api.InstanceID("start")
-		got := m.call(ctx, func(ctx context.Context) error {
-			_, err := mgmt.ScheduleNewWorkflow(ctx, wfDone, api.WithInstanceID(id))
+		got := m.Call(ctx, func(ctx context.Context) error {
+			_, err := mgmt.ScheduleNewWorkflow(ctx, stagedops.WfDone, api.WithInstanceID(id))
 			return err
 		})
-		assert.Equal(t, want(m.staged, noWorker, accepted), got)
-		assert.Equal(t, want(m.staged, statusNotFound, statusPending), statusOf(ctx, mgmt, id))
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.StatusNotFound, stagedops.StatusPending), stagedops.StatusOf(ctx, mgmt, id))
 
-		m.connect(t, ctx, 0)
-		waitStatus(t, ctx, mgmt, id, want(m.staged, statusNotFound, statusCompleted))
+		m.Connect(t, ctx, 0)
+		stagedops.WaitStatus(t, ctx, mgmt, id, stagedops.Want(m.Staged, stagedops.StatusNotFound, stagedops.StatusCompleted))
 	})
 }
