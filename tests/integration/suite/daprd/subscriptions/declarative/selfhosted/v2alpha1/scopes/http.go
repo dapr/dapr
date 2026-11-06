@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,9 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,12 +41,16 @@ type http struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
 	sub    *subscriber.Subscriber
+	log1   *logline.LogLine
+	log2   *logline.LogLine
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.sub = subscriber.New(t, subscriber.WithRoutes(
 		"/all", "/allempty", "/only1", "/only2", "/both",
 	))
+	h.log1 = logline.New(t, logline.WithCaptureAll())
+	h.log2 = logline.New(t, logline.WithCaptureAll())
 
 	resDir := t.TempDir()
 
@@ -51,11 +58,19 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(h.sub.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithResourcesDir(resDir),
+		daprd.WithExecOptions(
+			exec.WithStdout(h.log1.Stdout()),
+			exec.WithStderr(h.log1.Stderr()),
+		),
 	)
 	h.daprd2 = daprd.New(t,
 		daprd.WithAppPort(h.sub.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithResourcesDir(resDir),
+		daprd.WithExecOptions(
+			exec.WithStdout(h.log2.Stdout()),
+			exec.WithStderr(h.log2.Stderr()),
+		),
 	)
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"),
@@ -128,13 +143,27 @@ scopes:
 `, h.daprd1.AppID(), h.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
-		framework.WithProcesses(h.sub, h.daprd1, h.daprd2),
+		framework.WithProcesses(h.log1, h.log2, h.sub, h.daprd1, h.daprd2),
 	}
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
+
+	for _, name := range []string{"sub1", "sub2", "sub3", "sub5"} {
+		h.log1.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
+	}
+
+	for _, name := range []string{"sub1", "sub2", "sub4", "sub5"} {
+		h.log2.EventuallyContains(t, "Found Subscription: "+name, time.Second*15, time.Millisecond*10)
+	}
+
+	assert.Never(t, func() bool {
+		return h.log1.Contains("Found Subscription: sub4") ||
+			h.log2.Contains("Found Subscription: sub3")
+	}, time.Second*3, time.Millisecond*10,
+		"daprd logged a subscription scoped to another app")
 
 	client1 := h.daprd1.GRPCClient(t, ctx)
 	client2 := h.daprd2.GRPCClient(t, ctx)
