@@ -20,6 +20,8 @@ import (
 )
 
 type server struct {
+	sentryv1pb.UnimplementedCAServer
+
 	signCertificateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error)
 }
 

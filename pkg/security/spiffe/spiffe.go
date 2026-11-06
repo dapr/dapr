@@ -40,22 +40,32 @@ func FromGRPCContext(ctx context.Context) (*Parsed, bool, error) {
 		return nil, false, nil
 	}
 
+	parsed, err := FromID(id)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return parsed, true, nil
+}
+
+// FromID parses a SPIFFE ID according to the Dapr SPIFFE ID path format.
+func FromID(id spiffeid.ID) (*Parsed, error) {
 	split := strings.Split(id.Path(), "/")
 	// Don't force match of 4 segments, since we may want to add more identifiers
 	// to the path in future which would otherwise break backwards compat.
 	if len(split) < 4 || split[0] != "" || split[1] != "ns" {
-		return nil, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
+		return nil, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
 	}
 
 	if len(split[2]) == 0 || len(split[3]) == 0 {
-		return nil, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
+		return nil, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
 	}
 
 	return &Parsed{
 		id:        id,
 		namespace: split[2],
 		appID:     split[3],
-	}, true, nil
+	}, nil
 }
 
 // FromStrings builds a Dapr SPIFFE ID with the given namespace and app ID in

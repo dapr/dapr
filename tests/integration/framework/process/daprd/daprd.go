@@ -172,6 +172,9 @@ spec:
 	if len(opts.sentryRequestJwtAudiences) > 0 {
 		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
 	}
+	if opts.workloadKeyAlgorithm != "" {
+		args = append(args, "--workload-key-algorithm="+opts.workloadKeyAlgorithm)
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
@@ -564,6 +567,17 @@ func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.M
 
 func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *MetadataActorRuntime {
 	return d.meta(t, ctx).ActorRuntime
+}
+
+// PlacementStatus returns the placement connection status the daprd reports,
+// such as "placement: connected". A failed metadata read fails t and returns
+// "".
+func (d *Daprd) PlacementStatus(t assert.TestingT, ctx context.Context) string {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return ""
+	}
+	return rt.Placement
 }
 
 func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {

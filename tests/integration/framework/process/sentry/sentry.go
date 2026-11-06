@@ -18,6 +18,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,10 +34,12 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -43,6 +47,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	cryptopem "github.com/dapr/kit/crypto/pem"
 )
 
 type Sentry struct {
@@ -364,6 +369,51 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 			iowriter.Eventf(t, "gRPC connection close error (may be already closed): %v", err)
 		}
 	})
+
+	return conn
+}
+
+// SignSVID requests an X.509 SVID for the given namespace and app ID from
+// Sentry, using the insecure validator.
+func (s *Sentry) SignSVID(t *testing.T, ctx context.Context, sentryID, namespace, appID string) *x509svid.SVID {
+	t.Helper()
+
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	csr, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), key)
+	require.NoError(t, err)
+
+	resp, err := sentryv1pb.NewCAClient(s.DialGRPC(t, ctx, sentryID)).SignCertificate(ctx, &sentryv1pb.SignCertificateRequest{
+		Id:                        appID,
+		Namespace:                 namespace,
+		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr}),
+		TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
+	})
+	require.NoError(t, err)
+
+	certs, err := cryptopem.DecodePEMCertificates(resp.GetWorkloadCertificate())
+	require.NoError(t, err)
+	id, err := x509svid.IDFromCert(certs[0])
+	require.NoError(t, err)
+
+	return &x509svid.SVID{ID: id, Certificates: certs, PrivateKey: key}
+}
+
+// DialGRPCMTLS dials the sentry presenting the given X.509 SVID as the client
+// certificate, and returns a grpc client connection.
+func (s *Sentry) DialGRPCMTLS(t *testing.T, sentryID string, svid x509svid.Source) *grpc.ClientConn {
+	t.Helper()
+
+	id, err := spiffeid.FromString(sentryID)
+	require.NoError(t, err)
+	x509bundle, err := x509bundle.Parse(id.TrustDomain(), s.CABundle().X509.TrustAnchors)
+	require.NoError(t, err)
+
+	conn, err := grpc.NewClient(fmt.Sprintf("127.0.0.1:%d", s.Port()),
+		grpc.WithTransportCredentials(grpccredentials.MTLSClientCredentials(svid, x509bundle, tlsconfig.AuthorizeID(id))),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	return conn
 }

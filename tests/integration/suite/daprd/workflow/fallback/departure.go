@@ -79,7 +79,7 @@ func (d *departure) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t,
 		workflow.WithStagedOperations(),
 		workflow.WithClusteredDeployment(true),
-		withSettle(t, 0),
+		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(env,
 			exec.WithStdout(d.logline.Stdout()),
 			exec.WithStderr(d.logline.Stderr()),
@@ -107,7 +107,7 @@ func (d *departure) Run(t *testing.T, ctx context.Context) {
 	}))
 	require.NoError(t, reg.AddActivityN("act", func(task.ActivityContext) (any, error) {
 		ran.Add(1)
-		return doneOutput, nil
+		return workflow.DoneOutput, nil
 	}))
 
 	executorType := d.workflow.ExecutorActorType(0)
@@ -168,7 +168,7 @@ func (d *departure) Run(t *testing.T, ctx context.Context) {
 
 	for _, id := range ids {
 		meta := fworkflow.WaitForCompleted(t, ctx, mgmt, id)
-		assert.Equal(t, `"done"`, meta.GetOutput().GetValue(), id)
+		assert.Equal(t, `"`+workflow.DoneOutput+`"`, meta.GetOutput().GetValue(), id)
 	}
 
 	// The handoffs went through once the reconnect brought the executor

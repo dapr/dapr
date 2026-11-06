@@ -215,6 +215,7 @@ Imports are organized in three groups with `goimports`:
 - Use `github.com/stretchr/testify/assert` only for non-fatal checks
 - Mocks are generated with `github.com/golang/mock/mockgen` and live in `mock/` subdirectories
 - Table-driven tests are preferred
+- Integration test helpers never go under `tests/integration/suite/` — no `helpers.go`, no shared helper funcs in a suite package. A helper is either written in-line in the test that needs it, or, when several tests share it, added to `tests/integration/framework/` (usually as a method on the process it drives, e.g. `framework/process/workflow`, `framework/process/daprd`, `framework/process/scheduler`).
 
 ### Error Handling
 

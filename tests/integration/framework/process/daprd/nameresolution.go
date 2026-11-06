@@ -63,6 +63,10 @@ func NameResolutionSpec(t *testing.T) *configapi.NameResolutionSpec {
 
 	b, err := json.Marshal(map[string]string{
 		"connectionString": sqliteNameResolutionDB(t),
+		// The 1s default is too tight on loaded macOS runners when many
+		// concurrent invocations queue lookups on the shared database. 4s is
+		// the most the default 5s updateInterval allows.
+		"timeout": "4s",
 	})
 	require.NoError(t, err)
 

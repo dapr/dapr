@@ -51,6 +51,15 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 		}
 	}
 
+	// An ack only counts towards the phase it belongs to. Acks from a repeated
+	// one-shot table push are no longer filtered by receivingTable, and must not
+	// advance or restart the namespace-wide dissemination.
+	if op != v1pb.HostOperation_REPORT && op != d.currentOperation {
+		log.Debugf("Ignoring %s ack from stream %s:%d - current operation is %s",
+			op.String(), d.namespace, report.StreamIDx, d.currentOperation.String())
+		return
+	}
+
 	switch op {
 	case v1pb.HostOperation_REPORT:
 		d.doReport(report.StreamIDx, report.Host)

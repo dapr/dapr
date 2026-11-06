@@ -308,7 +308,9 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if IsRetryableRemoteError(err) {
-		// Destroy the connection and force a re-connection on the next attempt
+		// The pooled connection is not destroyed here because other in-flight
+		// calls share it. The caller retries, resolving the actor host again,
+		// and reuses the pooled connection for that address and app.
 		attempt := resiliency.GetAttempt(ctx)
 		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}
