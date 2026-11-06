@@ -32,7 +32,9 @@ import (
 // whether or not this app enables the preview: an operation targeting
 // another app is staged on that app's fallback host if that app enables it,
 // and with the preview off everywhere no response carries the marker, so
-// every call waits as before.
+// every call waits as before. Each of these calls, and a raise event, also
+// sets staged on its response when a fallback host served it, so the caller
+// can tell a staged operation from one that ran.
 func registerFallbackAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
 	return func(s grpc.ServiceRegistrar) {
 		register(fallbackAwareRegistrar{s})
@@ -50,28 +52,65 @@ func (r fallbackAwareRegistrar) RegisterService(desc *grpc.ServiceDesc, impl any
 	r.ServiceRegistrar.RegisterService(desc, impl)
 }
 
-// fallbackAwareServer gives each waiting call a ctx that records whether a
-// fallback host served its operation.
+// fallbackAwareServer gives each operation a fallback host may stage a ctx
+// that records whether a fallback host served it, and reports that as
+// staged on the response. Purge is not wrapped: it runs at once on any host.
 type fallbackAwareServer struct {
 	protos.TaskHubSidecarServiceServer
 }
 
 func (s fallbackAwareServer) StartInstance(ctx context.Context, req *protos.CreateInstanceRequest) (*protos.CreateInstanceResponse, error) {
-	return s.TaskHubSidecarServiceServer.StartInstance(backendactors.WithFallbackMarker(ctx), req)
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.StartInstance(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
 }
 
 func (s fallbackAwareServer) RerunWorkflowFromEvent(ctx context.Context, req *protos.RerunWorkflowFromEventRequest) (*protos.RerunWorkflowFromEventResponse, error) {
-	return s.TaskHubSidecarServiceServer.RerunWorkflowFromEvent(backendactors.WithFallbackMarker(ctx), req)
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.RerunWorkflowFromEvent(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
 }
 
 func (s fallbackAwareServer) TerminateInstance(ctx context.Context, req *protos.TerminateRequest) (*protos.TerminateResponse, error) {
-	return s.TaskHubSidecarServiceServer.TerminateInstance(backendactors.WithFallbackMarker(ctx), req)
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.TerminateInstance(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
 }
 
 func (s fallbackAwareServer) SuspendInstance(ctx context.Context, req *protos.SuspendRequest) (*protos.SuspendResponse, error) {
-	return s.TaskHubSidecarServiceServer.SuspendInstance(backendactors.WithFallbackMarker(ctx), req)
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.SuspendInstance(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
 }
 
 func (s fallbackAwareServer) ResumeInstance(ctx context.Context, req *protos.ResumeRequest) (*protos.ResumeResponse, error) {
-	return s.TaskHubSidecarServiceServer.ResumeInstance(backendactors.WithFallbackMarker(ctx), req)
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.ResumeInstance(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
+}
+
+// RaiseEvent does not wait for the instance on any host, so the marker only
+// tells the caller whether the event was staged.
+func (s fallbackAwareServer) RaiseEvent(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.RaiseEvent(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
 }

@@ -25,12 +25,20 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -546,4 +554,80 @@ func TestGetWorkflowNotFound(t *testing.T) {
 	assert.Equal(t, fakeInstanceID, res.GetInstanceId())
 	assert.Empty(t, res.GetWorkflowName())
 	assert.Empty(t, res.GetRuntimeStatus())
+}
+
+// newStagedTestEngine returns a workflow engine whose actor calls are all
+// answered by a fallback host if fallback is set, and by a host with an
+// executor otherwise.
+func newStagedTestEngine(t *testing.T, fallback bool) (wfengine.Interface, *actorsfake.Fake) {
+	t.Helper()
+
+	cs := compstore.New()
+	require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
+
+	r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		res := new(internalsv1pb.InternalInvokeResponse)
+		if fallback {
+			common.SetFallback(res)
+		}
+		return res, nil
+	})
+	actors := actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+		return r, nil
+	})
+
+	wfe, err := wfengine.New(wfengine.Options{
+		AppID:             "myapp",
+		Namespace:         "default",
+		ComponentStore:    cs,
+		Actors:            actors,
+		InProcessExecutor: inprocess.NewExecutor(),
+	})
+	require.NoError(t, err)
+	return wfe, actors
+}
+
+// TestWorkflowStaged checks that each operation a fallback host may stage
+// reports staged exactly when a fallback host served it.
+func TestWorkflowStaged(t *testing.T) {
+	ops := map[string]func(context.Context, *Universal) (bool, error){
+		"start": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.StartWorkflow(ctx, &runtimev1pb.StartWorkflowRequest{InstanceId: fakeInstanceID, WorkflowName: "wf"})
+			return res.GetStaged(), err
+		},
+		"terminate": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.TerminateWorkflow(ctx, &runtimev1pb.TerminateWorkflowRequest{InstanceId: fakeInstanceID})
+			return res.GetStaged(), err
+		},
+		"raise event": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.RaiseEventWorkflow(ctx, &runtimev1pb.RaiseEventWorkflowRequest{InstanceId: fakeInstanceID, EventName: "event"})
+			return res.GetStaged(), err
+		},
+		"pause": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.PauseWorkflow(ctx, &runtimev1pb.PauseWorkflowRequest{InstanceId: fakeInstanceID})
+			return res.GetStaged(), err
+		},
+		"resume": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.ResumeWorkflow(ctx, &runtimev1pb.ResumeWorkflowRequest{InstanceId: fakeInstanceID})
+			return res.GetStaged(), err
+		},
+	}
+
+	for _, fallback := range []bool{true, false} {
+		wfe, actors := newStagedTestEngine(t, fallback)
+		a := &Universal{
+			logger:         logger.NewLogger("test"),
+			resiliency:     resiliency.New(nil),
+			workflowEngine: wfe,
+			actors:         actors,
+		}
+
+		for name, call := range ops {
+			t.Run(fmt.Sprintf("%s served by a fallback host: %t", name, fallback), func(t *testing.T) {
+				staged, err := call(t.Context(), a)
+				require.NoError(t, err)
+				assert.Equal(t, fallback, staged)
+			})
+		}
+	}
 }
