@@ -241,6 +241,53 @@ func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginest
 	return nil
 }
 
+// loadStateForCreate loads the state a create is judged on. A cached state is
+// first checked against the store's metadata row: a force purge run on another
+// daprd deletes the rows but cannot evict the actor resident here, and several
+// of the create's verdicts (AlreadyExists, a parent still owed its completion,
+// a retry already committed) return without a save, so the save's ETag guard
+// would never catch the stale cache. A row that no longer describes the cache
+// drops it and reloads from the store; a row that is gone means the instance
+// was purged, so the create starts a new one. A missing row is only trusted
+// once the store has served this instance an ETag: before that it may be a
+// store that does not yet read its own write, and the cache is kept.
+func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.State, error) {
+	cached := o.state != nil
+	state, _, err := o.loadInternalState(ctx)
+	if err != nil || !cached {
+		return state, err
+	}
+
+	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	if err != nil {
+		return nil, wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	if res == nil || len(res.Data) == 0 {
+		if !state.MetadataETagSeen() {
+			return state, nil
+		}
+	} else if _, ok := rowMatches(res, state.MetadataETag(), state.Generation, uint64(len(state.History))); ok {
+		return state, nil
+	}
+
+	log.Debugf("Workflow actor '%s': cached state no longer matches the store; reloading before create", o.actorID)
+	o.invalidateCachedState()
+	state, _, err = o.loadInternalState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		// The instance is gone, so no result is owed to it: the same release
+		// a purge on this host makes once the rows are deleted.
+		o.activityResultAwaited.Store(false)
+	}
+	return state, nil
+}
+
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(o.actorID)
