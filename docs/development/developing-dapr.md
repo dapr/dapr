@@ -61,6 +61,26 @@ dapr version # see `Runtime version: edge` to ensure you are using the newly bui
 dapr run ... # this will use the newly-built binary
 ```
 
+## Updating Custom Resource Definitions (CRDs) and Generated Code
+
+When modifying Dapr Kubernetes Custom Resource Definitions (such as `Component`, `Configuration`, `Subscription`, `Resiliency`, or `HTTPEndpoint`) or protobuf definitions:
+
+1. **Update the Go API types** in `./pkg/apis/<resource>/<version>/types.go` (for example, `pkg/apis/configuration/v1alpha1/types.go`).
+2. **Generate deep-copy methods and CRD manifests** by running the `code-generate` target (defined in `tools/codegen.mk`):
+
+   ```sh
+   make code-generate
+   ```
+
+   This runs `controller-gen` over `./pkg/apis/...` to update `zz_generated.deepcopy.go` files and output the generated CRD YAML files under `config/crd/bases/`.
+3. **Sync the Helm chart CRDs** by copying the updated CRD YAML definitions from `config/crd/bases/` into the corresponding files under `charts/dapr/crds/`.
+4. **Regenerate protobuf code (if `.proto` files under `dapr/proto/` were changed)**:
+
+   ```sh
+   make init-proto
+   make gen-proto
+   ```
+
 ## Run unit tests
 
 ```sh
