@@ -552,3 +552,6 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+// The headers metadata field of the conversation components, from dapr/components-contrib#4750.
+replace github.com/dapr/components-contrib => github.com/nelson-parente/components-contrib v0.0.0-20261106130413-78b294d6f63c
