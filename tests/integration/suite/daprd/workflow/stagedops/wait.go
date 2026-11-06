@@ -15,6 +15,7 @@ package stagedops
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,13 +48,24 @@ func (r *wait) Run(t *testing.T, ctx context.Context) {
 			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: id})
 			return err
 		}), "wait for start of the running workflow")
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), m.Call(ctx, func(ctx context.Context) error {
-			_, err := sidecar.WaitForInstanceCompletion(ctx, &protos.GetInstanceRequest{InstanceId: id})
-			return err
-		}), "wait for completion of the running workflow")
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), m.Call(ctx, func(ctx context.Context) error {
-			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "wait-none"})
-			return err
-		}), "wait for start of a workflow that does not exist")
+		// Each blocking wait takes the whole OpTimeout, so the two run at the
+		// same time.
+		var wg sync.WaitGroup
+		var completion, missing stagedops.Outcome
+		wg.Go(func() {
+			completion = m.Call(ctx, func(ctx context.Context) error {
+				_, err := sidecar.WaitForInstanceCompletion(ctx, &protos.GetInstanceRequest{InstanceId: id})
+				return err
+			})
+		})
+		wg.Go(func() {
+			missing = m.Call(ctx, func(ctx context.Context) error {
+				_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "wait-none"})
+				return err
+			})
+		})
+		wg.Wait()
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), completion, "wait for completion of the running workflow")
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Blocks), missing, "wait for start of a workflow that does not exist")
 	})
 }

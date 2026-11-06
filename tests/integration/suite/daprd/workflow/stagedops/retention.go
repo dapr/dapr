@@ -60,13 +60,15 @@ spec:
 func (r *retention) Run(t *testing.T, ctx context.Context) {
 	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("retention")
+		before := time.Now()
 		m.StartWith(t, ctx, 0, stagedops.WfDone, stagedops.StatusCompleted, id)
 		completed := time.Now()
 		mgmt := m.Mgmt(t, ctx, 0)
 
 		// StartWith returns once the worker is gone; that must be before the
-		// retention reminder is due, or this checks nothing.
-		require.Less(t, time.Since(completed), retentionPeriod/2)
+		// retention reminder is due, or this checks nothing. The workflow
+		// completes no earlier than before.
+		require.Less(t, completed.Sub(before), retentionPeriod/2)
 
 		// Past the retention period, with a margin for the reminder to fire.
 		time.Sleep(time.Until(completed.Add(retentionPeriod + time.Second*5)))

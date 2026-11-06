@@ -49,13 +49,15 @@ func (r *timer) Run(t *testing.T, ctx context.Context) {
 		}))
 
 		const id = api.InstanceID("timer")
+		before := time.Now()
 		m.StartWith(t, ctx, 0, "timer", stagedops.StatusRunning, id)
 		started := time.Now()
 		mgmt := m.Mgmt(t, ctx, 0)
 
 		// StartWith returns once the worker is gone; that must be before the
-		// timer is due, or this checks nothing.
-		require.Less(t, time.Since(started), timerDelay/2)
+		// timer is due, or this checks nothing. The timer is scheduled no
+		// earlier than before.
+		require.Less(t, started.Sub(before), timerDelay/2)
 
 		// Past the timer, with a margin for it to fire.
 		time.Sleep(time.Until(started.Add(timerDelay + time.Second*5)))

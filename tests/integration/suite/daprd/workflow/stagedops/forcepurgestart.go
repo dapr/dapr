@@ -16,18 +16,15 @@ package stagedops
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/client"
 )
 
 func init() {
@@ -40,7 +37,7 @@ func init() {
 //   - off: no daprd holds the actor. The force purge works and the start
 //     fails, no worker connected.
 //   - on:  a staged raise has loaded the actor on the other daprd, which
-//     keeps it after the purge. That daprd has no worker, so the actor reads
+//     evicts it for the purge. Neither daprd has a worker, so the actor reads
 //     the instance from the store, finds none, and accepts the start: the
 //     new instance is PENDING.
 type forcepurgestart struct{ stagedops.Modes }
@@ -57,38 +54,9 @@ func (r *forcepurgestart) Run(t *testing.T, ctx context.Context) {
 		const id = api.InstanceID("forcepurgestart")
 		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
 		m.WaitNoWorker(t, ctx, 1)
-		mgmt := []*client.TaskHubGrpcClient{m.Mgmt(t, ctx, 0), m.Mgmt(t, ctx, 1)}
+		purger, mgmt := m.PurgeThroughNonOwner(t, ctx, id)
 
-		// With the preview on, a staged raise loads the workflow actor on the
-		// daprd which owns it. The event is not the one the workflow waits
-		// for.
 		got := m.Call(ctx, func(ctx context.Context) error {
-			return mgmt[0].RaiseEvent(ctx, id, "other")
-		})
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.Accepted), got)
-
-		purger := 1
-		if m.Staged {
-			owner := -1
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
-				for i := range 2 {
-					d := m.Idx(i)
-					if n, _ := m.WF.DaprN(d).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(d)); n > 0 {
-						owner = i
-					}
-				}
-				assert.GreaterOrEqual(c, owner, 0)
-			}, time.Second*10, time.Millisecond*50)
-			purger = 1 - owner
-		}
-
-		got = m.Call(ctx, func(ctx context.Context) error {
-			return mgmt[purger].PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
-		})
-		assert.Equal(t, stagedops.Accepted, got)
-		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
-
-		got = m.Call(ctx, func(ctx context.Context) error {
 			_, err := mgmt[purger].ScheduleNewWorkflow(ctx, stagedops.WfDone, api.WithInstanceID(id))
 			return err
 		})

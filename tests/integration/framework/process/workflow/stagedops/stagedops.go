@@ -260,6 +260,53 @@ func (m Mode) StartWith(t *testing.T, ctx context.Context, i int, name, exp stri
 	m.WaitNoWorker(t, ctx, i)
 }
 
+// Owner waits until one of the mode's first n daprds holds a workflow actor
+// and returns its index in the mode.
+func (m Mode) Owner(t *testing.T, ctx context.Context, n int) int {
+	t.Helper()
+
+	owner := -1
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for i := range n {
+			d := m.Idx(i)
+			if count, _ := m.WF.DaprN(d).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(d)); count > 0 {
+				owner = i
+			}
+		}
+		assert.GreaterOrEqual(c, owner, 0)
+	}, time.Second*10, time.Millisecond*50)
+	return owner
+}
+
+// PurgeThroughNonOwner runs on two daprds of one app with no worker and id
+// RUNNING. With the preview on, it loads the workflow actor of id with a
+// raise of an event the workflow does not wait for. It force purges id
+// through the daprd that does not hold the actor, checks that id is gone,
+// and returns that daprd's index and the management clients of both.
+func (m Mode) PurgeThroughNonOwner(t *testing.T, ctx context.Context, id api.InstanceID) (int, []*client.TaskHubGrpcClient) {
+	t.Helper()
+
+	mgmt := []*client.TaskHubGrpcClient{m.Mgmt(t, ctx, 0), m.Mgmt(t, ctx, 1)}
+
+	got := m.Call(ctx, func(ctx context.Context) error {
+		return mgmt[0].RaiseEvent(ctx, id, "other")
+	})
+	assert.Equal(t, Want(m.Staged, NoWorker, Accepted), got)
+
+	// With the preview off, no daprd holds the actor.
+	purger := 1
+	if m.Staged {
+		purger = 1 - m.Owner(t, ctx, 2)
+	}
+
+	got = m.Call(ctx, func(ctx context.Context) error {
+		return mgmt[purger].PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
+	})
+	assert.Equal(t, Accepted, got)
+	assert.Equal(t, StatusNotFound, StatusOf(ctx, mgmt[purger], id))
+	return purger, mgmt
+}
+
 // StatusOf returns the runtime status of id, StatusNotFound if it does not
 // exist, or the error of the read.
 func StatusOf(ctx context.Context, mgmt *client.TaskHubGrpcClient, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) string {
