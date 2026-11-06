@@ -38,105 +38,19 @@ import (
 
 func init() {
 	suite.Register(new(staged))
-	suite.Register(new(stagedcrossapp))
 }
 
 // staged checks that each workflow operation tells its caller whether it was
 // staged, through the durabletask API, Dapr's gRPC API and Dapr's HTTP API.
-// With a worker connected nothing is staged. Once the last worker leaves,
-// the daprd is a fallback host, and every start, raise event, terminate,
-// suspend, resume and rerun it serves is staged.
+// It runs two daprds of two apps: X, with a worker connected, and Y, whose
+// worker leaves so that its daprd is a fallback host. Nothing X serves is
+// staged, and every start, raise event, terminate, suspend, resume and rerun
+// Y serves is, whether the caller is on the same app or on the other one.
 type staged struct {
 	workflow *workflow.Workflow
 }
 
 func (s *staged) Setup(t *testing.T) []framework.Option {
-	s.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
-		workflow.WithFallbackSettleN(t, 0),
-	)
-
-	return []framework.Option{
-		framework.WithProcesses(s.workflow),
-	}
-}
-
-func (s *staged) Run(t *testing.T, ctx context.Context) {
-	s.workflow.WaitUntilRunning(t, ctx)
-
-	reg := s.workflow.Registry()
-	registerStagedWorkflow(t, reg)
-	require.NoError(t, reg.AddWorkflowN("act-wf", func(ctx *task.WorkflowContext) (any, error) {
-		var out string
-		if err := ctx.CallActivity("act").Await(&out); err != nil {
-			return nil, err
-		}
-		return out, nil
-	}))
-	require.NoError(t, reg.AddActivityN("act", func(task.ActivityContext) (any, error) {
-		return workflow.DoneOutput, nil
-	}))
-
-	worker := s.workflow.ConnectWorker(t, ctx, reg)
-	s.workflow.WaitForConnectedWorkers(t, ctx, 1)
-
-	ops := newStagedOps(t, ctx, s.workflow, 0, "")
-
-	// The sources of the reruns below: completed while a worker is connected.
-	for _, id := range []api.InstanceID{"staged-rerun-src-worker", "staged-rerun-src-fallback"} {
-		_, err := ops.mgmt.ScheduleNewWorkflow(ctx, "act-wf", api.WithInstanceID(id))
-		require.NoError(t, err)
-		_, err = ops.mgmt.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err)
-	}
-
-	t.Run("a daprd with a worker connected stages nothing", func(t *testing.T) {
-		ops.run(t, ctx, "staged-worker", false)
-
-		rctx, cancel := context.WithTimeout(ctx, time.Second*10)
-		defer cancel()
-		res, err := ops.mgmt.RerunWorkflowFromEventWithResult(rctx, "staged-rerun-src-worker", 0,
-			api.WithRerunNewInstanceID("staged-rerun-dst-worker"))
-		require.NoError(t, err)
-		assert.False(t, res.Staged)
-	})
-
-	worker.Disconnect(t)
-	s.workflow.WaitForNoConnectedWorkers(t, ctx)
-
-	// The daprd turns into a fallback host in place: it gives up the executor
-	// actor type and keeps hosting the workflow actor type.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(c, s.workflow.HostsActorType(c, ctx, 0, s.workflow.ExecutorActorType(0)))
-		assert.True(c, s.workflow.HostsActorType(c, ctx, 0, s.workflow.WorkflowActorType(0)))
-	}, time.Second*10, time.Millisecond*50)
-
-	t.Run("a fallback host stages every operation", func(t *testing.T) {
-		// The retry rides out the disconnect callback, as in rerun.
-		var res *api.RerunResult
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			rctx, cancel := context.WithTimeout(ctx, time.Second*5)
-			defer cancel()
-			var err error
-			res, err = ops.mgmt.RerunWorkflowFromEventWithResult(rctx, "staged-rerun-src-fallback", 0,
-				api.WithRerunNewInstanceID("staged-rerun-dst-fallback"))
-			assert.NoError(c, err)
-		}, time.Second*10, time.Millisecond*50)
-		assert.True(t, res.Staged)
-
-		ops.run(t, ctx, "staged-fallback", true)
-	})
-}
-
-// stagedcrossapp checks that a caller on one app learns whether an operation
-// on a workflow of another app was staged. App X has a worker and app Y has
-// none, so Y's daprd is a fallback host: every operation X makes on Y is
-// staged, and none Y makes on X is.
-type stagedcrossapp struct {
-	workflow *workflow.Workflow
-}
-
-func (s *stagedcrossapp) Setup(t *testing.T) []framework.Option {
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithStagedOperations(),
@@ -149,35 +63,99 @@ func (s *stagedcrossapp) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (s *stagedcrossapp) Run(t *testing.T, ctx context.Context) {
+func (s *staged) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	registerStagedWorkflow(t, s.workflow.RegistryN(0))
-	registerStagedWorkflow(t, s.workflow.RegistryN(1))
+	for i := range 2 {
+		reg := s.workflow.RegistryN(i)
+		registerStagedWorkflow(t, reg)
+		require.NoError(t, reg.AddWorkflowN("act-wf", func(ctx *task.WorkflowContext) (any, error) {
+			var out string
+			if err := ctx.CallActivity("act").Await(&out); err != nil {
+				return nil, err
+			}
+			return out, nil
+		}))
+		require.NoError(t, reg.AddActivityN("act", func(task.ActivityContext) (any, error) {
+			return workflow.DoneOutput, nil
+		}))
+	}
 
 	s.workflow.ConnectWorkerN(t, ctx, 0, s.workflow.RegistryN(0))
+	workerY := s.workflow.ConnectWorkerN(t, ctx, 1, s.workflow.RegistryN(1))
 	s.workflow.WaitForConnectedWorkersN(t, ctx, 0, 1)
-
-	// Y's fallback host registers once the placement tables have shown no
-	// executor of app Y for the settle period.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, s.workflow.HostsActorType(c, ctx, 1, s.workflow.WorkflowActorType(1)))
-	}, time.Second*30, time.Millisecond*50)
+	s.workflow.WaitForConnectedWorkersN(t, ctx, 1, 1)
 
 	appX := s.workflow.DaprN(0).AppID()
 	appY := s.workflow.DaprN(1).AppID()
+	onX := newStagedOps(t, ctx, s.workflow, 0, "")
+	onY := newStagedOps(t, ctx, s.workflow, 1, "")
 	fromX := newStagedOps(t, ctx, s.workflow, 0, appY)
 	fromY := newStagedOps(t, ctx, s.workflow, 1, appX)
 
-	// Retried until the placement table which shows Y's host reaches X.
+	// The sources of the reruns below, completed while each app has a worker.
+	for _, src := range []struct {
+		ops *stagedOps
+		id  api.InstanceID
+	}{
+		{onX, "staged-rerun-src-worker"},
+		{onY, "staged-rerun-src-fallback"},
+	} {
+		_, err := src.ops.mgmt.ScheduleNewWorkflow(ctx, "act-wf", api.WithInstanceID(src.id))
+		require.NoError(t, err)
+		_, err = src.ops.mgmt.WaitForWorkflowCompletion(ctx, src.id)
+		require.NoError(t, err)
+	}
+
+	workerY.Disconnect(t)
+	s.workflow.WaitForNoConnectedWorkersN(t, ctx, 1)
+
+	// Y's daprd turns into a fallback host in place: it gives up the executor
+	// actor type and keeps hosting the workflow actor type.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.False(c, s.workflow.HostsActorType(c, ctx, 1, s.workflow.ExecutorActorType(1)))
+		assert.True(c, s.workflow.HostsActorType(c, ctx, 1, s.workflow.WorkflowActorType(1)))
+	}, time.Second*10, time.Millisecond*50)
+
+	t.Run("a daprd with a worker connected stages nothing", func(t *testing.T) {
+		onX.run(t, ctx, "staged-worker", false)
+
+		rctx, cancel := context.WithTimeout(ctx, time.Second*10)
+		defer cancel()
+		res, err := onX.mgmt.RerunWorkflowFromEventWithResult(rctx, "staged-rerun-src-worker", 0,
+			api.WithRerunNewInstanceID("staged-rerun-dst-worker"))
+		require.NoError(t, err)
+		assert.False(t, res.Staged)
+	})
+
+	t.Run("a fallback host stages every operation", func(t *testing.T) {
+		// The retry rides out the disconnect callback, as in rerun.
+		var res *api.RerunResult
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			rctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			var err error
+			res, err = onY.mgmt.RerunWorkflowFromEventWithResult(rctx, "staged-rerun-src-fallback", 0,
+				api.WithRerunNewInstanceID("staged-rerun-dst-fallback"))
+			assert.NoError(c, err)
+		}, time.Second*10, time.Millisecond*50)
+		assert.True(t, res.Staged)
+
+		onY.run(t, ctx, "staged-fallback", true)
+	})
+
+	// Retried until the placement table which shows Y's daprd as a fallback
+	// host reaches X.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		sctx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
-		_, err := fromX.mgmt.ScheduleNewWorkflow(sctx, "staged-wf",
+		res, err := fromX.mgmt.ScheduleNewWorkflowWithResult(sctx, "staged-wf",
 			api.WithInstanceID("staged-crossapp-probe"),
 			api.WithAppID(appY),
 		)
-		assert.NoError(c, err)
+		if assert.NoError(c, err) {
+			assert.True(c, res.Staged)
+		}
 	}, time.Second*20, time.Millisecond*50)
 
 	t.Run("operations on an app without a worker are staged", func(t *testing.T) {
