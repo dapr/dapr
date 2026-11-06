@@ -41,11 +41,9 @@ func init() {
 //   - off: no daprd holds the actor. The force purge works and both raises
 //     fail, no worker connected.
 //   - on:  a staged raise has loaded the actor on the other daprd, which
-//     keeps it after the purge. The first raise reaches that actor and fails
-//     with an internal "possible etag mismatch" error; the actor then drops
-//     its state, and the second raise fails with "no such instance exists".
-//     The instance stays purged. Probably unwanted: the caller gets internal
-//     errors where it would get "not found" with the preview off.
+//     keeps it after the purge. That daprd has no worker, so the actor reads
+//     the instance from the store on every call: both raises fail with "no
+//     such instance exists".
 type forcepurgeremote struct{ stagedops.Modes }
 
 func (r *forcepurgeremote) Setup(t *testing.T) []framework.Option {
@@ -94,7 +92,7 @@ func (r *forcepurgeremote) Run(t *testing.T, ctx context.Context) {
 		got = m.Call(ctx, func(ctx context.Context) error {
 			return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("after"))
 		})
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.EtagMismatch), got)
+		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.NotFound), got)
 		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
 
 		got = m.Call(ctx, func(ctx context.Context) error {

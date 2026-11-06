@@ -57,6 +57,10 @@ import (
 // goroutine, so assertions on wake effects must be eventual.
 type wakeHarness struct {
 	saved bool
+	// store holds the state rows once persist has run: the fake store then
+	// serves loads from it and applies saves to it. Until then a load finds
+	// no rows, and the cache stands in for the store.
+	store map[string][]byte
 	lock  sync.Mutex
 	ops   []string
 
@@ -115,6 +119,14 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			h.lock.Lock()
 			defer h.lock.Unlock()
+			if h.store != nil {
+				data, ok := h.store[req.Key]
+				if !ok {
+					return &actorapi.StateResponse{}, nil
+				}
+				etag := "etag"
+				return &actorapi.StateResponse{Data: data, ETag: &etag}, nil
+			}
 			// The metadata row exists once something was saved, as the
 			// post-save etag refresh expects, and describes the cache: the
 			// store is in step with it.
@@ -124,11 +136,26 @@ func newWakeHarness(t *testing.T, instanceID string, fastPath bool) *wakeHarness
 			}
 			return &actorapi.StateResponse{}, nil
 		}).
-		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
+		WithGetBulkFn(func(_ context.Context, req *actorapi.GetBulkStateRequest, _ bool) (actorapi.BulkStateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			res := actorapi.BulkStateResponse{}
+			for _, key := range req.Keys {
+				if data, ok := h.store[key]; ok {
+					etag := "etag"
+					res[key] = actorapi.BulkStateEntry{Data: data, ETag: &etag}
+				}
+			}
+			return res, nil
+		}).
+		WithTransactionalStateOperationFn(func(_ context.Context, _ bool, req *actorapi.TransactionalRequest, _ bool) error {
 			h.lock.Lock()
 			defer h.lock.Unlock()
 			h.ops = append(h.ops, "save")
 			h.saved = true
+			if h.store != nil {
+				return applyToStore(h.store, req)
+			}
 			return nil
 		})
 
@@ -239,6 +266,46 @@ func (h *wakeHarness) primeRunning(t *testing.T, instanceID string, scheduled in
 	h.orch.state = wfState
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, startEvent.GetExecutionStarted())
+}
+
+// persist writes the cached state to the fake store, which from then on
+// serves loads and takes saves, so a call that drops the cache (as one on a
+// fallback host does) reloads the same instance.
+func (h *wakeHarness) persist(t *testing.T) {
+	t.Helper()
+
+	req, err := h.orch.state.GetSaveRequest(h.orch.actorID)
+	require.NoError(t, err)
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	h.store = make(map[string][]byte)
+	require.NoError(t, applyToStore(h.store, req))
+}
+
+// applyToStore applies the upserts and deletes of req to store.
+func applyToStore(store map[string][]byte, req *actorapi.TransactionalRequest) error {
+	for _, op := range req.Operations {
+		switch r := op.Request.(type) {
+		case actorapi.TransactionalUpsert:
+			switch v := r.Value.(type) {
+			case []byte:
+				store[r.Key] = v
+			case proto.Message:
+				data, err := proto.Marshal(v)
+				if err != nil {
+					return err
+				}
+				store[r.Key] = data
+			default:
+				return fmt.Errorf("unsupported value type %T for key %q", r.Value, r.Key)
+			}
+		case actorapi.TransactionalDelete:
+			delete(store, r.Key)
+		default:
+			return fmt.Errorf("unsupported operation %T", op.Request)
+		}
+	}
+	return nil
 }
 
 func taskCompletedEvent(scheduled int32) *backend.HistoryEvent {

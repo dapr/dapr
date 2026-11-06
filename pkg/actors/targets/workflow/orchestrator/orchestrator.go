@@ -167,6 +167,7 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 	}
 	defer unlock()
 
+	o.dropFallbackCache()
 	return o.handleReminder(ctx, reminder)
 }
 
@@ -225,6 +226,8 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 	if err != nil {
 		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
+
+	o.dropFallbackCache()
 
 	var ok bool
 	ok, err = o.handleStream(ctx, req, stream, unlock)

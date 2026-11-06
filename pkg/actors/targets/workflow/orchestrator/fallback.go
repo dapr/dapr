@@ -50,6 +50,19 @@ func (o *orchestrator) pinFallback() (fallback bool, unpin func()) {
 	return fallback, func() { o.pinnedFallback.Store(nil) }
 }
 
+// dropFallbackCache drops the cached state at the start of a call on a
+// fallback host, so the call reads the instance from the store. A force
+// purge served by another daprd deletes the rows but evicts the actor only
+// there: an actor this daprd kept cached would go on serving the purged
+// instance, refusing a start of its ID as already existing. A fallback host
+// runs no turns, so the cache saves it little. The caller holds the turn
+// lock.
+func (o *orchestrator) dropFallbackCache() {
+	if o.isFallback() {
+		o.invalidateCachedState()
+	}
+}
+
 // localFastPath reports whether an operation served outside a turn may take
 // the WorkflowsFastPath local drives and elisions. A fallback host takes the
 // durable reminder path instead: a local drive runs a turn here, which fails,

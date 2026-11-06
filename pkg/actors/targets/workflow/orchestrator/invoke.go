@@ -51,6 +51,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	// describes the path the method took.
 	_, unpin := o.pinFallback()
 	defer unpin()
+	o.dropFallbackCache()
 
 	method := req.GetMessage().GetMethod()
 	data := req.GetMessage().GetData().GetValue()
