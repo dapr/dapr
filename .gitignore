@@ -6,6 +6,7 @@ config/crd/bases
 github.com/
 
 .vscode
+.devcontainer/devcontainer-lock.json
 
 # Auto-generated CRDs
 config/crd/bases/*.yaml
