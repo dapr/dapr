@@ -21,28 +21,69 @@ import (
 
 func TestGetClusterDomain(t *testing.T) {
 	testCases := []struct {
+		name     string
 		content  string
 		expected string
 	}{
 		{
-			content:  "search svc.cluster.local #test comment",
-			expected: "svc.cluster.local",
-		},
-		{
+			name:     "standard search list (default namespace)",
 			content:  "search default.svc.cluster.local svc.cluster.local cluster.local",
 			expected: "cluster.local",
 		},
 		{
+			// A namespace that sorts before "cluster" must still resolve to the
+			// cluster domain and not to the namespace-qualified search domain.
+			name:     "namespace sorts before cluster",
+			content:  "search app.svc.cluster.local svc.cluster.local cluster.local",
+			expected: "cluster.local",
+		},
+		{
+			name:     "namespace sorts after cluster",
+			content:  "search zoo.svc.cluster.local svc.cluster.local cluster.local",
+			expected: "cluster.local",
+		},
+		{
+			name:     "multi-label namespace",
+			content:  "search my-app-ns.svc.cluster.local svc.cluster.local cluster.local",
+			expected: "cluster.local",
+		},
+		{
+			name:     "custom multi-label cluster domain",
+			content:  "search app.svc.k8s.corp.example svc.k8s.corp.example k8s.corp.example",
+			expected: "k8s.corp.example",
+		},
+		{
+			name:     "trailing dots on search entries",
+			content:  "search app.svc.cluster.local. svc.cluster.local. cluster.local.",
+			expected: "cluster.local",
+		},
+		{
+			name:     "unrelated search entries present",
+			content:  "search corp.example example.com app.svc.cluster.local svc.cluster.local cluster.local",
+			expected: "cluster.local",
+		},
+		{
+			name:     "single svc search entry with comment",
+			content:  "search svc.cluster.local #test comment",
+			expected: "cluster.local",
+		},
+		{
+			name:     "no kubernetes-shaped suffix falls back to default",
+			content:  "search corp.example example.com",
+			expected: "cluster.local",
+		},
+		{
+			name:     "no search line falls back to default",
 			content:  "",
 			expected: "cluster.local",
 		},
 	}
 	for _, tc := range testCases {
-		domain, err := getClusterDomain([]byte(tc.content))
-		if err != nil {
-			t.Fatalf("get kube cluster domain error:%s", err)
-		}
-		assert.Equal(t, tc.expected, domain)
+		t.Run(tc.name, func(t *testing.T) {
+			domain, err := getClusterDomain([]byte(tc.content))
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, domain)
+		})
 	}
 }
 

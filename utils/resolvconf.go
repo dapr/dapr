@@ -21,7 +21,6 @@ import (
 	"net"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -77,15 +76,36 @@ func GetKubeClusterDomain() (string, error) {
 }
 
 func getClusterDomain(resolvConf []byte) (string, error) {
-	var kubeClusterDomain string
 	searchDomains := getResolvSearchDomains(resolvConf)
-	sort.Strings(searchDomains)
-	if len(searchDomains) == 0 || searchDomains[0] == "" {
-		kubeClusterDomain = DefaultKubeClusterDomain
-	} else {
-		kubeClusterDomain = searchDomains[0]
+	if clusterDomain := clusterDomainFromSearchDomains(searchDomains); clusterDomain != "" {
+		return clusterDomain, nil
 	}
-	return kubeClusterDomain, nil
+	// No Kubernetes-shaped "svc.<cluster-domain>" search entry was found; fall
+	// back to the default cluster domain.
+	return DefaultKubeClusterDomain, nil
+}
+
+// clusterDomainFromSearchDomains derives the Kubernetes cluster domain from the
+// resolv.conf search list. A pod's search list has the shape
+// "<namespace>.svc.<cluster-domain> svc.<cluster-domain> <cluster-domain>", so
+// the cluster domain is the "svc.<cluster-domain>" entry with its leading
+// "svc." label removed. Matching on that label, rather than sorting the entries
+// or assuming a fixed number of namespace labels, keeps detection independent
+// of the namespace name, preserves the resolver's search order, supports custom
+// cluster domains, and ignores unrelated search entries. It returns "" when no
+// such entry exists.
+func clusterDomainFromSearchDomains(searchDomains []string) string {
+	const svcLabel = "svc."
+	for _, domain := range searchDomains {
+		// resolv.conf entries may be written with a trailing dot.
+		domain = strings.Trim(domain, ".")
+		// The namespace-qualified entry ("<namespace>.svc.<cluster-domain>")
+		// does not begin with "svc.", so only "svc.<cluster-domain>" matches.
+		if clusterDomain, ok := strings.CutPrefix(domain, svcLabel); ok && clusterDomain != "" {
+			return clusterDomain
+		}
+	}
+	return ""
 }
 
 func getResolvContent(resolvPath string) ([]byte, error) {
