@@ -2,6 +2,7 @@ package expr
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -62,6 +63,9 @@ func (e *Expr) DecodeString(value string) (err error) {
 }
 
 func (e *Expr) Eval(variables map[string]any) (any, error) {
+	if e == nil {
+		return nil, errors.New("cannot evaluate nil expression")
+	}
 	if e.program == nil {
 		err := e.DecodeString(e.expr)
 		if err != nil {
@@ -78,6 +82,9 @@ func (e *Expr) Eval(variables map[string]any) (any, error) {
 }
 
 func (e *Expr) Expr() string {
+	if e == nil {
+		return ""
+	}
 	return e.expr
 }
 
@@ -89,10 +96,17 @@ func (e *Expr) String() string {
 }
 
 func (e *Expr) MarshalJSON() ([]byte, error) {
+	if e == nil {
+		return []byte("null"), nil
+	}
 	return json.Marshal(e.expr)
 }
 
 func (e *Expr) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		*e = Expr{}
+		return nil
+	}
 	var code string
 	if err := json.Unmarshal(b, &code); err != nil {
 		return err
