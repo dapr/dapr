@@ -62,7 +62,7 @@ func (svc Service) Address(namespace, clusterDomain string) string {
 	return fmt.Sprintf("%s.%s.svc.%s:%d", svc.name, namespace, clusterDomain, svc.port)
 }
 
-// Address returns the address of a Dapr control plane service
+// AddressAllInstances returns the addresses of all instances (one per replica) of a Dapr control plane service
 func (svc Service) AddressAllInstances(replicaCount int, namespace, clusterDomain string) []string {
 	allInstances := make([]string, 0, replicaCount)
 	for i := range replicaCount {
