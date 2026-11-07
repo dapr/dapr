@@ -24,9 +24,10 @@ import (
 // evict deactivates this actor for a force purge served by another daprd,
 // which cannot reach the actor's cache any other way. Deactivation takes the
 // turn lock, so it lands after any in-flight turn commits, and it releases a
-// stalled actor the same way the purging daprd's own halt does. Only this
-// app's daprds may evict: the access policy refuses internal methods to every
-// other caller.
+// stalled actor the same way the purging daprd's own halt does. With a
+// workflow access policy configured, only this app's daprds may evict: the
+// policy refuses internal methods to every other caller. Without one, the
+// method is as open as every other internal method.
 func (o *orchestrator) evict(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	if err := o.checkAccessPolicy(ctx, todo.EvictWorkflowMethod, nil, nil, nil, req.GetMetadata()); err != nil {
 		return nil, err
@@ -34,14 +35,11 @@ func (o *orchestrator) evict(ctx context.Context, req *internalsv1pb.InternalInv
 
 	log.Debugf("Workflow actor '%s': evicting for a force purge on another daprd", o.actorID)
 
-	// An actor another call already retired is evicted. Deactivating it again
-	// is not a no-op: its lock is closed but free, and the lock's select picks
-	// either ready case, so the teardown could run a second time, deleting
-	// whatever actor the table now holds under this ID.
-	if !o.isRetired() {
-		if err := o.Deactivate(ctx); err != nil && !o.isRetired() {
-			return nil, err
-		}
+	// Deactivate is a no-op on an actor another call already retired. Its
+	// lock may also refuse a retired actor as closed, which is the same
+	// outcome: the actor is evicted.
+	if err := o.Deactivate(ctx); err != nil && !o.isRetired() {
+		return nil, err
 	}
 
 	return &internalsv1pb.InternalInvokeResponse{

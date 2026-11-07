@@ -84,15 +84,7 @@ func (r *remoteowner) Run(t *testing.T, ctx context.Context) {
 		return n
 	}
 
-	owner := -1
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		for i := range 2 {
-			if active(c, i) > 0 {
-				owner = i
-			}
-		}
-		assert.GreaterOrEqual(c, owner, 0)
-	}, time.Second*10, time.Millisecond*50)
+	owner := r.workflow.OwnerIndex(t, ctx, 0, 1)
 	purger := 1 - owner
 
 	require.NoError(t, clients[purger].PurgeWorkflowState(ctx, id, dworkflow.WithForcePurge(true)))

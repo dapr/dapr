@@ -103,3 +103,17 @@ func Test_evict_accessPolicy(t *testing.T) {
 		assert.True(t, h.orch.isRetired())
 	})
 }
+
+// A second Deactivate on a retired object must not remove the actor the
+// table holds under the ID by then.
+func Test_Deactivate_retiredObjectKeepsFreshEntry(t *testing.T) {
+	h := newCreateHarness(t, "deactivate-twice")
+	h.primeHistory(startEventFor("deactivate-twice", time.Now(), withExecutionID("exec-1")))
+	require.NoError(t, h.orch.Deactivate(t.Context()))
+	h.orch.table.Store(h.orch.actorID, newOrchestrator())
+	for range 80 {
+		_ = h.orch.Deactivate(t.Context())
+		_, ok := h.orch.table.Load(h.orch.actorID)
+		require.True(t, ok, "a retired object removed a fresh actor from the table")
+	}
+}

@@ -246,3 +246,20 @@ func Test_createWorkflowInstance_metadataReadFailsRecoverably(t *testing.T) {
 	defer h.lock.Unlock()
 	assert.Empty(t, h.ops)
 }
+
+// Completions held for the purged instance are not handed to the new one.
+func Test_createWorkflowInstance_purgedOnAnotherHost_flushesHeldFolds(t *testing.T) {
+	const instanceID = "test-purged-folds"
+	h := newCreateHarness(t, instanceID)
+	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")))
+	etag := "etag-1"
+	cached.SetMetadataETag(&etag)
+	h.orch.foldPending = append(h.orch.foldPending, &foldEntry{event: &backend.HistoryEvent{}, gen: cached.Generation, committed: make(chan struct{})})
+	h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{0: {}}
+	h.storedMeta = func() (*actorapi.StateResponse, error) { return &actorapi.StateResponse{}, nil }
+
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), withExecutionID("exec-2")))))
+	assert.Equal(t, cached.Generation, h.orch.state.Generation, "the new instance starts at the purged one's generation")
+	assert.Empty(t, h.orch.foldPending)
+	assert.Nil(t, h.orch.janitorEscalated)
+}

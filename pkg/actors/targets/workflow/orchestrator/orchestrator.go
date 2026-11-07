@@ -269,6 +269,13 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	}
 	defer unlock()
 
+	// A retired object's lock is closed but free, so a second caller can
+	// take it: the teardown ran already, and the table may hold a fresh
+	// actor under this ID by now.
+	if o.isRetired() {
+		return nil
+	}
+
 	o.table.Delete(o.actorID)
 	o.invalidateCachedState()
 	o.lock.Close()

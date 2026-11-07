@@ -285,7 +285,9 @@ func (o *orchestrator) probeMetadataRow(ctx context.Context, state *wfenginestat
 func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.State, error) {
 	cached := o.state != nil
 	state, _, err := o.loadInternalState(ctx)
-	if err != nil || !cached {
+	// A fallback host probed the row at the start of this call, in
+	// dropFallbackCache: a cache that survived it was confirmed.
+	if err != nil || !cached || o.isFallback() {
 		return state, err
 	}
 
@@ -313,6 +315,11 @@ func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.S
 		o.activityResultAwaited.Store(false)
 		o.janitorAsserted.Store(false)
 		o.janitorRedispatched = nil
+		o.janitorEscalated = nil
+		// Completions held for the purged instance would be taken by the
+		// new instance's first turn: a new instance starts at generation 1,
+		// the purged one's generation unless it had continued as new.
+		o.foldFlush()
 	}
 	return state, nil
 }

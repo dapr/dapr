@@ -20,6 +20,7 @@ package stagedops
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -265,17 +266,11 @@ func (m Mode) StartWith(t *testing.T, ctx context.Context, i int, name, exp stri
 func (m Mode) Owner(t *testing.T, ctx context.Context, n int) int {
 	t.Helper()
 
-	owner := -1
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		for i := range n {
-			d := m.Idx(i)
-			if count, _ := m.WF.DaprN(d).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(d)); count > 0 {
-				owner = i
-			}
-		}
-		assert.GreaterOrEqual(c, owner, 0)
-	}, time.Second*10, time.Millisecond*50)
-	return owner
+	idx := make([]int, n)
+	for i := range n {
+		idx[i] = m.Idx(i)
+	}
+	return slices.Index(idx, m.WF.OwnerIndex(t, ctx, idx...))
 }
 
 // PurgeThroughNonOwner runs on two daprds of one app with no worker and id
