@@ -14,6 +14,7 @@ limitations under the License.
 package runtime
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/ports"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -61,6 +63,40 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, new(true), intc.enableAPILogging)
 	assert.True(t, intc.disableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
+}
+
+func TestToInternalSkipsConfiguredPorts(t *testing.T) {
+	const appID = "internal-port-collision-app"
+	stable, err := ports.GetStablePort(internalGRPCStablePortStart, appID)
+	require.NoError(t, err)
+
+	cfg := defaultTestConfig()
+	cfg.AppID = appID
+	cfg.DaprInternalGRPCPort = ""
+	cfg.DaprAPIGRPCPort = strconv.Itoa(stable)
+
+	intc, err := cfg.toInternal()
+	require.NoError(t, err)
+	assert.NotEqual(t, intc.apiGRPCPort, intc.internalGRPCPort)
+	assert.NotEqual(t, intc.httpPort, intc.internalGRPCPort)
+
+	for name, set := range map[string]func(*Config, string){
+		"profile": func(c *Config, p string) { c.ProfilePort = p },
+		"public":  func(c *Config, p string) { c.DaprPublicPort = p },
+		"metrics": func(c *Config, p string) { c.Metrics.Port = p },
+		"app":     func(c *Config, p string) { c.ApplicationPort = p },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := defaultTestConfig()
+			cfg.AppID = appID
+			cfg.DaprInternalGRPCPort = ""
+			set(&cfg, strconv.Itoa(stable))
+
+			intc, err := cfg.toInternal()
+			require.NoError(t, err)
+			assert.NotEqual(t, stable, intc.internalGRPCPort)
+		})
+	}
 }
 
 func TestStandaloneWasmStrictSandbox(t *testing.T) {

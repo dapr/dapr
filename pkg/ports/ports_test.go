@@ -79,4 +79,20 @@ func TestGetStablePort(t *testing.T) {
 		assert.True(t, port >= 1024 && port <= 65535,
 			"port %d should be within valid TCP range", port)
 	})
+
+	t.Run("skips excluded ports", func(t *testing.T) {
+		stable, err := GetStablePort(47300, "excluded-app")
+		require.NoError(t, err)
+
+		port, err := GetStablePort(47300, "excluded-app", stable)
+		require.NoError(t, err)
+		assert.NotEqual(t, stable, port,
+			"excluded stable port %d must not be returned", stable)
+	})
+
+	t.Run("skips excluded ports when start leaves no stable range", func(t *testing.T) {
+		port, err := GetStablePort(65535, "excluded-app", 65535)
+		require.NoError(t, err)
+		assert.NotEqual(t, 65535, port)
+	})
 }

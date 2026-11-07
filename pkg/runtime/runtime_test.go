@@ -83,6 +83,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/ports"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -1164,6 +1165,18 @@ func TestInternalGRPCPortHeldAcrossRuntimes(t *testing.T) {
 		assert.NotEqual(t, p1, p2)
 		requireBound(t, p1)
 		requireBound(t, p2)
+	})
+
+	t.Run("empty port skips the server ports", func(t *testing.T) {
+		const appID = "internal-grpc-skipped-port"
+		stable, err := ports.GetStablePort(internalGRPCStablePortStart, appID)
+		require.NoError(t, err)
+
+		held, p, err := ReserveInternalGRPCPort(t.Context(), DefaultChannelAddress, "", appID, strconv.Itoa(stable))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, held.Close()) })
+
+		assert.NotEqual(t, stable, p)
 	})
 
 	t.Run("port in use is an error", func(t *testing.T) {
