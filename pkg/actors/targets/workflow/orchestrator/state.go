@@ -222,23 +222,112 @@ func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *
 // etag; a mismatch drops the cache and fails recoverably so the sender
 // retries against a fresh load.
 func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginestate.State) error {
+	row, err := o.probeMetadataRow(ctx, state)
+	if err != nil {
+		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	switch row {
+	case metadataRowMissing:
+		o.invalidateCachedState()
+		return api.ErrInstanceNotFound
+	case metadataRowStale:
+		o.invalidateCachedState()
+		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+	default:
+		return nil
+	}
+}
+
+// rowVerdict is what the store's metadata row says about a cached state.
+type rowVerdict int
+
+const (
+	// metadataRowMatches: the row still describes the cached state.
+	metadataRowMatches rowVerdict = iota
+	// metadataRowMissing: the store holds no row for the instance.
+	metadataRowMissing
+	// metadataRowStale: the row describes a state other than the cached one.
+	metadataRowStale
+)
+
+// probeMetadataRow reads the metadata row, one Get, and compares it with
+// state. What each outcome means is left to the caller.
+func (o *orchestrator) probeMetadataRow(ctx context.Context, state *wfenginestate.State) (rowVerdict, error) {
 	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
 		ActorType: o.actorType,
 		ActorID:   o.actorID,
 		Key:       wfenginestate.MetadataKey,
 	}, false)
 	if err != nil {
-		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+		return 0, err
 	}
 	if res == nil || len(res.Data) == 0 {
-		o.invalidateCachedState()
-		return api.ErrInstanceNotFound
+		return metadataRowMissing, nil
 	}
 	if _, ok := rowMatches(res, state.MetadataETag(), state.Generation, uint64(len(state.History))); !ok {
-		o.invalidateCachedState()
-		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+		return metadataRowStale, nil
 	}
-	return nil
+	return metadataRowMatches, nil
+}
+
+// loadStateForCreate loads the state a create is judged on. A cached state is
+// first checked against the store's metadata row: a force purge run on another
+// daprd deletes the rows and evicts the actor resident here, but when that
+// eviction does not land (an owner that predates it, or a turn that held the
+// lock past the purge's budget) the actor keeps its cache. Several of the
+// create's verdicts (AlreadyExists, a parent still owed its completion, a
+// retry already committed) return without a save, so the save's ETag guard
+// would never catch the stale cache. A row that no longer describes the cache
+// drops it and reloads from the store; a row that is gone means the instance
+// was purged, so the create starts a new one. A missing row is only trusted
+// once the store has served this instance an ETag: before that it may be a
+// store that does not yet read its own write, and the cache is kept.
+func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.State, error) {
+	cached := o.state != nil
+	state, _, err := o.loadInternalState(ctx)
+	// A fallback host probed the row at the start of this call, in
+	// dropFallbackCache: a cache that survived it was confirmed.
+	if err != nil || !cached || o.isFallback() {
+		return state, err
+	}
+
+	row, err := o.probeMetadataRow(ctx, state)
+	if err != nil {
+		return nil, wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	if row == metadataRowMatches || (row == metadataRowMissing && !state.MetadataETagSeen()) {
+		return state, nil
+	}
+
+	log.Debugf("Workflow actor '%s': cached state no longer matches the store; reloading before create", o.actorID)
+	o.invalidateCachedState()
+	state, _, err = o.loadInternalState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		o.resetForPurgedInstance()
+	}
+	return state, nil
+}
+
+// resetForPurgedInstance releases what the actor holds for an instance a
+// force purge on another daprd deleted while the actor stayed resident. The
+// instance is gone, so no result is owed to it: the same release a purge on
+// this host makes once the rows are deleted. A purge on this host also
+// retires the actor, so the next instance starts with the residency state
+// initOrchestrator gives a fresh one; here the actor stays, so reset it: the
+// janitor the purge deleted must be asserted again for the new instance.
+// The caller holds the turn lock.
+func (o *orchestrator) resetForPurgedInstance() {
+	o.activityResultAwaited.Store(false)
+	o.janitorAsserted.Store(false)
+	o.janitorRedispatched = nil
+	o.janitorEscalated = nil
+	// Completions held for the purged instance would be taken by the new
+	// instance's first turn: a new instance starts at generation 1, the
+	// purged one's generation unless it had continued as new.
+	o.foldFlush()
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
