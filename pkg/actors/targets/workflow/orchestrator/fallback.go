@@ -65,7 +65,16 @@ func (o *orchestrator) dropFallbackCache(ctx context.Context) {
 		return
 	}
 	if o.state != nil && o.state.MetadataETagSeen() {
-		if row, err := o.probeMetadataRow(ctx, o.state); err == nil && row == metadataRowMatches {
+		row, err := o.probeMetadataRow(ctx, o.state)
+		if err == nil && row == metadataRowMatches {
+			return
+		}
+		if err == nil && row == metadataRowMissing {
+			// The instance was purged. loadStateForCreate does not probe
+			// again on a fallback host, so release what the actor holds for
+			// it here.
+			o.invalidateCachedState()
+			o.resetForPurgedInstance()
 			return
 		}
 	}

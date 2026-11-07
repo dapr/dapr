@@ -35,20 +35,12 @@ func (o *orchestrator) evict(ctx context.Context, req *internalsv1pb.InternalInv
 
 	log.Debugf("Workflow actor '%s': evicting for a force purge on another daprd", o.actorID)
 
-	// Deactivate is a no-op on an actor another call already retired. Its
-	// lock may also refuse a retired actor as closed, which is the same
-	// outcome: the actor is evicted.
-	if err := o.Deactivate(ctx); err != nil && !o.isRetired() {
+	// Deactivate is a no-op on an actor another call already retired.
+	if err := o.Deactivate(ctx); err != nil {
 		return nil, err
 	}
 
 	return &internalsv1pb.InternalInvokeResponse{
 		Status: &internalsv1pb.Status{Code: http.StatusOK},
 	}, nil
-}
-
-func (o *orchestrator) isRetired() bool {
-	o.retireLock.Lock()
-	defer o.retireLock.Unlock()
-	return o.retired
 }

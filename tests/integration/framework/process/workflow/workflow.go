@@ -215,13 +215,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
 	}
 
-	// daprd loads each config file onto one Configuration struct and
-	// spec.features is a slice, so the LAST config file that specifies
-	// features replaces every earlier feature list. All harness-driven
-	// features must therefore land in a single manifest per daprd; it is
-	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath, opts.stagedOperations)
-
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
 		// scheduler) truly replaces any addresses appended by other option
@@ -242,10 +235,12 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts := make([]daprd.Option, 0, len(baseDopts)+1)
 		dopts = append(dopts, baseDopts...)
 
-		features := baseFeatures
-		if !opts.stagedOperations && slices.Contains(opts.stagedN, i) {
-			features = baseFeatureList(clustered, fastPath, true)
-		}
+		// daprd loads each config file onto one Configuration struct and
+		// spec.features is a slice, so the LAST config file that specifies
+		// features replaces every earlier feature list. All harness-driven
+		// features must therefore land in a single manifest per daprd, built
+		// here because signing and staged operations are per-daprd.
+		features := baseFeatureList(clustered, fastPath, opts.stagedOperations || slices.Contains(opts.stagedN, i))
 		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}

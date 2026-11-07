@@ -255,6 +255,13 @@ func (o *orchestrator) enter(kind string) error {
 	return nil
 }
 
+// isRetired reports whether Deactivate has run.
+func (o *orchestrator) isRetired() bool {
+	o.retireLock.Lock()
+	defer o.retireLock.Unlock()
+	return o.retired
+}
+
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
 	unlock, err := o.lock.ContextLock(ctx)
@@ -264,24 +271,30 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		o.lock.ReleaseStall()
 		unlock, err = o.lock.ContextLock(ctx)
 	}
+	// A retired object's lock is closed but free, so a second caller either
+	// takes it or is refused as closed, at random. Either way the teardown
+	// ran already, and the table may hold a fresh actor under this ID by
+	// now: deactivating again is a no-op.
 	if err != nil {
+		if o.isRetired() {
+			return nil
+		}
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
 
-	// A retired object's lock is closed but free, so a second caller can
-	// take it: the teardown ran already, and the table may hold a fresh
-	// actor under this ID by now.
 	if o.isRetired() {
 		return nil
 	}
 
 	o.table.Delete(o.actorID)
 	o.invalidateCachedState()
-	o.lock.Close()
+	// Mark retired before closing the lock: a concurrent Deactivate refused
+	// as closed must see the actor as retired, not report a failure.
 	o.retireLock.Lock()
 	o.retired = true
 	o.retireLock.Unlock()
+	o.lock.Close()
 	o.foldFlush()
 	for _, stream := range o.streamFns {
 		stream.errCh <- targeterrors.NewClosed("deactivated")

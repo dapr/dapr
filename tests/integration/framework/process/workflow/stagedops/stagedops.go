@@ -20,17 +20,18 @@ package stagedops
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -85,7 +86,7 @@ func Classify(err error) Outcome {
 		return Accepted
 	case errors.Is(err, context.DeadlineExceeded), status.Code(err) == codes.DeadlineExceeded:
 		return Blocks
-	case strings.Contains(err.Error(), "no workflow worker is connected"):
+	case strings.Contains(err.Error(), wferrors.ErrNoWorkerConnected.Error()):
 		return NoWorker
 	case errors.Is(err, api.ErrInstanceNotFound), status.Code(err) == codes.NotFound,
 		strings.Contains(err.Error(), api.ErrInstanceNotFound.Error()):
@@ -176,6 +177,18 @@ func (m *Modes) SetupN(t *testing.T, perMode int, opts func(staged bool, i int) 
 		{Name: "on", Staged: true, WF: m.wf, first: perMode},
 	}
 	return []framework.Option{framework.WithProcesses(m.wf)}
+}
+
+// SetupSharedApp runs perMode daprds per mode as SetupN does, with each
+// mode's daprds sharing one app ID: one app with several daprds, the
+// workflow actor placed on one of them.
+func (m *Modes) SetupSharedApp(t *testing.T, perMode int) []framework.Option {
+	t.Helper()
+
+	appIDs := map[bool]string{false: uuid.NewString(), true: uuid.NewString()}
+	return m.SetupN(t, perMode, func(staged bool, _ int) []daprd.Option {
+		return []daprd.Option{daprd.WithAppID(appIDs[staged])}
+	})
 }
 
 // RunModes adds the shared workflows to every daprd, then runs fn as the
@@ -270,17 +283,20 @@ func (m Mode) Owner(t *testing.T, ctx context.Context, n int) int {
 	for i := range n {
 		idx[i] = m.Idx(i)
 	}
-	return slices.Index(idx, m.WF.OwnerIndex(t, ctx, idx...))
+	return m.WF.OwnerIndex(t, ctx, idx...) - m.first
 }
 
-// PurgeThroughNonOwner runs on two daprds of one app with no worker and id
-// RUNNING. With the preview on, it loads the workflow actor of id with a
+// PurgeThroughNonOwner runs on two daprds of one app. It starts id on the
+// first daprd and leaves it RUNNING with no worker on either. With the
+// preview on, it then loads the workflow actor of id with a
 // raise of an event the workflow does not wait for. It force purges id
 // through the daprd that does not hold the actor, checks that id is gone,
 // and returns that daprd's index and the management clients of both.
 func (m Mode) PurgeThroughNonOwner(t *testing.T, ctx context.Context, id api.InstanceID) (int, []*client.TaskHubGrpcClient) {
 	t.Helper()
 
+	m.StartWith(t, ctx, 0, WfEvent, StatusRunning, id)
+	m.WaitNoWorker(t, ctx, 1)
 	mgmt := []*client.TaskHubGrpcClient{m.Mgmt(t, ctx, 0), m.Mgmt(t, ctx, 1)}
 
 	got := m.Call(ctx, func(ctx context.Context) error {

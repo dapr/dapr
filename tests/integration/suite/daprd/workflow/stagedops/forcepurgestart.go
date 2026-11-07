@@ -17,11 +17,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -42,17 +40,12 @@ func init() {
 type forcepurgestart struct{ stagedops.Modes }
 
 func (r *forcepurgestart) Setup(t *testing.T) []framework.Option {
-	appIDs := map[bool]string{false: uuid.NewString(), true: uuid.NewString()}
-	return r.SetupN(t, 2, func(staged bool, _ int) []daprd.Option {
-		return []daprd.Option{daprd.WithAppID(appIDs[staged])}
-	})
+	return r.SetupSharedApp(t, 2)
 }
 
 func (r *forcepurgestart) Run(t *testing.T, ctx context.Context) {
 	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("forcepurgestart")
-		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
-		m.WaitNoWorker(t, ctx, 1)
 		purger, mgmt := m.PurgeThroughNonOwner(t, ctx, id)
 
 		got := m.Call(ctx, func(ctx context.Context) error {

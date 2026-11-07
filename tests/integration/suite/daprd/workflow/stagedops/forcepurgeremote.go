@@ -17,11 +17,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -44,29 +42,20 @@ func init() {
 type forcepurgeremote struct{ stagedops.Modes }
 
 func (r *forcepurgeremote) Setup(t *testing.T) []framework.Option {
-	appIDs := map[bool]string{false: uuid.NewString(), true: uuid.NewString()}
-	return r.SetupN(t, 2, func(staged bool, _ int) []daprd.Option {
-		return []daprd.Option{daprd.WithAppID(appIDs[staged])}
-	})
+	return r.SetupSharedApp(t, 2)
 }
 
 func (r *forcepurgeremote) Run(t *testing.T, ctx context.Context) {
 	r.RunModes(t, ctx, func(t *testing.T, m stagedops.Mode) {
 		const id = api.InstanceID("forcepurgeremote")
-		m.StartWith(t, ctx, 0, stagedops.WfEvent, stagedops.StatusRunning, id)
-		m.WaitNoWorker(t, ctx, 1)
 		purger, mgmt := m.PurgeThroughNonOwner(t, ctx, id)
 
-		got := m.Call(ctx, func(ctx context.Context) error {
-			return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("after"))
-		})
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.NotFound), got)
-		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
-
-		got = m.Call(ctx, func(ctx context.Context) error {
-			return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload("again"))
-		})
-		assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.NotFound), got)
-		assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
+		for _, payload := range []string{"after", "again"} {
+			got := m.Call(ctx, func(ctx context.Context) error {
+				return mgmt[purger].RaiseEvent(ctx, id, stagedops.EvGo, api.WithEventPayload(payload))
+			})
+			assert.Equal(t, stagedops.Want(m.Staged, stagedops.NoWorker, stagedops.NotFound), got)
+			assert.Equal(t, stagedops.StatusNotFound, stagedops.StatusOf(ctx, mgmt[purger], id))
+		}
 	})
 }

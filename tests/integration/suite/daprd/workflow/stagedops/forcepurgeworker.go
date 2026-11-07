@@ -16,14 +16,11 @@ package stagedops
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stagedops"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -45,10 +42,7 @@ func init() {
 type forcepurgeworker struct{ stagedops.Modes }
 
 func (r *forcepurgeworker) Setup(t *testing.T) []framework.Option {
-	appIDs := map[bool]string{false: uuid.NewString(), true: uuid.NewString()}
-	return r.SetupN(t, 2, func(staged bool, _ int) []daprd.Option {
-		return []daprd.Option{daprd.WithAppID(appIDs[staged])}
-	})
+	return r.SetupSharedApp(t, 2)
 }
 
 func (r *forcepurgeworker) Run(t *testing.T, ctx context.Context) {
@@ -61,11 +55,7 @@ func (r *forcepurgeworker) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		stagedops.WaitStatus(t, ctx, mgmt[0], id, stagedops.StatusRunning)
 
-		d := m.Idx(0)
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			n, _ := m.WF.DaprN(d).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(d))
-			assert.Equal(c, 1, n)
-		}, time.Second*10, time.Millisecond*50)
+		m.WF.OwnerIndex(t, ctx, m.Idx(0))
 
 		got := m.Call(ctx, func(ctx context.Context) error {
 			return mgmt[1].PurgeWorkflowState(ctx, id, api.WithForcePurge(true))

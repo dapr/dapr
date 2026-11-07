@@ -1540,9 +1540,13 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 // lock in time is logged and the purge proceeds. Activity actors are left
 // alone: their result lands on a cold workflow actor that finds no state, and
 // halting them spawns claim guards that would write after the purge.
+// The two target different daprds, so they run side by side and share one
+// halt budget rather than adding up.
 func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
-	abe.haltLocalActor(ctx, id)
-	abe.evictRemoteActor(ctx, id)
+	var wg sync.WaitGroup
+	wg.Go(func() { abe.haltLocalActor(ctx, id) })
+	wg.Go(func() { abe.evictRemoteActor(ctx, id) })
+	wg.Wait()
 }
 
 // haltLocalActor deactivates the workflow actor if it is resident on this
