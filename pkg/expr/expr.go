@@ -31,18 +31,30 @@ func (e *Expr) DecodeString(value string) (err error) {
 		var iss *cel.Issues
 		ast, iss = env.Compile(value)
 		if iss.Err() != nil {
+			added := false
 			for _, e := range iss.Errors() {
 				if strings.HasPrefix(e.Message, missingVariableMessage) {
 					msg := e.Message[len(missingVariableMessage):]
-					msg = msg[0:strings.IndexRune(msg, '\'')]
+					idx := strings.IndexRune(msg, '\'')
+					if idx != -1 {
+						msg = msg[0:idx]
+					}
+					msg = strings.TrimPrefix(msg, ".")
+					if msg == "" {
+						return iss.Err()
+					}
 					if _, exists := found[msg]; exists {
 						continue
 					}
 					variables = append(variables, decls.NewVar(msg, decls.Any))
 					found[msg] = struct{}{}
+					added = true
 				} else {
 					return iss.Err()
 				}
+			}
+			if !added {
+				return iss.Err()
 			}
 		} else {
 			break

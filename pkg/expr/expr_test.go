@@ -45,6 +45,58 @@ func TestEmptyProgramNoPanic(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestLeadingDot(t *testing.T) {
+	tests := map[string]struct {
+		code   string
+		vars   map[string]any
+		expect bool
+	}{
+		"leading dot on simple variable": {
+			code:   ".data == 1234",
+			vars:   map[string]any{"data": 1234},
+			expect: true,
+		},
+		"leading dot on nested field": {
+			code:   ".input.test == 1234",
+			vars:   map[string]any{"input": map[string]any{"test": 1234}},
+			expect: true,
+		},
+		"leading dot with has() check": {
+			code:   "has(.input.test) && .input.test == 1234",
+			vars:   map[string]any{"input": map[string]any{"test": 1234}},
+			expect: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var e expr.Expr
+			err := e.DecodeString(tc.code)
+			require.NoError(t, err)
+			res, err := e.Eval(tc.vars)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expect, res)
+		})
+	}
+}
+
+func TestNoInfiniteLoopOnInvalidExpr(t *testing.T) {
+	tests := []string{
+		".",
+		"..",
+		"foo(bar)",
+		"unknownFunc(input.test)",
+		".startsWit('abc')",
+	}
+	for _, code := range tests {
+		t.Run(code, func(t *testing.T) {
+			var e expr.Expr
+			err := e.DecodeString(code)
+			require.Error(t, err)
+		})
+	}
+}
+
 var result any
 
 func BenchmarkEval(b *testing.B) {
