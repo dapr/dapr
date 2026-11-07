@@ -482,6 +482,9 @@ func (p *Processor) Process(ctx context.Context) error {
 // processed every event queued ahead of the Barrier.
 func (p *Processor) Flush(ctx context.Context) error {
 	if p.closed.Load() {
+		if fatal := p.rootLoop.FatalError(); fatal != nil {
+			return fatal
+		}
 		return nil
 	}
 	done := make(chan struct{})
@@ -490,8 +493,19 @@ func (p *Processor) Flush(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-done:
+		if fatal := p.rootLoop.FatalError(); fatal != nil {
+			return fatal
+		}
 		return nil
 	}
+}
+
+// FatalError returns the first non-ignored component initialization failure, if any.
+func (p *Processor) FatalError() error {
+	if p.rootLoop == nil {
+		return nil
+	}
+	return p.rootLoop.FatalError()
 }
 
 // DefaultReporter is the default resource reporter for the registry. It does
