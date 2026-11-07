@@ -14,8 +14,10 @@ limitations under the License.
 package subscriber
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -293,6 +295,46 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
+	})
+
+	t.Run("logs an error when subscribed pubsub component is not registered", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: true,
+		})
+
+		b, err := json.Marshal([]rtpubsub.SubscriptionJSON{
+			{
+				PubsubName: "missing-pubsub",
+				Topic:      "topic1",
+				Routes: rtpubsub.RoutesJSON{
+					Default: "/",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(b).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.cancelCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
+
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer log.SetOutput(os.Stderr)
+
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+		assert.Contains(t, buf.String(), "no pubsub component with that name was found")
 	})
 
 	t.Run("skip programmatic subscription loading when disabled", func(t *testing.T) {
