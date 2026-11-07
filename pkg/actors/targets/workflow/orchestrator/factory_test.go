@@ -18,9 +18,12 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
@@ -147,6 +150,84 @@ func Test_HaltNonHosted(t *testing.T) {
 		return pl.IsActorHosted(t.Context(), r.ActorType, r.ActorID)
 	}))
 	assert.Equal(t, 4, mapLen(ff))
+}
+
+// Test_Deactivate_streamErrorReason covers dapr/dapr#11082: an in-flight
+// WaitForRuntimeStatus stream parked on a workflow actor must see a retryable
+// gRPC Unavailable when the actor is deactivated for lifecycle reasons
+// (placement rebalancing, idle scale-to-zero, shutdown/restart), while a
+// workflow-driven deactivation keeps the existing plain closed error so it
+// stays distinguishable.
+func Test_Deactivate_streamErrorReason(t *testing.T) {
+	parkStream := func(t *testing.T, o *orchestrator) chan error {
+		t.Helper()
+		errCh := make(chan error, 1)
+		o.streamFns[o.streamIDx] = &streamFn{errCh: errCh}
+		o.streamIDx++
+		return errCh
+	}
+
+	t.Run("actor lifecycle deactivation closes streams with Unavailable", func(t *testing.T) {
+		ff := newTestFactory(t)
+		o := ff.GetOrCreate("foo").(*orchestrator)
+		errCh := parkStream(t, o)
+
+		require.NoError(t, o.Deactivate(t.Context()))
+
+		err := <-errCh
+		require.Truef(t, targeterrors.IsClosed(err), "lifecycle stream error must still read as closed, got: %v", err)
+		st, ok := status.FromError(err)
+		require.True(t, ok, "lifecycle stream error must carry a gRPC status, got: %v", err)
+		assert.Equal(t, codes.Unavailable, st.Code())
+	})
+
+	t.Run("workflow-driven deactivation keeps the plain closed error", func(t *testing.T) {
+		ff := newTestFactory(t)
+		o := ff.GetOrCreate("foo").(*orchestrator)
+		errCh := parkStream(t, o)
+
+		require.NoError(t, o.deactivateWithReason(t.Context(), deactivateReasonWorkflow))
+
+		err := <-errCh
+		require.Truef(t, targeterrors.IsClosed(err), "workflow-driven stream error must read as closed, got: %v", err)
+		st, _ := status.FromError(err)
+		assert.Equal(t, codes.Unknown, st.Code(), "workflow-driven stream error must not gain a retryable status, got: %v", err)
+	})
+
+	t.Run("deactivateCh worker keeps the workflow-driven error", func(t *testing.T) {
+		ff := newTestFactory(t)
+		o := ff.GetOrCreate("foo").(*orchestrator)
+		errCh := parkStream(t, o)
+
+		ff.deactivate(o)
+
+		select {
+		case err := <-errCh:
+			require.Truef(t, targeterrors.IsClosed(err), "deactivateCh stream error must read as closed, got: %v", err)
+			st, _ := status.FromError(err)
+			assert.Equal(t, codes.Unknown, st.Code(), "deactivateCh stream error must not gain a retryable status, got: %v", err)
+		case <-time.After(time.Second * 10):
+			t.Fatal("timed out waiting for the deactivateCh worker to close the parked stream")
+		}
+	})
+
+	t.Run("idle reaper deactivation closes streams with Unavailable", func(t *testing.T) {
+		ff := newTestFactory(t)
+		o := ff.GetOrCreate("foo").(*orchestrator)
+		errCh := parkStream(t, o)
+
+		ff.deactivateLifecycle(o)
+
+		select {
+		case err := <-errCh:
+			require.Truef(t, targeterrors.IsClosed(err), "idle reaper stream error must still read as closed, got: %v", err)
+			st, ok := status.FromError(err)
+			require.True(t, ok, "idle reaper stream error must carry a gRPC status, got: %v", err)
+			assert.Equal(t, codes.Unavailable, st.Code())
+		case <-time.After(time.Second * 10):
+			t.Fatal("timed out waiting for the idle reaper deactivation to close the parked stream")
+		}
+	})
 }
 
 func Test_Deactivate_concurrentInvokeNoWaitGroupRace(t *testing.T) {

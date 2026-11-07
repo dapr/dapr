@@ -246,8 +246,30 @@ func (o *orchestrator) enter(kind string) error {
 	return nil
 }
 
+// deactivateReason distinguishes why a workflow actor is being deactivated:
+// a lifecycle event (placement rebalancing, idle scale-to-zero,
+// shutdown/restart) is transient for in-flight waiters, while a
+// workflow-driven deactivation (completion, cleanup, purge, rerun) is part of
+// the workflow's own lifecycle and must stay distinguishable from actor
+// unavailability.
+type deactivateReason int
+
+const (
+	deactivateReasonLifecycle deactivateReason = iota
+	deactivateReasonWorkflow
+)
+
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	return o.deactivateWithReason(ctx, deactivateReasonLifecycle)
+}
+
+// deactivateWithReason closes the actor, releasing parked wait streams. A
+// lifecycle deactivation closes the streams with a gRPC Unavailable error so
+// in-flight WaitForRuntimeStatus callers treat the interruption as transient
+// and retry; a workflow-driven deactivation keeps the existing plain closed
+// error.
+func (o *orchestrator) deactivateWithReason(ctx context.Context, reason deactivateReason) error {
 	unlock, err := o.lock.ContextLock(ctx)
 	if targeterrors.IsStalled(err) {
 		// The actor is parked in the stall hold; wake it so its invocation
@@ -267,8 +289,12 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	o.retired = true
 	o.retireLock.Unlock()
 	o.foldFlush()
+	streamErr := targeterrors.NewClosed("deactivated")
+	if reason == deactivateReasonLifecycle {
+		streamErr = targeterrors.NewClosedUnavailable("deactivated")
+	}
 	for _, stream := range o.streamFns {
-		stream.errCh <- targeterrors.NewClosed("deactivated")
+		stream.errCh <- streamErr
 	}
 	clear(o.streamFns)
 	o.signing.Reset()
