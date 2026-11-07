@@ -114,7 +114,7 @@ type factory struct {
 
 	scheduler todo.WorkflowScheduler
 
-	deactivateCh  chan *orchestrator
+	deactivateCh  chan deactivateRequest
 	deactivateCtx context.Context
 
 	// fastPath and the wake* fields drive the detached local wake goroutines
@@ -179,7 +179,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	deactivateCh := make(chan *orchestrator, 1024)
+	deactivateCh := make(chan deactivateRequest, 1024)
 
 	wakeCtx, wakeCancel := context.WithCancel(context.Background())
 
@@ -233,8 +233,8 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 				select {
 				case <-ctx.Done():
 					return
-				case orchestrator := <-deactivateCh:
-					orchestrator.Deactivate(ctx)
+				case req := <-deactivateCh:
+					req.orchestrator.deactivateWithReason(ctx, req.reason)
 				}
 			}
 		})
@@ -384,13 +384,31 @@ func (f *factory) Len() int {
 	return count
 }
 
+// deactivateRequest is a queued deactivation for the deactivateCh worker
+// pool, carrying the reason the actor is going away.
+type deactivateRequest struct {
+	orchestrator *orchestrator
+	reason       deactivateReason
+}
+
 func (f *factory) deactivate(orchestrator *orchestrator) {
+	f.enqueueDeactivate(orchestrator, deactivateReasonWorkflow)
+}
+
+// deactivateLifecycle queues a deactivation caused by an actor lifecycle
+// event (idle scale-to-zero via the reaper): in-flight waiters see it as
+// transient actor unavailability.
+func (f *factory) deactivateLifecycle(orchestrator *orchestrator) {
+	f.enqueueDeactivate(orchestrator, deactivateReasonLifecycle)
+}
+
+func (f *factory) enqueueDeactivate(orchestrator *orchestrator, reason deactivateReason) {
 	if !orchestrator.closed.CompareAndSwap(false, true) {
 		return
 	}
 
 	select {
-	case f.deactivateCh <- orchestrator:
+	case f.deactivateCh <- deactivateRequest{orchestrator: orchestrator, reason: reason}:
 	case <-f.deactivateCtx.Done():
 	}
 }
@@ -414,7 +432,7 @@ func (f *factory) reapIdle(ctx context.Context) {
 			// refreshed on the next lock acquisition.
 			if o.lastActive.Load() < cutoff && !o.driveRunning.Load() && o.inTurn.Load() == 0 {
 				log.Debugf("Workflow actor '%s': reaping idle actor", o.actorID)
-				f.deactivate(o)
+				f.deactivateLifecycle(o)
 			}
 			return true
 		})

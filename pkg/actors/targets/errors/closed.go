@@ -13,7 +13,12 @@ limitations under the License.
 
 package errors
 
-import "errors"
+import (
+	"errors"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
 
 type closed struct {
 	method string
@@ -30,4 +35,28 @@ func (c *closed) Error() string {
 func IsClosed(err error) bool {
 	var c *closed
 	return errors.As(err, &c)
+}
+
+// NewClosedUnavailable is NewClosed with a gRPC Unavailable status attached.
+// It reports as closed to IsClosed, so the local actor routers keep treating
+// it as retryable, and it reports as codes.Unavailable to status.FromError,
+// so the remote actor routers and language SDKs treat it as transient
+// instead of surfacing gRPC UNKNOWN. Use it when an actor is closed by a
+// lifecycle event (placement rebalancing, scale-to-zero, shutdown/restart)
+// rather than by the workflow itself.
+func NewClosedUnavailable(method string) error {
+	return &closedUnavailable{closed: &closed{method: method}}
+}
+
+type closedUnavailable struct {
+	*closed
+}
+
+// GRPCStatus implements google.golang.org/grpc/status's GRPCStatus interface.
+func (c *closedUnavailable) GRPCStatus() *status.Status {
+	return status.New(codes.Unavailable, c.closed.Error())
+}
+
+func (c *closedUnavailable) Unwrap() error {
+	return c.closed
 }
