@@ -935,7 +935,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 
 	// The operation this watch follows was served by a fallback host: the
 	// instance does not change until it moves to a daprd with an executor.
-	if servedByFallback(ctx) {
+	if ServedByFallback(ctx) {
 		return nil
 	}
 
