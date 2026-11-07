@@ -50,6 +50,10 @@ const (
 	// configuring the control plane trust domain.
 	ControlPlaneTrustDomainEnvVar = "DAPR_CONTROLPLANE_TRUST_DOMAIN"
 
+	// WorkloadKeyAlgorithmEnvVar is the daprd environment variable for the
+	// algorithm of the workload's X.509 SVID private key.
+	WorkloadKeyAlgorithmEnvVar = "DAPR_WORKLOAD_KEY_ALGORITHM"
+
 	// ControlPlaneDefaultTrustAnchorsPath is the default path where the trust anchors are placed for control plane services.
 	ControlPlaneDefaultTrustAnchorsPath = "/var/run/secrets/dapr.io/tls/ca.crt"
 )

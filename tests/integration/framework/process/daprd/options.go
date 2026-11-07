@@ -65,6 +65,7 @@ type options struct {
 	enableMTLS                 bool
 	sentryAddress              string
 	sentryRequestJwtAudiences  []string
+	workloadKeyAlgorithm       string
 	controlPlaneAddress        string
 	disableK8sSecretStore      *bool
 	gracefulShutdownSeconds    *int
@@ -341,6 +342,12 @@ func WithSentryAddress(address string) Option {
 func WithSentryRequestJwtAudiences(audiences ...string) Option {
 	return func(o *options) {
 		o.sentryRequestJwtAudiences = audiences
+	}
+}
+
+func WithWorkloadKeyAlgorithm(alg string) Option {
+	return func(o *options) {
+		o.workloadKeyAlgorithm = alg
 	}
 }
 
