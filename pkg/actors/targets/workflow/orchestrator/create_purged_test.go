@@ -31,6 +31,9 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+// cachedETag is the metadata etag a cached instance last saw.
+const cachedETag = "etag-1"
+
 // metadataRow encodes a metadata row as the store holds it.
 func metadataRow(t *testing.T, generation, historyLength uint64, etag string) *actorapi.StateResponse {
 	t.Helper()
@@ -119,7 +122,7 @@ func Test_createWorkflowInstance_purgedOnAnotherHost(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			h := newCreateHarness(t, instanceID)
 			cached := tc.prime(h)
-			etag := "etag-1"
+			etag := cachedETag
 			cached.SetMetadataETag(&etag)
 			// The purged instance had armed its janitor, which the purge
 			// deleted with its other reminders.
@@ -157,7 +160,7 @@ func Test_createWorkflowInstance_cachedStateConfirmed(t *testing.T) {
 
 	h := newCreateHarness(t, instanceID)
 	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")))
-	etag := "etag-1"
+	etag := cachedETag
 	cached.SetMetadataETag(&etag)
 	h.storedMeta = func() (*actorapi.StateResponse, error) {
 		return metadataRow(t, cached.Generation, uint64(len(cached.History)), etag), nil
@@ -180,7 +183,7 @@ func Test_createWorkflowInstance_cacheReloadedWhenStoreChanged(t *testing.T) {
 
 	h := newCreateHarness(t, instanceID)
 	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")), completedEvent())
-	oldETag := "etag-1"
+	oldETag := cachedETag
 	cached.SetMetadataETag(&oldETag)
 
 	peerStart, err := proto.Marshal(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-peer")))
@@ -232,7 +235,7 @@ func Test_createWorkflowInstance_metadataReadFailsRecoverably(t *testing.T) {
 
 	h := newCreateHarness(t, instanceID)
 	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")), completedEvent())
-	etag := "etag-1"
+	etag := cachedETag
 	cached.SetMetadataETag(&etag)
 	h.storedMeta = func() (*actorapi.StateResponse, error) {
 		return nil, errors.New("store unavailable")
@@ -252,7 +255,7 @@ func Test_createWorkflowInstance_purgedOnAnotherHost_flushesHeldFolds(t *testing
 	const instanceID = "test-purged-folds"
 	h := newCreateHarness(t, instanceID)
 	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1")))
-	etag := "etag-1"
+	etag := cachedETag
 	cached.SetMetadataETag(&etag)
 	h.orch.foldPending = append(h.orch.foldPending, &foldEntry{event: &backend.HistoryEvent{}, gen: cached.Generation, committed: make(chan struct{})})
 	h.orch.janitorEscalated = map[int32]*backend.HistoryEvent{0: {}}
