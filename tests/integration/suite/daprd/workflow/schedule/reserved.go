@@ -47,22 +47,24 @@ func (r *reserved) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *reserved) Run(t *testing.T, ctx context.Context) {
+	const noop, every1s = "noop", "@every 1s"
+
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	// No worker is connected yet, so the schedule could never run.
-	_, err := r.workflow.WorkflowClient(t, ctx).CreateWorkflowSchedule(ctx, "early", "noop", "@every 1s")
+	_, err := r.workflow.WorkflowClient(t, ctx).CreateWorkflowSchedule(ctx, "early", noop, every1s)
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err), err)
 
-	r.workflow.Registry().AddWorkflowN("noop", func(*task.WorkflowContext) (any, error) { return nil, nil })
+	r.workflow.Registry().AddWorkflowN(noop, func(*task.WorkflowContext) (any, error) { return nil, nil })
 	client := r.workflow.BackendClient(t, ctx)
 
 	_, err = client.ScheduleNewWorkflow(ctx, "dapr.internal.schedule", api.WithInstanceID("dapr-internal-schedule-x"))
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	_, err = client.ScheduleNewWorkflow(ctx, "noop", api.WithInstanceID("dapr-internal-schedule-y"))
+	_, err = client.ScheduleNewWorkflow(ctx, noop, api.WithInstanceID("dapr-internal-schedule-y"))
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	_, err = r.workflow.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
-		WorkflowComponent: "dapr", WorkflowName: "noop", InstanceId: "dapr-internal-schedule-z",
+		WorkflowComponent: "dapr", WorkflowName: noop, InstanceId: "dapr-internal-schedule-z",
 	})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
@@ -70,15 +72,15 @@ func (r *reserved) Run(t *testing.T, ctx context.Context) {
 		name, workflow, schedule string
 		opts                     []api.CreateWorkflowScheduleOptions
 	}{
-		"bad name":         {"a_b", "noop", "@every 1s", nil},
-		"bad schedule":     {"a", "noop", "* * *", nil},
-		"too frequent":     {"a", "noop", "@every 10ms", nil},
-		"no workflow":      {"a", "", "@every 1s", nil},
-		"zero repeats":     {"a", "noop", "@every 1s", []api.CreateWorkflowScheduleOptions{api.WithScheduleRepeats(0)}},
-		"schedule itself":  {"a", "dapr.internal.schedule", "@every 1s", nil},
-		"namespace no app": {"a", "noop", "@every 1s", []api.CreateWorkflowScheduleOptions{api.WithScheduleTargetAppNamespace("ns")}},
+		"bad name":         {"a_b", noop, every1s, nil},
+		"bad schedule":     {"a", noop, "* * *", nil},
+		"too frequent":     {"a", noop, "@every 10ms", nil},
+		"no workflow":      {"a", "", every1s, nil},
+		"zero repeats":     {"a", noop, every1s, []api.CreateWorkflowScheduleOptions{api.WithScheduleRepeats(0)}},
+		"schedule itself":  {"a", "dapr.internal.schedule", every1s, nil},
+		"namespace no app": {"a", noop, every1s, []api.CreateWorkflowScheduleOptions{api.WithScheduleTargetAppNamespace("ns")}},
 	} {
-		_, err := client.CreateWorkflowSchedule(ctx, c.name, c.workflow, c.schedule, c.opts...)
+		_, err = client.CreateWorkflowSchedule(ctx, c.name, c.workflow, c.schedule, c.opts...)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err), name)
 	}
 

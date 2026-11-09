@@ -70,8 +70,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}, 20*time.Second, 10*time.Millisecond)
 
 	for i, id := range ids {
-		ts, err := time.Parse("20060102T150405Z", id[len(id)-len("20060102T150405Z"):])
-		require.NoError(t, err, id)
+		ts, perr := time.Parse("20060102T150405Z", id[len(id)-len("20060102T150405Z"):])
+		require.NoError(t, perr, id)
 		assert.False(t, ts.Before(created.Truncate(time.Second)), id)
 		if i > 0 {
 			assert.NotEqual(t, ids[i-1], id)
