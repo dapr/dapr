@@ -35,7 +35,7 @@ import (
 // when this workflow dispatched the task to that app.
 func Test_checkAccessPolicy_completionSender(t *testing.T) {
 	const instanceID = "test-completion-sender"
-	appB := "app-b"
+	appB, appC := "app-b", "app-c"
 
 	newHarness := func(t *testing.T, prime bool) *createHarness {
 		h := newCreateHarness(t, instanceID)
@@ -57,10 +57,13 @@ func Test_checkAccessPolicy_completionSender(t *testing.T) {
 		ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{TaskScheduledId: 2},
 	}}
 
-	check := func(h *createHarness, caller string, ev *backend.HistoryEvent) error {
-		var md map[string]*internalsv1pb.ListStringValue
+	check := func(h *createHarness, caller, parentExecID string, ev *backend.HistoryEvent) error {
+		md := make(map[string]*internalsv1pb.ListStringValue)
 		if caller != "" {
-			md = map[string]*internalsv1pb.ListStringValue{invokev1.CallerIDHeader: {Values: []string{caller}}}
+			md[invokev1.CallerIDHeader] = &internalsv1pb.ListStringValue{Values: []string{caller}}
+		}
+		if parentExecID != "" {
+			md[todo.MetadataParentExecutionID] = &internalsv1pb.ListStringValue{Values: []string{parentExecID}}
 		}
 		return h.orch.checkAccessPolicy(t.Context(), todo.AddWorkflowEventMethod, nil, ev, nil, md)
 	}
@@ -68,6 +71,7 @@ func Test_checkAccessPolicy_completionSender(t *testing.T) {
 	for name, tc := range map[string]struct {
 		caller  string
 		self    bool
+		execID  string
 		ev      *backend.HistoryEvent
 		allowed bool
 	}{
@@ -76,21 +80,26 @@ func Test_checkAccessPolicy_completionSender(t *testing.T) {
 		"child result from the app it was dispatched to":         {caller: appB, ev: childCompletedEvent(2), allowed: true},
 		"child failure from the app it was dispatched to":        {caller: appB, ev: childFailed, allowed: true},
 		"result from this app":                                   {self: true, ev: taskCompletedEvent(1), allowed: true},
-		"activity result from another app":                       {caller: "app-c", ev: taskCompletedEvent(1)},
-		"child result from another app":                          {caller: "app-c", ev: childCompletedEvent(2)},
-		"child failure from another app":                         {caller: "app-c", ev: childFailed},
+		"activity result from another app":                       {caller: appC, ev: taskCompletedEvent(1)},
+		"child result from another app":                          {caller: appC, ev: childCompletedEvent(2)},
+		"child failure from another app":                         {caller: appC, ev: childFailed},
 		"dispatched app answering a task run by this app":        {caller: appB, ev: taskCompletedEvent(0)},
 		"dispatched app answering a task that was never sent":    {caller: appB, ev: taskCompletedEvent(9)},
 		"dispatched app answering with a timer's id":             {caller: appB, ev: taskCompletedEvent(3)},
 		"missing caller identity for a task run by this app":     {caller: "", ev: taskCompletedEvent(0)},
 		"missing caller identity for a task sent to another app": {caller: "", ev: taskCompletedEvent(1)},
+		// Admission drops these, so the child stops re-sending.
+		"child result from an earlier execution":                 {caller: appB, execID: "exec-0", ev: childCompletedEvent(0), allowed: true},
+		"child result from another app claiming an earlier run":  {caller: appC, execID: "exec-0", ev: childCompletedEvent(2), allowed: true},
+		"child result from another app claiming the current run": {caller: appC, execID: "exec-1", ev: childCompletedEvent(2)},
+		"activity result from an earlier execution":              {caller: appB, execID: "exec-0", ev: taskCompletedEvent(0)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, true)
 			if tc.self {
 				tc.caller = h.orch.appID
 			}
-			err := check(h, tc.caller, tc.ev)
+			err := check(h, tc.caller, tc.execID, tc.ev)
 			if tc.allowed {
 				require.NoError(t, err)
 				return
@@ -102,13 +111,27 @@ func Test_checkAccessPolicy_completionSender(t *testing.T) {
 	}
 
 	t.Run("a timer firing from another app is still malformed", func(t *testing.T) {
-		err := check(newHarness(t, true), appB, firedEvent(3))
+		err := check(newHarness(t, true), appB, "", firedEvent(3))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "malformed request")
 	})
 
 	// Nothing to complete: admission answers not found so the sender stops.
 	t.Run("completion for an instance that does not exist passes to admission", func(t *testing.T) {
-		require.NoError(t, check(newHarness(t, false), "app-c", taskCompletedEvent(1)))
+		require.NoError(t, check(newHarness(t, false), appC, "", taskCompletedEvent(1)))
+	})
+
+	t.Run("child result for a finished workflow passes to admission", func(t *testing.T) {
+		h := newHarness(t, false)
+		h.primeHistory(startEventFor(instanceID, time.Now(), withExecutionID("exec-1")), completedEvent())
+		require.NoError(t, check(h, appC, "", childCompletedEvent(2)))
+	})
+
+	t.Run("activity result for a finished workflow is denied", func(t *testing.T) {
+		h := newHarness(t, false)
+		h.primeHistory(startEventFor(instanceID, time.Now(), withExecutionID("exec-1")), completedEvent())
+		err := check(h, appC, "", taskCompletedEvent(2))
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 }

@@ -31,6 +31,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -49,10 +50,10 @@ func init() {
 // child workflows and activities on another app. Their results are replies to
 // tasks the parent dispatched, not operations the other app performs on it,
 // so the policy must let them through: every parent gets the real outcome,
-// including a child that finishes after its parent was terminated or purged,
-// and no ACL denial is recorded for the target app. A result for a pending
-// task sent by any app other than the one the task was dispatched to is
-// denied and never reaches the workflow.
+// a child that finishes after its parent was terminated, purged or continued
+// as new stops re-sending, and no ACL denial is recorded for the target app.
+// A result for a pending task sent by any app other than the one the task
+// was dispatched to never reaches the workflow.
 //
 // It runs with history signing on. completionnosigning and
 // completionfastpath run the same test without signing and on the
@@ -134,6 +135,9 @@ func (c *completion) Run(t *testing.T, ctx context.Context) {
 	}))
 	require.NoError(t, target.AddActivityN("remote-wait", blocking(remoteStarted, "remote")))
 	require.NoError(t, parent.AddActivityN("local-wait", blocking(localStarted, "local")))
+	require.NoError(t, parent.AddActivityN("local-echo", func(task.ActivityContext) (any, error) {
+		return "echo", nil
+	}))
 
 	for _, name := range []string{"child-ok", "child-fail"} {
 		require.NoError(t, parent.AddWorkflowN("parent-"+name, func(ctx *task.WorkflowContext) (any, error) {
@@ -155,6 +159,28 @@ func (c *completion) Run(t *testing.T, ctx context.Context) {
 			return nil, err
 		}
 		return nil, ctx.CallChildWorkflow("child-wait", task.WithChildWorkflowAppID(targetID), task.WithChildWorkflowInstanceID(childID)).Await(nil)
+	}))
+	const canChildID = "completion-can-child"
+	require.NoError(t, parent.AddWorkflowN("parent-can", func(ctx *task.WorkflowContext) (any, error) {
+		var gen int
+		if err := ctx.GetInput(&gen); err != nil {
+			return nil, err
+		}
+		if gen == 0 {
+			// Left running: its result arrives after the parent continued as new.
+			ctx.CallChildWorkflow("child-wait", task.WithChildWorkflowAppID(targetID), task.WithChildWorkflowInstanceID(canChildID))
+			if err := ctx.WaitForSingleEvent("can", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			ctx.ContinueAsNew(1)
+			return nil, nil
+		}
+		// Task 0 of this execution runs on the parent's own app.
+		var out string
+		if err := ctx.CallActivity("local-echo").Await(&out); err != nil {
+			return nil, err
+		}
+		return out, ctx.WaitForSingleEvent("done", -1).Await(nil)
 	}))
 	const forgeChildID = "completion-forge-child"
 	require.NoError(t, parent.AddWorkflowN("parent-forge", func(ctx *task.WorkflowContext) (any, error) {
@@ -234,6 +260,40 @@ func (c *completion) Run(t *testing.T, ctx context.Context) {
 			assert.Zero(t, sched.JobKeyCount(t, ctx, "parent-notify"), "the child is still re-sending its result")
 		})
 	}
+
+	t.Run("child result from before the parent continued as new", func(t *testing.T) {
+		id, err := client.ScheduleNewWorkflow(ctx, "parent-can", api.WithInput(0))
+		require.NoError(t, err)
+		wf.WaitForRuntimeStatus(t, ctx, targetClient, canChildID, api.RUNTIME_STATUS_RUNNING)
+
+		require.NoError(t, client.RaiseEvent(ctx, id, "can"))
+		require.EventuallyWithT(t, func(col *assert.CollectT) {
+			hist, herr := client.GetInstanceHistory(ctx, id)
+			require.NoError(col, herr)
+			var done bool
+			for _, e := range hist.GetEvents() {
+				done = done || e.GetTaskCompleted() != nil
+			}
+			assert.True(col, done, "the new execution has not run its own task 0")
+		}, time.Second*10, time.Millisecond*10)
+
+		require.NoError(t, targetClient.RaiseEvent(ctx, canChildID, "go"))
+		wf.WaitForRuntimeStatus(t, ctx, targetClient, canChildID, api.RUNTIME_STATUS_COMPLETED)
+
+		// Give a retry loop time to show itself before asserting there is none.
+		time.Sleep(time.Second * 2)
+		assert.Zero(t, sched.JobKeyCount(t, ctx, "parent-notify"), "the child is still re-sending its result")
+		completed, failed := wf.ChildCompletions(t, ctx, client, id, 0)
+		assert.Zero(t, completed+failed, "a result from the previous execution reached the new one")
+
+		require.NoError(t, client.RaiseEvent(ctx, id, "done"))
+		wctx, cancel := context.WithTimeout(ctx, time.Second*8)
+		defer cancel()
+		meta, err := client.WaitForWorkflowCompletion(wctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+		assert.Equal(t, `"echo"`, meta.GetOutput().GetValue())
+	})
 
 	denied := "dapr_runtime_workflow_acl_action_denied_total|"
 	for k := range c.workflow.DaprN(0).Metrics(t, ctx).All() {
@@ -325,6 +385,21 @@ func (c *completion) Run(t *testing.T, ctx context.Context) {
 				assert.Contains(t, cerr.Error(), fmt.Sprintf("was not dispatched task %d", tc.task))
 			})
 		}
+
+		// A result claiming an earlier execution is acknowledged and dropped,
+		// as a real child's late result would be, and never reaches the workflow.
+		t.Run("child workflow result from another app claiming an earlier execution", func(t *testing.T) {
+			data, merr := proto.Marshal(&protos.HistoryEvent{EventId: -1, Timestamp: timestamppb.Now(), EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+				ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: childTask, Result: wrapperspb.String(`"forged"`)},
+			}})
+			require.NoError(t, merr)
+			_, cerr := forger.CallActor(ctx, internalv1pb.NewInternalInvokeRequest("AddWorkflowEvent").
+				WithActor("dapr.internal."+parentd.Namespace()+"."+c.parentID+".workflow", string(id)).
+				WithData(data).
+				WithMetadata(map[string][]string{todo.MetadataParentExecutionID: {"earlier-execution"}}),
+			)
+			require.NoError(t, cerr)
+		})
 
 		close(release)
 		require.NoError(t, targetClient.RaiseEvent(ctx, forgeChildID, "go"))

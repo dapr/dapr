@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +25,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -62,7 +64,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 		return nil
 	}
 	if workflowacl.IsCompletionEvent(parsedAddEvent) {
-		return o.checkCompletionSender(ctx, callerAppID, parsedAddEvent)
+		return o.checkCompletionSender(ctx, callerAppID, parsedAddEvent, md)
 	}
 
 	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
@@ -106,7 +108,7 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 // from another app only when this workflow dispatched that task to the app.
 // A completion is the reply to the workflow's own request, so no policy rule
 // describes it, and any other app sending one is denied.
-func (o *orchestrator) checkCompletionSender(ctx context.Context, callerAppID string, e *backend.HistoryEvent) error {
+func (o *orchestrator) checkCompletionSender(ctx context.Context, callerAppID string, e *backend.HistoryEvent, md map[string]*internalsv1pb.ListStringValue) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		log.Errorf("Workflow actor '%s': failed to load state for completion sender check: %v", o.actorID, err)
@@ -126,6 +128,18 @@ func (o *orchestrator) checkCompletionSender(ctx context.Context, callerAppID st
 			target = o.appID
 		}
 		if target == callerAppID {
+			return nil
+		}
+	}
+
+	// A child's result that admission acknowledges without effect, such as
+	// one from before a ContinueAsNew or for a finished workflow, or answers
+	// as not found, passes so the child stops re-sending it. Not an
+	// activity's: dropping one releases the instance ID reuse guard, and its
+	// sender falls back to a result reminder, which admission checks against
+	// the dispatched app.
+	if e.GetChildWorkflowInstanceCompleted() != nil || e.GetChildWorkflowInstanceFailed() != nil {
+		if a := o.classifyEvent(e, state, senderFromMetadata(md), false); a.reason != "" || errors.Is(a.err, api.ErrInstanceNotFound) {
 			return nil
 		}
 	}
