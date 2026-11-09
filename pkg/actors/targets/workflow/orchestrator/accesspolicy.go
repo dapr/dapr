@@ -61,6 +61,9 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 	if policies.SelfCallExempt(o.appID, callerAppID, &o.selfCallerWarned) {
 		return nil
 	}
+	if workflowacl.IsCompletionEvent(parsedAddEvent) {
+		return o.checkCompletionSender(ctx, callerAppID, parsedAddEvent)
+	}
 
 	operation, err := workflowacl.WorkflowOperationFromMethod(method, parsedAddEvent)
 	if err != nil {
@@ -97,6 +100,39 @@ func (o *orchestrator) checkAccessPolicy(ctx context.Context, method string, dat
 
 	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(workflowacl.OperationTypeWorkflow), string(operation))
 	return nil
+}
+
+// checkCompletionSender admits an activity result or child workflow outcome
+// from another app only when this workflow dispatched that task to the app.
+// A completion is the reply to the workflow's own request, so no policy rule
+// describes it, and any other app sending one is denied.
+func (o *orchestrator) checkCompletionSender(ctx context.Context, callerAppID string, e *backend.HistoryEvent) error {
+	state, _, err := o.loadInternalState(ctx)
+	if err != nil {
+		log.Errorf("Workflow actor '%s': failed to load state for completion sender check: %v", o.actorID, err)
+		return status.Error(codes.Internal, "failed to evaluate workflow access policy")
+	}
+	// No instance: there is nothing a completion could change, and admission
+	// reports it gone so the sender stops re-delivering.
+	if state == nil {
+		return nil
+	}
+
+	step, _ := resolves(e)
+	dispatch := state.FindHistoryEventByID(step.id)
+	if dispatch.GetTaskScheduled() != nil || dispatch.GetChildWorkflowInstanceCreated() != nil {
+		target := dispatch.GetRouter().GetTargetAppID()
+		if target == "" {
+			target = o.appID
+		}
+		if target == callerAppID {
+			return nil
+		}
+	}
+
+	log.Warnf("Workflow actor '%s': workflow access policy denied %s result for task %d from app '%s', which the task was not dispatched to", o.actorID, step.kind, step.id, callerAppID)
+	diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(workflowacl.OperationTypeWorkflow), todo.AddWorkflowEventMethod)
+	return status.Errorf(codes.PermissionDenied, "%s: app '%s' was not dispatched task %d of workflow instance '%s'", workflowacl.DeniedMessageBase, callerAppID, step.id, o.actorID)
 }
 
 // workflowNameForOperation returns the workflow name for the policy check
