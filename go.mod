@@ -12,9 +12,9 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.19.0
-	github.com/dapr/durabletask-go v0.15.1
-	github.com/dapr/kit v0.19.0
+	github.com/dapr/components-contrib v1.19.1-0.20261104141951-1ce056f5e15d
+	github.com/dapr/durabletask-go v0.16.0
+	github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4
 	github.com/diagridio/go-etcd-cron v0.12.11-0.20261027123650-5a19e4812a75
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.3.2
@@ -165,7 +165,7 @@ require (
 	github.com/aliyun/credentials-go v1.1.2 // indirect
 	github.com/aliyunmq/mq-http-go-sdk v1.0.3 // indirect
 	github.com/alphadose/haxmap v1.4.0 // indirect
-	github.com/andybalholm/brotli v1.2.1 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/anshal21/go-worker v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/apache/dubbo-getty v1.4.9-0.20220610060150-8af010f3f3dc // indirect
@@ -554,4 +554,4 @@ replace (
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
 // TODO: temporary, until dapr/components-contrib#4713 merges; replace with a components-contrib bump.
-replace github.com/dapr/components-contrib => github.com/arturotrenard/components-contrib v0.0.0-20261029085522-a08181a15739
+replace github.com/dapr/components-contrib => github.com/arturotrenard/components-contrib v0.0.0-20261108114412-7c2e92d7a2c6

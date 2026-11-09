@@ -42,6 +42,7 @@ var buildTags = []string{
 	"middleware_http_routeralias",
 	"middleware_http_wasm",
 	"conversation_echo",
+	"conversation_anthropic",
 	"search_inmemory",
 	"vector_inmemory",
 	// state_spiffeprobe compiles in an integration-test-only state store that

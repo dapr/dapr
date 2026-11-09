@@ -258,8 +258,8 @@ github.com/aliyunmq/mq-http-go-sdk v1.0.3/go.mod h1:JYfRMQoPexERvnNNBcal0ZQ2TVQ5
 github.com/alphadose/haxmap v1.4.0 h1:1yn+oGzy2THJj1DMuJBzRanE3sMnDAjJVbU0L31Jp3w=
 github.com/alphadose/haxmap v1.4.0/go.mod h1:rjHw1IAqbxm0S3U5tD16GoKsiAd8FWx5BJ2IYqXwgmM=
 github.com/andybalholm/brotli v1.0.0/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
-github.com/andybalholm/brotli v1.2.1 h1:R+f5xP285VArJDRgowrfb9DqL18yVK0gKAW/F+eTWro=
-github.com/andybalholm/brotli v1.2.1/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
+github.com/andybalholm/brotli v1.2.7 h1:UgafRPGMam5ySHfRkhthMqOFA6IFoeF3D7mWIDLjG5A=
+github.com/andybalholm/brotli v1.2.7/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/anshal21/go-worker v1.1.0 h1:TPt2jBN/6dmPDPDTq8DHA0MtoXG8RWKGoJVHqED+s5g=
 github.com/anshal21/go-worker v1.1.0/go.mod h1:6GiLOIr/VvVg80vfW65ytLuouSvndU2IoJTu+8M47lI=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
@@ -301,8 +301,8 @@ github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
-github.com/arturotrenard/components-contrib v0.0.0-20261029085522-a08181a15739 h1:ChTU0qXOTeEdvXgnxkF0J3XcBgbX9t5wckjZ4M7yxWQ=
-github.com/arturotrenard/components-contrib v0.0.0-20261029085522-a08181a15739/go.mod h1:ughqO9d08BNskuKV0xWSvaVRs2GpNwZyKn07WMKKkYk=
+github.com/arturotrenard/components-contrib v0.0.0-20261108114412-7c2e92d7a2c6 h1:qPabk1ww12deOOmApFsmQb4ApJgxUb8VYSNeY0i2aXs=
+github.com/arturotrenard/components-contrib v0.0.0-20261108114412-7c2e92d7a2c6/go.mod h1:bqhLe5flhvy4n0jd0uns0RGHc0u5FyknHArjZBYNL+U=
 github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a/go.mod h1:DAHtR1m6lCRdSC2Tm3DSWRPvIPr6xNKyeHdqDQSQT+A=
 github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496/go.mod h1:oGkLhpf+kjZl6xBf758TQhh5XrAeiJv/7FRz/2spLIg=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
@@ -523,10 +523,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.15.1 h1:yKQCfT49PEpWoJkUpGR0Y+lrqujbRYjJhzsmpYlpEIg=
-github.com/dapr/durabletask-go v0.15.1/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
-github.com/dapr/kit v0.19.0 h1:xRZXEHMcBhQp1roZ3RW56Vaa1LlXGaPLHJv0CTbgXN4=
-github.com/dapr/kit v0.19.0/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
+github.com/dapr/durabletask-go v0.16.0 h1:IAy36r/UVCsLozNo2Spwn/hhalrcSHaMNFnw1Hu01bc=
+github.com/dapr/durabletask-go v0.16.0/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
+github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4 h1:VKGjNTbRKRSfhvDestGRoCmBa0zw53/oXNbP3HQp1PU=
+github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
