@@ -159,11 +159,11 @@ func (m *Modes) SetupN(t *testing.T, perMode int, opts func(staged bool, i int) 
 	for k, staged := range []bool{false, true} {
 		for i := range perMode {
 			index := k*perMode + i
+			// Pinned per daprd, so the off mode stays off when
+			// DAPR_INTEGRATION_WORKFLOW_STAGED turns the preview on.
+			wopts = append(wopts, workflow.WithStagedOperationsN(index, staged))
 			if staged {
-				wopts = append(wopts,
-					workflow.WithStagedOperationsN(index),
-					workflow.WithFallbackSettleN(t, index),
-				)
+				wopts = append(wopts, workflow.WithFallbackSettleN(t, index))
 			}
 			if opts != nil {
 				wopts = append(wopts, workflow.WithDaprdOptions(index, opts(staged, i)...))
