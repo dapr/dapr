@@ -154,7 +154,16 @@ jobs:
         if [ -d "$DAPR_PATCH_DIR" ]; then
           cd latest-release
           echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"
-          git apply --ignore-space-change --ignore-whitespace $DAPR_PATCH_DIR/*.patch
+          # Skip a patch the release already carries (a backported fix), so
+          # cutting the next patch release does not break this step.
+          for p in "$DAPR_PATCH_DIR"/*.patch; do
+            if ! git apply --check --ignore-space-change --ignore-whitespace "$p" 2>/dev/null &&
+              git apply --reverse --check --ignore-space-change --ignore-whitespace "$p" 2>/dev/null; then
+              echo "::warning::Skipping $(basename "$p"): already applied in this release, delete it"
+              continue
+            fi
+            git apply --ignore-space-change --ignore-whitespace "$p"
+          done
           git diff
         fi
     - name: Set up Go
@@ -364,7 +373,16 @@ jobs:
           echo "Applying patches from $DAPR_PATCH_DIR"
           cd latest-release
           echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"
-          git apply --ignore-space-change --ignore-whitespace $DAPR_PATCH_DIR/*.patch
+          # Skip a patch the release already carries (a backported fix), so
+          # cutting the next patch release does not break this step.
+          for p in "$DAPR_PATCH_DIR"/*.patch; do
+            if ! git apply --check --ignore-space-change --ignore-whitespace "$p" 2>/dev/null &&
+              git apply --reverse --check --ignore-space-change --ignore-whitespace "$p" 2>/dev/null; then
+              echo "::warning::Skipping $(basename "$p"): already applied in this release, delete it"
+              continue
+            fi
+            git apply --ignore-space-change --ignore-whitespace "$p"
+          done
           git diff
         fi
     - name: Set up Go
