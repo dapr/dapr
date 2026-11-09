@@ -20,10 +20,12 @@ import (
 )
 
 // Key returns the inflight Map key for an activity invocation. It pairs the
-// activity actor ID with the TaskExecutionId from the TaskScheduled event so
-// retries of the same scheduled task share a cache entry while a new workflow
-// run that re-uses the same instance ID (and therefore the same activity actor
-// ID) gets a fresh entry.
+// activity actor ID with the identity of one scheduling of the task, built from
+// the TaskExecutionId and the timestamp of the TaskScheduled event, so retries
+// of the same scheduling share a cache entry while a new workflow run or rerun
+// that re-uses the same instance ID (and therefore the same activity actor ID)
+// gets a fresh entry. A rerun copies the TaskExecutionId but resets the
+// timestamp, so the ID alone is not enough.
 //
 // SDKs that predate TaskExecutionId leave it empty; the event's timestamp is
 // used instead. The timestamp is part of the persisted event carried by the
@@ -34,13 +36,22 @@ import (
 // faster than the inflight cache TTL would join its previous generation's
 // completed call as a follower and never execute (the monitor pattern).
 func Key(actorID string, taskEvent *backend.HistoryEvent) string {
-	if ts := taskEvent.GetTaskScheduled(); ts != nil {
-		if id := ts.GetTaskExecutionId(); id != "" {
-			return actorID + "::" + id
-		}
+	ts := taskEvent.GetTimestamp()
+
+	var id string
+	if sched := taskEvent.GetTaskScheduled(); sched != nil {
+		id = sched.GetTaskExecutionId()
 	}
-	if ts := taskEvent.GetTimestamp(); ts != nil {
-		return actorID + "::" + strconv.FormatInt(ts.GetSeconds(), 10) + "." + strconv.FormatInt(int64(ts.GetNanos()), 10)
+
+	switch {
+	case id != "" && ts != nil:
+		return actorID + "::" + backend.ActivitySchedulingID(taskEvent)
+	case id != "":
+		return actorID + "::" + id
+	case ts != nil:
+		return actorID + "::" + strconv.FormatInt(ts.GetSeconds(), 10) +
+			"." + strconv.FormatInt(int64(ts.GetNanos()), 10)
+	default:
+		return actorID
 	}
-	return actorID
 }
