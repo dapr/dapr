@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -205,6 +206,59 @@ func Test_createWorkflowInstance_cacheReloadedWhenStoreChanged(t *testing.T) {
 	assert.Empty(t, h.ops)
 	require.NotNil(t, h.orch.state)
 	assert.Len(t, h.orch.state.History, 1, "the cache now holds the store's instance")
+}
+
+// The store holds a different, completed instance under the ID: the cached
+// one was purged and created again elsewhere, so nothing the actor holds for
+// the cached one applies. When the store holds the cached instance, moved on
+// by another host, what the actor holds for it stays. Both on a host with a
+// local executor (loadStateForCreate) and on a fallback host
+// (dropFallbackCache, run at the start of the invoked method).
+func Test_createWorkflowInstance_cacheReplacedResetsResidency(t *testing.T) {
+	const instanceID = "test-cache-replaced"
+
+	for _, fallback := range []bool{false, true} {
+		for name, tc := range map[string]struct {
+			storedExec string
+			wantErr    string
+		}{
+			"replaced": {storedExec: "exec-peer"},
+			"moved on": {storedExec: "exec-1", wantErr: "already awaiting an activity result"},
+		} {
+			t.Run(fmt.Sprintf("%s fallback=%t", name, fallback), func(t *testing.T) {
+				h := newCreateHarness(t, instanceID)
+				h.orch.fallback = func() bool { return fallback }
+				cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")), completedEvent())
+				oldETag := cachedETag
+				cached.SetMetadataETag(&oldETag)
+				h.orch.activityResultAwaited.Store(true)
+				h.orch.janitorAsserted.Store(true)
+
+				storedStart, err := proto.Marshal(startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID(tc.storedExec)))
+				require.NoError(t, err)
+				storedDone, err := proto.Marshal(completedEvent())
+				require.NoError(t, err)
+				h.storedMeta = func() (*actorapi.StateResponse, error) {
+					return metadataRow(t, 1, 2, "etag-2"), nil
+				}
+				h.storedBulk = actorapi.BulkStateResponse{
+					wfenginestate.HistoryKey(0): {Data: storedStart},
+					wfenginestate.HistoryKey(1): {Data: storedDone},
+				}
+
+				h.orch.dropFallbackCache(t.Context())
+				err = h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))))
+				if tc.wantErr != "" {
+					require.ErrorContains(t, err, tc.wantErr)
+					assert.True(t, h.orch.activityResultAwaited.Load())
+					assert.True(t, h.orch.janitorAsserted.Load())
+					return
+				}
+				require.NoError(t, err, "the completed instance in the store allows the create")
+				assert.False(t, h.orch.activityResultAwaited.Load())
+			})
+		}
+	}
 }
 
 // A row the store has never served an ETag for may be a store that does not

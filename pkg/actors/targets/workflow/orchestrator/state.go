@@ -300,12 +300,23 @@ func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.S
 	}
 
 	log.Debugf("Workflow actor '%s': cached state no longer matches the store; reloading before create", o.actorID)
+	return o.reloadDroppedCache(ctx)
+}
+
+// reloadDroppedCache drops a cached state the store's metadata row no longer
+// describes and loads the instance from the store. When the instance is gone,
+// or the store now holds another instance under the ID (purged on another
+// daprd, then created again elsewhere), nothing the actor holds for the cached
+// instance applies to what the store holds, so it is released. A row that
+// moved on for the same instance keeps it. The caller holds the turn lock.
+func (o *orchestrator) reloadDroppedCache(ctx context.Context) (*wfenginestate.State, error) {
+	cachedExec := o.getExecutionStartedEvent(o.state).GetWorkflowInstance().GetExecutionId().GetValue()
 	o.invalidateCachedState()
-	state, _, err = o.loadInternalState(ctx)
+	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if state == nil {
+	if state == nil || o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue() != cachedExec {
 		o.resetForPurgedInstance()
 	}
 	return state, nil
