@@ -71,6 +71,8 @@ type createHarness struct {
 	storedMeta func() (*actorapi.StateResponse, error)
 	// storedBulk answers bulk reads: the rows a reload loads.
 	storedBulk actorapi.BulkStateResponse
+	// refreshErr, when set, fails the metadata read after a save.
+	refreshErr error
 
 	orch *orchestrator
 }
@@ -114,6 +116,9 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 			// expects.
 			if !h.saved && h.storedMeta != nil && req.Key == wfenginestate.MetadataKey {
 				return h.storedMeta()
+			}
+			if h.saved && h.refreshErr != nil && req.Key == wfenginestate.MetadataKey {
+				return nil, h.refreshErr
 			}
 			if h.saved && req.Key == wfenginestate.MetadataKey {
 				etag := testETag

@@ -66,6 +66,9 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	if err != nil {
 		var verifyErr *wferrors.VerificationError
 		if errors.As(err, &verifyErr) {
+			if state != nil {
+				o.releaseReplacedInstance(state)
+			}
 			if !state.IsCompleted() {
 				return o.tombstoneTamperedState(ctx, opts, state, err)
 			}
@@ -229,8 +232,10 @@ func (o *orchestrator) releaseReplacedInstance(loaded *wfenginestate.State) {
 	}
 	if loaded == nil || executionIDOf(o.getExecutionStartedEvent(loaded)) != *o.cachedExecutionID {
 		o.resetForPurgedInstance()
+		o.cachedExecutionID = nil
 	}
-	o.cachedExecutionID = nil
+	// The same instance: the record stays until cacheDurable replaces it, so
+	// a load that fails after this point still leaves it in place.
 }
 
 func executionIDOf(es *protos.ExecutionStartedEvent) string {
@@ -393,6 +398,13 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	// The save is durable: the store now holds this state, whatever the
+	// refresh below does with the cache. A ContinueAsNew changed the
+	// execution ID, and a load that follows a dropped cache must compare the
+	// store with it, not with the generation before.
+	id := executionIDOf(o.getExecutionStartedEvent(state))
+	o.cachedExecutionID = &id
 
 	// Refresh the metadata ETag for the next save. Multi does not return new
 	// ETags, so we read just the metadata row back. A read error here is

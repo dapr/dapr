@@ -412,3 +412,28 @@ func Test_createWorkflowInstance_cacheDroppedAfterUnsavedChangeKeepsResidency(t 
 	assert.True(t, h.orch.activityResultAwaited.Load(), "the instance the store holds may still owe a result")
 	assert.True(t, h.orch.janitorAsserted.Load())
 }
+
+// A save commits a new generation, here a ContinueAsNew with its own
+// execution ID, and the metadata refresh after it fails, which drops the
+// cache. The record must name the committed generation: the load that
+// follows finds it in the store and releases nothing.
+func Test_saveInternalState_recordsCommittedExecutionBeforeRefresh(t *testing.T) {
+	const instanceID = "test-save-refresh-fails"
+	h := newCreateHarness(t, instanceID)
+	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")))
+	h.orch.activityResultAwaited.Store(true)
+	require.Equal(t, "exec-1", *h.orch.cachedExecutionID)
+
+	cached.History[0] = startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
+	h.refreshErr = errors.New("store unavailable")
+	require.NoError(t, h.orch.saveInternalState(t.Context(), cached))
+	require.Nil(t, h.orch.state, "the failed refresh drops the cache")
+	require.NotNil(t, h.orch.cachedExecutionID)
+	assert.Equal(t, "exec-2", *h.orch.cachedExecutionID, "the record names the committed generation")
+
+	// The store holds the committed generation: nothing is released.
+	loaded := wfenginestate.NewState(h.orch.stateOptions())
+	loaded.AddToHistory(startEventFor(instanceID, time.Now(), withExecutionID("exec-2")))
+	h.orch.releaseReplacedInstance(loaded)
+	assert.True(t, h.orch.activityResultAwaited.Load())
+}

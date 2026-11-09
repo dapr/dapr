@@ -95,6 +95,9 @@ func (w *wedgedowner) Run(t *testing.T, ctx context.Context) {
 	janitors := func() int {
 		return w.workflow.Scheduler().JobKeyCount(t, ctx, "new-event-janitor")
 	}
+	// Polls run on another goroutine: they look the keys up through a
+	// collector-aware lookup dialled here, on the test goroutine.
+	jobKeys := w.workflow.Scheduler().JobKeysLookup(t, ctx)
 
 	const id = "wedgedowner"
 	_, err := clients[0].ScheduleWorkflow(ctx, "wedge", dworkflow.WithInstanceID(id))
@@ -119,6 +122,6 @@ func (w *wedgedowner) Run(t *testing.T, ctx context.Context) {
 	_, err = clients[owner].ScheduleWorkflow(ctx, "wait", dworkflow.WithInstanceID(id))
 	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, 1, janitors())
+		assert.Len(c, jobKeys(c, "new-event-janitor"), 1)
 	}, time.Second*10, time.Millisecond*10, "the new instance must arm its own janitor")
 }
