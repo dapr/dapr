@@ -42,6 +42,9 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
+// testETag is the etag the fake state store hands back in these tests.
+const testETag = "etag"
+
 // createHarness captures every state save and reminder create in a single
 // ordered operation log so tests can assert save-before-create ordering.
 type createHarness struct {
@@ -61,6 +64,13 @@ type createHarness struct {
 	// getErr, when non-nil, is returned by the reminders Get fake: the
 	// scheduler could not be reached to check the reminder.
 	getErr error
+
+	// storedMeta, when set, answers metadata-row reads until the first save:
+	// what the store holds for an instance primed into the cache, or nil
+	// data for one deleted underneath it.
+	storedMeta func() (*actorapi.StateResponse, error)
+	// storedBulk answers bulk reads: the rows a reload loads.
+	storedBulk actorapi.BulkStateResponse
 
 	orch *orchestrator
 }
@@ -102,11 +112,22 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 			// No stored state until the first save: fresh instance. After a
 			// save the metadata row exists, as the post-save etag refresh
 			// expects.
+			if !h.saved && h.storedMeta != nil && req.Key == wfenginestate.MetadataKey {
+				return h.storedMeta()
+			}
 			if h.saved && req.Key == wfenginestate.MetadataKey {
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
+		}).
+		WithGetBulkFn(func(context.Context, *actorapi.GetBulkStateRequest, bool) (actorapi.BulkStateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			if h.storedBulk == nil {
+				return actorapi.BulkStateResponse{}, nil
+			}
+			return h.storedBulk, nil
 		}).
 		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
 			h.lock.Lock()
