@@ -40,8 +40,9 @@ permissions: {}
 jobs:
   # Dapr guarantees that the control plane and Dapr sidecars may have a version
   # skew of N-1 and still be fully functional. This workflow verifies this
-  # guarantee holds for master and the previous release (or overridden version
-  # reference).
+  # guarantee holds for the branch that triggered the run and the release
+  # before it (or overridden version reference). master runs against the
+  # latest release, and a release-X.Y branch against the latest X.(Y-1) patch.
 
   # This workflow runs the previous releases integration tests against the
   # matrix of master/latest-release daprd/control-plane. This ensures the
@@ -60,14 +61,45 @@ jobs:
         - control-plane-master
         - dapr-sidecar-master
     steps:
-    - name: Set up for Dapr lastest release
+    - name: Set up for the previous Dapr release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
-    - name: Set up for master
+        set -euo pipefail
+        # Dapr guarantees N-1, so test each branch against the release before
+        # it. master tests against the latest release. A release-X.Y branch
+        # tests against the latest X.(Y-1) patch, because the latest release
+        # can be X.Y itself or a newer minor.
+        resolve() {
+          if [[ "$GITHUB_REF_NAME" =~ ^release-([0-9]+)\.([0-9]+)$ ]]; then
+            local prefix="v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1))."
+            gh api --paginate repos/dapr/dapr/releases \
+              -q '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' \
+              | awk -v p="$prefix" 'index($0, p) == 1' | sort -V | tail -n 1
+          else
+            gh api repos/dapr/dapr/releases/latest -q '.tag_name'
+          fi
+        }
+        tag=""
+        for i in 1 2 3 4 5; do
+          tag="$(resolve || true)"
+          if [ -n "$tag" ]; then
+            break
+          fi
+          echo "Attempt $i: could not resolve the previous Dapr release tag, retrying..." >&2
+          sleep $((i * 5))
+        done
+        if [ -z "$tag" ]; then
+          echo "Failed to resolve the previous Dapr release tag for $GITHUB_REF_NAME" >&2
+          exit 1
+        fi
+        echo "Testing $GITHUB_REF_NAME against $tag"
+        echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
+    - name: Set up for the triggering branch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Setup test output
       shell: bash
@@ -242,14 +274,45 @@ jobs:
         - control-plane-master
         - dapr-sidecar-master
     steps:
-    - name: Set up for Dapr lastest release
+    - name: Set up for the previous Dapr release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
-    - name: Set up for master
+        set -euo pipefail
+        # Dapr guarantees N-1, so test each branch against the release before
+        # it. master tests against the latest release. A release-X.Y branch
+        # tests against the latest X.(Y-1) patch, because the latest release
+        # can be X.Y itself or a newer minor.
+        resolve() {
+          if [[ "$GITHUB_REF_NAME" =~ ^release-([0-9]+)\.([0-9]+)$ ]]; then
+            local prefix="v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1))."
+            gh api --paginate repos/dapr/dapr/releases \
+              -q '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' \
+              | awk -v p="$prefix" 'index($0, p) == 1' | sort -V | tail -n 1
+          else
+            gh api repos/dapr/dapr/releases/latest -q '.tag_name'
+          fi
+        }
+        tag=""
+        for i in 1 2 3 4 5; do
+          tag="$(resolve || true)"
+          if [ -n "$tag" ]; then
+            break
+          fi
+          echo "Attempt $i: could not resolve the previous Dapr release tag, retrying..." >&2
+          sleep $((i * 5))
+        done
+        if [ -z "$tag" ]; then
+          echo "Failed to resolve the previous Dapr release tag for $GITHUB_REF_NAME" >&2
+          exit 1
+        fi
+        echo "Testing $GITHUB_REF_NAME against $tag"
+        echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
+    - name: Set up for the triggering branch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Parse test payload
       if: github.event_name == 'repository_dispatch'
