@@ -122,6 +122,9 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 // In all other scenarios the result, error returned is the result, error returned by the
 // operation.
 func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
+	if c == nil || c.breaker == nil {
+		return oper()
+	}
 	res, err := c.breaker.Execute(oper)
 
 	// Wrap the error so we don't have to reference the external package in other places.
@@ -139,15 +142,18 @@ func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
 
 // String implements fmt.Stringer and is used for debugging.
 func (c *CircuitBreaker) String() string {
+	if c == nil {
+		return ""
+	}
 	return fmt.Sprintf(
-		"name='%s' namRequests='%d' interval='%v' timeout='%v' trip='%v'",
+		"name='%s' maxRequests='%d' interval='%v' timeout='%v' trip='%v'",
 		c.Name, c.MaxRequests, c.Interval, c.Timeout, c.Trip,
 	)
 }
 
 // State returns the current state of the circuit breaker.
 func (c *CircuitBreaker) State() CircuitBreakerState {
-	if c.breaker == nil {
+	if c == nil || c.breaker == nil {
 		return StateUnknown
 	}
 	switch c.breaker.State() {
