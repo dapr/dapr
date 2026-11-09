@@ -50,6 +50,7 @@ type options struct {
 	clustered        *bool
 	fastPath         *bool
 	stagedOperations bool
+	stagedN          []int
 	signing          *bool
 
 	orchestrators     []orchestratorConfig
@@ -193,6 +194,15 @@ func WithFastPath(enabled bool) Option {
 func WithStagedOperations() Option {
 	return func(o *options) {
 		o.stagedOperations = true
+	}
+}
+
+// WithStagedOperationsN enables the WorkflowsStagedOperations feature flag on
+// the daprd at index only, so one cluster can run daprds with the feature on
+// next to daprds with it off.
+func WithStagedOperationsN(index int) Option {
+	return func(o *options) {
+		o.stagedN = append(o.stagedN, index)
 	}
 }
 
