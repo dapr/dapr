@@ -85,10 +85,14 @@ func (r *trigger) Run(t *testing.T, ctx context.Context) {
 	_, err = client.TriggerWorkflowSchedule(ctx, "missing")
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.CreateWorkflowSchedule(ctx, "once", "noop", "@every 1s", api.WithScheduleRepeats(1))
+	// A triggered run counts toward the repeats, so this one uses them up.
+	_, err = client.CreateWorkflowSchedule(ctx, "once", "noop", "@every 1h", api.WithScheduleRepeats(1))
+	require.NoError(t, err)
+	_, err = client.TriggerWorkflowSchedule(ctx, "once")
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, terr := client.TriggerWorkflowSchedule(ctx, "once")
 		assert.Equal(c, codes.FailedPrecondition, status.Code(terr))
 	}, 10*time.Second, 10*time.Millisecond)
+	assert.Len(t, wf.ScheduleRuns(t, ctx, client, "once"), 1)
 }

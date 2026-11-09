@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -34,7 +35,8 @@ func init() {
 }
 
 // restart checks a schedule survives a daprd restart, and that every time it
-// missed while no worker was connected still gets its run.
+// missed while no worker was connected still gets its run, unless it skips
+// missed times.
 type restart struct {
 	workflow *workflow.Workflow
 }
@@ -56,12 +58,17 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	_, err := client.CreateWorkflowSchedule(ctx, "survivor", "noop", "@every 1s")
 	require.NoError(t, err)
+	_, err = client.CreateWorkflowSchedule(ctx, "skipper", "noop", "@every 1s", api.WithScheduleSkipMissed())
+	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NotEmpty(c, wf.ScheduleRuns(t, ctx, client, "survivor"))
+		assert.NotEmpty(c, wf.ScheduleRuns(t, ctx, client, "skipper"))
 	}, 20*time.Second, 10*time.Millisecond)
 
 	before := len(wf.ScheduleRuns(t, ctx, client, "survivor"))
 	cancel()
+	// Without a worker the schedules pause, so this misses several times.
+	time.Sleep(3 * time.Second)
 	r.workflow.Dapr().Restart(t, ctx)
 	r.workflow.Dapr().WaitUntilRunning(t, ctx)
 	client = r.workflow.BackendClient(t, ctx)
@@ -87,4 +94,20 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		}
 		prev = ts
 	}
+
+	// With skipMissed the missed times get one run, then the schedule carries
+	// on from now, so the outage shows as a gap between two runs.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		var gap bool
+		var last time.Time
+		for _, id := range wf.ScheduleRuns(t, ctx, client, "skipper") {
+			ts, err := time.Parse("20060102T150405Z", id[len(id)-len("20060102T150405Z"):])
+			if !assert.NoError(c, err, id) {
+				return
+			}
+			gap = gap || (!last.IsZero() && ts.Sub(last) > time.Second)
+			last = ts
+		}
+		assert.True(c, gap, "the missed times are skipped")
+	}, 20*time.Second, 10*time.Millisecond)
 }
