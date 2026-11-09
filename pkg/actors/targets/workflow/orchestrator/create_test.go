@@ -193,6 +193,8 @@ func (h *createHarness) primePendingStart(savedStart *backend.HistoryEvent, extr
 	}
 
 	h.orch.state = state
+	cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+	h.orch.cachedExecutionID = &cachedID
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, nil)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, savedStart.GetExecutionStarted())
 	return state
@@ -541,6 +543,8 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		})
 		state.SetParentNotifyPending(true)
 		h.orch.state = state
+		cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+		h.orch.cachedExecutionID = &cachedID
 		h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
 		h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, start.GetExecutionStarted())
 		return h
@@ -868,6 +872,8 @@ func (h *createHarness) primeHistory(events ...*backend.HistoryEvent) *wfengines
 		state.AddToHistory(e)
 	}
 	h.orch.state = state
+	cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+	h.orch.cachedExecutionID = &cachedID
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, events[0].GetExecutionStarted())
 	return state
