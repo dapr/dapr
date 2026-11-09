@@ -55,7 +55,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, createWorkflo
 		}
 	}
 
-	state, _, err := o.loadInternalState(ctx)
+	state, err := o.loadStateForCreate(ctx)
 	if err != nil {
 		return err
 	}
