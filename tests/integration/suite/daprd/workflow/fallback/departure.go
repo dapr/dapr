@@ -77,7 +77,7 @@ func (d *departure) Setup(t *testing.T) []framework.Option {
 
 	d.logline = logline.New(t, logline.WithCaptureAll())
 	d.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		workflow.WithClusteredDeployment(true),
 		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(env,
