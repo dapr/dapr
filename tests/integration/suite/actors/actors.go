@@ -27,5 +27,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/schedulerplacement"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/statestores"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
 )

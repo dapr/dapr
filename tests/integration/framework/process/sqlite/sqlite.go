@@ -207,6 +207,27 @@ func (s *SQLite) CountStateKeys(t *testing.T, ctx context.Context, keyPrefix str
 	return count
 }
 
+// StateKeys returns every key stored in the state table, sorted. Keys are the
+// raw composite keys written by daprd, e.g. `appID||actorType||actorID||key`
+// for actor state.
+func (s *SQLite) StateKeys(t *testing.T, ctx context.Context) []string {
+	t.Helper()
+
+	rows, err := s.GetConnection(t).QueryContext(ctx,
+		"SELECT key FROM "+s.tableName+" ORDER BY key")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		require.NoError(t, rows.Scan(&key))
+		keys = append(keys, key)
+	}
+	require.NoError(t, rows.Err())
+	return keys
+}
+
 // DeleteStateKeys deletes all rows whose key matches the given SQL LIKE
 // pattern. Use `%` as the wildcard (e.g. `%||signature-%`).
 func (s *SQLite) DeleteStateKeys(t *testing.T, ctx context.Context, likePattern string) {
