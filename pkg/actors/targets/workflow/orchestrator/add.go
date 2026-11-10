@@ -121,15 +121,8 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, e *backend.HistoryE
 	// task ids restart on ContinueAsNew: a completion for task N from any
 	// instance other than the child this generation created for N is a
 	// straggler from a previous generation and is acked without effect.
-	if sender.instanceID != "" {
-		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
-			return ackDropped("the task's current child is '"+created.GetInstanceId()+"'", false)
-		}
-	}
-	if sender.parentExecutionID != "" {
-		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
-			return ackDropped("it was created under a previous execution", false)
-		}
+	if reason := o.stragglerReason(state, e, sender); reason != "" {
+		return ackDropped(reason, false)
 	}
 
 	taskID, execID, isResolution := activityResolution(e)
@@ -326,6 +319,22 @@ func (o *orchestrator) verifyAndAbsorbAttestation(ctx context.Context, state *wf
 		return terr
 	}
 	return api.ErrInstanceNotFound
+}
+
+// stragglerReason reports why e, delivered by sender, is a straggler from
+// another child or a previous execution, or "" when it is not.
+func (o *orchestrator) stragglerReason(state *wfenginestate.State, e *backend.HistoryEvent, sender completionSender) string {
+	if sender.instanceID != "" {
+		if created := childCreatedFor(state.History, e); created != nil && created.GetInstanceId() != sender.instanceID {
+			return "the task's current child is '" + created.GetInstanceId() + "'"
+		}
+	}
+	if sender.parentExecutionID != "" {
+		if cur := o.getExecutionStartedEvent(state).GetWorkflowInstance().GetExecutionId().GetValue(); cur != "" && cur != sender.parentExecutionID {
+			return "it was created under a previous execution"
+		}
+	}
+	return ""
 }
 
 // childCreatedFor returns the ChildWorkflowInstanceCreated event this
