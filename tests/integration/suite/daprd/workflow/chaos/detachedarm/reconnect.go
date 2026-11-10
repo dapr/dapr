@@ -63,6 +63,9 @@ func (s *reconnect) Setup(t *testing.T) []framework.Option {
 	)
 	s.proxy = proxy.New(t, s.scheduler, proxy.WithSentry(t, sen, "default", appID))
 	s.workflow = workflow.New(t,
+		// Asserts the workflow actor types are unregistered once the worker
+		// leaves, which the staged operations preview does not do.
+		workflow.WithStagedOperations(false),
 		workflow.WithSentryInstance(sen),
 		workflow.WithSchedulerInstance(s.scheduler),
 		workflow.WithSchedulerAddress(s.proxy.Address()),
