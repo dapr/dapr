@@ -110,7 +110,7 @@ func (e *exporter) Start(ctx context.Context) error {
 	// (etcd_*, grpc_*, go_*, process_*) on the metrics endpoint without ever
 	// registering on the default registry, keeping restarts of this exporter
 	// in the same process safe.
-	mux.Handle(defaultMetricsPath, promhttp.HandlerFor(
+	mux.Handle(http.MethodGet+" "+defaultMetricsPath, promhttp.HandlerFor(
 		prom.Gatherers{reg, prom.DefaultGatherer},
 		promhttp.HandlerOpts{
 			ErrorHandling: promhttp.ContinueOnError,
