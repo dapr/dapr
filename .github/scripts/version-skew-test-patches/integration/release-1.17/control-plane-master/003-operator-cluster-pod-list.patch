@@ -1,0 +1,34 @@
+diff --git a/tests/integration/framework/process/kubernetes/options.go b/tests/integration/framework/process/kubernetes/options.go
+--- a/tests/integration/framework/process/kubernetes/options.go
++++ b/tests/integration/framework/process/kubernetes/options.go
+@@ -134,13 +134,18 @@
+ 	}
+ }
+ 
+-// WithDaprPodList serves the pods on the namespaced pod list path the operator
+-// reads to resolve an app's assigned configuration.
++// WithDaprPodList serves the pods on both the cluster and namespaced pod list
++// paths, so they are seen by the operator's pod cache and its direct API reads.
++// Must be passed after WithBaseOperatorAPI, which serves empty pod lists.
+ func WithDaprPodList(t *testing.T, ns string, pods ...corev1.Pod) Option {
+-	return WithNamespacedPodList(t, ns, &corev1.PodList{
++	list := &corev1.PodList{
+ 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+ 		Items:    pods,
+-	})
++	}
++	return func(o *options) {
++		WithClusterPodList(t, list)(o)
++		WithNamespacedPodList(t, ns, list)(o)
++	}
+ }
+ 
+ // WithDaprPods serves one DaprPod per app ID, named after the app ID and
+@@ -211,6 +216,7 @@
+ 					},
+ 				},
+ 			}),
++			WithClusterPodList(t, &corev1.PodList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"}}),
+ 			WithClusterServiceList(t, &corev1.ServiceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceList"}}),
+ 			WithClusterStatefulSetList(t, &appsv1.StatefulSetList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSetList"}}),
+ 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),
