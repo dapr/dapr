@@ -125,7 +125,7 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 			Count: 1,
 		},
 	}
-	if w.workflow.ClusteredDeployment() {
+	if w.workflow.ClusteredDeployment() || w.workflow.StagedOperations() {
 		expected = append(expected, &daprd.MetadataActorRuntimeActiveActor{
 			Type:  "dapr.internal.default." + w.workflow.Dapr().AppID() + ".executor",
 			Count: 0,

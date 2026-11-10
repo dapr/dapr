@@ -192,6 +192,9 @@ type Actors struct {
 	// Guarded by the engine's actor registration lock.
 	hostedCancel   context.CancelFunc
 	executorCancel context.CancelFunc
+	// hostedWakes cancels the local wakes of the workflow factory registered
+	// last; see SetLocalExecutor. Guarded by the same lock.
+	hostedWakes interface{ CancelWakes() }
 }
 
 var _ backend.Backend = (*Actors)(nil)
