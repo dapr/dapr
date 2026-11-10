@@ -43,7 +43,9 @@ type orchestrator struct {
 
 func (a *orchestrator) Setup(t *testing.T) []framework.Option {
 	a.waitCh = make(chan struct{})
-	a.workflow = workflow.New(t)
+	// Asserts the workflow actor types are unregistered once the worker
+	// leaves, which the staged operations preview does not do.
+	a.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),

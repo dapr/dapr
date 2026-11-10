@@ -52,7 +52,7 @@ func WithFallbackPair(t *testing.T, damping, settle time.Duration) Option {
 	return func(o *options) {
 		for _, opt := range []Option{
 			WithDaprds(2),
-			WithStagedOperations(),
+			WithStagedOperations(true),
 			WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, settle)),
 			WithDaprdOptions(1, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, settle), daprd.WithWorkflowFallbackDamping(t, damping)),
 		} {
