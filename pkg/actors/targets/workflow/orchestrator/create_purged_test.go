@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -319,4 +320,120 @@ func Test_createWorkflowInstance_purgedOnAnotherHost_flushesHeldFolds(t *testing
 	assert.Equal(t, cached.Generation, h.orch.state.Generation, "the new instance starts at the purged one's generation")
 	assert.Empty(t, h.orch.foldPending)
 	assert.Nil(t, h.orch.janitorEscalated)
+}
+
+// A cache dropped without a probe, as a failed save drops it, is released
+// the same way on the next load: the store holds no instance, so nothing the
+// actor held for the cached one applies to the instance the create starts.
+func Test_createWorkflowInstance_cacheDroppedBySaveFailureResetsResidency(t *testing.T) {
+	const instanceID = "test-dropped-by-save"
+	h := newCreateHarness(t, instanceID)
+	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")))
+	etag := cachedETag
+	cached.SetMetadataETag(&etag)
+	h.orch.activityResultAwaited.Store(true)
+	h.orch.janitorAsserted.Store(true)
+	h.orch.foldPending = append(h.orch.foldPending, &foldEntry{event: &backend.HistoryEvent{}, gen: cached.Generation, committed: make(chan struct{})})
+
+	// What signAndSaveState does when the save fails on the purged row.
+	h.orch.invalidateCachedState()
+	h.storedMeta = func() (*actorapi.StateResponse, error) { return &actorapi.StateResponse{}, nil }
+
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), withExecutionID("exec-2")))))
+	assert.False(t, h.orch.activityResultAwaited.Load(), "nothing is owed to a purged instance")
+	assert.False(t, h.orch.janitorAsserted.Load(), "the new instance must arm its own janitor")
+	assert.Empty(t, h.orch.foldPending)
+}
+
+// On a fallback host the probe fails once, or the cache never saw an ETag:
+// the cache is dropped, the call's own load finds the instance purged, and
+// the new instance must not inherit the purged one's residency state.
+func Test_dropFallbackCache_droppedCacheResetsResidency(t *testing.T) {
+	for name, prime := range map[string]func(h *createHarness){
+		"probe error": func(h *createHarness) {
+			etag := cachedETag
+			h.orch.state.SetMetadataETag(&etag)
+			var calls atomic.Int32
+			h.storedMeta = func() (*actorapi.StateResponse, error) {
+				if calls.Add(1) == 1 {
+					return nil, errors.New("store unavailable")
+				}
+				return &actorapi.StateResponse{}, nil
+			}
+		},
+		"no etag seen": func(h *createHarness) {
+			h.storedMeta = func() (*actorapi.StateResponse, error) { return &actorapi.StateResponse{}, nil }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			const instanceID = "test-fallback-drop"
+			h := newCreateHarness(t, instanceID)
+			h.orch.fallback = func() bool { return true }
+			h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")), completedEvent())
+			h.orch.activityResultAwaited.Store(true)
+			h.orch.janitorAsserted.Store(true)
+			prime(h)
+
+			h.orch.dropFallbackCache(t.Context())
+			require.Nil(t, h.orch.state, "the cache is dropped")
+			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), withExecutionID("exec-2")))))
+			assert.False(t, h.orch.activityResultAwaited.Load(), "nothing is owed to a purged instance")
+			assert.False(t, h.orch.janitorAsserted.Load(), "the new instance must arm its own janitor")
+		})
+	}
+}
+
+// A turn changes the cached state in place, here to a new generation with its
+// own execution ID, and its save fails on an ETag conflict: the cache is
+// dropped and the store still holds the instance the cache last held from it.
+// Nothing is released, as a result can still be owed to that instance.
+func Test_createWorkflowInstance_cacheDroppedAfterUnsavedChangeKeepsResidency(t *testing.T) {
+	const instanceID = "test-unsaved-change"
+	h := newCreateHarness(t, instanceID)
+	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")))
+	etag := cachedETag
+	cached.SetMetadataETag(&etag)
+	h.orch.activityResultAwaited.Store(true)
+	h.orch.janitorAsserted.Store(true)
+
+	// What a ContinueAsNew turn does before its save, then what
+	// signAndSaveState does when that save fails.
+	cached.History[0] = startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
+	h.orch.invalidateCachedState()
+
+	stored, err := proto.Marshal(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")))
+	require.NoError(t, err)
+	h.storedMeta = func() (*actorapi.StateResponse, error) { return metadataRow(t, 1, 1, etag), nil }
+	h.storedBulk = actorapi.BulkStateResponse{wfenginestate.HistoryKey(0): {Data: stored}}
+
+	err = h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), withExecutionID("exec-3"))))
+	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, status.Code(err), "the store still holds the running instance")
+	assert.True(t, h.orch.activityResultAwaited.Load(), "the instance the store holds may still owe a result")
+	assert.True(t, h.orch.janitorAsserted.Load())
+}
+
+// A save commits a new generation, here a ContinueAsNew with its own
+// execution ID, and the metadata refresh after it fails, which drops the
+// cache. The record must name the committed generation: the load that
+// follows finds it in the store and releases nothing.
+func Test_saveInternalState_recordsCommittedExecutionBeforeRefresh(t *testing.T) {
+	const instanceID = "test-save-refresh-fails"
+	h := newCreateHarness(t, instanceID)
+	cached := h.primeHistory(startEventFor(instanceID, time.Now().Add(-time.Hour), withExecutionID("exec-1")))
+	h.orch.activityResultAwaited.Store(true)
+	require.Equal(t, "exec-1", *h.orch.cachedExecutionID)
+
+	cached.History[0] = startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
+	h.refreshErr = errors.New("store unavailable")
+	require.NoError(t, h.orch.saveInternalState(t.Context(), cached))
+	require.Nil(t, h.orch.state, "the failed refresh drops the cache")
+	require.NotNil(t, h.orch.cachedExecutionID)
+	assert.Equal(t, "exec-2", *h.orch.cachedExecutionID, "the record names the committed generation")
+
+	// The store holds the committed generation: nothing is released.
+	loaded := wfenginestate.NewState(h.orch.stateOptions())
+	loaded.AddToHistory(startEventFor(instanceID, time.Now(), withExecutionID("exec-2")))
+	h.orch.releaseReplacedInstance(loaded)
+	assert.True(t, h.orch.activityResultAwaited.Load())
 }
