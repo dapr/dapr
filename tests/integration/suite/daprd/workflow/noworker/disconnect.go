@@ -41,7 +41,9 @@ type disconnect struct {
 }
 
 func (d *disconnect) Setup(t *testing.T) []framework.Option {
-	d.workflow = workflow.New(t)
+	// The staged operations preview stages these calls instead of failing
+	// them, so this test pins it off whatever the suite's mode.
+	d.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 	return []framework.Option{
 		framework.WithProcesses(d.workflow),
 	}
