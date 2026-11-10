@@ -52,6 +52,7 @@ var (
 	ActorInstanceMissing          = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", "", CategoryActor}        // Missing actor instance
 	ActorInvokeMethod             = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", "", CategoryActor}           // Error invoking actor method
 	ActorRuntimeNotFound          = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", "", CategoryActor}       // Actor runtime not found
+	ActorStateStoreNotFound       = ErrorCode{"ERR_ACTOR_STATE_STORE_NOT_FOUND", "", CategoryActor}   // State store bound to an actor type is not loaded
 	ActorStateGet                 = ErrorCode{"ERR_ACTOR_STATE_GET", "", CategoryActor}               // Error getting actor state
 	ActorStateTransactionSave     = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", "", CategoryActor}  // Error saving actor transaction
 	ActorReminderCreate           = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", "", CategoryActor}         // Error creating actor reminder
