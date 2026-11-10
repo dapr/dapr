@@ -586,6 +586,37 @@ func Test_localWake_haltAllDrainsGoroutines(t *testing.T) {
 	h.fact.wakeLock.Unlock()
 }
 
+func Test_localWake_cancelWakesOnFallbackSwitch(t *testing.T) {
+	const instanceID = "test-wake-fallback-switch"
+
+	h := newWakeHarness(t, instanceID, true)
+	h.reminderGate = make(chan struct{})
+	var fallback atomic.Bool
+	h.fact.fallback = fallback.Load
+	h.primeRunning(t, instanceID, 7)
+
+	require.NoError(t, h.orch.addWorkflowEvent(t.Context(), taskCompletedEvent(7), completionSender{}))
+	require.Eventually(t, func() bool { return h.attempts.Load() == 1 }, time.Second*5, time.Millisecond*5)
+
+	// The daprd turns into a fallback host: the executor is marked
+	// unavailable, then the wake parked on the gate is cancelled.
+	fallback.Store(true)
+	h.fact.CancelWakes()
+	require.Eventually(t, func() bool { return !h.orch.driveRunning.Load() }, time.Second*5, time.Millisecond*5,
+		"CancelWakes must end the parked drive loop")
+
+	// A turn pinned before the switch still takes the fast path, but its
+	// spawn comes after the fresh context: it must not drive on the
+	// fallback host.
+	pinned := false
+	h.orch.pinnedFallback.Store(&pinned)
+	t.Cleanup(func() { h.orch.pinnedFallback.Store(nil) })
+	h.orch.localDrive("new-event-tc-8", time.Time{})
+	time.Sleep(time.Millisecond * 100)
+	assert.Equal(t, int64(1), h.attempts.Load(), "no drive may start on a fallback host")
+	assert.False(t, h.orch.driveRunning.Load())
+}
+
 func Test_localWake_driveLoopLosslessUnderConcurrency(t *testing.T) {
 	const instanceID = "test-drive-lossless"
 
