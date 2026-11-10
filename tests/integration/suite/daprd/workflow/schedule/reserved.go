@@ -45,7 +45,9 @@ type reserved struct {
 }
 
 func (r *reserved) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	// Staged operations would hold the create until a worker connects,
+	// instead of failing it.
+	r.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
 	}
