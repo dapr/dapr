@@ -16,7 +16,6 @@ package workflow
 import (
 	"context"
 	"slices"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 
@@ -25,9 +24,12 @@ import (
 )
 
 // ScheduleRuns returns the instance IDs of a workflow schedule's runs,
-// oldest first.
-func ScheduleRuns(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, name string) []string {
-	t.Helper()
+// oldest first. Inside an EventuallyWithT, pass its CollectT so an error is
+// retried.
+func ScheduleRuns(t require.TestingT, ctx context.Context, client *client.TaskHubGrpcClient, name string) []string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	resp, err := client.ListInstanceIDs(ctx, api.WithListInstanceIDsInstanceIDPrefix(name+"_"))
 	require.NoError(t, err)
 	ids := resp.GetInstanceIds()

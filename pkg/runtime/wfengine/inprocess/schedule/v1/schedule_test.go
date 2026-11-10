@@ -111,6 +111,7 @@ func TestValidate(t *testing.T) {
 	for name, mutate := range map[string]func(*protos.WorkflowSchedule){
 		"name with underscore": func(ws *protos.WorkflowSchedule) { ws.Name = "a_b" },
 		"name too long":        func(ws *protos.WorkflowSchedule) { ws.Name = "a123456789a123456789a123456789a" },
+		"reserved name":        func(ws *protos.WorkflowSchedule) { ws.Name = InstanceIDPrefix + "a" },
 		"no workflow":          func(ws *protos.WorkflowSchedule) { ws.WorkflowName = "" },
 		"schedule workflow":    func(ws *protos.WorkflowSchedule) { ws.WorkflowName = WorkflowName },
 		"bad cron":             func(ws *protos.WorkflowSchedule) { ws.Schedule = "0 0 2 * *" },
@@ -149,6 +150,18 @@ func TestCheckCreate(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(CheckCreate(ctx, WorkflowName, "abc")))
 	assert.Equal(t, codes.InvalidArgument, status.Code(CheckCreate(ctx, "wf", InstanceIDPrefix+"x")))
 	assert.NoError(t, CheckCreate(context.WithValue(ctx, createKey{}, true), WorkflowName, InstanceIDPrefix+"x"))
+}
+
+func TestCreateRejectsBeforeTheBackend(t *testing.T) {
+	h := NewHandler(nil, "default", "app")
+	ws := &protos.WorkflowSchedule{Name: "a", WorkflowName: "wf", Schedule: every1h, TargetAppID: ptr.Of("b")}
+	for name, req := range map[string]*protos.CreateWorkflowScheduleRequest{
+		"no schedule":     {},
+		"other namespace": {Schedule: func() *protos.WorkflowSchedule { ws.TargetAppNamespace = ptr.Of("other"); return ws }()},
+	} {
+		_, err := h.CreateWorkflowSchedule(t.Context(), req)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), name)
+	}
 }
 
 // TestRunTurns replays the schedule workflow turn by turn, as the runtime
@@ -204,12 +217,17 @@ func TestRunTurns(t *testing.T) {
 	})
 
 	t.Run("a trigger in the same turn starts its run without continuing as new", func(t *testing.T) {
-		events := append(begin(due, input(t, ws, state{Due: &due, Owner: "abc123"})), &protos.HistoryEvent{
-			EventId: -1, Timestamp: timestamppb.New(due),
-			EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{
-				Name: triggerEvent, Input: wrapperspb.String(`{"instanceId":"s_manual"}`),
-			}},
-		})
+		events := begin(due, input(t, ws, state{Due: &due, Owner: "abc123"}))
+		// The second trigger shares the first's run ID; the third names an
+		// ID outside the schedule's runs.
+		for _, id := range []string{"s_abc123_1_manual", "s_abc123_1_manual", InstanceIDPrefix + "x"} {
+			events = append(events, &protos.HistoryEvent{
+				EventId: -1, Timestamp: timestamppb.New(due),
+				EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{
+					Name: triggerEvent, Input: wrapperspb.String(`{"instanceId":"` + id + `"}`),
+				}},
+			})
+		}
 		resp := execute(t, nil, events)
 		// The wait the trigger ends inline still emits its timer, which fires
 		// with the next one and is ignored.
@@ -220,11 +238,11 @@ func TestRunTurns(t *testing.T) {
 			}
 			assert.Nil(t, a.GetCompleteWorkflow(), "a run and ContinueAsNew must not share a turn")
 		}
-		assert.Equal(t, []string{"s_abc123_20261029T100010Z", "s_manual"}, runs)
+		assert.Equal(t, []string{"s_abc123_20261029T100010Z", "s_abc123_1_manual", ManualRunInstanceID("s", "abc123", due)}, runs)
 		last := resp.GetActions()[len(resp.GetActions())-1].GetCreateTimer()
 		require.NotNil(t, last)
 		assert.Equal(t, due.Add(10*time.Second), last.GetFireAt().AsTime())
-		assert.Equal(t, uint32(2), customStatus(t, resp).GetRunCount())
+		assert.Equal(t, uint32(3), customStatus(t, resp).GetRunCount())
 	})
 
 	t.Run("a generation behind starts one missed run and waits for no time", func(t *testing.T) {

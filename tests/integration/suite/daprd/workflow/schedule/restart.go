@@ -61,8 +61,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	_, err = client.CreateWorkflowSchedule(ctx, "skipper", "noop", "@every 1s", api.WithScheduleSkipMissed())
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NotEmpty(c, wf.ScheduleRuns(t, ctx, client, "survivor"))
-		assert.NotEmpty(c, wf.ScheduleRuns(t, ctx, client, "skipper"))
+		assert.NotEmpty(c, wf.ScheduleRuns(c, ctx, client, "survivor"))
+		assert.NotEmpty(c, wf.ScheduleRuns(c, ctx, client, "skipper"))
 	}, 20*time.Second, 10*time.Millisecond)
 
 	before := len(wf.ScheduleRuns(t, ctx, client, "survivor"))
@@ -75,7 +75,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	var runs []string
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		runs = wf.ScheduleRuns(t, ctx, client, "survivor")
+		runs = wf.ScheduleRuns(c, ctx, client, "survivor")
 		assert.GreaterOrEqual(c, len(runs), before+3)
 	}, 20*time.Second, 10*time.Millisecond)
 	resp, err := client.GetWorkflowSchedule(ctx, "survivor")
@@ -100,7 +100,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		var gap bool
 		var last time.Time
-		for _, id := range wf.ScheduleRuns(t, ctx, client, "skipper") {
+		for _, id := range wf.ScheduleRuns(c, ctx, client, "skipper") {
 			ts, err := time.Parse("20060102T150405Z", id[len(id)-len("20060102T150405Z"):])
 			if !assert.NoError(c, err, id) {
 				return

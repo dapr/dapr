@@ -55,22 +55,30 @@ func CheckCreate(ctx context.Context, name, instanceID string) error {
 
 // Handler serves the workflow schedule calls of the TaskHubSidecarService.
 type Handler struct {
-	be     backend.Backend
-	client backend.TaskHubClient
-	owner  string
+	be        backend.Backend
+	client    backend.TaskHubClient
+	namespace string
+	owner     string
 }
 
 var _ backend.WorkflowScheduleHandler = (*Handler)(nil)
 
 func NewHandler(be backend.Backend, namespace, appID string) *Handler {
-	return &Handler{be: be, client: backend.NewTaskHubClient(be), owner: Owner(namespace, appID)}
+	return &Handler{be: be, client: backend.NewTaskHubClient(be), namespace: namespace, owner: Owner(namespace, appID)}
 }
 
 func (h *Handler) CreateWorkflowSchedule(ctx context.Context, req *protos.CreateWorkflowScheduleRequest) (*protos.CreateWorkflowScheduleResponse, error) {
+	if req.GetSchedule() == nil {
+		return nil, status.Error(codes.InvalidArgument, "a schedule is required")
+	}
 	ws := proto.Clone(req.GetSchedule()).(*protos.WorkflowSchedule)
 	ws.Status = nil
 	if err := validate(ws, time.Now()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	// Workflow calls only reach apps in this namespace.
+	if ws.TargetAppNamespace != nil && ws.GetTargetAppNamespace() != h.namespace {
+		return nil, status.Errorf(codes.InvalidArgument, "target app namespace %q is not supported: it must be this app's namespace %q", ws.GetTargetAppNamespace(), h.namespace)
 	}
 
 	id := api.InstanceID(InstanceIDPrefix + ws.GetName())
@@ -192,12 +200,13 @@ func (h *Handler) TriggerWorkflowSchedule(ctx context.Context, req *protos.Trigg
 	return &protos.TriggerWorkflowScheduleResponse{InstanceId: runID}, nil
 }
 
-// get returns a schedule with its status, and how its last run stands.
+// get returns a schedule with its status, and how its last run stands. An
+// instance with a schedule's ID that runs another workflow is not a schedule.
 func (h *Handler) get(ctx context.Context, name string) (*protos.WorkflowSchedule, error) {
 	md, err := h.client.FetchWorkflowMetadata(ctx, api.InstanceID(InstanceIDPrefix+name))
 	switch {
 	case errors.Is(err, api.ErrInstanceNotFound),
-		err == nil && md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
+		err == nil && (md.GetName() != WorkflowName || md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED):
 		return nil, notFound(name)
 	case err != nil:
 		return nil, statusErr(err)
@@ -231,11 +240,8 @@ func (h *Handler) get(ctx context.Context, name string) (*protos.WorkflowSchedul
 }
 
 // readRun fills in how a run stands. A run that cannot be read, as one
-// purged or on an app in another namespace, keeps only its instance ID.
+// purged, keeps only its instance ID.
 func (h *Handler) readRun(ctx context.Context, ws *protos.WorkflowSchedule, run *protos.WorkflowScheduleRun) {
-	if ws.TargetAppNamespace != nil {
-		return
-	}
 	var opts []api.FetchWorkflowMetadataOptions
 	if ws.TargetAppID != nil {
 		opts = append(opts, api.WithFetchAppID(ws.GetTargetAppID()))
@@ -275,6 +281,8 @@ func validate(ws *protos.WorkflowSchedule, now time.Time) error {
 	switch {
 	case !nameRegexp.MatchString(ws.GetName()):
 		return fmt.Errorf("invalid name %q: it must be 1 to 30 letters, digits or '-'", ws.GetName())
+	case strings.HasPrefix(ws.GetName(), InstanceIDPrefix):
+		return fmt.Errorf("invalid name %q: names starting with %q are reserved", ws.GetName(), InstanceIDPrefix)
 	case ws.GetWorkflowName() == "":
 		return errors.New("a workflow name is required")
 	case ws.GetWorkflowName() == WorkflowName:

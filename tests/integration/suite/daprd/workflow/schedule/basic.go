@@ -65,7 +65,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	var ids []string
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ids = wf.ScheduleRuns(t, ctx, client, "basic")
+		ids = wf.ScheduleRuns(c, ctx, client, "basic")
 		assert.GreaterOrEqual(c, len(ids), 2)
 	}, 20*time.Second, 10*time.Millisecond)
 

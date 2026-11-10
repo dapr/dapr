@@ -36,9 +36,9 @@ func init() {
 	suite.Register(new(targetapp))
 }
 
-// targetapp checks a schedule starts its runs on the app it targets, that
-// Get reads the last run from there, and that same-named schedules of two
-// apps targeting one app do not share run IDs.
+// targetapp checks a schedule starts its runs on the app it targets, named
+// with its namespace, that Get reads the last run from there, and that
+// same-named schedules of two apps targeting one app do not share run IDs.
 type targetapp struct {
 	workflow *workflow.Workflow
 }
@@ -60,14 +60,16 @@ func (a *targetapp) Run(t *testing.T, ctx context.Context) {
 	srcRun := "shared_" + wfschedule.Owner(a.workflow.DaprN(0).Namespace(), a.workflow.DaprN(0).AppID()) + "_"
 	dstRun := "shared_" + wfschedule.Owner(a.workflow.DaprN(1).Namespace(), dstApp) + "_"
 
-	_, err := src.CreateWorkflowSchedule(ctx, "shared", "echo", "@every 1s", api.WithScheduleTargetAppID(dstApp))
+	dstNamespace := a.workflow.DaprN(1).Namespace()
+	_, err := src.CreateWorkflowSchedule(ctx, "shared", "echo", "@every 1s",
+		api.WithScheduleTargetAppID(dstApp), api.WithScheduleTargetAppNamespace(dstNamespace))
 	require.NoError(t, err)
 	_, err = dst.CreateWorkflowSchedule(ctx, "shared", "echo", "@every 1s")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		var fromSrc, fromDst int
-		for _, id := range wf.ScheduleRuns(t, ctx, dst, "shared") {
+		for _, id := range wf.ScheduleRuns(c, ctx, dst, "shared") {
 			switch {
 			case strings.HasPrefix(id, srcRun):
 				fromSrc++
@@ -87,6 +89,7 @@ func (a *targetapp) Run(t *testing.T, ctx context.Context) {
 		}
 		ws := resp.GetSchedule()
 		assert.Equal(c, dstApp, ws.GetTargetAppID())
+		assert.Equal(c, dstNamespace, ws.GetTargetAppNamespace())
 		run := ws.GetStatus().GetLastRun()
 		assert.True(c, strings.HasPrefix(run.GetInstanceId(), srcRun), run.GetInstanceId())
 		assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, run.GetRuntimeStatus())

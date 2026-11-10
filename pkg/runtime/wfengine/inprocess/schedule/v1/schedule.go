@@ -220,9 +220,14 @@ func run(ctx *task.WorkflowContext) (any, error) {
 		}
 
 		// Any other error is a trigger whose payload does not decode, as one
-		// raised by hand: it still starts a run.
-		if err != nil || tr.InstanceID == "" {
+		// raised by hand: it still starts a run, under one of this schedule's
+		// run IDs whatever the payload names.
+		if err != nil || !strings.HasPrefix(tr.InstanceID, ws.GetName()+"_"+s.Owner+"_") {
 			tr.InstanceID = ManualRunInstanceID(ws.GetName(), s.Owner, ctx.CurrentTimeUtc)
+		}
+		// Triggers in the same millisecond share a run ID, so are one run.
+		if tr.InstanceID == s.LastInstanceID {
+			continue
 		}
 		if err := start(ctx, ws, &s, tr.InstanceID, ctx.CurrentTimeUtc); err != nil {
 			return nil, err

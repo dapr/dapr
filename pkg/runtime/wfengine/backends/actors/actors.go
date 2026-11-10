@@ -548,6 +548,11 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
 		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
 	}
+	for _, id := range []string{req.GetSourceInstanceID(), req.GetNewInstanceID()} {
+		if err := schedule.CheckCreate(ctx, "", id); err != nil {
+			return "", err
+		}
+	}
 
 	// A router targeting another app means the source instance (and therefore
 	// the forked instance) lives on that app: fork on its workflow actor. The

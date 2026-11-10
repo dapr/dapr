@@ -76,7 +76,7 @@ func (l *limits) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []string{wfschedule.RunInstanceID("due", owner, due)}, wf.ScheduleRuns(t, ctx, client, "due"))
+		assert.Equal(c, []string{wfschedule.RunInstanceID("due", owner, due)}, wf.ScheduleRuns(c, ctx, client, "due"))
 	}, 20*time.Second, 10*time.Millisecond)
 
 	// A completed schedule has started every run it counts, and no other.
@@ -90,7 +90,7 @@ func (l *limits) Run(t *testing.T, ctx context.Context) {
 			assert.NotZero(t, ws.GetStatus().GetRunCount(), name)
 		}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, wf.ScheduleRuns(t, ctx, client, name), int(ws.GetStatus().GetRunCount()))
+			assert.Len(c, wf.ScheduleRuns(c, ctx, client, name), int(ws.GetStatus().GetRunCount()))
 		}, 10*time.Second, 10*time.Millisecond, name)
 	}
 }

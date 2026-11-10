@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	wfschedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
@@ -38,7 +39,8 @@ func init() {
 }
 
 // trigger checks a triggered run starts at once and leaves the next
-// scheduled run where it was.
+// scheduled run where it was, that triggers naming one run ID start one run,
+// and that a trigger naming an ID outside the schedule's runs gets its own.
 type trigger struct {
 	workflow *workflow.Workflow
 }
@@ -81,6 +83,26 @@ func (r *trigger) Run(t *testing.T, ctx context.Context) {
 		}
 	}, 10*time.Second, 10*time.Millisecond)
 	assert.Equal(t, []string{string(id)}, wf.ScheduleRuns(t, ctx, client, "hourly"))
+
+	dup := "hourly_" + wfschedule.Owner(r.workflow.Dapr().Namespace(), r.workflow.Dapr().AppID()) + "_dup_manual"
+	for _, runID := range []string{dup, dup, "dapr-internal-schedule-x"} {
+		require.NoError(t, client.RaiseEvent(ctx, api.InstanceID(wfschedule.InstanceIDPrefix+"hourly"), "dapr.internal.schedule.trigger",
+			api.WithEventPayload(map[string]string{"instanceId": runID})))
+	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, gerr := client.GetWorkflowSchedule(ctx, "hourly")
+		if !assert.NoError(c, gerr) {
+			return
+		}
+		st := resp.GetSchedule().GetStatus()
+		assert.Equal(c, uint32(3), st.GetRunCount())
+		runs := wf.ScheduleRuns(c, ctx, client, "hourly")
+		assert.Len(c, runs, 3)
+		assert.Contains(c, runs, dup)
+		last := st.GetLastRun().GetInstanceId()
+		assert.True(c, last != dup && last != string(id) && strings.HasSuffix(last, "_manual"), last)
+		assert.Contains(c, runs, last)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	_, err = client.TriggerWorkflowSchedule(ctx, "missing")
 	assert.Equal(t, codes.NotFound, status.Code(err))

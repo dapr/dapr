@@ -91,8 +91,8 @@ func (a *accesspolicy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, len(wf.ScheduleRuns(t, ctx, target, "allowed")), 2)
-		assert.GreaterOrEqual(c, len(wf.ScheduleRuns(t, ctx, target, "local")), 2, "the policy only gates other apps")
+		assert.GreaterOrEqual(c, len(wf.ScheduleRuns(c, ctx, target, "allowed")), 2)
+		assert.GreaterOrEqual(c, len(wf.ScheduleRuns(c, ctx, target, "local")), 2, "the policy only gates other apps")
 
 		resp, gerr := caller.GetWorkflowSchedule(ctx, "refused")
 		if assert.NoError(c, gerr) {
