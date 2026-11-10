@@ -1127,3 +1127,65 @@ spec:
 	require.False(t, c.Spec.WorkflowSpec.ActivityDispatchPull("SendEmail"))
 	require.Equal(t, int32(5), *c.Spec.WorkflowSpec.ActivityConcurrencyLimits[0].MaxConcurrent)
 }
+
+func TestActorsSpecDecode(t *testing.T) {
+	want := &ActorsSpec{
+		StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		},
+	}
+
+	t.Run("standalone YAML", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/actor_state_stores_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, want, config.Spec.ActorsSpec)
+	})
+
+	t.Run("operator JSON", func(t *testing.T) {
+		var config Configuration
+		require.NoError(t, json.Unmarshal([]byte(`{"spec":{"actors":{"stateStores":[`+
+			`{"name":"wallet-transactions","actorTypes":["TransactionActor","AuditActor"]},`+
+			`{"name":"wallet-balance","actorTypes":["BalanceActor"]}]}}}`), &config))
+		assert.Equal(t, want, config.Spec.ActorsSpec)
+	})
+
+	t.Run("no actors section leaves ActorsSpec nil", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		require.NoError(t, err)
+		assert.Nil(t, config.Spec.ActorsSpec)
+	})
+}
+
+func TestActorsSpecStateStoreByActorType(t *testing.T) {
+	spec := &ActorsSpec{
+		StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		},
+	}
+	want := map[string]string{
+		"TransactionActor": "wallet-transactions",
+		"AuditActor":       "wallet-transactions",
+		"BalanceActor":     "wallet-balance",
+	}
+
+	t.Run("nil spec has no bindings", func(t *testing.T) {
+		var nilSpec *ActorsSpec
+		got := nilSpec.StateStoreByActorType()
+		assert.Empty(t, got)
+		_, ok := got["Any"]
+		assert.False(t, ok)
+	})
+
+	t.Run("maps every actor type to its store", func(t *testing.T) {
+		assert.Equal(t, want, spec.StateStoreByActorType())
+	})
+
+	t.Run("returns a fresh map on every call", func(t *testing.T) {
+		m1 := spec.StateStoreByActorType()
+		m1["BalanceActor"] = "hacked"
+		delete(m1, "TransactionActor")
+		assert.Equal(t, want, spec.StateStoreByActorType())
+	})
+}

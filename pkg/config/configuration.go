@@ -183,6 +183,46 @@ type ConfigurationSpec struct {
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
 	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
+	ActorsSpec          *ActorsSpec         `json:"actors,omitempty"          yaml:"actors,omitempty"`
+}
+
+// ActorsSpec defines the configuration for Dapr actors.
+type ActorsSpec struct {
+	// StateStores binds actor types to state stores other than the default
+	// actor state store. A bound actor type uses only its bound store and
+	// never falls back to the default one.
+	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty" yaml:"stateStores,omitempty"`
+}
+
+// ActorStateStoreBinding binds a set of actor types to one state store.
+type ActorStateStoreBinding struct {
+	// Name is the name of the state store component.
+	Name string `json:"name" yaml:"name"`
+	// ActorTypes are the actor types whose state is kept in this store.
+	ActorTypes []string `json:"actorTypes" yaml:"actorTypes"`
+}
+
+// StateStoreByActorType returns the name of the state store bound to each
+// actor type. The map is a fresh copy owned by the caller, and is empty when
+// the spec is nil or has no bindings. It assumes the spec is valid: if an
+// actor type appeared in more than one binding, the last one would win.
+func (a *ActorsSpec) StateStoreByActorType() map[string]string {
+	if a == nil {
+		return map[string]string{}
+	}
+
+	var n int
+	for _, binding := range a.StateStores {
+		n += len(binding.ActorTypes)
+	}
+
+	stores := make(map[string]string, n)
+	for _, binding := range a.StateStores {
+		for _, actorType := range binding.ActorTypes {
+			stores[actorType] = binding.Name
+		}
+	}
+	return stores
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.
