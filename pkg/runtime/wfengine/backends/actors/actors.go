@@ -25,14 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
-
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
@@ -69,6 +62,11 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
@@ -1451,11 +1449,12 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	}
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
+		AppID:               abe.appID,
+		Namespace:           abe.namespace,
+		WorkflowActorType:   abe.workflowActorType,
+		ActivityActorType:   abe.activityActorType,
+		Signer:              abe.signer,
+		AllowMissingEntries: true,
 	})
 	if err != nil {
 		// Force purge is the escape hatch for instances that cannot be
