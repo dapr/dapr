@@ -147,9 +147,6 @@ func parse(spec string) (cron.Schedule, error) {
 // reminders do, so after downtime it is in the past and every missed time
 // gets its run, one per timer turn. With skipMissed, the missed times are
 // skipped and it is the first time after now.
-// ponytail: one catch-up run per timer turn. Starting several in one turn
-// would catch up faster, but Catalyst admits a turn's runs all or nothing, so
-// it would need per-run admission there first.
 func next(ws *protos.WorkflowSchedule, sched cron.Schedule, s *state, now time.Time) (time.Time, bool) {
 	if ws.Repeats != nil && s.RunCount >= ws.GetRepeats() {
 		return time.Time{}, false
