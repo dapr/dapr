@@ -46,7 +46,7 @@ type reboot struct {
 
 func (r *reboot) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		workflow.WithFallbackSettleN(t, 0),
 	)
 
