@@ -135,6 +135,17 @@ func WorkflowNameFromCreateRequest(data []byte) (string, *protos.PropagatedHisto
 	return es.GetName(), req.GetPropagatedHistory(), nil
 }
 
+// IsCompletionEvent reports whether ev carries the outcome of a task the
+// target workflow dispatched: an activity result or a child workflow's
+// completion or failure. A completion is the reply to the workflow's own
+// request, not an operation the sender performs on it, so no rule describes
+// it and the access policy does not gate it. The orchestrator admits it only
+// against the matching dispatch record.
+func IsCompletionEvent(ev *backend.HistoryEvent) bool {
+	return ev.GetTaskCompleted() != nil || ev.GetTaskFailed() != nil ||
+		ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
+}
+
 func operationFromHistoryEvent(ev *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {
 	switch {
 	case ev.GetExecutionTerminated() != nil:
