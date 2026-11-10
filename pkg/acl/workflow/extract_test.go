@@ -164,6 +164,26 @@ func TestWorkflowOperationFromMethod(t *testing.T) {
 	}
 }
 
+func TestIsCompletionEvent(t *testing.T) {
+	for name, tc := range map[string]struct {
+		ev   *backend.HistoryEvent
+		want bool
+	}{
+		"nil":             {ev: nil},
+		"empty":           {ev: &backend.HistoryEvent{}},
+		"event raised":    {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{}}}},
+		"terminated":      {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionTerminated{ExecutionTerminated: &protos.ExecutionTerminatedEvent{}}}},
+		"task completed":  {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{}}}, want: true},
+		"task failed":     {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{}}}, want: true},
+		"child completed": {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{}}}, want: true},
+		"child failed":    {ev: &backend.HistoryEvent{EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{}}}, want: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsCompletionEvent(tc.ev))
+		})
+	}
+}
+
 func TestWorkflowNameFromCreateRequest(t *testing.T) {
 	t.Run("extracts name from valid request", func(t *testing.T) {
 		req := &protos.CreateWorkflowInstanceRequest{
