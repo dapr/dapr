@@ -57,28 +57,16 @@ func (o *orchestrator) pinFallback() (fallback bool, unpin func()) {
 // actor, but when that eviction does not land (an owner that predates it, or
 // a turn that held the lock past the purge's budget) the actor would go on
 // serving the purged instance, refusing a start of its ID as already
-// existing. The check is one Get; only a cache it drops is reloaded, which
-// the call would do anyway, to tell whether the store still holds the cached
-// instance. A cache the store has never served an ETag for cannot be checked,
-// and is dropped. The caller holds the turn lock.
+// existing. The check is one Get; the call's own load then tells whether the
+// store still holds the cached instance and releases what the actor holds for
+// it if not (releaseDroppedInstance). A cache the store has never served an
+// ETag for cannot be checked, and is dropped. The caller holds the turn lock.
 func (o *orchestrator) dropFallbackCache(ctx context.Context) {
-	if !o.isFallback() {
+	if !o.isFallback() || o.state == nil {
 		return
 	}
-	if o.state != nil && o.state.MetadataETagSeen() {
-		row, err := o.probeMetadataRow(ctx, o.state)
-		if err == nil && row == metadataRowMatches {
-			return
-		}
-		if err == nil {
-			// The instance was purged, or purged and created again
-			// elsewhere. loadStateForCreate does not probe again on a
-			// fallback host, so release what the actor holds for it here.
-			// A load that fails leaves the cache dropped; the call's own
-			// load reports the error.
-			if _, err = o.reloadDroppedCache(ctx); err != nil {
-				log.Debugf("Workflow actor '%s': failed to reload the dropped cache: %v", o.actorID, err)
-			}
+	if o.state.MetadataETagSeen() {
+		if row, err := o.probeMetadataRow(ctx, o.state); err == nil && row == metadataRowMatches {
 			return
 		}
 	}

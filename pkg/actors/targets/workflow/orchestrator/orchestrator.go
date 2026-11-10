@@ -48,6 +48,11 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// cachedExecutionID is the execution ID of the instance the cache last
+	// held as the store held it, nil when it held none, so a load after the
+	// cache was dropped can tell whether the store still holds that instance.
+	// See cacheDurable and releaseReplacedInstance.
+	cachedExecutionID *string
 	// pinnedFallback holds the fallback state read once at the start of an
 	// invoked method, nil outside one (see pinFallback).
 	pinnedFallback atomic.Pointer[bool]
