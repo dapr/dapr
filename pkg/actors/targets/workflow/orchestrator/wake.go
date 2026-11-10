@@ -40,6 +40,14 @@ var testArmHold = sync.OnceValue(func() time.Duration {
 	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ARM_HOLD", 0)
 })
 
+// testSpawnHold is a test-only fault injection: a local drive which spawns
+// its loop waits this long first, so a test can turn the daprd into a
+// fallback host between the drive's fast path check and its spawn. Not a
+// supported production knob.
+var testSpawnHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_DRIVE_SPAWN_HOLD", 0)
+})
+
 // driveLost reports whether the drive cannot be delivered from this host at
 // all: only the factory's wake context (cancelled by HaltAll) says so. A
 // closed lock means the orchestrator OBJECT was retired under the wake (a
@@ -151,9 +159,17 @@ func (o *orchestrator) localDrive(reminderName string, dueTime time.Time) {
 	// or the context is already cancelled and the spawn is skipped; the
 	// janitor (or the caller's durable reminder) drives the turn on the new
 	// owner.
+	if hold := testSpawnHold(); hold > 0 {
+		log.Warnf("TEST INJECTION: holding the local drive spawn of workflow actor '%s' for %s", o.actorID, hold)
+		time.Sleep(hold)
+	}
 	o.wakeLock.Lock()
 	wakeCtx := o.wakeCtx
-	if wakeCtx.Err() != nil {
+	// The live fallback state, not the pinned one: a turn pinned before its
+	// daprd turned into a fallback host can get here after CancelWakes put a
+	// fresh context in place. The executor is marked unavailable before that
+	// switch, so this read sees it, and the janitor drives the wake.
+	if wakeCtx.Err() != nil || o.fallbackNow() {
 		o.wakeLock.Unlock()
 		o.driveRunning.Store(false)
 		return

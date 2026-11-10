@@ -58,6 +58,10 @@ func (a *apphealth) Setup(t *testing.T) []framework.Option {
 	)
 
 	a.workflow = workflow.New(t,
+		// Asserts no workflow actor types are hosted before a worker
+		// connects, which a fallback host under the staged operations
+		// preview does after its settle period.
+		workflow.WithStagedOperations(false),
 		workflow.WithDaprdOptions(0,
 			daprd.WithAppPort(a.app.Port(t)),
 			daprd.WithAppProtocol("grpc"),
