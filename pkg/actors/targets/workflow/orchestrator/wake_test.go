@@ -264,6 +264,8 @@ func (h *wakeHarness) primeRunning(t *testing.T, instanceID string, scheduled in
 	}
 
 	h.orch.state = wfState
+	cachedID := executionIDOf(h.orch.getExecutionStartedEvent(wfState))
+	h.orch.cachedExecutionID = &cachedID
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, startEvent.GetExecutionStarted())
 }
