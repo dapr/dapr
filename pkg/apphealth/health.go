@@ -189,13 +189,15 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 		return
 	}
 
-	// Only report if the status has changed
+	// Report every successful probe, so that it resets the failure count and
+	// the threshold counts consecutive failures only. A failed probe while the
+	// app is already unhealthy does not change its status, so skip it.
 	currentStatus := h.GetStatus()
-	if currentStatus.IsHealthy != status.IsHealthy {
-		log.Debug("App health probe detected status change - health probe successful: " + strconv.FormatBool(status.IsHealthy))
+	if status.IsHealthy || currentStatus.IsHealthy {
+		log.Debug("App health probe successful: " + strconv.FormatBool(status.IsHealthy))
 		h.setResult(parentCtx, status)
 	} else {
-		log.Debug("App health probe status is unchanged - health probe successful: " + strconv.FormatBool(status.IsHealthy))
+		log.Debug("App health probe failed while the app is unhealthy")
 	}
 }
 

@@ -119,6 +119,60 @@ func TestAppHealth_setResult(t *testing.T) {
 	assert.Equal(t, threshold+3, h.failureCount.Load())
 }
 
+func TestAppHealth_doProbe(t *testing.T) {
+	// Each case uses a threshold of 3. The app starts unhealthy, and the first
+	// successful probe makes it healthy.
+	tests := map[string]struct {
+		probes        []bool  // result of each probe
+		wantFailures  []int32 // failure count after each probe
+		wantUnhealthy int32   // times the app is reported unhealthy
+	}{
+		"a successful probe resets the failure count": {
+			probes:        []bool{true, false, true, false, true, false, true},
+			wantFailures:  []int32{0, 1, 0, 1, 0, 1, 0},
+			wantUnhealthy: 0,
+		},
+		"consecutive failures reach the threshold": {
+			probes:        []bool{true, false, true, false, false, false, true},
+			wantFailures:  []int32{0, 1, 0, 1, 2, 3, 0},
+			wantUnhealthy: 1,
+		},
+		"failures while unhealthy are not counted": {
+			probes:        []bool{true, false, false, false, false, true},
+			wantFailures:  []int32{0, 1, 2, 3, 3, 0},
+			wantUnhealthy: 1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var i atomic.Int32
+			h := New(config.AppHealthConfig{
+				ProbeInterval: time.Second,
+				ProbeTimeout:  time.Second,
+				Threshold:     3,
+			}, func(context.Context) (*Status, error) {
+				return NewStatus(tc.probes[i.Add(1)-1], nil), nil
+			})
+
+			var unhealthy atomic.Int32
+			h.OnHealthChange(func(_ context.Context, status *Status) {
+				if !status.IsHealthy {
+					unhealthy.Add(1)
+				}
+			})
+
+			for n := range tc.probes {
+				h.doProbe(t.Context())
+				assert.Equal(t, tc.wantFailures[n], h.failureCount.Load(), "failure count after probe %d", n+1)
+			}
+
+			h.Close() // waits for the change callbacks
+			assert.Equal(t, tc.wantUnhealthy, unhealthy.Load())
+		})
+	}
+}
+
 func Test_StartProbes(t *testing.T) {
 	t.Run("closing context should return", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
