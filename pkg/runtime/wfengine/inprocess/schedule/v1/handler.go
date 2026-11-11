@@ -81,20 +81,6 @@ func (h *Handler) CreateWorkflowSchedule(ctx context.Context, req *protos.Create
 		return nil, status.Errorf(codes.InvalidArgument, "target app namespace %q is not supported: it must be this app's namespace %q", ws.GetTargetAppNamespace(), h.namespace)
 	}
 
-	id := api.InstanceID(InstanceIDPrefix + ws.GetName())
-	md, err := h.client.FetchWorkflowMetadata(ctx, id)
-	switch {
-	case errors.Is(err, api.ErrInstanceNotFound):
-	case err != nil:
-		return nil, statusErr(err)
-	case !req.GetOverwrite() && md.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
-		return nil, status.Errorf(codes.AlreadyExists, "workflow schedule %q already exists", ws.GetName())
-	default:
-		if derr := h.delete(ctx, id, md); derr != nil {
-			return nil, derr
-		}
-	}
-
 	spec, err := protojson.Marshal(ws)
 	if err != nil {
 		return nil, err
@@ -103,6 +89,23 @@ func (h *Handler) CreateWorkflowSchedule(ctx context.Context, req *protos.Create
 	if err != nil {
 		return nil, err
 	}
+
+	id := api.InstanceID(InstanceIDPrefix + ws.GetName())
+	md, err := h.client.FetchWorkflowMetadata(ctx, id)
+	switch {
+	case errors.Is(err, api.ErrInstanceNotFound):
+	case err != nil:
+		return nil, statusErr(err)
+	case md.GetName() != WorkflowName:
+		return nil, status.Errorf(codes.AlreadyExists, "instance ID %q is taken by workflow %q", id, md.GetName())
+	case !req.GetOverwrite() && md.GetRuntimeStatus() != protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
+		return nil, status.Errorf(codes.AlreadyExists, "workflow schedule %q already exists", ws.GetName())
+	default:
+		if derr := h.delete(ctx, id, md); derr != nil {
+			return nil, derr
+		}
+	}
+
 	if _, err := h.client.ScheduleNewWorkflow(context.WithValue(ctx, createKey{}, true), WorkflowName,
 		api.WithInstanceID(id),
 		api.WithRawInput(wrapperspb.String(string(input))),
@@ -166,50 +169,56 @@ func (h *Handler) ListWorkflowSchedules(ctx context.Context, req *protos.ListWor
 }
 
 func (h *Handler) DeleteWorkflowSchedule(ctx context.Context, req *protos.DeleteWorkflowScheduleRequest) (*protos.DeleteWorkflowScheduleResponse, error) {
-	id := api.InstanceID(InstanceIDPrefix + req.GetName())
-	md, err := h.client.FetchWorkflowMetadata(ctx, id)
-	if errors.Is(err, api.ErrInstanceNotFound) {
-		return nil, notFound(req.GetName())
-	}
+	md, err := h.fetch(ctx, req.GetName())
 	if err != nil {
-		return nil, statusErr(err)
+		return nil, err
 	}
-	if err := h.delete(ctx, id, md); err != nil {
+	if err := h.delete(ctx, api.InstanceID(InstanceIDPrefix+req.GetName()), md); err != nil {
 		return nil, err
 	}
 	return new(protos.DeleteWorkflowScheduleResponse), nil
 }
 
 func (h *Handler) TriggerWorkflowSchedule(ctx context.Context, req *protos.TriggerWorkflowScheduleRequest) (*protos.TriggerWorkflowScheduleResponse, error) {
-	id := api.InstanceID(InstanceIDPrefix + req.GetName())
-	md, err := h.client.FetchWorkflowMetadata(ctx, id)
+	md, err := h.fetch(ctx, req.GetName())
 	switch {
-	case errors.Is(err, api.ErrInstanceNotFound),
-		err == nil && md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
-		return nil, notFound(req.GetName())
 	case err != nil:
-		return nil, statusErr(err)
+		return nil, err
+	case md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
+		return nil, notFound(req.GetName())
 	case api.WorkflowMetadataIsComplete(md):
 		return nil, status.Errorf(codes.FailedPrecondition, "workflow schedule %q has no runs left", req.GetName())
 	}
 
 	runID := ManualRunInstanceID(req.GetName(), h.owner, time.Now())
+	id := api.InstanceID(InstanceIDPrefix + req.GetName())
 	if err := h.client.RaiseEvent(ctx, id, triggerEvent, api.WithEventPayload(trigger{InstanceID: runID})); err != nil {
 		return nil, statusErr(err)
 	}
 	return &protos.TriggerWorkflowScheduleResponse{InstanceId: runID}, nil
 }
 
-// get returns a schedule with its status, and how its last run stands. An
-// instance with a schedule's ID that runs another workflow is not a schedule.
-func (h *Handler) get(ctx context.Context, name string) (*protos.WorkflowSchedule, error) {
+// fetch returns the metadata of a schedule's workflow. An instance with a
+// schedule's ID that runs another workflow is not a schedule.
+func (h *Handler) fetch(ctx context.Context, name string) (*backend.WorkflowMetadata, error) {
 	md, err := h.client.FetchWorkflowMetadata(ctx, api.InstanceID(InstanceIDPrefix+name))
 	switch {
-	case errors.Is(err, api.ErrInstanceNotFound),
-		err == nil && (md.GetName() != WorkflowName || md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED):
+	case errors.Is(err, api.ErrInstanceNotFound), err == nil && md.GetName() != WorkflowName:
 		return nil, notFound(name)
 	case err != nil:
 		return nil, statusErr(err)
+	}
+	return md, nil
+}
+
+// get returns a schedule with its status, and how its last run stands.
+func (h *Handler) get(ctx context.Context, name string) (*protos.WorkflowSchedule, error) {
+	md, err := h.fetch(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if md.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED {
+		return nil, notFound(name)
 	}
 
 	var s state
