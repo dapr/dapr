@@ -169,6 +169,10 @@ type actors struct {
 	hostingRev    uint64
 	hostingActive bool
 	hostingName   string
+	// boundStoreRevs holds the revision of each bound state store as last
+	// seen by the converge runner. Like the hosting fields, it is only
+	// touched by Init and the converge runner.
+	boundStoreRevs map[string]uint64
 
 	clock clock.Clock
 	mode  modes.DaprMode
@@ -261,6 +265,7 @@ func (a *actors) Init(opts InitOptions) error {
 	}
 
 	_, a.hostingName, a.hostingRev, a.hostingActive = a.compStore.GetStateStoreActorWithRevision()
+	a.boundStoreRevs = a.currentBoundStoreRevs()
 	if !a.hostingActive {
 		log.Info("Actor state store not configured - actor hosting disabled until one is configured, but invocation enabled")
 	}
@@ -384,6 +389,7 @@ func (a *actors) Run(ctx context.Context) error {
 				case <-a.storeKickCh:
 				}
 				a.convergeHosting(ctx)
+				a.convergeBoundStores(ctx)
 			}
 		},
 		func(ctx context.Context) error {
@@ -701,6 +707,46 @@ func (a *actors) convergeHosting(ctx context.Context) {
 
 	a.hostingActive = ok
 	a.hostingName = name
+}
+
+// convergeBoundStores deactivates the actors of the actor types bound to a
+// state store that was removed or reloaded since the last call. Unlike the
+// default actor state store, a same-name reload is not assumed to keep the
+// same data: the actors' in-memory state, and any state an SDK caches, may no
+// longer match the store, so they are deactivated and reactivated on demand
+// against it. Hosting itself is unaffected, and other actor types continue.
+func (a *actors) convergeBoundStores(ctx context.Context) {
+	current := a.currentBoundStoreRevs()
+
+	affected := make(map[string]struct{})
+	for actorType, storeName := range a.stateResolver.Bindings() {
+		if current[storeName] != a.boundStoreRevs[storeName] {
+			affected[actorType] = struct{}{}
+		}
+	}
+	a.boundStoreRevs = current
+	if len(affected) == 0 {
+		return
+	}
+
+	actorTypes := slices.Sorted(maps.Keys(affected))
+	log.Infof("Bound actor state store removed or reloaded - deactivating actors of types %v", actorTypes)
+	if err := a.table.HaltNonHosted(ctx, func(req *api.LookupActorRequest) bool {
+		_, ok := affected[req.ActorType]
+		return !ok
+	}); err != nil {
+		log.Errorf("Error deactivating actors of types %v after their bound state store changed: %s", actorTypes, err)
+	}
+}
+
+// currentBoundStoreRevs returns the current revision of each bound state
+// store.
+func (a *actors) currentBoundStoreRevs() map[string]uint64 {
+	revs := make(map[string]uint64)
+	for _, storeName := range a.stateResolver.Bindings() {
+		revs[storeName] = a.compStore.GetStateStoreRevision(storeName)
+	}
+	return revs
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {

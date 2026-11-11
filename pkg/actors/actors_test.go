@@ -28,6 +28,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	"github.com/dapr/dapr/pkg/actors/api"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/messages"
@@ -158,6 +159,114 @@ func TestConvergeHosting(t *testing.T) {
 		require.NoError(t, cs.AddStateStoreActor("otherstore", store(t)))
 		a.convergeHosting(t.Context())
 		assert.Equal(t, []string{"resume", "suspend", "resume"}, *ops)
+	})
+}
+
+// TestConvergeBoundStores verifies that removing or reloading a bound state
+// store deactivates the actors of the actor types bound to it, and only
+// those: their in-memory state, and any state an SDK caches, may no longer
+// match the store.
+func TestConvergeBoundStores(t *testing.T) {
+	t.Parallel()
+
+	store := func(t *testing.T) contribstate.Store {
+		t.Helper()
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	// newConverge returns an actors runtime whose table records, for each
+	// halt, the actor types it deactivates among the given ones.
+	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *[][]string) {
+		t.Helper()
+
+		cs := compstore.New()
+		require.NoError(t, cs.AddStateStoreActor("default", store(t)))
+		cs.AddStateStore("wallet-transactions", store(t))
+		cs.AddStateStore("wallet-balance", store(t))
+
+		var halts [][]string
+		a := &actors{
+			compStore: cs,
+			stateResolver: actorstate.NewResolver(actorstate.ResolverOptions{
+				Stores: cs,
+				Bindings: map[string]string{
+					"TransactionActor": "wallet-transactions",
+					"AuditActor":       "wallet-transactions",
+					"BalanceActor":     "wallet-balance",
+				},
+			}),
+			table: tablefake.New().WithHaltNonHosted(func(_ context.Context, keep func(*api.LookupActorRequest) bool) error {
+				var halted []string
+				for _, actorType := range []string{"AuditActor", "BalanceActor", "PlainActor", "TransactionActor"} {
+					if !keep(&api.LookupActorRequest{ActorType: actorType, ActorID: "1"}) {
+						halted = append(halted, actorType)
+					}
+				}
+				halts = append(halts, halted)
+				return nil
+			}),
+		}
+		a.boundStoreRevs = a.currentBoundStoreRevs()
+		return a, cs, &halts
+	}
+
+	t.Run("no change is a no-op", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		// Changes to unbound stores, the default one included, are ignored.
+		cs.AddStateStore("plain", store(t))
+		cs.DeleteStateStore("default")
+		a.convergeBoundStores(t.Context())
+		assert.Empty(t, *halts)
+	})
+
+	t.Run("removing a bound store deactivates its actor types", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-transactions")
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"AuditActor", "TransactionActor"}}, *halts)
+
+		// Converging again with no further change is a no-op.
+		a.convergeBoundStores(t.Context())
+		assert.Len(t, *halts, 1)
+	})
+
+	t.Run("reloading a bound store deactivates its actor types", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		// A hot reload closes the store and adds it again, possibly against
+		// different data.
+		cs.DeleteStateStore("wallet-balance")
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"BalanceActor"}}, *halts)
+	})
+
+	t.Run("adding a missing bound store back deactivates its actor types", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		a.convergeBoundStores(t.Context())
+		// Actors reactivated in between, for example by a reminder, ran
+		// without their store.
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"BalanceActor"}, {"BalanceActor"}}, *halts)
+	})
+
+	t.Run("several bound stores changing are halted together", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		cs.DeleteStateStore("wallet-transactions")
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"AuditActor", "BalanceActor", "TransactionActor"}}, *halts)
 	})
 }
 

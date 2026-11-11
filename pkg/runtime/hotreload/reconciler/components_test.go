@@ -231,11 +231,13 @@ func Test_components_actorStateStore(t *testing.T) {
 		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
 		ctx := runProc(t, proc)
 
-		// Add: an unmarked store does not occupy the actor slot or kick.
+		// Add: an unmarked store does not occupy the actor slot. It still
+		// kicks, as any state store may be bound to actor types: both the
+		// state processor (add side) and the reconciler (settle) notify.
 		require.NoError(t, m.update(ctx, actorStoreComp("mystore", false, 1)))
 		_, _, ok := cs.GetStateStoreActor()
 		assert.False(t, ok)
-		assert.Equal(t, int64(0), kicks.Load())
+		assert.Equal(t, int64(2), kicks.Load())
 
 		// Update to marked: slot occupied. Both the state processor (add
 		// side) and the reconciler (settle) notify; kicks coalesce in the
@@ -244,7 +246,7 @@ func Test_components_actorStateStore(t *testing.T) {
 		_, name, ok := cs.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
-		assert.Equal(t, int64(2), kicks.Load())
+		assert.Equal(t, int64(4), kicks.Load())
 
 		// Same-name update: the close side does not notify, so the actor
 		// runtime never observes the transient store-less state between the
@@ -258,7 +260,7 @@ func Test_components_actorStateStore(t *testing.T) {
 		_, name, ok = cs.GetStateStoreActor()
 		require.True(t, ok)
 		assert.Equal(t, "mystore", name)
-		assert.Equal(t, int64(4), kicks.Load())
+		assert.Equal(t, int64(6), kicks.Load())
 
 		// Delete: slot cleared, reconciler settle notifies.
 		require.NoError(t, m.delete(ctx, comp))
@@ -266,6 +268,35 @@ func Test_components_actorStateStore(t *testing.T) {
 		assert.False(t, ok)
 		_, exists := cs.GetComponent("mystore")
 		assert.False(t, exists)
+		assert.Equal(t, int64(7), kicks.Load())
+	})
+
+	// A state store other than the actor state store may be bound to actor
+	// types, so its changes notify the actor runtime too, which deactivates
+	// the actors of the types bound to it.
+	t.Run("changes to another state store notify the actor runtime", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, _ := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("plainstore", false, 1)))
+		assert.Equal(t, int64(2), kicks.Load())
+
+		comp := actorStoreComp("plainstore", false, 2)
+		comp.Spec.Metadata = append(comp.Spec.Metadata, commonapi.NameValuePair{
+			Name:  "marker",
+			Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"x"`)}},
+		})
+		require.NoError(t, m.update(ctx, comp))
+		assert.Equal(t, int64(4), kicks.Load())
+
+		// The processor (add side) and the reconciler (settle) each notify
+		// on add and update; an unchanged component is not reloaded, so it
+		// does not notify.
+		require.NoError(t, m.update(ctx, comp))
+		assert.Equal(t, int64(4), kicks.Load())
+
+		require.NoError(t, m.delete(ctx, comp))
 		assert.Equal(t, int64(5), kicks.Load())
 	})
 

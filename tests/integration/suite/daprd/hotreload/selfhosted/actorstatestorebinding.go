@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,14 +45,23 @@ func init() {
 
 // actorstatestorebinding ensures that hot reloading the state store bound to
 // an actor type through spec.actors.stateStores affects only that actor type:
-// removing the store makes its state API fail with
-// ERR_ACTOR_STATE_STORE_NOT_FOUND, without falling back to the default actor
-// state store and without touching actor hosting or other actor types, and
-// adding the store back recovers the state that was already in it.
+// removing the store deactivates the actors of that type and makes its state
+// API fail with ERR_ACTOR_STATE_STORE_NOT_FOUND, without falling back to the
+// default actor state store and without touching actor hosting or other actor
+// types. Adding the store back recovers the state that was already in it, and
+// reloading it in place against another database deactivates the actors of
+// that type again, so none keeps state from the previous database.
 type actorstatestorebinding struct {
 	app       *actors.Actors
 	defaultDB *sqlite.SQLite
 	txDB      *sqlite.SQLite
+	// otherDB backs the bound store after it is reloaded in place.
+	otherDB *sqlite.SQLite
+
+	// deactivated counts the deactivation calls daprd makes to the app, per
+	// actor type.
+	boundDeactivated atomic.Int64
+	plainDeactivated atomic.Int64
 
 	// compFile is the hot-reloadable component file of the bound store.
 	compFile string
@@ -75,18 +85,28 @@ func (a *actorstatestorebinding) Setup(t *testing.T) []framework.Option {
 		sqlite.WithName(a.boundStore),
 		sqlite.WithCreateStateTables(),
 	)
+	a.otherDB = sqlite.New(t,
+		sqlite.WithName(a.boundStore),
+		sqlite.WithCreateStateTables(),
+	)
 
 	resDir := t.TempDir()
 	a.compFile = filepath.Join(resDir, a.boundStore+".yaml")
 	a.compYAML = a.txDB.GetComponent(t)
 	require.NoError(t, os.WriteFile(a.compFile, []byte(a.compYAML), 0o600))
 
-	noop := func(nethttp.ResponseWriter, *nethttp.Request) {}
+	counting := func(deactivated *atomic.Int64) nethttp.HandlerFunc {
+		return func(_ nethttp.ResponseWriter, r *nethttp.Request) {
+			if r.Method == nethttp.MethodDelete {
+				deactivated.Add(1)
+			}
+		}
+	}
 	a.app = actors.New(t,
 		actors.WithDB(a.defaultDB),
 		actors.WithActorTypes(a.boundType, a.plainType),
-		actors.WithActorTypeHandler(a.boundType, noop),
-		actors.WithActorTypeHandler(a.plainType, noop),
+		actors.WithActorTypeHandler(a.boundType, counting(&a.boundDeactivated)),
+		actors.WithActorTypeHandler(a.plainType, counting(&a.plainDeactivated)),
 		actors.WithDaprdOptions(
 			daprd.WithResourcesDir(resDir),
 			daprd.WithConfigManifests(t, `
@@ -104,7 +124,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.txDB, a.app),
+		framework.WithProcesses(a.txDB, a.otherDB, a.app),
 	}
 }
 
@@ -188,6 +208,12 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 	t.Run("bound store removed", func(t *testing.T) {
 		require.NoError(t, os.Remove(a.compFile))
 
+		// The active actor of the bound type is deactivated, and only it.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, int64(1), a.boundDeactivated.Load())
+		}, 20*time.Second, 10*time.Millisecond)
+		assert.Equal(t, int64(0), a.plainDeactivated.Load())
+
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			code, body := doHTTP(c, nethttp.MethodGet, a.boundType+"/a1/state/kh", "")
 			assert.Equal(c, nethttp.StatusInternalServerError, code)
@@ -205,7 +231,9 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 		}, 20*time.Second, 10*time.Millisecond)
 
 		// Writes to the bound type fail too, and never fall back to the
-		// default actor state store.
+		// default actor state store. The deactivated actor is activated
+		// again first, as writes need an active actor.
+		invoke(t, a.boundType)
 		code, body := saveHTTP(t, a.boundType, "kx")
 		assert.Equalf(t, nethttp.StatusInternalServerError, code, "body: %s", body)
 		assert.Contains(t, body, "ERR_ACTOR_STATE_STORE_NOT_FOUND")
@@ -213,7 +241,6 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, codes.Internal, status.Code(err))
 
 		// Hosting and the unbound type are unaffected.
-		invoke(t, a.boundType)
 		invoke(t, a.plainType)
 		code, body = saveHTTP(t, a.plainType, "kh2")
 		assert.Equalf(t, nethttp.StatusNoContent, code, "body: %s", body)
@@ -233,6 +260,13 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 	t.Run("bound store added back", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(a.compFile, []byte(a.compYAML), 0o600))
 
+		// The actor activated again while the store was missing is
+		// deactivated, so it does not keep what it read without the store.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, int64(2), a.boundDeactivated.Load())
+		}, 20*time.Second, 10*time.Millisecond)
+		assert.Equal(t, int64(0), a.plainDeactivated.Load())
+
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			code, body := doHTTP(c, nethttp.MethodGet, a.boundType+"/a1/state/kh", "")
 			assert.Equal(c, nethttp.StatusOK, code)
@@ -246,6 +280,42 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 			}
 		}, 20*time.Second, 10*time.Millisecond)
 
+		assert.Equal(t, boundKeys, a.txDB.StateKeys(t, ctx))
+	})
+
+	t.Run("bound store reloaded in place against another database", func(t *testing.T) {
+		// Activate the bound type's actor against the current database.
+		invoke(t, a.boundType)
+		require.Equal(t, int64(2), a.boundDeactivated.Load())
+
+		require.NoError(t, os.WriteFile(a.compFile, []byte(a.otherDB.GetComponent(t)), 0o600))
+
+		// The actor is deactivated, so none keeps state read from the
+		// previous database.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, int64(3), a.boundDeactivated.Load())
+		}, 20*time.Second, 10*time.Millisecond)
+		assert.Equal(t, int64(0), a.plainDeactivated.Load())
+
+		// State operations use the new database: the previous keys are not
+		// there, and new writes land only in it.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			code, _ := doHTTP(c, nethttp.MethodGet, a.boundType+"/a1/state/kh", "")
+			assert.Equal(c, nethttp.StatusNoContent, code)
+		}, 20*time.Second, 10*time.Millisecond)
+		got, err := getGRPC(a.boundType, "kg")
+		require.NoError(t, err)
+		assert.Empty(t, got)
+
+		invoke(t, a.boundType)
+		code, body := saveHTTP(t, a.boundType, "kh3")
+		require.Equalf(t, nethttp.StatusNoContent, code, "body: %s", body)
+		require.NoError(t, saveGRPC(a.boundType, "kg3"))
+
+		assert.Equal(t, []string{
+			appID + "||" + a.boundType + "||a1||kg3",
+			appID + "||" + a.boundType + "||a1||kh3",
+		}, a.otherDB.StateKeys(t, ctx))
 		assert.Equal(t, boundKeys, a.txDB.StateKeys(t, ctx))
 	})
 }
