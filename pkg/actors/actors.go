@@ -254,12 +254,12 @@ func (a *actors) Init(opts InitOptions) error {
 		return err
 	}
 
-	// The state facade is always constructed; it resolves the actor state
-	// store from the component store on every call so the store can be hot
-	// reloaded at any point in the runtime's lifetime.
+	// The state facade is always constructed; it resolves each actor type's
+	// state store from the component store on every call so stores can be
+	// hot reloaded at any point in the runtime's lifetime.
 	a.state = actorstate.New(actorstate.Options{
 		AppID:           a.appID,
-		CompStore:       a.compStore,
+		StoreResolver:   actorstate.NewResolver(actorstate.ResolverOptions{Stores: a.compStore}),
 		Resiliency:      a.resiliency,
 		StateTTLEnabled: a.stateTTLEnabled,
 		Table:           a.table,
