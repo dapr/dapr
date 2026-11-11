@@ -14,6 +14,7 @@ limitations under the License.
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -21,16 +22,19 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
 )
 
@@ -53,6 +57,16 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		{
 			name:          "Invalid config file",
 			path:          "./testdata/invalid_secrets_config.yaml",
+			errorExpected: true,
+		},
+		{
+			name:          "Valid actor state stores config",
+			path:          "./testdata/actor_state_stores_config.yaml",
+			errorExpected: false,
+		},
+		{
+			name:          "Invalid actor state stores config",
+			path:          "./testdata/invalid_actor_state_stores_config.yaml",
 			errorExpected: true,
 		},
 	}
@@ -1187,5 +1201,142 @@ func TestActorsSpecStateStoreByActorType(t *testing.T) {
 		m1["BalanceActor"] = "hacked"
 		delete(m1, "TransactionActor")
 		assert.Equal(t, want, spec.StateStoreByActorType())
+	})
+}
+
+func TestActorsSpecValidate(t *testing.T) {
+	valid := func() *ActorsSpec {
+		return &ActorsSpec{StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		}}
+	}
+
+	tests := []struct {
+		name    string
+		spec    *ActorsSpec
+		wantErr []string
+	}{
+		{name: "nil spec", spec: nil},
+		{name: "empty spec", spec: &ActorsSpec{}},
+		{name: "valid bindings", spec: valid()},
+		{
+			name:    "empty store name",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{ActorTypes: []string{"A"}}}},
+			wantErr: []string{"stateStores[0]", "name"},
+		},
+		{
+			name:    "no actor types",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1"}}},
+			wantErr: []string{"stateStores[0]", `"s1"`, "actorTypes"},
+		},
+		{
+			name:    "empty actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{""}}}},
+			wantErr: []string{"stateStores[0]", `"s1"`, "empty"},
+		},
+		{
+			name:    "same actor type twice in one binding",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"A", "A"}}}},
+			wantErr: []string{`actor type "A" is listed more than once`, `"s1"`},
+		},
+		{
+			name: "same actor type in two bindings",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{Name: "s1", ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"A"}},
+			}},
+			wantErr: []string{`actor type "A" is bound to more than one state store: "s1" and "s2"`},
+		},
+		{
+			name: "same actor type twice in the second of two bindings",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{Name: "s1", ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"A", "A"}},
+			}},
+			wantErr: []string{`actor type "A" is bound to more than one state store: "s1" and "s2"`, `"A" is listed more than once`},
+		},
+		{
+			name:    "internal actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internal.ns.app.workflow"}}}},
+			wantErr: []string{`"dapr.internal.ns.app.workflow" is reserved for Dapr internal actors`},
+		},
+		{
+			name:    "bare dapr.internal actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internal"}}}},
+			wantErr: []string{`"dapr.internal" is reserved for Dapr internal actors`},
+		},
+		{
+			name:    "a type merely starting with dapr.internal is allowed",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internalish"}}}},
+			wantErr: nil,
+		},
+		{
+			name: "every violation is reported",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"dapr.internal.x"}},
+			}},
+			wantErr: []string{"stateStores[0]", `"dapr.internal.x" is reserved`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.spec.Validate()
+			if len(tt.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, want := range tt.wantErr {
+				assert.Equalf(t, 1, strings.Count(err.Error(), want), "want %q exactly once in %q", want, err)
+			}
+		})
+	}
+}
+
+// fakeOperatorClient serves a fixed configuration. Embedding the interface
+// implements only the method under test.
+type fakeOperatorClient struct {
+	operatorv1pb.OperatorClient
+	resp []byte
+}
+
+func (f *fakeOperatorClient) GetConfiguration(context.Context, *operatorv1pb.GetConfigurationRequest, ...grpc.CallOption) (*operatorv1pb.GetConfigurationResponse, error) {
+	return &operatorv1pb.GetConfigurationResponse{Configuration: f.resp}, nil
+}
+
+func TestLoadKubernetesConfiguration(t *testing.T) {
+	// "carries bindings" and "no actors section" characterize the existing
+	// decoding; "rejects duplicate actor type" drives the validation.
+	t.Run("carries bindings", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{"actors":{"stateStores":[
+			{"name":"wallet-transactions","actorTypes":["TransactionActor"]},
+			{"name":"wallet-balance","actorTypes":["BalanceActor"]}]}}}`)}
+		conf, res, err := LoadKubernetesConfiguration("c", "default", client)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assert.Equal(t, &ActorsSpec{StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		}}, conf.Spec.ActorsSpec)
+	})
+
+	t.Run("rejects duplicate actor type across bindings", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{"actors":{"stateStores":[
+			{"name":"s1","actorTypes":["A"]},
+			{"name":"s2","actorTypes":["A"]}]}}}`)}
+		conf, res, err := LoadKubernetesConfiguration("c", "default", client)
+		require.ErrorContains(t, err, `actor type "A" is bound to more than one state store`)
+		assert.Nil(t, conf)
+		assert.Nil(t, res)
+	})
+
+	t.Run("no actors section", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{}}`)}
+		conf, _, err := LoadKubernetesConfiguration("c", "default", client)
+		require.NoError(t, err)
+		assert.Nil(t, conf.Spec.ActorsSpec)
 	})
 }

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -200,6 +201,64 @@ type ActorStateStoreBinding struct {
 	Name string `json:"name" yaml:"name"`
 	// ActorTypes are the actor types whose state is kept in this store.
 	ActorTypes []string `json:"actorTypes" yaml:"actorTypes"`
+}
+
+// internalActorTypePrefix prefixes the actor types Dapr uses internally, such
+// as the workflow actors. It mirrors pkg/actors/hostauthz.
+const internalActorTypePrefix = "dapr.internal."
+
+// Validate returns every violation of the actor state store binding rules:
+// each binding names a store and at least one non-empty actor type, an actor
+// type is bound to at most one store, and internal actor types (dapr.internal
+// and dapr.internal.*) cannot be bound.
+func (a *ActorsSpec) Validate() error {
+	if a == nil {
+		return nil
+	}
+
+	var errs []error
+	storeByType := make(map[string]string)
+	for i, binding := range a.StateStores {
+		errs = append(errs, binding.validate(i)...)
+		for _, actorType := range slices.Compact(slices.Sorted(slices.Values(binding.ActorTypes))) {
+			if actorType == "" {
+				continue
+			}
+			if store, ok := storeByType[actorType]; ok && store != binding.Name {
+				errs = append(errs, fmt.Errorf("spec.actors.stateStores: actor type %q is bound to more than one state store: %q and %q", actorType, store, binding.Name))
+				continue
+			}
+			storeByType[actorType] = binding.Name
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// validate returns the violations within one binding, at index idx.
+func (b ActorStateStoreBinding) validate(idx int) []error {
+	var errs []error
+	if b.Name == "" {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d]: name is required", idx))
+	}
+	if len(b.ActorTypes) == 0 {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actorTypes is required", idx, b.Name))
+	}
+
+	seen := make(map[string]struct{}, len(b.ActorTypes))
+	for _, actorType := range b.ActorTypes {
+		switch {
+		case actorType == "":
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type must not be empty", idx, b.Name))
+			continue
+		case actorType == strings.TrimSuffix(internalActorTypePrefix, ".") || strings.HasPrefix(actorType, internalActorTypePrefix):
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is reserved for Dapr internal actors", idx, b.Name, actorType))
+		}
+		if _, ok := seen[actorType]; ok {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is listed more than once", idx, b.Name, actorType))
+		}
+		seen[actorType] = struct{}{}
+	}
+	return errs
 }
 
 // StateStoreByActorType returns the name of the state store bound to each
@@ -924,8 +983,7 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		}
 	}
 
-	err := conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
+	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
@@ -963,8 +1021,7 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 		return nil, nil, err
 	}
 
-	err = conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
+	if err = conf.validate(); err != nil {
 		return nil, nil, err
 	}
 
@@ -1245,6 +1302,15 @@ func (c *Configuration) sortMetricsSpec() {
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
 		c.Spec.MetricSpec.RecordErrorCodes = c.Spec.MetricsSpec.RecordErrorCodes
 	}
+}
+
+// validate validates a loaded configuration. It is the single validation
+// entry point shared by the standalone and Kubernetes loaders.
+func (c *Configuration) validate() error {
+	if err := c.sortAndValidateSecretsConfiguration(); err != nil {
+		return err
+	}
+	return c.Spec.ActorsSpec.Validate()
 }
 
 // Validate the secrets configuration and sort to the allowed and denied lists if present.
