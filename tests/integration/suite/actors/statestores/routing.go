@@ -113,13 +113,13 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("http", func(t *testing.T) {
 		for _, actorType := range actorTypes {
-			r.saveAndReadHTTP(t, ctx, actorType, "h1")
+			saveAndReadHTTP(t, ctx, r.app, actorType, "h1")
 		}
 	})
 
 	t.Run("grpc", func(t *testing.T) {
 		for _, actorType := range actorTypes {
-			r.saveAndReadGRPC(t, ctx, actorType, "g1")
+			saveAndReadGRPC(t, ctx, r.app, actorType, "g1")
 		}
 	})
 
@@ -140,11 +140,11 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 
 // saveAndReadHTTP activates the actor, then writes and reads back key k1
 // through the HTTP API.
-func (r *routing) saveAndReadHTTP(t *testing.T, ctx context.Context, actorType, actorID string) {
+func saveAndReadHTTP(t *testing.T, ctx context.Context, app *actors.Actors, actorType, actorID string) {
 	t.Helper()
 
 	httpClient := client.HTTP(t)
-	baseURL := "http://" + r.app.Daprd().HTTPAddress() + "/v1.0/actors/" + actorType + "/" + actorID
+	baseURL := "http://" + app.Daprd().HTTPAddress() + "/v1.0/actors/" + actorType + "/" + actorID
 
 	do := func(method, path, body string) (int, string) {
 		t.Helper()
@@ -172,10 +172,10 @@ func (r *routing) saveAndReadHTTP(t *testing.T, ctx context.Context, actorType, 
 
 // saveAndReadGRPC activates the actor, then writes and reads back key k1
 // through the gRPC API.
-func (r *routing) saveAndReadGRPC(t *testing.T, ctx context.Context, actorType, actorID string) {
+func saveAndReadGRPC(t *testing.T, ctx context.Context, app *actors.Actors, actorType, actorID string) {
 	t.Helper()
 
-	gclient := r.app.GRPCClient(t, ctx)
+	gclient := app.GRPCClient(t, ctx)
 
 	_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: actorType,
