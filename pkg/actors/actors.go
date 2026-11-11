@@ -71,6 +71,11 @@ type Options struct {
 	MaxRequestBodySize int
 	Mode               modes.DaprMode
 
+	// ActorStateStores maps an actor type to the name of the state store
+	// bound to it, from the configuration's spec.actors.stateStores. Actor
+	// types not listed use the default actor state store.
+	ActorStateStores map[string]string
+
 	// DisseminationTimeout is the daprd-side timeout for a placement
 	// LOCK -> UPDATE -> UNLOCK round.
 	DisseminationTimeout time.Duration
@@ -143,6 +148,7 @@ type actors struct {
 	timers          timers.Interface
 	scheduler       scheduler.Interface
 	state           actorstate.Interface
+	stateResolver   *actorstate.Resolver
 	reentrancyStore *reentrancystore.Store
 
 	disabled   *atomic.Pointer[error]
@@ -178,14 +184,18 @@ func New(opts Options) Interface {
 	}
 
 	return &actors{
-		appID:                     opts.AppID,
-		namespace:                 opts.Namespace,
-		port:                      opts.Port,
-		placementAddresses:        opts.PlacementAddresses,
-		healthEndpoint:            opts.HealthEndpoint,
-		resiliency:                opts.Resiliency,
-		security:                  opts.Security,
-		compStore:                 opts.CompStore,
+		appID:              opts.AppID,
+		namespace:          opts.Namespace,
+		port:               opts.Port,
+		placementAddresses: opts.PlacementAddresses,
+		healthEndpoint:     opts.HealthEndpoint,
+		resiliency:         opts.Resiliency,
+		security:           opts.Security,
+		compStore:          opts.CompStore,
+		stateResolver: actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores:   opts.CompStore,
+			Bindings: opts.ActorStateStores,
+		}),
 		stateTTLEnabled:           opts.StateTTLEnabled,
 		clock:                     clock.RealClock{},
 		disabled:                  &disabled,
@@ -255,11 +265,12 @@ func (a *actors) Init(opts InitOptions) error {
 	}
 
 	// The state facade is always constructed; it resolves each actor type's
-	// state store from the component store on every call so stores can be
-	// hot reloaded at any point in the runtime's lifetime.
+	// state store (its bound store, or the default actor state store) from
+	// the component store on every call, so stores can be hot reloaded at
+	// any point in the runtime's lifetime.
 	a.state = actorstate.New(actorstate.Options{
 		AppID:           a.appID,
-		StoreResolver:   actorstate.NewResolver(actorstate.ResolverOptions{Stores: a.compStore}),
+		StoreResolver:   a.stateResolver,
 		Resiliency:      a.resiliency,
 		StateTTLEnabled: a.stateTTLEnabled,
 		Table:           a.table,

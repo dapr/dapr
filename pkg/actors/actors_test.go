@@ -227,3 +227,29 @@ func TestWaitForReady(t *testing.T) {
 		require.ErrorIs(t, a.waitForReady(context.Background()), errDisabled)
 	})
 }
+
+func TestNew_ActorStateStoreBindings(t *testing.T) {
+	newStore := func() contribstate.Store {
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	t.Run("bound actor type resolves to its state store", func(t *testing.T) {
+		cs := compstore.New()
+		cs.AddStateStore("wallet-transactions", newStore())
+		a := New(Options{
+			CompStore:        cs,
+			ActorStateStores: map[string]string{"TransactionActor": "wallet-transactions"},
+		}).(*actors)
+
+		name, _, err := a.stateResolver.Resolve("TransactionActor")
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-transactions", name)
+	})
+
+	t.Run("no bindings uses the default actor state store slot", func(t *testing.T) {
+		a := New(Options{CompStore: compstore.New()}).(*actors)
+
+		_, _, err := a.stateResolver.Resolve("TransactionActor")
+		require.ErrorIs(t, err, messages.ErrActorRuntimeNotFound)
+	})
+}

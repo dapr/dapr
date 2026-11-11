@@ -62,6 +62,19 @@ func (r *Resolver) Resolve(actorType string) (string, Backend, error) {
 	return r.resolveDefault()
 }
 
+// Unresolved returns the bindings (actor type to state store name) whose
+// state store is not loaded. Like Resolve, it looks the stores up on every
+// call.
+func (r *Resolver) Unresolved() map[string]string {
+	unresolved := make(map[string]string)
+	for actorType, storeName := range r.bindings {
+		if _, ok := r.stores.GetStateStore(storeName); !ok {
+			unresolved[actorType] = storeName
+		}
+	}
+	return unresolved
+}
+
 func (r *Resolver) resolveBound(actorType, storeName string) (string, Backend, error) {
 	storeS, ok := r.stores.GetStateStore(storeName)
 	if !ok {

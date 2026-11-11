@@ -27,6 +27,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var _ StoreGetter = (*compstore.ComponentStore)(nil)
+
 // fakeStores is a StoreGetter backed by a map. actorName names the store in
 // the default actor state store slot; empty means the slot is empty.
 type fakeStores struct {
@@ -172,6 +174,23 @@ func TestResolver_Bound(t *testing.T) {
 	})
 }
 
+func TestResolver_Unresolved(t *testing.T) {
+	t.Run("lists the bindings whose store is not loaded", func(t *testing.T) {
+		r := NewResolver(ResolverOptions{
+			Bindings: map[string]string{"B": "s2", "A": "s1", "C": "s1"},
+			Stores: &fakeStores{
+				stores: map[string]contribstate.Store{"s2": daprt.NewFakeStateStore()},
+			},
+		})
+		assert.Equal(t, map[string]string{"A": "s1", "C": "s1"}, r.Unresolved())
+	})
+
+	t.Run("no bindings", func(t *testing.T) {
+		r := NewResolver(ResolverOptions{Stores: &fakeStores{}})
+		assert.Empty(t, r.Unresolved())
+	})
+}
+
 // TestResolver_CompStore verifies stores are resolved from the component
 // store on every call, so hot reloading a store (add, replace, remove) is
 // observed without reconstructing the resolver.
@@ -214,15 +233,18 @@ func TestResolver_CompStore(t *testing.T) {
 
 		_, _, err := r.Resolve("TransactionActor")
 		require.ErrorIs(t, err, messages.ErrActorStateStoreNotFound)
+		assert.Equal(t, map[string]string{"TransactionActor": "wallet-transactions"}, r.Unresolved())
 
 		cs.AddStateStore("wallet-transactions", newStore())
 		name, _, err := r.Resolve("TransactionActor")
 		require.NoError(t, err)
 		assert.Equal(t, "wallet-transactions", name)
+		assert.Empty(t, r.Unresolved())
 
 		cs.DeleteStateStore("wallet-transactions")
 		_, _, err = r.Resolve("TransactionActor")
 		require.ErrorIs(t, err, messages.ErrActorStateStoreNotFound)
+		assert.Equal(t, map[string]string{"TransactionActor": "wallet-transactions"}, r.Unresolved())
 
 		// Unbound types are unaffected throughout.
 		name, _, err = r.Resolve("PlainActor")
