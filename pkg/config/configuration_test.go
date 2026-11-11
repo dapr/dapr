@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -1338,5 +1339,28 @@ func TestLoadKubernetesConfiguration(t *testing.T) {
 		conf, _, err := LoadKubernetesConfiguration("c", "default", client)
 		require.NoError(t, err)
 		assert.Nil(t, conf.Spec.ActorsSpec)
+	})
+
+	t.Run("operator-marshalled CRD carries bindings", func(t *testing.T) {
+		// The operator serves the Configuration CRD marshalled as JSON
+		// (pkg/operator/api/configurations.go), so the CRD type must carry
+		// spec.actors for the bindings to reach daprd in Kubernetes mode.
+		cfg := configapi.Configuration{
+			Spec: configapi.ConfigurationSpec{
+				ActorsSpec: &configapi.ActorsSpec{
+					StateStores: []configapi.ActorStateStoreBinding{
+						{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+					},
+				},
+			},
+		}
+		b, err := json.Marshal(&cfg)
+		require.NoError(t, err)
+
+		conf, res, err := LoadKubernetesConfiguration("c", "default", &fakeOperatorClient{resp: b})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"BalanceActor": "wallet-balance"}, conf.Spec.ActorsSpec.StateStoreByActorType())
+		require.NotNil(t, res.Spec.ActorsSpec)
+		assert.Equal(t, cfg.Spec.ActorsSpec, res.Spec.ActorsSpec)
 	})
 }
