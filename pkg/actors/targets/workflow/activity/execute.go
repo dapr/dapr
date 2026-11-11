@@ -214,10 +214,19 @@ func (a *activity) gate(ctx context.Context, key string, owned *inflight.Call) (
 	return false, err
 }
 
+// purgeConfirmWindow is how long after a task was scheduled a missing
+// workflow metadata row is not yet taken as a purge. The row is written when
+// the workflow is created, before any task is scheduled, so a store whose
+// reads lag its writes can still be missing it for a young task. Dropping the
+// reminder of a live workflow can strand it: its janitor is only asserted by
+// a fast path orchestrator.
+const purgeConfirmWindow = 5 * time.Second
+
 // parentPurged reports whether the activity's workflow has no state left. An
 // empty read is confirmed once, as a store may not yet serve its own write
-// (see the orchestrator's saveInternalState). False for a workflow of another
-// app, whose state this daprd cannot read.
+// (see the orchestrator's saveInternalState), and is an error, for the
+// reminder to retry, while the task is younger than purgeConfirmWindow. False
+// for a workflow of another app, whose state this daprd cannot read.
 func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) (bool, error) {
 	if src := invocation.GetHistoryEvent().GetRouter().GetSourceAppID(); src != "" && src != a.appID {
 		return false, nil
@@ -235,6 +244,9 @@ func (a *activity) parentPurged(ctx context.Context, workflowID string, invocati
 		if res == nil || len(res.Data) > 0 {
 			return false, nil
 		}
+	}
+	if age := time.Since(invocation.GetHistoryEvent().GetTimestamp().AsTime()); age < purgeConfirmWindow {
+		return false, fmt.Errorf("workflow '%s' has no metadata row %s after its task was scheduled; not yet taken as purged", workflowID, age.Truncate(time.Millisecond))
 	}
 	return true, nil
 }

@@ -16,6 +16,8 @@ package fallback
 import (
 	"context"
 	"fmt"
+	goos "os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -45,16 +47,19 @@ func init() {
 // purgecheckfault covers the metadata read a scheduler-fired run-activity
 // reminder makes under WorkflowsFastPath before it runs. The local drives of
 // two activities escalate to the reminder while the daprd is a fallback host,
-// and the escalations are held. One workflow is purged meanwhile, and the
-// store fails its next metadata read: the reminder must retry rather than run
-// the activity. The other stays live, and the store answers its next metadata
-// read empty, as a store that lags its own writes would: the reminder must
-// confirm the read rather than drop a live workflow's activity.
+// and the escalations are held until the test releases them. One workflow is
+// purged meanwhile, and the store fails its next metadata read: the reminder
+// must retry rather than run the activity. The other stays live, and the
+// store answers its next metadata read empty, as a store that lags its own
+// writes would: the reminder must confirm the read rather than drop a live
+// workflow's activity.
 type purgecheckfault struct {
 	workflow *workflow.Workflow
 	ss       *statestore.StateStore
 	store    *fault.Store
 	logline  *logline.LogLine
+	// release is the file the held escalations wait for.
+	release string
 }
 
 func (p *purgecheckfault) Setup(t *testing.T) []framework.Option {
@@ -67,6 +72,7 @@ func (p *purgecheckfault) Setup(t *testing.T) []framework.Option {
 		statestore.WithStateStore(p.store),
 	)
 	p.logline = logline.New(t, logline.WithCaptureAll())
+	p.release = filepath.Join(t.TempDir(), "release")
 
 	p.workflow = workflow.New(t,
 		workflow.WithFastPath(true),
@@ -88,7 +94,7 @@ spec:
     value: "true"
 `, p.ss.SocketName())),
 			daprd.WithExecOptions(
-				exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_ESCALATION_HOLD", "8s"),
+				exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_ESCALATION_HOLD", p.release),
 				exec.WithStdout(p.logline.Stdout()),
 				exec.WithStderr(p.logline.Stderr()),
 			),
@@ -165,6 +171,7 @@ func (p *purgecheckfault) Run(t *testing.T, ctx context.Context) {
 	lagged := make(chan struct{})
 	p.store.ArmGetFailures(purgedID+"||metadata", 1, failed)
 	p.store.ArmGetEmpty(liveID+"||metadata", 1, lagged)
+	require.NoError(t, goos.WriteFile(p.release, nil, 0o600))
 	for _, ch := range []chan struct{}{failed, lagged} {
 		select {
 		case <-ch:
@@ -183,6 +190,6 @@ func (p *purgecheckfault) Run(t *testing.T, ctx context.Context) {
 	}
 	assert.Zero(t, dropped(liveID), "the live workflow's reminder was dropped")
 	require.Eventually(t, func() bool { return dropped(purgedID) > 0 },
-		time.Second*10, time.Millisecond*10, "the purged workflow's reminder was not dropped")
+		time.Second*20, time.Millisecond*10, "the purged workflow's reminder was not dropped")
 	assert.Equal(t, 1, ranRuns(purgedID), "the purged workflow's activity ran again")
 }

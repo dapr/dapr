@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
@@ -642,14 +643,18 @@ func Test_executeActivity_purgedWorkflow(t *testing.T) {
 		reads       []*actorsapi.StateResponse
 		sourceApp   string
 		skipRetries bool
-		runs        bool
-		retried     bool
+		// young: the task was scheduled within purgeConfirmWindow.
+		young   bool
+		runs    bool
+		retried bool
 	}{
 		"live workflow runs":                     {reads: []*actorsapi.StateResponse{row}, runs: true},
 		"purged workflow is dropped":             {reads: []*actorsapi.StateResponse{empty}},
 		"purged workflow of this app is dropped": {reads: []*actorsapi.StateResponse{empty}, sourceApp: "testapp"},
 		"lagging read of a live workflow runs":   {reads: []*actorsapi.StateResponse{empty, row}, runs: true},
 		"failed read is retried":                 {reads: []*actorsapi.StateResponse{nil}, retried: true},
+		"missing row of a young task is retried": {reads: []*actorsapi.StateResponse{empty}, young: true, retried: true},
+		"lagging reads of a young task then run": {reads: []*actorsapi.StateResponse{empty, empty, row}, young: true, runs: true},
 		"workflow of another app runs":           {reads: []*actorsapi.StateResponse{empty}, sourceApp: "otherapp", runs: true},
 		"local drive of a purged workflow runs":  {reads: []*actorsapi.StateResponse{empty}, skipRetries: true, runs: true},
 	} {
@@ -671,9 +676,20 @@ func Test_executeActivity_purgedWorkflow(t *testing.T) {
 			reminder := testReminder()
 			reminder.SkipRetries = tc.skipRetries
 
+			if tc.young {
+				invocation.HistoryEvent.Timestamp = timestamppb.Now()
+			}
+
 			a := f.GetOrCreate("wf::3::0").(*activity)
 			errCh := make(chan error, 1)
-			go func() { errCh <- a.executeActivity(t.Context(), reminder, invocation) }()
+			// Retried as the scheduler retries a recoverable failure.
+			go func() {
+				err := a.executeActivity(t.Context(), reminder, invocation)
+				for tc.runs && wferrors.IsRecoverable(err) {
+					err = a.executeActivity(t.Context(), reminder, invocation)
+				}
+				errCh <- err
+			}()
 			if tc.runs {
 				completeWorkItem(t, recvWorkItem(t, scheduled))
 				return

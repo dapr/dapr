@@ -15,6 +15,8 @@ package fallback
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -41,26 +43,29 @@ func init() {
 // purgeescalation purges two workflows while the local drives of their
 // activities are escalating to the run-activity reminder: one by force while
 // the daprd is a fallback host, one terminated and then purged normally once
-// a worker is back. Each escalation is held until its workflow is purged, so
-// it creates its reminder after the purge deleted the reminders. When that
-// reminder fires it must be dropped, not run the activity once more for a
-// workflow that no longer exists.
+// a worker is back. The escalations are held until the test releases them,
+// after both purges, so each creates its reminder after the purge deleted the
+// reminders. When that reminder fires it must be dropped, not run the
+// activity once more for a workflow that no longer exists.
 type purgeescalation struct {
 	workflow *workflow.Workflow
 	logline  *logline.LogLine
+	// release is the file the held escalations wait for.
+	release string
 }
 
 const purgeescalationHold = "TEST INJECTION: holding the run-activity escalation"
 
 func (p *purgeescalation) Setup(t *testing.T) []framework.Option {
 	p.logline = logline.New(t, logline.WithCaptureAll())
+	p.release = filepath.Join(t.TempDir(), "release")
 	p.workflow = workflow.New(t,
 		workflow.WithFastPath(true),
 		workflow.WithStagedOperations(true),
 		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithDaprdOptions(0,
 			daprd.WithExecOptions(
-				exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_ESCALATION_HOLD", "8s"),
+				exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_ESCALATION_HOLD", p.release),
 				exec.WithStdout(p.logline.Stdout()),
 				exec.WithStderr(p.logline.Stderr()),
 			),
@@ -130,6 +135,7 @@ func (p *purgeescalation) Run(t *testing.T, ctx context.Context) {
 	p.workflow.ConnectWorker(t, ctx, p.workflow.Registry())
 	fworkflow.WaitForRuntimeStatus(t, ctx, mgmt, terminated, protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED)
 	require.NoError(t, mgmt.PurgeWorkflowState(ctx, terminated))
+	require.NoError(t, os.WriteFile(p.release, nil, 0o600))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, p.workflow.Dapr().Metrics(c, ctx).SumWithLabels(
