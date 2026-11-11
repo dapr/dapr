@@ -16,11 +16,13 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"k8s.io/utils/clock"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -28,7 +30,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
-	kitstrings "github.com/dapr/kit/strings"
 )
 
 type components struct {
@@ -63,12 +64,31 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 }
 
 func (c *components) update(ctx context.Context, comp compapi.Component) error {
+	// Resolve a copy of comp's secret and environment variable references at
+	// most once per event: the actor state store guard and the comparison
+	// against the installed copy both need it, and each resolution reads from
+	// the secret store. It must be a copy - Spec.Metadata is a slice, so
+	// resolving in place would write through to the caller's comp, and the
+	// processor's own pass on reload would then decode already-decoded values
+	// (on Kubernetes, failing per value and logging the secret's first byte).
+	var (
+		resolved *compapi.Component
+		unready  string
+	)
+	resolve := func() (*compapi.Component, string) {
+		if resolved == nil {
+			resolved = comp.DeepCopy()
+			_, unready = c.proc.Secret().ProcessResource(ctx, resolved)
+		}
+		return resolved, unready
+	}
+
 	// Only a single actor state store may be configured. Skip a component
 	// which would become a second actor state store, rather than failing its
 	// init and exiting daprd. The skipped component is stashed and replayed
 	// if the current actor state store is removed, so a rename delivered as
 	// create-before-delete converges without waiting for the next reconcile.
-	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && isMarkedActorStateStore(comp) {
+	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && isMarkedActorStateStore(comp, resolve) {
 		log.Errorf("Skipping hot reload of %s: %s is already the actor state store, only one actor state store is allowed. The component will be applied if %s is removed", comp.LogName(), name, name)
 		c.skippedActorStoreLock.Lock()
 		c.skippedActorStore = &comp
@@ -88,17 +108,10 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	oldComp, exists := c.store.GetComponent(comp.Name)
 
 	if exists {
-		// Resolve a copy before comparing: the stored copy was resolved on
-		// load, so comparing it against the raw incoming spec would differ
-		// every tick for a secret-ref metadata item. It must be a copy -
-		// Spec.Metadata is a slice, so resolving in place would write through
-		// to the caller's comp, and the processor's own pass on reload would
-		// then decode already-decoded values (on Kubernetes, failing per value
-		// and logging the secret's first byte).
-		resolved := comp.DeepCopy()
-		_, _ = c.proc.Secret().ProcessResource(ctx, resolved)
-
-		if differ.AreSame(oldComp, *resolved) {
+		// Compare the resolved copy: the stored copy was resolved on load, so
+		// comparing it against the raw incoming spec would differ every tick
+		// for a secret-ref metadata item.
+		if resolved, _ := resolve(); differ.AreSame(oldComp, *resolved) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
 			return nil
 		}
@@ -209,23 +222,46 @@ func (c *components) notifyActorStateStoreChanged() func() {
 	}
 }
 
-// isMarkedActorStateStore returns whether the component is a state store
-// marked as the actor state store. A literal value is marked only when it is
-// truthy, matching the state processor. A value read from a secret or an
-// environment variable is not known yet, so its presence alone marks the
-// store.
-func isMarkedActorStateStore(comp compapi.Component) bool {
+// isMarkedActorStateStore returns whether the state processor will mark comp
+// as the actor state store. It takes comp with its secret and environment
+// variable references resolved, as the processor resolves them before init,
+// and applies the processor's own check, so that duplicate entries and
+// resolved values are decided the same way. A reference that cannot be
+// resolved yet, for example because its secret store is not loaded, counts as
+// marked: skipping the component is recoverable, while a second actor state
+// store fails its init and exits daprd.
+func isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string)) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
 	}
-	for _, meta := range comp.Spec.Metadata {
-		if !strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
+	if !slices.ContainsFunc(comp.Spec.Metadata, isActorStateStoreItem) {
+		return false
+	}
+
+	resolved, unready := resolve()
+
+	// Build the properties as the processor does: the last entry of a name wins.
+	props := make(map[string]string, len(resolved.Spec.Metadata))
+	for i, item := range resolved.Spec.Metadata {
+		props[item.Name] = item.Value.String()
+
+		if !isActorStateStoreItem(item) {
 			continue
 		}
-		if meta.SecretKeyRef.Name != "" || meta.EnvRef != "" {
+		// Resolution stops at the first secret whose store is not loaded, so
+		// every reference may still be unresolved, even one that has a value.
+		ref := comp.Spec.Metadata[i]
+		if unready != "" && (ref.SecretKeyRef.Name != "" || ref.EnvRef != "") {
 			return true
 		}
-		return kitstrings.IsTruthy(meta.Value.String())
+		if item.SecretKeyRef.Name != "" && !item.HasValue() {
+			return true
+		}
 	}
-	return false
+
+	return state.IsActorStateStore(props)
+}
+
+func isActorStateStoreItem(item commonapi.NameValuePair) bool {
+	return strings.EqualFold(item.Name, state.PropertyKeyActorStateStore)
 }

@@ -38,6 +38,20 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
+// IsActorStateStore reports whether the metadata properties of a state store
+// mark it as the actor state store: its "actorStateStore" property, matched
+// case-insensitively, is truthy. The hot reload reconciler applies the same
+// check before processing a component, so both must agree.
+func IsActorStateStore(props map[string]string) bool {
+	for k, v := range props {
+		//nolint:gocritic
+		if strings.ToLower(k) == PropertyKeyActorStateStore {
+			return kitstrings.IsTruthy(v)
+		}
+	}
+	return false
+}
+
 // Actors is the subset of the actor runtime which is notified when a
 // component becomes the actor state store.
 type Actors interface {
@@ -125,18 +139,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 
 	// when placement address list is not empty, set specified actor store.
 	if s.actorsEnabled {
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := false
-
-		for k, v := range props {
-			//nolint:gocritic
-			if strings.ToLower(k) == PropertyKeyActorStateStore {
-				actorStoreSpecified = kitstrings.IsTruthy(v)
-				break
-			}
-		}
-
-		if actorStoreSpecified {
+		if IsActorStateStore(props) {
 			if err = s.compStore.AddStateStoreActor(comp.Name, store); err != nil {
 				diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

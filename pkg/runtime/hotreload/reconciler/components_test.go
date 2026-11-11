@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -144,6 +146,18 @@ func actorStoreComp(name string, marked bool, gen int64) compapi.Component {
 		}}
 	}
 	return comp
+}
+
+// boolSecretStore serves every secret with the keys "true" and "false", each
+// holding its own name, so a secretKeyRef picks the resolved value by key.
+type boolSecretStore struct {
+	daprt.FakeSecretStore
+}
+
+func (boolSecretStore) GetSecret(context.Context, secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{"true": "true", "false": "false"},
+	}, nil
 }
 
 func newComponentsActorStoreManager(t *testing.T, kicks *atomic.Int64) (*components, *processor.Processor, *compstore.ComponentStore) {
@@ -277,24 +291,118 @@ func Test_components_actorStateStore(t *testing.T) {
 		assert.Equal(t, "mystore", name)
 	})
 
-	t.Run("a second store with an unresolved actorStateStore value is skipped", func(t *testing.T) {
-		var kicks atomic.Int64
-		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
-		ctx := runProc(t, proc)
+	// The guard must agree with the state processor on whether a second store
+	// is marked: skipping an unmarked store loses it, and installing a marked
+	// one fails its init with a duplicate actor state store and exits daprd.
+	t.Run("a second store is skipped only when the processor would mark it", func(t *testing.T) {
+		literal := func(v string) commonapi.NameValuePair {
+			return commonapi.NameValuePair{
+				Name:  "actorStateStore",
+				Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(strconv.Quote(v))}},
+			}
+		}
+		envRef := func(env string) commonapi.NameValuePair {
+			return commonapi.NameValuePair{Name: "actorStateStore", EnvRef: env}
+		}
+		secretRef := func(key string) commonapi.NameValuePair {
+			return commonapi.NameValuePair{
+				Name:         "actorStateStore",
+				SecretKeyRef: commonapi.SecretKeyRef{Name: "actorstore-secret", Key: key},
+			}
+		}
+		withValue := func(nv commonapi.NameValuePair, v string) commonapi.NameValuePair {
+			nv.Value = literal(v).Value
+			return nv
+		}
 
-		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+		t.Setenv("RECONCILER_TEST_ACTOR_STORE_FALSE", "false")
+		t.Setenv("RECONCILER_TEST_ACTOR_STORE_TRUE", "true")
 
-		// A value read from a secret or an environment variable is not known
-		// before processing, so the store is conservatively treated as marked.
-		for _, nv := range []commonapi.NameValuePair{
-			{Name: "actorStateStore", SecretKeyRef: commonapi.SecretKeyRef{Name: "secret", Key: "key"}},
-			{Name: "actorStateStore", EnvRef: "ACTOR_STATE_STORE"},
-		} {
-			comp := actorStoreComp("otherstore", false, 1)
-			comp.Spec.Metadata = []commonapi.NameValuePair{nv}
-			require.NoError(t, m.update(ctx, comp))
-			_, exists := cs.GetComponent("otherstore")
-			assert.False(t, exists)
+		tests := map[string]struct {
+			metadata []commonapi.NameValuePair
+			// secretStore loads the secret store the secretRef entries read.
+			secretStore bool
+			skipped     bool
+		}{
+			"duplicate entries, the last one is truthy": {
+				metadata: []commonapi.NameValuePair{literal("false"), literal("true")},
+				skipped:  true,
+			},
+			"duplicate entries, the last one is falsy": {
+				metadata: []commonapi.NameValuePair{literal("true"), literal("false")},
+			},
+			"envRef resolving to false": {
+				metadata: []commonapi.NameValuePair{envRef("RECONCILER_TEST_ACTOR_STORE_FALSE")},
+			},
+			"envRef resolving to true": {
+				metadata: []commonapi.NameValuePair{envRef("RECONCILER_TEST_ACTOR_STORE_TRUE")},
+				skipped:  true,
+			},
+			"envRef to an unset variable": {
+				metadata: []commonapi.NameValuePair{envRef("RECONCILER_TEST_ACTOR_STORE_UNSET")},
+			},
+			"literal false next to an envRef resolving to true": {
+				metadata: []commonapi.NameValuePair{withValue(envRef("RECONCILER_TEST_ACTOR_STORE_TRUE"), "false")},
+			},
+			"secretKeyRef resolving to false": {
+				metadata:    []commonapi.NameValuePair{secretRef("false")},
+				secretStore: true,
+			},
+			"secretKeyRef resolving to true": {
+				metadata:    []commonapi.NameValuePair{secretRef("true")},
+				secretStore: true,
+				skipped:     true,
+			},
+			// The value cannot be known yet, so the store is treated as
+			// marked rather than risking a second actor state store.
+			"secretKeyRef to a secret store that is not loaded": {
+				metadata: []commonapi.NameValuePair{secretRef("false")},
+				skipped:  true,
+			},
+			// Resolution stops at the first secret whose store is not loaded,
+			// so a later envRef is not resolved either.
+			"envRef after a secret whose store is not loaded": {
+				metadata: []commonapi.NameValuePair{
+					{Name: "password", SecretKeyRef: commonapi.SecretKeyRef{Name: "actorstore-secret", Key: "false"}},
+					envRef("RECONCILER_TEST_ACTOR_STORE_TRUE"),
+				},
+				skipped: true,
+			},
+			// The secret replaces the literal value once its store is loaded.
+			"literal false with a secretKeyRef whose store is not loaded": {
+				metadata: []commonapi.NameValuePair{withValue(secretRef("true"), "false")},
+				skipped:  true,
+			},
+		}
+
+		for name, test := range tests {
+			t.Run(name, func(t *testing.T) {
+				var kicks atomic.Int64
+				m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+				ctx := runProc(t, proc)
+
+				if test.secretStore {
+					cs.AddSecretStore("actorstore-secrets", boolSecretStore{})
+				}
+
+				require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+
+				comp := actorStoreComp("otherstore", false, 1)
+				comp.SecretStore = "actorstore-secrets"
+				comp.Spec.Metadata = test.metadata
+				require.NoError(t, m.update(ctx, comp))
+
+				_, exists := cs.GetComponent("otherstore")
+				assert.Equal(t, !test.skipped, exists)
+				// A component parked behind a secret store that is not loaded
+				// is not installed either, so check it was skipped by the guard.
+				m.skippedActorStoreLock.Lock()
+				assert.Equal(t, test.skipped, m.skippedActorStore != nil)
+				m.skippedActorStoreLock.Unlock()
+				_, name, ok := cs.GetStateStoreActor()
+				require.True(t, ok)
+				assert.Equal(t, "mystore", name)
+			})
 		}
 	})
 
