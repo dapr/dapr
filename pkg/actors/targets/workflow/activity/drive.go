@@ -99,6 +99,12 @@ func testBudget(env string) func() bool {
 // and the janitor's elided re-dispatch arm through here.
 var dropActivityDriveForTest = testBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES")
 
+// testEscalationHold delays each escalation's reminder create, so a test can
+// purge the workflow first. Test-only fault injection, not a supported knob.
+var testEscalationHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ESCALATION_HOLD", 0)
+})
+
 // driveActivity runs one activity execution locally, retrying transient
 // failures at the same cadence as the elided reminder's failure policy, and
 // escalates to the durable run-activity reminder when the drive cannot
@@ -191,6 +197,11 @@ func (f *factory) driveActivity(driveCtx context.Context, actorID string, invoca
 // a drive is only ever armed for an invocation whose dueTime has passed.
 func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityInvocation, activityName *string) {
 	started := f.detached.Go(func(rootCtx context.Context) {
+		if hold := testEscalationHold(); hold > 0 {
+			log.Warnf("TEST INJECTION: holding the run-activity escalation of activity actor '%s' for %s", actorID, hold)
+			time.Sleep(hold)
+		}
+
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 

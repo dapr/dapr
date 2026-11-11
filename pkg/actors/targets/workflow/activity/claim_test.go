@@ -152,12 +152,15 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 		workflowActorType: "dapr.internal.default.testapp.workflow",
 		router:            routerfake.New(),
 		reminders:         &stubScheduler{},
-		signing:           &signing.Signing{Namespace: "default"},
-		fastPath:          true,
-		rootCtx:           t.Context(),
-		detached:          det,
-		publishGrace:      newPublishGrace(det.Context(), time.Minute),
-		staleClaimAfter:   time.Hour,
+		state: statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+			return &actorsapi.StateResponse{Data: []byte("metadata")}, nil
+		}),
+		signing:         &signing.Signing{Namespace: "default"},
+		fastPath:        true,
+		rootCtx:         t.Context(),
+		detached:        det,
+		publishGrace:    newPublishGrace(det.Context(), time.Minute),
+		staleClaimAfter: time.Hour,
 		claims: claim.New(claim.Options{
 			ActorType:      "dapr.internal.default.testapp.activity",
 			State:          store.fake(),
@@ -622,6 +625,55 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, claim.Defer, outcome)
 	})
+}
+
+// Test_executeActivity_purgedWorkflow: a scheduler-fired arrival for a
+// purged workflow of this app acks without running the activity.
+func Test_executeActivity_purgedWorkflow(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		purged      bool
+		sourceApp   string
+		skipRetries bool
+		runs        bool
+	}{
+		"live workflow runs":                     {runs: true},
+		"purged workflow is dropped":             {purged: true},
+		"purged workflow of this app is dropped": {purged: true, sourceApp: "testapp"},
+		"workflow of another app runs":           {purged: true, sourceApp: "otherapp", runs: true},
+		"local drive of a purged workflow runs":  {purged: true, skipRetries: true, runs: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f, _, scheduled := newClaimHarness(t)
+			if tc.purged {
+				f.state = statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+					return &actorsapi.StateResponse{}, nil
+				})
+			}
+			invocation := testInvocation()
+			invocation.HistoryEvent.Router = &protos.TaskRouter{SourceAppID: tc.sourceApp}
+			reminder := testReminder()
+			reminder.SkipRetries = tc.skipRetries
+
+			a := f.GetOrCreate("wf::3::0").(*activity)
+			errCh := make(chan error, 1)
+			go func() { errCh <- a.executeActivity(t.Context(), reminder, invocation) }()
+			if tc.runs {
+				completeWorkItem(t, recvWorkItem(t, scheduled))
+				return
+			}
+			select {
+			case err := <-errCh:
+				require.NoError(t, err)
+			case <-scheduled:
+				t.Fatal("the activity of a purged workflow must not run")
+			case <-time.After(time.Second * 5):
+				t.Fatal("timed out waiting for the arrival to return")
+			}
+		})
+	}
 }
 
 // Test_executeActivity_recoveryGate: live defers, completed acks, stale

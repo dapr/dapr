@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -61,6 +62,15 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 	key := inflight.Key(a.actorID, taskEvent)
 	taskID := taskEvent.GetEventId()
 	gated := a.fastPath && !reminder.SkipRetries
+
+	// Under the fast path a local drive that runs out of retries creates
+	// the run-activity reminder, unordered with a purge of its workflow.
+	// Ack such a reminder rather than run the activity of a purged workflow.
+	if gated && a.parentPurged(ctx, workflowID, invocation) {
+		log.Infof("Activity actor '%s': workflow '%s' was purged; dropping its run-activity reminder", a.actorID, workflowID)
+		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusPurgedDropped)
+		return nil
+	}
 	for {
 		call, owner, err := a.claim(ctx, key, workflowID, taskID, reminder.SkipLock)
 		if err != nil {
@@ -196,4 +206,19 @@ func (a *activity) gate(ctx context.Context, key string, owned *inflight.Call) (
 		a.settle(key, owned, err)
 	}
 	return false, err
+}
+
+// parentPurged reports whether the activity's workflow has no state left.
+// False when the read fails, and for a workflow of another app, whose state
+// this daprd cannot read.
+func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) bool {
+	if src := invocation.GetHistoryEvent().GetRouter().GetSourceAppID(); src != "" && src != a.appID {
+		return false
+	}
+	res, err := a.state.Get(ctx, &actorapi.GetStateRequest{
+		ActorType: a.workflowActorType,
+		ActorID:   workflowID,
+		Key:       wfenginestate.MetadataKey,
+	}, false)
+	return err == nil && res != nil && len(res.Data) == 0
 }
