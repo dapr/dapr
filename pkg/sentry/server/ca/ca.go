@@ -65,9 +65,9 @@ type SignRequest struct {
 	// containers, embedded as a certificate extension when non-empty.
 	ContainerImages []images.ContainerImage
 
-	// TTL, when greater than 0, is the lifetime of the certificate instead of
-	// the configured workload certificate TTL.
-	TTL time.Duration
+	// TTLOverride, when set, is the lifetime of the certificate instead of the
+	// configured workload certificate TTL.
+	TTLOverride *time.Duration
 }
 
 // Signer is the interface for the CA.
@@ -276,8 +276,8 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 	}
 
 	ttl := c.config.WorkloadCertTTL
-	if req.TTL > 0 {
-		ttl = req.TTL
+	if req.TTLOverride != nil {
+		ttl = *req.TTLOverride
 	}
 
 	tmpl, err := bundle.GenerateWorkloadCert(ttl, c.config.AllowedClockSkew, spiffeID)

@@ -228,7 +228,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		AppID:           req.GetId(),
 		DNS:             dns,
 		ContainerImages: res.ContainerImages,
-		TTL:             res.CertTTL,
+		TTLOverride:     res.CertTTL,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)
@@ -245,12 +245,8 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
 
-	// A JWT issued with the certificate must not outlive it. The remaining
-	// lifetime is read again for each JWT, since signing takes time.
 	notAfter := chain[0].NotAfter
-	jwtTTL := func() time.Duration {
-		return min(s.jwtTTL, time.Until(notAfter))
-	}
+	jwtTTL := min(s.jwtTTL, time.Until(notAfter))
 
 	var jwtToken *wrapperspb.StringValue
 	var perJWTToken map[string]*wrapperspb.StringValue
@@ -261,7 +257,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 			Audiences:   audiences,
 			Namespace:   req.GetNamespace(),
 			AppID:       req.GetId(),
-			TTL:         jwtTTL(),
+			TTL:         jwtTTL,
 		})
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to generate JWT: %v", err)
@@ -277,7 +273,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 				Audiences:   []string{audience},
 				Namespace:   req.GetNamespace(),
 				AppID:       req.GetId(),
-				TTL:         jwtTTL(),
+				TTL:         jwtTTL,
 			})
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to generate JWT for audience %s: %v", audience, err)

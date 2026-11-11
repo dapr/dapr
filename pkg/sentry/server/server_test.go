@@ -52,6 +52,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorfake "github.com/dapr/dapr/pkg/sentry/server/validator/fake"
 	cryptotest "github.com/dapr/kit/crypto/test"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestRun(t *testing.T) {
@@ -390,7 +391,7 @@ func TestSignCertificateCertTTL(t *testing.T) {
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})
 
 	tests := map[string]struct {
-		certTTL    time.Duration
+		certTTL    *time.Duration
 		expCertTTL time.Duration
 		expJWTTTL  time.Duration
 	}{
@@ -399,12 +400,12 @@ func TestSignCertificateCertTTL(t *testing.T) {
 			expJWTTTL:  24 * time.Hour,
 		},
 		"a shorter CertTTL caps the JWT": {
-			certTTL:    time.Hour,
+			certTTL:    ptr.Of(time.Hour),
 			expCertTTL: time.Hour,
 			expJWTTTL:  time.Hour,
 		},
 		"a longer CertTTL keeps the JWT TTL": {
-			certTTL:    48 * time.Hour,
+			certTTL:    ptr.Of(48 * time.Hour),
 			expCertTTL: 48 * time.Hour,
 			expJWTTTL:  24 * time.Hour,
 		},
@@ -412,7 +413,7 @@ func TestSignCertificateCertTTL(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			var gotSignTTL time.Duration
+			var gotSignTTL *time.Duration
 			var gotJWTTTLs []time.Duration
 			s := &Server{
 				vals: map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator{
@@ -426,10 +427,10 @@ func TestSignCertificateCertTTL(t *testing.T) {
 				jwtEnabled: true,
 				jwtTTL:     24 * time.Hour,
 				ca: cafake.New().WithSignIdentity(func(_ context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
-					gotSignTTL = req.TTL
+					gotSignTTL = req.TTLOverride
 					ttl := 24 * time.Hour
-					if req.TTL > 0 {
-						ttl = req.TTL
+					if req.TTLOverride != nil {
+						ttl = *req.TTLOverride
 					}
 					tmpl := &x509.Certificate{
 						SerialNumber: big.NewInt(1),

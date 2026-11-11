@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/kit/crypto/pem"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestNew(t *testing.T) {
@@ -453,12 +454,12 @@ func TestSignIdentity(t *testing.T) {
 		require.NoError(t, err)
 
 		for name, tc := range map[string]struct {
-			ttl  time.Duration
+			ttl  *time.Duration
 			want time.Duration
 		}{
-			"no TTL":   {0, 24 * time.Hour},
-			"one hour": {time.Hour, time.Hour},
-			"two days": {48 * time.Hour, 48 * time.Hour},
+			"no TTL":   {nil, 24 * time.Hour},
+			"one hour": {ptr.Of(time.Hour), time.Hour},
+			"two days": {ptr.Of(48 * time.Hour), 48 * time.Hour},
 		} {
 			t.Run(name, func(t *testing.T) {
 				clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
@@ -466,7 +467,7 @@ func TestSignIdentity(t *testing.T) {
 					TrustDomain: "example.test.dapr.io",
 					Namespace:   "my-test-namespace",
 					AppID:       "my-app-id",
-					TTL:         tc.ttl,
+					TTLOverride: tc.ttl,
 				})
 				require.NoError(t, err)
 				assert.WithinDuration(t, time.Now().Add(tc.want), clientCert[0].NotAfter, time.Minute)
