@@ -426,4 +426,51 @@ func TestSignIdentity(t *testing.T) {
 		}
 		assert.Empty(t, clientCert[0].UnhandledCriticalExtensions)
 	})
+
+	t.Run("signing identity with a TTL should replace the workload certificate TTL", func(t *testing.T) {
+		dir := t.TempDir()
+		rootCertPath := filepath.Join(dir, "root.cert")
+		issuerCertPath := filepath.Join(dir, "issuer.cert")
+		issuerKeyPath := filepath.Join(dir, "issuer.key")
+		config := config.Config{
+			RootCertPath:    rootCertPath,
+			IssuerCertPath:  issuerCertPath,
+			IssuerKeyPath:   issuerKeyPath,
+			WorkloadCertTTL: 24 * time.Hour,
+		}
+
+		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
+		int1PEM, _, int1PKPEM, _ := genCrt(t, "int1", rootCrt, rootPK)
+
+		require.NoError(t, os.WriteFile(rootCertPath, rootPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, int1PEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, int1PKPEM, 0o600))
+
+		ca, err := New(t.Context(), config)
+		require.NoError(t, err)
+
+		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		for name, tc := range map[string]struct {
+			ttl  time.Duration
+			want time.Duration
+		}{
+			"no TTL":   {0, 24 * time.Hour},
+			"one hour": {time.Hour, time.Hour},
+			"two days": {48 * time.Hour, 48 * time.Hour},
+		} {
+			t.Run(name, func(t *testing.T) {
+				clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
+					PublicKey:   clientPK.Public(),
+					TrustDomain: "example.test.dapr.io",
+					Namespace:   "my-test-namespace",
+					AppID:       "my-app-id",
+					TTL:         tc.ttl,
+				})
+				require.NoError(t, err)
+				assert.WithinDuration(t, time.Now().Add(tc.want), clientCert[0].NotAfter, time.Minute)
+			})
+		}
+	})
 }

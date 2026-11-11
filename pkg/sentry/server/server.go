@@ -228,6 +228,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		AppID:           req.GetId(),
 		DNS:             dns,
 		ContainerImages: res.ContainerImages,
+		TTL:             res.CertTTL,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)
@@ -244,6 +245,9 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
 
+	// A JWT issued with the certificate must not outlive it.
+	jwtTTL := min(s.jwtTTL, time.Until(chain[0].NotAfter))
+
 	var jwtToken *wrapperspb.StringValue
 	var perJWTToken map[string]*wrapperspb.StringValue
 	if s.jwtEnabled {
@@ -253,7 +257,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 			Audiences:   audiences,
 			Namespace:   req.GetNamespace(),
 			AppID:       req.GetId(),
-			TTL:         s.jwtTTL,
+			TTL:         jwtTTL,
 		})
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to generate JWT: %v", err)
@@ -269,7 +273,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 				Audiences:   []string{audience},
 				Namespace:   req.GetNamespace(),
 				AppID:       req.GetId(),
-				TTL:         s.jwtTTL,
+				TTL:         jwtTTL,
 			})
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to generate JWT for audience %s: %v", audience, err)
@@ -296,49 +300,51 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 // FetchJWTSVID implements the FetchJWTSVID gRPC method.
 func (s *Server) FetchJWTSVID(ctx context.Context, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
-	id, err := s.peerID(ctx)
+	id, leaf, err := s.peerID(ctx)
 	if err != nil {
 		log.Debugf("Rejected FetchJWTSVID request: %s", err)
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 
-	return s.fetchJWTSVID(ctx, id, req)
+	return s.fetchJWTSVID(ctx, id, time.Until(leaf.NotAfter), req)
 }
 
-// peerID returns the SPIFFE ID of the X.509 SVID the client presented, after
-// verifying it against the CA trust anchors.
-func (s *Server) peerID(ctx context.Context) (spiffeid.ID, error) {
+// peerID returns the SPIFFE ID and the leaf certificate of the X.509 SVID the
+// client presented, after verifying it against the CA trust anchors.
+func (s *Server) peerID(ctx context.Context) (spiffeid.ID, *x509.Certificate, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return spiffeid.ID{}, errors.New("client certificate required")
+		return spiffeid.ID{}, nil, errors.New("client certificate required")
 	}
 	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
 	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
-		return spiffeid.ID{}, errors.New("client certificate required")
+		return spiffeid.ID{}, nil, errors.New("client certificate required")
 	}
 
 	certs := tlsInfo.State.PeerCertificates
 	leafID, err := x509svid.IDFromCert(certs[0])
 	if err != nil {
-		return spiffeid.ID{}, fmt.Errorf("invalid client certificate: %w", err)
+		return spiffeid.ID{}, nil, fmt.Errorf("invalid client certificate: %w", err)
 	}
 
 	// Apps may be issued identities in different trust domains, all signed by
 	// the same CA.
 	bundle, err := x509bundle.Parse(leafID.TrustDomain(), s.ca.TrustAnchors())
 	if err != nil {
-		return spiffeid.ID{}, fmt.Errorf("failed to parse trust anchors: %w", err)
+		return spiffeid.ID{}, nil, fmt.Errorf("failed to parse trust anchors: %w", err)
 	}
 
 	id, _, err := x509svid.Verify(certs, bundle)
 	if err != nil {
-		return spiffeid.ID{}, fmt.Errorf("failed to verify client certificate: %w", err)
+		return spiffeid.ID{}, nil, fmt.Errorf("failed to verify client certificate: %w", err)
 	}
 
-	return id, nil
+	return id, certs[0], nil
 }
 
-func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
+// fetchJWTSVID issues a JWT SVID for id. certRemaining is the remaining
+// lifetime of the client certificate, which the JWT must not outlive.
+func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, certRemaining time.Duration, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
 	if !s.jwtEnabled {
 		return nil, status.Error(codes.FailedPrecondition, "JWT issuing is not enabled")
 	}
@@ -357,7 +363,11 @@ func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, req *sentryv1
 			return nil, status.Error(codes.InvalidArgument, "ttl must be positive")
 		}
 	}
-	ttl = min(ttl, s.jwtTTL)
+	// The JWT must not outlive the certificate the client authenticated with.
+	ttl = min(ttl, s.jwtTTL, certRemaining)
+	if ttl <= 0 {
+		return nil, status.Error(codes.Unauthenticated, "client certificate has expired")
+	}
 
 	parsed, err := spiffe.FromID(id)
 	if err != nil {

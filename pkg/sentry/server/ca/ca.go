@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -63,6 +64,10 @@ type SignRequest struct {
 	// ContainerImages are optional image references of the workload's
 	// containers, embedded as a certificate extension when non-empty.
 	ContainerImages []images.ContainerImage
+
+	// TTL, when set, is the lifetime of the certificate instead of the
+	// configured workload certificate TTL.
+	TTL time.Duration
 }
 
 // Signer is the interface for the CA.
@@ -270,7 +275,12 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := bundle.GenerateWorkloadCert(c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	ttl := c.config.WorkloadCertTTL
+	if req.TTL > 0 {
+		ttl = req.TTL
+	}
+
+	tmpl, err := bundle.GenerateWorkloadCert(ttl, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}

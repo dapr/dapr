@@ -382,6 +382,95 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestSignCertificateCertTTL(t *testing.T) {
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, pk)
+	require.NoError(t, err)
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})
+
+	tests := map[string]struct {
+		certTTL    time.Duration
+		expCertTTL time.Duration
+		expJWTTTL  time.Duration
+	}{
+		"no CertTTL uses the workload certificate TTL": {
+			expCertTTL: 24 * time.Hour,
+			expJWTTTL:  24 * time.Hour,
+		},
+		"a shorter CertTTL caps the JWT": {
+			certTTL:    time.Hour,
+			expCertTTL: time.Hour,
+			expJWTTTL:  time.Hour,
+		},
+		"a longer CertTTL keeps the JWT TTL": {
+			certTTL:    48 * time.Hour,
+			expCertTTL: 48 * time.Hour,
+			expJWTTTL:  24 * time.Hour,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var gotSignTTL time.Duration
+			var gotJWTTTLs []time.Duration
+			s := &Server{
+				vals: map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator{
+					sentryv1pb.SignCertificateRequest_INSECURE: validatorfake.New().WithValidateFn(func(context.Context, *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+						return validator.ValidateResult{
+							TrustDomain: spiffeid.RequireTrustDomainFromString("example.org"),
+							CertTTL:     test.certTTL,
+						}, nil
+					}),
+				},
+				jwtEnabled: true,
+				jwtTTL:     24 * time.Hour,
+				ca: cafake.New().WithSignIdentity(func(_ context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
+					gotSignTTL = req.TTL
+					ttl := 24 * time.Hour
+					if req.TTL > 0 {
+						ttl = req.TTL
+					}
+					tmpl := &x509.Certificate{
+						SerialNumber: big.NewInt(1),
+						NotBefore:    time.Now(),
+						NotAfter:     time.Now().Add(ttl),
+					}
+					der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pk.Public(), pk)
+					require.NoError(t, err)
+					crt, err := x509.ParseCertificate(der)
+					require.NoError(t, err)
+					return []*x509.Certificate{crt}, nil
+				}).WithGenerateJWT(func(_ context.Context, req *jwt.Request) (string, error) {
+					gotJWTTTLs = append(gotJWTTTLs, req.TTL)
+					return "my-jwt", nil
+				}),
+			}
+
+			resp, err := s.signCertificate(t.Context(), &sentryv1pb.SignCertificateRequest{
+				Id:                        "my-app",
+				Namespace:                 "my-ns",
+				CertificateSigningRequest: csrPEM,
+				TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
+				JwtAudiences:              []string{"a"},
+			})
+			require.NoError(t, err)
+
+			assert.Equal(t, test.certTTL, gotSignTTL)
+			assert.WithinDuration(t, time.Now().Add(test.expCertTTL), resp.GetValidUntil().AsTime(), time.Minute)
+
+			// One JWT for all audiences, and one each for the trust domain and
+			// "a". NotAfter is in whole seconds, so a capped JWT can be up to a
+			// second short.
+			require.Len(t, gotJWTTTLs, 3)
+			for _, ttl := range gotJWTTTLs {
+				assert.LessOrEqual(t, ttl, test.expJWTTTL)
+				assert.Greater(t, ttl, test.expJWTTTL-5*time.Second)
+			}
+		})
+	}
+}
+
 func TestFetchJWTSVID(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/my-ns/my-app")
 	pki := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafID: appID})
@@ -396,27 +485,29 @@ func TestFetchJWTSVID(t *testing.T) {
 			}})
 		}
 
-		id, err := s.peerID(withPeer(pki.LeafCert))
+		id, leaf, err := s.peerID(withPeer(pki.LeafCert))
 		require.NoError(t, err)
 		assert.Equal(t, appID, id)
+		assert.Equal(t, pki.LeafCert, leaf)
 
-		_, err = s.peerID(t.Context())
+		_, _, err = s.peerID(t.Context())
 		require.Error(t, err)
 
-		_, err = s.peerID(withPeer())
+		_, _, err = s.peerID(withPeer())
 		require.Error(t, err)
 
-		_, err = s.peerID(withPeer(other.LeafCert))
+		_, _, err = s.peerID(withPeer(other.LeafCert))
 		require.Error(t, err, "certificate not signed by the CA must be rejected")
 	})
 
 	t.Run("fetchJWTSVID", func(t *testing.T) {
 		tests := map[string]struct {
-			jwtEnabled bool
-			id         spiffeid.ID
-			req        *sentryv1pb.FetchJWTSVIDRequest
-			expCode    codes.Code
-			expReq     *jwt.Request
+			jwtEnabled    bool
+			id            spiffeid.ID
+			certRemaining time.Duration
+			req           *sentryv1pb.FetchJWTSVIDRequest
+			expCode       codes.Code
+			expReq        *jwt.Request
 		}{
 			"default ttl": {
 				jwtEnabled: true,
@@ -441,6 +532,26 @@ func TestFetchJWTSVID(t *testing.T) {
 					AppID:       "my-app",
 					TTL:         24 * time.Hour,
 				},
+			},
+			"ttl is capped at the client certificate's remaining lifetime": {
+				jwtEnabled:    true,
+				id:            appID,
+				certRemaining: time.Hour,
+				req:           &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}, Ttl: durationpb.New(24 * time.Hour)},
+				expReq: &jwt.Request{
+					TrustDomain: appID.TrustDomain(),
+					Audiences:   []string{"a"},
+					Namespace:   "my-ns",
+					AppID:       "my-app",
+					TTL:         time.Hour,
+				},
+			},
+			"expired client certificate": {
+				jwtEnabled:    true,
+				id:            appID,
+				certRemaining: -time.Second,
+				req:           &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}},
+				expCode:       codes.Unauthenticated,
 			},
 			"jwt disabled": {
 				id:      appID,
@@ -491,7 +602,11 @@ func TestFetchJWTSVID(t *testing.T) {
 					}),
 				}
 
-				resp, err := s.fetchJWTSVID(t.Context(), test.id, test.req)
+				certRemaining := test.certRemaining
+				if certRemaining == 0 {
+					certRemaining = 48 * time.Hour
+				}
+				resp, err := s.fetchJWTSVID(t.Context(), test.id, certRemaining, test.req)
 				assert.Equal(t, test.expCode, status.Code(err), "%v", err)
 				assert.Equal(t, test.expReq, gotReq)
 				if test.expCode == codes.OK {
