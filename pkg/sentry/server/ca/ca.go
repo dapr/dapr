@@ -65,8 +65,8 @@ type SignRequest struct {
 	// containers, embedded as a certificate extension when non-empty.
 	ContainerImages []images.ContainerImage
 
-	// TTL, when set, is the lifetime of the certificate instead of the
-	// configured workload certificate TTL.
+	// TTL, when greater than 0, is the lifetime of the certificate instead of
+	// the configured workload certificate TTL.
 	TTL time.Duration
 }
 

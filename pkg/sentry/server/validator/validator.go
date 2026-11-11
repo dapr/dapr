@@ -33,8 +33,8 @@ type ValidateResult struct {
 	// populates this; it is empty for all other validators.
 	ContainerImages []images.ContainerImage
 
-	// CertTTL, when set, is the lifetime of the signed certificate instead of
-	// the configured workload certificate TTL. JWTs issued with the certificate
+	// CertTTL, when greater than 0, is the lifetime of the signed certificate
+	// instead of the configured workload certificate TTL. JWTs issued with the certificate
 	// live no longer than it.
 	CertTTL time.Duration
 }
