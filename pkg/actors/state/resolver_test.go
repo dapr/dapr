@@ -14,6 +14,8 @@ limitations under the License.
 package state
 
 import (
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -196,21 +198,50 @@ func TestResolver_BoundStoreCapabilities(t *testing.T) {
 	assert.NotContains(t, err.Error(), "actorStateStore")
 }
 
-func TestResolver_Unresolved(t *testing.T) {
-	t.Run("lists the bindings whose store is not loaded", func(t *testing.T) {
+// TestResolver_Unusable verifies each binding whose store cannot be used is
+// reported with the same error Resolve returns for it, so the problem can be
+// logged before the first state operation fails.
+func TestResolver_Unusable(t *testing.T) {
+	t.Run("reports missing and incapable bound stores", func(t *testing.T) {
 		r := NewResolver(ResolverOptions{
-			Bindings: map[string]string{"B": "s2", "A": "s1", "C": "s1"},
+			Bindings: map[string]string{
+				"MissingActor":   "missing",
+				"IncapableActor": "incapable",
+				"GoodActor":      "good",
+			},
 			Stores: &fakeStores{
-				stores: map[string]contribstate.Store{"s2": daprt.NewFakeStateStore()},
+				stores: map[string]contribstate.Store{
+					"good":      daprt.NewFakeStateStore(),
+					"incapable": &daprt.MockStateStore{},
+				},
 			},
 		})
-		assert.Equal(t, map[string]string{"A": "s1", "C": "s1"}, r.Unresolved())
+
+		unusable := r.Unusable()
+		assert.Len(t, unusable, 2)
+		require.ErrorIs(t, unusable["MissingActor"], messages.ErrActorStateStoreNotFound)
+		for actorType := range unusable {
+			_, _, err := r.Resolve(actorType)
+			assert.Equal(t, err.Error(), unusable[actorType].Error())
+		}
 	})
 
 	t.Run("no bindings", func(t *testing.T) {
 		r := NewResolver(ResolverOptions{Stores: &fakeStores{}})
-		assert.Empty(t, r.Unresolved())
+		assert.Empty(t, r.Unusable())
 	})
+}
+
+func TestResolver_Bindings(t *testing.T) {
+	bindings := map[string]string{"A": "s1", "B": "s2"}
+	r := NewResolver(ResolverOptions{Stores: &fakeStores{}, Bindings: bindings})
+
+	got := r.Bindings()
+	assert.Equal(t, bindings, got)
+
+	// The caller owns the returned map.
+	got["C"] = "s3"
+	assert.Equal(t, map[string]string{"A": "s1", "B": "s2"}, r.Bindings())
 }
 
 // TestResolver_CompStore verifies stores are resolved from the component
@@ -255,18 +286,18 @@ func TestResolver_CompStore(t *testing.T) {
 
 		_, _, err := r.Resolve("TransactionActor")
 		require.ErrorIs(t, err, messages.ErrActorStateStoreNotFound)
-		assert.Equal(t, map[string]string{"TransactionActor": "wallet-transactions"}, r.Unresolved())
+		assert.Equal(t, []string{"TransactionActor"}, slices.Collect(maps.Keys(r.Unusable())))
 
 		cs.AddStateStore("wallet-transactions", newStore())
 		name, _, err := r.Resolve("TransactionActor")
 		require.NoError(t, err)
 		assert.Equal(t, "wallet-transactions", name)
-		assert.Empty(t, r.Unresolved())
+		assert.Empty(t, r.Unusable())
 
 		cs.DeleteStateStore("wallet-transactions")
 		_, _, err = r.Resolve("TransactionActor")
 		require.ErrorIs(t, err, messages.ErrActorStateStoreNotFound)
-		assert.Equal(t, map[string]string{"TransactionActor": "wallet-transactions"}, r.Unresolved())
+		assert.Equal(t, []string{"TransactionActor"}, slices.Collect(maps.Keys(r.Unusable())))
 
 		// Unbound types are unaffected throughout.
 		name, _, err = r.Resolve("PlainActor")

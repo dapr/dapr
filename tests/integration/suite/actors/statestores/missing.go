@@ -64,7 +64,7 @@ func (m *missing) Setup(t *testing.T) []framework.Option {
 	)
 
 	m.logline = logline.New(t, logline.WithStdoutLineContains(
-		"Actor type "+m.boundType+" is bound to state store "+m.boundStore+", which is not loaded",
+		"State operations of actor type "+m.boundType+" will fail: actor type "+m.boundType+" is bound to state store "+m.boundStore+", which is not loaded",
 	))
 
 	m.app = actors.New(t,

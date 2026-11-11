@@ -15,6 +15,7 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -215,14 +216,40 @@ func New(opts Options) Interface {
 	}
 }
 
-// warnUnresolvedStateStores logs a warning, sorted by actor type, for each
-// actor type bound to a state store that is not loaded. It is not fatal: the
-// store may be loaded later through hot reload, and until then the actor
-// type's state operations fail with ERR_ACTOR_STATE_STORE_NOT_FOUND.
-func warnUnresolvedStateStores(l logger.Logger, r *actorstate.Resolver) {
-	unresolved := r.Unresolved()
-	for _, actorType := range slices.Sorted(maps.Keys(unresolved)) {
-		l.Warnf("Actor type %s is bound to state store %s, which is not loaded; its state operations will fail until the store is loaded", actorType, unresolved[actorType])
+// warnUnusableStateStores logs a warning, sorted by actor type, for each
+// actor type bound to a state store that cannot be used, with the error its
+// state operations will return: the store is not loaded, or lacks the ETag or
+// transactional feature. It is not fatal: the store may be loaded or replaced
+// later through hot reload.
+func warnUnusableStateStores(l logger.Logger, r *actorstate.Resolver) {
+	unusable := r.Unusable()
+	for _, actorType := range slices.Sorted(maps.Keys(unusable)) {
+		err := unusable[actorType]
+		msg := err.Error()
+		// Log the message of an API error without its gRPC code.
+		var apiErr messages.APIError
+		if errors.As(err, &apiErr) {
+			msg = apiErr.Message()
+		}
+		l.Warnf("State operations of actor type %s will fail: %s", actorType, msg)
+	}
+}
+
+// warnUnhostedBindings logs a warning, sorted by actor type, for each bound
+// actor type that this app does not host, since the binding then has no
+// effect. When a hosted actor type differs from it only in case, the warning
+// names it, as actor types are case-sensitive.
+func warnUnhostedBindings(l logger.Logger, bindings map[string]string, hosted []string) {
+	for _, actorType := range slices.Sorted(maps.Keys(bindings)) {
+		if slices.Contains(hosted, actorType) {
+			continue
+		}
+		idx := slices.IndexFunc(hosted, func(h string) bool { return strings.EqualFold(h, actorType) })
+		if idx >= 0 {
+			l.Warnf("Actor type %s is bound to state store %s, but this app does not host it; did you mean %s? Actor types are case-sensitive", actorType, bindings[actorType], hosted[idx])
+			continue
+		}
+		l.Warnf("Actor type %s is bound to state store %s, but this app does not host it, so the binding has no effect", actorType, bindings[actorType])
 	}
 }
 
@@ -237,7 +264,7 @@ func (a *actors) Init(opts InitOptions) error {
 	if !a.hostingActive {
 		log.Info("Actor state store not configured - actor hosting disabled until one is configured, but invocation enabled")
 	}
-	warnUnresolvedStateStores(log, a.stateResolver)
+	warnUnusableStateStores(log, a.stateResolver)
 
 	a.table = table.New(table.Options{
 		ReentrancyStore: a.reentrancyStore,
@@ -566,6 +593,9 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 			EntityConfigs: entityConfigs,
 		},
 	})
+	// Registered, not Types: Types is empty while hosting is suspended, for
+	// example until a default actor state store is loaded.
+	warnUnhostedBindings(log, a.stateResolver.Bindings(), a.table.Registered())
 
 	// Update the placement service with the drain settings so that during
 	// dissemination, in-flight actor calls are given the configured time to

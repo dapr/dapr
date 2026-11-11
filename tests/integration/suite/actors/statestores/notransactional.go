@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
@@ -49,8 +50,9 @@ func init() {
 // error naming that store, rather than one about the actorStateStore
 // metadata.
 type notransactional struct {
-	app   *actors.Actors
-	store *statestore.StateStore
+	app     *actors.Actors
+	store   *statestore.StateStore
+	logline *logline.LogLine
 
 	boundStore string
 	boundType  string
@@ -63,6 +65,12 @@ func (n *notransactional) Setup(t *testing.T) []framework.Option {
 
 	n.boundStore = "wallet-balance"
 	n.boundType = "BalanceActor"
+
+	// daprd warns at startup that the bound store cannot be used, with the
+	// error its state operations return.
+	n.logline = logline.New(t, logline.WithStdoutLineContains(
+		`State operations of actor type `+n.boundType+` will fail: actors: state store \"`+n.boundStore+`\" bound to actor type \"`+n.boundType+`\" must support both the ETag and transactional features`,
+	))
 
 	sock := socket.New(t)
 	n.store = statestore.New(t,
@@ -84,6 +92,7 @@ spec:
 `),
 		actors.WithDaprdOptions(
 			daprd.WithSocket(t, sock),
+			daprd.WithLogLineStdout(n.logline),
 			daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -99,12 +108,13 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(n.store, n.app),
+		framework.WithProcesses(n.logline, n.store, n.app),
 	}
 }
 
 func (n *notransactional) Run(t *testing.T, ctx context.Context) {
 	n.app.WaitUntilRunning(t, ctx)
+	n.logline.EventuallyFoundAll(t)
 
 	assertMessage := func(t *testing.T, msg string) {
 		t.Helper()

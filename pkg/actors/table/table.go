@@ -42,6 +42,7 @@ type Interface interface {
 	io.Closer
 
 	Types() []string
+	Registered() []string
 	ReminderTypes() []string
 	IsActorTypeHosted(actorType string) bool
 	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
@@ -190,6 +191,14 @@ func (t *table) typesLocked() []string {
 	if t.suspended.Load() {
 		return nil
 	}
+	return t.registeredLocked()
+}
+
+// Registered returns the registered actor types, less the draining ones.
+// Unlike Types, it includes them while hosting is suspended.
+func (t *table) Registered() []string {
+	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
 	return t.registeredLocked()
 }
 

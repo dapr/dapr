@@ -63,17 +63,24 @@ func (r *Resolver) Resolve(actorType string) (string, Backend, error) {
 	return r.resolveDefault()
 }
 
-// Unresolved returns the bindings (actor type to state store name) whose
-// state store is not loaded. Like Resolve, it looks the stores up on every
-// call.
-func (r *Resolver) Unresolved() map[string]string {
-	unresolved := make(map[string]string)
+// Unusable returns, for each bound actor type whose state store cannot be
+// used, the error Resolve returns for it: the store is not loaded, or lacks
+// the features actor state needs. Like Resolve, it looks the stores up on
+// every call.
+func (r *Resolver) Unusable() map[string]error {
+	unusable := make(map[string]error)
 	for actorType, storeName := range r.bindings {
-		if _, ok := r.stores.GetStateStore(storeName); !ok {
-			unresolved[actorType] = storeName
+		if _, _, err := r.resolveBound(actorType, storeName); err != nil {
+			unusable[actorType] = err
 		}
 	}
-	return unresolved
+	return unusable
+}
+
+// Bindings returns a copy of the bindings, from actor type to state store
+// name.
+func (r *Resolver) Bindings() map[string]string {
+	return maps.Clone(r.bindings)
 }
 
 func (r *Resolver) resolveBound(actorType, storeName string) (string, Backend, error) {

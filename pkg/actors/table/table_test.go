@@ -152,6 +152,8 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.Empty(t, tble.Types())
 		assert.False(t, tble.IsActorTypeHosted("test1"))
 		assert.Equal(t, int64(1), halted.Load())
+		// The registered types are still known while suspended.
+		assert.Equal(t, []string{"test1"}, tble.Registered())
 
 		_, err := tble.GetOrCreate(t.Context(), "test1", "1")
 		require.Error(t, err)

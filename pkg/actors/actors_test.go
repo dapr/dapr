@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	daprt "github.com/dapr/dapr/pkg/testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -257,34 +259,37 @@ func TestNew_ActorStateStoreBindings(t *testing.T) {
 	})
 }
 
-func TestWarnUnresolvedStateStores(t *testing.T) {
+func TestWarnUnusableStateStores(t *testing.T) {
 	newStore := func() contribstate.Store {
 		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
 	}
 
-	t.Run("warns for each binding whose store is not loaded", func(t *testing.T) {
+	t.Run("warns for each binding whose store cannot be used", func(t *testing.T) {
 		var buf bytes.Buffer
 		l := logger.NewLogger(t.Name())
 		l.SetOutput(&buf)
 
 		cs := compstore.New()
 		cs.AddStateStore("wallet-balance", newStore())
+		cs.AddStateStore("wallet-audit", &daprt.MockStateStore{})
 		r := actorstate.NewResolver(actorstate.ResolverOptions{
 			Stores: cs,
 			Bindings: map[string]string{
 				"TransactionActor": "wallet-transactions",
-				"AuditActor":       "wallet-transactions",
+				"AuditActor":       "wallet-audit",
 				"BalanceActor":     "wallet-balance",
 			},
 		})
 
-		warnUnresolvedStateStores(l, r)
+		warnUnusableStateStores(l, r)
 
 		out := buf.String()
 		assert.Contains(t, out, "level=warning")
-		assert.Contains(t, out, "Actor type TransactionActor is bound to state store wallet-transactions, which is not loaded")
-		assert.Contains(t, out, "Actor type AuditActor is bound to state store wallet-transactions, which is not loaded")
+		assert.Contains(t, out, "State operations of actor type TransactionActor will fail: actor type TransactionActor is bound to state store wallet-transactions, which is not loaded")
+		assert.Contains(t, out, `State operations of actor type AuditActor will fail: actors: state store \"wallet-audit\" bound to actor type \"AuditActor\" must support both the ETag and transactional features`)
 		assert.NotContains(t, out, "BalanceActor")
+		// The gRPC code of the API error is not part of the log line.
+		assert.NotContains(t, out, "code =")
 		// Warnings are sorted by actor type, so the output is deterministic.
 		assert.Less(t, strings.Index(out, "AuditActor"), strings.Index(out, "TransactionActor"))
 	})
@@ -301,7 +306,32 @@ func TestWarnUnresolvedStateStores(t *testing.T) {
 			Bindings: map[string]string{"TransactionActor": "wallet-transactions"},
 		})
 
-		warnUnresolvedStateStores(l, r)
+		warnUnusableStateStores(l, r)
 		assert.Empty(t, buf.String())
 	})
+}
+
+func TestWarnUnhostedBindings(t *testing.T) {
+	bindings := map[string]string{
+		"transactionactor": "wallet-transactions",
+		"OrphanActor":      "wallet-orphans",
+		"BalanceActor":     "wallet-balance",
+	}
+
+	var buf bytes.Buffer
+	l := logger.NewLogger(t.Name())
+	l.SetOutput(&buf)
+
+	warnUnhostedBindings(l, bindings, []string{"TransactionActor", "BalanceActor"})
+
+	out := buf.String()
+	assert.Contains(t, out, "level=warning")
+	assert.Contains(t, out, "Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive")
+	assert.Contains(t, out, "Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it, so the binding has no effect")
+	assert.NotContains(t, out, "BalanceActor is bound")
+	assert.Less(t, strings.Index(out, "OrphanActor"), strings.Index(out, "transactionactor"))
+
+	buf.Reset()
+	warnUnhostedBindings(l, map[string]string{"BalanceActor": "wallet-balance"}, []string{"BalanceActor"})
+	assert.Empty(t, buf.String())
 }

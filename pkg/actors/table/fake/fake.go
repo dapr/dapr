@@ -24,6 +24,7 @@ import (
 type Fake struct {
 	closeFn                  func() error
 	typesFn                  func() []string
+	registeredFn             func() []string
 	reminderTypesFn          func() []string
 	setReminderDeliveryFn    func(bool, ...string)
 	subscribeReminderTypesFn func(context.Context) <-chan struct{}
@@ -46,6 +47,7 @@ func New() *Fake {
 	return &Fake{
 		closeFn:                  func() error { return nil },
 		typesFn:                  func() []string { return nil },
+		registeredFn:             func() []string { return nil },
 		reminderTypesFn:          func() []string { return nil },
 		setReminderDeliveryFn:    func(bool, ...string) {},
 		subscribeReminderTypesFn: func(context.Context) <-chan struct{} { return nil },
@@ -67,6 +69,8 @@ func New() *Fake {
 
 func (f *Fake) WithClose(fn func() error) *Fake    { f.closeFn = fn; return f }
 func (f *Fake) WithTypes(fn func() []string) *Fake { f.typesFn = fn; return f }
+
+func (f *Fake) WithRegistered(fn func() []string) *Fake { f.registeredFn = fn; return f }
 
 func (f *Fake) WithReminderTypes(fn func() []string) *Fake { f.reminderTypesFn = fn; return f }
 
@@ -99,7 +103,9 @@ func (f *Fake) WithGetOrCreate(fn func(context.Context, string, string) (targets
 	f.getOrCreateFn = fn
 	return f
 }
+
 func (f *Fake) WithActorExists(fn func(string, string) bool) *Fake { f.actorExistsFn = fn; return f }
+
 func (f *Fake) WithRegisterActorTypes(fn func(table.RegisterActorTypeOptions)) *Fake {
 	f.registerActorTypesFn = fn
 	return f
@@ -133,6 +139,7 @@ func (f *Fake) WithResumeHosting(fn func()) *Fake {
 
 func (f *Fake) Close() error                            { return f.closeFn() }
 func (f *Fake) Types() []string                         { return f.typesFn() }
+func (f *Fake) Registered() []string                    { return f.registeredFn() }
 func (f *Fake) ReminderTypes() []string                 { return f.reminderTypesFn() }
 func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHostedFn(actorType) }
 func (f *Fake) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
@@ -142,7 +149,9 @@ func (f *Fake) GetOrCreate(ctx context.Context, actorType, actorID string) (targ
 func (f *Fake) ActorExists(actorType, actorKey string) bool {
 	return f.actorExistsFn(actorType, actorKey)
 }
+
 func (f *Fake) RegisterActorTypes(opts table.RegisterActorTypeOptions) { f.registerActorTypesFn(opts) }
+
 func (f *Fake) UnRegisterActorTypes(actorTypes ...string) error {
 	return f.unRegisterActorTypesFn(actorTypes...)
 }
