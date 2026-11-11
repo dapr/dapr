@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -214,6 +215,17 @@ func New(opts Options) Interface {
 	}
 }
 
+// warnUnresolvedStateStores logs a warning, sorted by actor type, for each
+// actor type bound to a state store that is not loaded. It is not fatal: the
+// store may be loaded later through hot reload, and until then the actor
+// type's state operations fail with ERR_ACTOR_STATE_STORE_NOT_FOUND.
+func warnUnresolvedStateStores(l logger.Logger, r *actorstate.Resolver) {
+	unresolved := r.Unresolved()
+	for _, actorType := range slices.Sorted(maps.Keys(unresolved)) {
+		l.Warnf("Actor type %s is bound to state store %s, which is not loaded; its state operations will fail until the store is loaded", actorType, unresolved[actorType])
+	}
+}
+
 func (a *actors) Init(opts InitOptions) error {
 	defer close(a.initDoneCh)
 
@@ -225,6 +237,7 @@ func (a *actors) Init(opts InitOptions) error {
 	if !a.hostingActive {
 		log.Info("Actor state store not configured - actor hosting disabled until one is configured, but invocation enabled")
 	}
+	warnUnresolvedStateStores(log, a.stateResolver)
 
 	a.table = table.New(table.Options{
 		ReentrancyStore: a.reentrancyStore,

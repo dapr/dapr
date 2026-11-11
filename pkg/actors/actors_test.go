@@ -14,8 +14,10 @@ limitations under the License.
 package actors
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -24,6 +26,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
@@ -251,5 +254,54 @@ func TestNew_ActorStateStoreBindings(t *testing.T) {
 
 		_, _, err := a.stateResolver.Resolve("TransactionActor")
 		require.ErrorIs(t, err, messages.ErrActorRuntimeNotFound)
+	})
+}
+
+func TestWarnUnresolvedStateStores(t *testing.T) {
+	newStore := func() contribstate.Store {
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	t.Run("warns for each binding whose store is not loaded", func(t *testing.T) {
+		var buf bytes.Buffer
+		l := logger.NewLogger(t.Name())
+		l.SetOutput(&buf)
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-balance", newStore())
+		r := actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores: cs,
+			Bindings: map[string]string{
+				"TransactionActor": "wallet-transactions",
+				"AuditActor":       "wallet-transactions",
+				"BalanceActor":     "wallet-balance",
+			},
+		})
+
+		warnUnresolvedStateStores(l, r)
+
+		out := buf.String()
+		assert.Contains(t, out, "level=warning")
+		assert.Contains(t, out, "Actor type TransactionActor is bound to state store wallet-transactions, which is not loaded")
+		assert.Contains(t, out, "Actor type AuditActor is bound to state store wallet-transactions, which is not loaded")
+		assert.NotContains(t, out, "BalanceActor")
+		// Warnings are sorted by actor type, so the output is deterministic.
+		assert.Less(t, strings.Index(out, "AuditActor"), strings.Index(out, "TransactionActor"))
+	})
+
+	t.Run("no warning when every binding resolves", func(t *testing.T) {
+		var buf bytes.Buffer
+		l := logger.NewLogger(t.Name())
+		l.SetOutput(&buf)
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-transactions", newStore())
+		r := actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores:   cs,
+			Bindings: map[string]string{"TransactionActor": "wallet-transactions"},
+		})
+
+		warnUnresolvedStateStores(l, r)
+		assert.Empty(t, buf.String())
 	})
 }
