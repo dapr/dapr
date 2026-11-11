@@ -253,6 +253,51 @@ func Test_components_actorStateStore(t *testing.T) {
 		assert.True(t, exists)
 	})
 
+	t.Run("a second store with a falsy actorStateStore value is installed", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+
+		for _, value := range []string{`"false"`, `false`, `"0"`, `""`} {
+			comp := actorStoreComp("plainstore", false, 1)
+			comp.Spec.Metadata = []commonapi.NameValuePair{{
+				Name:  "actorStateStore",
+				Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(value)}},
+			}}
+			require.NoError(t, m.update(ctx, comp))
+			_, exists := cs.GetComponent("plainstore")
+			assert.Truef(t, exists, "store with actorStateStore=%s must be installed", value)
+			require.NoError(t, m.delete(ctx, comp))
+		}
+
+		_, name, ok := cs.GetStateStoreActor()
+		require.True(t, ok)
+		assert.Equal(t, "mystore", name)
+	})
+
+	t.Run("a second store with an unresolved actorStateStore value is skipped", func(t *testing.T) {
+		var kicks atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+
+		// A value read from a secret or an environment variable is not known
+		// before processing, so the store is conservatively treated as marked.
+		for _, nv := range []commonapi.NameValuePair{
+			{Name: "actorStateStore", SecretKeyRef: commonapi.SecretKeyRef{Name: "secret", Key: "key"}},
+			{Name: "actorStateStore", EnvRef: "ACTOR_STATE_STORE"},
+		} {
+			comp := actorStoreComp("otherstore", false, 1)
+			comp.Spec.Metadata = []commonapi.NameValuePair{nv}
+			require.NoError(t, m.update(ctx, comp))
+			_, exists := cs.GetComponent("otherstore")
+			assert.False(t, exists)
+		}
+	})
+
 	t.Run("skipped store is replayed when the actor state store is deleted", func(t *testing.T) {
 		var kicks atomic.Int64
 		m, proc, cs := newComponentsActorStoreManager(t, &kicks)

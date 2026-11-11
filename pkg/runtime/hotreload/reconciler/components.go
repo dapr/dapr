@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 type components struct {
@@ -209,16 +210,22 @@ func (c *components) notifyActorStateStoreChanged() func() {
 }
 
 // isMarkedActorStateStore returns whether the component is a state store
-// carrying the actor state store metadata key. Presence based, since the
-// value may be resolved from a secret.
+// marked as the actor state store. A literal value is marked only when it is
+// truthy, matching the state processor. A value read from a secret or an
+// environment variable is not known yet, so its presence alone marks the
+// store.
 func isMarkedActorStateStore(comp compapi.Component) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
 	}
 	for _, meta := range comp.Spec.Metadata {
-		if strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
+		if !strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
+			continue
+		}
+		if meta.SecretKeyRef.Name != "" || meta.EnvRef != "" {
 			return true
 		}
+		return kitstrings.IsTruthy(meta.Value.String())
 	}
 	return false
 }
