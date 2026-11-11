@@ -37,17 +37,9 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 	if actor == nil {
 		return false
 	}
-	if key, c := d.claimFor(req); c != nil {
-		if c.status != nil {
-			d.resolveClaim(req, key, c)
-			return true
-		}
-		if len(d.pools[actor.GetType()]) == 0 {
-			// A sidecar is running it; regular routing would run it again
-			// elsewhere. The cron retries once a sidecar can take pull work.
-			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-			return true
-		}
+	if c := d.claims[req.Job.GetKey()]; c != nil {
+		d.takeClaimed(req.Job.GetKey(), c, req)
+		return true
 	}
 	if len(d.pools[actor.GetType()]) == 0 {
 		log.Debugf("Pull trigger %s has no eligible sidecar for its actor type; using regular routing", req.Job.GetName())
@@ -87,45 +79,51 @@ func (d *Dispatcher) park(req *loops.TriggerRequest, throttledKey string, admitt
 // the trigger's type and per-name gates are acquired. When it does not
 // dispatch it leaves no gate held and returns the gate key that was full, or
 // "" when no sidecar had a free slot.
-// A reminder a sidecar claimed as running only goes back to that sidecar,
-// without taking a slot, so it joins the running activity.
 func (d *Dispatcher) tryDispatch(req *loops.TriggerRequest) (dispatched bool, throttledKey string) {
-	actorType := req.Job.GetMetadata().GetTarget().GetActor().GetType()
-	if key, c := d.claimFor(req); c != nil {
-		if c.status != nil {
-			d.resolveClaim(req, key, c)
-			return true, ""
-		}
-		p := d.poolOf(actorType, c.sidecar)
-		if p == nil {
-			return false, ""
-		}
-		dispatched, throttledKey = d.dispatch(req, p, false)
-		if dispatched {
-			delete(d.claims, key)
-		}
-		return dispatched, throttledKey
-	}
-	p, ok := d.pickPool(actorType)
+	p, ok := d.pickPool(req.Job.GetMetadata().GetTarget().GetActor().GetType())
 	if !ok {
 		return false, ""
 	}
 	return d.dispatch(req, p, true)
 }
 
-func (d *Dispatcher) claimFor(req *loops.TriggerRequest) (string, *claim) {
-	key := req.Job.GetKey()
-	return key, d.claims[key]
+// takeClaimed resolves the trigger of a claimed reminder with the result its
+// sidecar already sent, or hands it to that sidecar without taking a slot,
+// so it joins the running activity. Otherwise the trigger is held on the
+// claim, not parked: regular routing or another sidecar would run it a
+// second time, and resolving it undeliverable makes the cron fire it again
+// at once.
+func (d *Dispatcher) takeClaimed(key string, c *claim, req *loops.TriggerRequest) {
+	if c.status != nil {
+		d.resolveClaim(key, c, req, *c.status)
+		return
+	}
+	if p := d.poolOf(req.Job.GetMetadata().GetTarget().GetActor().GetType(), c.sidecar); p != nil {
+		if dispatched, _ := d.dispatch(req, p, false); dispatched {
+			delete(d.claims, key)
+			return
+		}
+	}
+	c.req = req
 }
 
-// resolveClaim resolves req with the result its sidecar already sent.
-func (d *Dispatcher) resolveClaim(req *loops.TriggerRequest, key string, c *claim) {
-	delete(d.claims, key)
-	if *c.status == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
+// resolveClaim resolves req with the result its sidecar sent.
+func (d *Dispatcher) resolveClaim(key string, c *claim, req *loops.TriggerRequest, status schedulerv1pb.WatchJobsRequestResultStatus) {
+	d.dropClaim(key, c)
+	if status == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
 		req.ResultFn(api.TriggerResponseResult_SUCCESS)
 	} else {
 		req.ResultFn(api.TriggerResponseResult_FAILED)
 	}
+}
+
+// dropClaim forgets c. The loop may have been kept only for its result.
+func (d *Dispatcher) dropClaim(key string, c *claim) {
+	delete(d.claims, key)
+	if c.timer != nil {
+		c.timer.Stop()
+	}
+	d.opts.Idle()
 }
 
 // dispatch hands req to p's newest stream once its type and per-name gates
@@ -227,13 +225,18 @@ func (d *Dispatcher) poolOf(actorType, id string) *pool {
 	return nil
 }
 
-// Drain dispatches as many parked pull triggers as capacity allows, one
-// group-fair rotation at a time per actor type, until no sidecar has a free
-// slot and no parked trigger is claimed by a sidecar running it.
+// Drain hands held claimed triggers to their sidecars, then dispatches as
+// many parked pull triggers as capacity allows, one group-fair rotation at a
+// time per actor type, until no sidecar has a free slot.
 // ponytail: while a per-name gate is full and a sidecar has a free slot,
 // every release retries the head of each parked group, O(groups) per
 // release; index parked triggers by the gate blocking them if that shows up.
 func (d *Dispatcher) Drain() {
+	for key, c := range d.claims {
+		if c.req != nil {
+			d.takeClaimed(key, c, c.req)
+		}
+	}
 	for actorType, q := range d.pending {
 		if q.len() == 0 {
 			delete(d.pending, actorType)
@@ -250,7 +253,7 @@ func (d *Dispatcher) Drain() {
 			continue
 		}
 		typeFull := false
-		for (len(d.claims) > 0 || d.hasCredit(actorType)) && !typeFull && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
+		for d.hasCredit(actorType) && !typeFull && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
 			if typeFull {
 				return false
 			}

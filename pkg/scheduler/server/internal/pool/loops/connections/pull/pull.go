@@ -125,4 +125,12 @@ func (d *Dispatcher) Shutdown() {
 			d.inflight.add(f.req, -1)
 		}
 	}
+	for _, c := range d.claims {
+		if c.timer != nil {
+			c.timer.Stop()
+		}
+		if c.req != nil {
+			c.req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+		}
+	}
 }

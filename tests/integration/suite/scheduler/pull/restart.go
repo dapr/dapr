@@ -15,6 +15,7 @@ package pull
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -39,6 +40,10 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	r.scheduler = scheduler.New(t)
 	return []framework.Option{
 		framework.WithProcesses(r.scheduler),

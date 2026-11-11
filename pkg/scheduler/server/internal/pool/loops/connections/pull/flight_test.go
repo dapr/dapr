@@ -115,6 +115,27 @@ func TestDispatcher_ConfirmedBeforeOrphaned(t *testing.T) {
 	assert.NotNil(t, f.timer)
 }
 
+func TestDispatcher_OmittedBeforeOrphaned(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 1)
+
+	running := h.trigger("wf::1::0", "act")
+	h.handle(running)
+
+	// Two new streams of the sidecar arrive before this scheduler notices the
+	// old one closing, and the later one no longer lists the reminder.
+	h.dispatched = append(h.dispatched, nil, nil)
+	h.addStreamFor(t, 1, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		InflightReminders: []*schedulerv1pb.ActorReminderRef{ref("wf::1::0")},
+	})
+	h.addStreamFor(t, 2, addr(0), &schedulerv1pb.WatchJobsRequestInitial{})
+	h.closeStream(t, 0, running)
+
+	f := h.d.sidecars[sidecarOf(0)].flights[key("wf::1::0")]
+	require.NotNil(t, f)
+	assert.NotNil(t, f.timer, "the sidecar's latest listing decides")
+}
+
 func TestDispatcher_UnlistedOrphanStartsTimer(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, 1, 1)
@@ -214,8 +235,9 @@ func TestDispatcher_ClaimWaitsForItsSidecar(t *testing.T) {
 	req := h.trigger("wf::1::0", "act")
 	h.handle(req)
 	assert.Empty(t, h.dispatched[1])
-	assert.Equal(t, 1, h.d.pending[testActorType].len())
 	require.Contains(t, h.d.claims, key("wf::1::0"), "a claim is kept until it dispatches")
+	assert.Same(t, req, h.d.claims[key("wf::1::0")].req, "held for its sidecar, not parked")
+	assert.Empty(t, h.d.pending)
 
 	h.gates[testActorType+":act"].current = 0
 	h.d.Drain()
@@ -247,7 +269,7 @@ func TestDispatcher_ClaimKeepsAnEarlyResult(t *testing.T) {
 	assert.Empty(t, h.d.claims)
 }
 
-func TestDispatcher_ParkedClaimResolvesWithItsResult(t *testing.T) {
+func TestDispatcher_HeldClaimResolvesWithItsResult(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, 0, 0)
 	h.dispatched = append(h.dispatched, nil)
@@ -260,9 +282,9 @@ func TestDispatcher_ParkedClaimResolvesWithItsResult(t *testing.T) {
 	// The cron fires the claimed reminder while its per-name gate is full.
 	req := h.trigger("wf::1::0", "act")
 	h.handle(req)
-	require.Equal(t, 1, h.d.pending[testActorType].len())
+	require.Same(t, req, h.d.claims[key("wf::1::0")].req)
 
-	// The sidecar's result arrives while the trigger is parked.
+	// The sidecar's result arrives while the trigger is held.
 	h.result(0, ref("wf::1::0"), schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS)
 	assert.Equal(t, api.TriggerResponseResult_SUCCESS, h.resultOf(t, req), "resolved with the result the sidecar sent")
 	assert.Empty(t, h.d.pending)
@@ -297,14 +319,90 @@ func TestDispatcher_ClaimedReminderWithoutPoolsIsNotRoutedElsewhere(t *testing.T
 
 	// The sidecar running it reconnects before it reports slots for the type.
 	h.dispatched = append(h.dispatched, nil)
-	h.addStreamFor(t, 0, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+	idx := h.addStreamFor(t, 0, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
 		InflightReminders: []*schedulerv1pb.ActorReminderRef{ref("wf::1::0")},
 	})
 
 	req := h.trigger("wf::1::0", "act")
 	h.handle(req)
 	assert.Empty(t, h.routed, "regular routing would run it a second time")
-	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, req), "the cron retries once a sidecar takes pull work")
+	assert.NotContains(t, h.results, req, "resolved undeliverable, the cron would fire it again at once")
+
+	// The sidecar leaves without a result: it is routed again.
+	h.closeStream(t, idx)
+	assert.Equal(t, []*loops.TriggerRequest{req}, h.routed)
+	assert.Empty(t, h.d.claims)
+}
+
+func TestDispatcher_ClaimTakesItsParkedTrigger(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 2, 0)
+
+	// The cron fired the reminder before the sidecar running it reconnected.
+	other := h.trigger("wf-a::1::0", "act")
+	h.handle(other)
+	req := h.trigger("wf::1::0", "act")
+	h.handle(req)
+	require.Equal(t, 2, h.d.pending[testActorType].len())
+
+	h.addStreamFor(t, 0, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		PullSlots:         []*schedulerv1pb.PullSlots{{ActorType: testActorType, Free: 0}},
+		InflightReminders: []*schedulerv1pb.ActorReminderRef{ref("wf::1::0")},
+	})
+	require.Len(t, h.dispatched[0], 1, "it goes to the sidecar running it, without a slot")
+	assert.Same(t, req, h.dispatched[0][0])
+	assert.Equal(t, 1, h.d.pending[testActorType].len())
+
+	h.report(1, 2)
+	require.Len(t, h.dispatched[1], 1, "the other parked trigger is still served")
+	assert.Same(t, other, h.dispatched[1][0])
+}
+
+func TestDispatcher_RefusedClaimGoesElsewhere(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 0, 0)
+	h.dispatched = append(h.dispatched, nil, nil)
+	h.addStreamFor(t, 0, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		InflightReminders: []*schedulerv1pb.ActorReminderRef{ref("wf::1::0")},
+	})
+	h.addStream(t, 1, 1)
+
+	req := h.trigger("wf::1::0", "act")
+	h.handle(req)
+	require.Zero(t, h.totalDispatched(), "held for the sidecar that claimed it")
+
+	// That sidecar is not running it after all.
+	h.result(0, ref("wf::1::0"), schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY)
+	require.Len(t, h.dispatched[1], 1, "the refused trigger goes to the sidecar with a free slot")
+	assert.Same(t, req, h.dispatched[1][0])
+	assert.Empty(t, h.d.claims)
+}
+
+func TestDispatcher_ClaimResultExpires(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 0, 0)
+	h.d.grace = time.Millisecond
+	h.dispatched = append(h.dispatched, nil)
+	idx := h.addStreamFor(t, 0, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		InflightReminders: []*schedulerv1pb.ActorReminderRef{ref("wf::1::0")},
+	})
+
+	h.result(0, ref("wf::1::0"), schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS)
+	assert.True(t, h.d.HasFlights(), "the loop is kept for the result, with or without its sidecar")
+	h.closeStream(t, idx)
+
+	// The cron never fires it again: it ran elsewhere, or was deleted.
+	timeout := time.After(5 * time.Second)
+	for len(h.d.claims) > 0 {
+		select {
+		case e := <-h.events:
+			e.(*loops.ConnRun).Fn()
+		case <-timeout:
+			require.FailNow(t, "the claim did not expire")
+		}
+	}
+	assert.False(t, h.d.HasFlights())
+	assert.Equal(t, 1, h.idles, "the loop can close")
 }
 
 func TestDispatcher_NoCapacityAtTheBoundStillParks(t *testing.T) {

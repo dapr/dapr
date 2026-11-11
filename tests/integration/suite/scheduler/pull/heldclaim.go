@@ -15,6 +15,7 @@ package pull
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -41,6 +42,10 @@ type heldclaim struct {
 }
 
 func (h *heldclaim) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	h.scheduler = scheduler.New(t)
 	return []framework.Option{
 		framework.WithProcesses(h.scheduler),

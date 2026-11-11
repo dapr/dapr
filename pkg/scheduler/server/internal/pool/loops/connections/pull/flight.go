@@ -35,7 +35,14 @@ import (
 // flight at a restart.
 type claim struct {
 	sidecar string
-	status  *schedulerv1pb.WatchJobsRequestResultStatus
+	// status is the result the sidecar sent before the cron fired the
+	// reminder again, kept until timer: a reminder that never fires again
+	// ran elsewhere or was deleted, and a later one of the same name must
+	// still run.
+	status *schedulerv1pb.WatchJobsRequestResultStatus
+	timer  *time.Timer
+	// req is the cron's trigger, held until the sidecar can take it.
+	req *loops.TriggerRequest
 }
 
 // flight is a pull trigger dispatched to a sidecar and not yet resolved. done
@@ -137,11 +144,17 @@ func (d *Dispatcher) endFlight(f *flight) {
 }
 
 // HasFlights reports whether a pull trigger dispatched by this loop is still
-// unresolved. The loop is kept while it does, even with no stream connected,
-// so the sidecar can reattach.
+// unresolved, or a sidecar's result waits for the cron to fire its reminder
+// again. The loop is kept while either holds, even with no stream connected,
+// so the sidecar can reattach and the result is not lost.
 func (d *Dispatcher) HasFlights() bool {
 	for _, sc := range d.sidecars {
 		if len(sc.flights) > 0 {
+			return true
+		}
+	}
+	for _, c := range d.claims {
+		if c.status != nil {
 			return true
 		}
 	}
@@ -150,13 +163,18 @@ func (d *Dispatcher) HasFlights() bool {
 
 // MarkGates adds the gates held by unresolved pull triggers to referenced:
 // they outlive the stream that delivered them, and dropping their gates
-// would let a reconnect start counting again from zero.
-func (d *Dispatcher) MarkGates(referenced map[string]struct{}) {
+// would let a reconnect start counting again from zero. It reports whether
+// a gate is referenced only by those triggers.
+func (d *Dispatcher) MarkGates(referenced map[string]struct{}) (retained bool) {
 	for _, sc := range d.sidecars {
 		for _, f := range sc.flights {
 			for _, key := range f.gateKeys {
-				referenced[key] = struct{}{}
+				if _, ok := referenced[key]; !ok {
+					referenced[key] = struct{}{}
+					retained = true
+				}
 			}
 		}
 	}
+	return retained
 }

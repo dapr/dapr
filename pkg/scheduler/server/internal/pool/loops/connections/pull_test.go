@@ -180,4 +180,5 @@ func TestPullDispatch_HeldGatesSurviveTheStream(t *testing.T) {
 	running.ResultFn(api.TriggerResponseResult_SUCCESS)
 	h.pump(t)
 	assert.Equal(t, uint32(0), gate.current, "the gate is released when the activity resolves")
+	assert.NotContains(t, h.c.concurrencyGates, limit, "a gate no stream sets goes once no activity holds it")
 }

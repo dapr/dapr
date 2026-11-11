@@ -78,6 +78,10 @@ type connections struct {
 	pull             *pull.Dispatcher
 	namespace        string
 
+	// gatesRetained: a gate is kept only for pull triggers that outlived
+	// their stream, and goes once they release it.
+	gatesRetained bool
+
 	wg sync.WaitGroup
 }
 
@@ -90,6 +94,7 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 	conns.streamIDx = 0
 	conns.schedulerCount = 1
 	conns.schedulerIdx = 0
+	conns.gatesRetained = false
 
 	conns.loop = loopFactory.NewLoop(conns)
 	conns.pull = conns.newPull()
@@ -241,7 +246,7 @@ func (c *connections) removeOrphanedGates() {
 			referenced[key] = struct{}{}
 		}
 	}
-	c.pull.MarkGates(referenced)
+	c.gatesRetained = c.pull.MarkGates(referenced)
 
 	for key, gate := range c.concurrencyGates {
 		if _, ok := referenced[key]; !ok {
@@ -393,6 +398,10 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 
 		gate.release()
 		monitoring.RecordConcurrencyInflight(key, int64(gate.current))
+	}
+
+	if c.gatesRetained {
+		c.removeOrphanedGates()
 	}
 
 	for _, key := range rel.GateKeys {
