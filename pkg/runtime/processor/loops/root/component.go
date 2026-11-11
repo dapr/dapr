@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
+	procsecret "github.com/dapr/dapr/pkg/runtime/processor/secret"
 )
 
 // DefaultComponentInitTimeout is the init deadline applied to a component
@@ -31,6 +32,10 @@ const DefaultComponentInitTimeout = time.Second * 5
 
 func (r *Root) handleInit(ctx context.Context, ev *loops.Init) {
 	comp := ev.Component
+
+	// Warn before secret resolution so envRef is still distinguishable from
+	// a plaintext value.
+	procsecret.WarnPlaintextCredentials(&comp)
 
 	// Preprocess: resolve secret refs on the component, detect unresolved
 	// secret-store dependencies.
