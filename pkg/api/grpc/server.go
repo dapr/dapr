@@ -419,11 +419,7 @@ func (s *server) printAPILog(ctx context.Context, method string, duration time.D
 			fields["useragent"] = val[0]
 		}
 	}
-	// Include the trace and span IDs so the log line can be correlated with the exported trace
-	if sc := diagUtils.SpanFromContext(ctx).SpanContext(); sc.IsValid() {
-		fields["trace_id"] = sc.TraceID().String()
-		fields["span_id"] = sc.SpanID().String()
-	}
+	diag.AddTraceLogFields(ctx, fields)
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
 	// TODO: fix types

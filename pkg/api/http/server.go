@@ -358,11 +358,7 @@ func (s *server) useAPILogging(mux chi.Router) {
 			// Report duration in milliseconds
 			fields["duration"] = time.Since(start).Milliseconds()
 
-			// Include the trace and span IDs so the log line can be correlated with the exported trace
-			if sc := diagUtils.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
-				fields["trace_id"] = sc.TraceID().String()
-				fields["span_id"] = sc.SpanID().String()
-			}
+			diag.AddTraceLogFields(r.Context(), fields)
 
 			if s.config.APILoggingObfuscateURLs {
 				endpointName := endpointData.GetEndpointName()

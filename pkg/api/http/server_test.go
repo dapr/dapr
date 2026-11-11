@@ -16,6 +16,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,12 +30,13 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -441,15 +443,9 @@ func TestAPILoggingTraceContext(t *testing.T) {
 	infoLog = logger.NewLogger("test-api-logging-trace")
 	infoLog.EnableJSONOutput(true)
 	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
-	defer func() {
+	t.Cleanup(func() {
 		infoLog = prev
-	}()
-
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
-	defer func() { _ = tp.Shutdown(t.Context()) }()
-	prevTracerProvider := otel.GetTracerProvider()
-	defer otel.SetTracerProvider(prevTracerProvider)
-	otel.SetTracerProvider(tp)
+	})
 
 	endpoints := []endpoints.Endpoint{
 		{
@@ -464,58 +460,116 @@ func TestAPILoggingTraceContext(t *testing.T) {
 	}
 
 	const (
-		path     = "/" + apiVersionV1 + "/state/mystate/mykey"
-		traceID  = "4bf92f3577b34da6a3ce929d0e0e4736"
-		emptySID = "0000000000000000"
+		path      = "/" + apiVersionV1 + "/state/mystate/mykey"
+		traceID   = "4bf92f3577b34da6a3ce929d0e0e4736"
+		parentSID = "00f067aa0ba902b7"
 	)
 
-	newRouter := func(samplingRate string) chi.Router {
-		srv := newServer()
-		srv.config.EnableAPILogging = true
-		srv.tracingSpec = config.TracingSpec{SamplingRate: samplingRate}
+	// The provider is deliberately not installed with otel.SetTracerProvider:
+	// diag's package level tracer resolves the global provider once, so the
+	// first call would change what every later test in this package sees.
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())))
+	t.Cleanup(func() {
+		require.NoError(t, tp.Shutdown(context.Background()))
+	})
 
-		router := chi.NewRouter()
-		srv.useContextSetup(router)
-		srv.useTracing(router)
-		srv.useAPILogging(router)
-		srv.setupRoutes(router, endpoints)
-		return router
+	remoteParent := func(sampled bool) trace.SpanContext {
+		cfg := trace.SpanContextConfig{
+			TraceID: trace.TraceID(mustHex(t, traceID)),
+			SpanID:  trace.SpanID(mustHex(t, parentSID)),
+		}
+		if sampled {
+			cfg.TraceFlags = trace.FlagsSampled
+		}
+		return trace.NewSpanContext(cfg)
 	}
 
-	dec := json.NewDecoder(logDest)
+	// daprdSpan starts a span the way the tracing middleware does, from the
+	// given inbound span context.
+	daprdSpan := func(parent trace.SpanContext) func(*http.Request) {
+		return func(r *http.Request) {
+			ctx := trace.ContextWithRemoteSpanContext(r.Context(), parent)
+			_, span := tp.Tracer("test").Start(ctx, "test")
+			diagUtils.AddSpanToRequest(r, span)
+		}
+	}
 
-	t.Run("span in the request context", func(t *testing.T) {
-		router := newRouter("1")
+	for _, test := range []struct {
+		name     string
+		setSpan  func(*http.Request)
+		expectID bool
+	}{
+		{
+			// The span daprd started is exported, so its IDs are logged.
+			name:     "sampled span started by daprd",
+			setSpan:  daprdSpan(remoteParent(true)),
+			expectID: true,
+		},
+		{
+			// ParentBased drops the span, so it is never exported.
+			name:    "unsampled span started by daprd",
+			setSpan: daprdSpan(remoteParent(false)),
+		},
+		{
+			// What the no-op tracer leaves in the context when no tracing
+			// exporter is configured: the caller's span, not one of daprd's.
+			name: "remote span context only",
+			setSpan: func(r *http.Request) {
+				*r = *r.WithContext(trace.ContextWithRemoteSpanContext(r.Context(), remoteParent(true)))
+			},
+		},
+		{
+			name: "no span",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv := newServer()
+			srv.config.EnableAPILogging = true
 
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		req.Header.Set("traceparent", "00-"+traceID+"-00f067aa0ba902b7-01")
-		router.ServeHTTP(httptest.NewRecorder(), req)
+			router := chi.NewRouter()
+			srv.useContextSetup(router)
+			if test.setSpan != nil {
+				router.Use(func(next http.Handler) http.Handler {
+					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						test.setSpan(r)
+						next.ServeHTTP(w, r)
+					})
+				})
+			}
+			srv.useAPILogging(router)
+			srv.setupRoutes(router, endpoints)
 
-		logData := map[string]any{}
-		require.NoError(t, dec.Decode(&logData))
+			logDest.Reset()
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
 
-		assert.Equal(t, "HTTP API Called", logData["msg"])
-		assert.Equal(t, traceID, logData["trace_id"])
-		spanID, ok := logData["span_id"].(string)
-		require.True(t, ok)
-		assert.NotEqual(t, emptySID, spanID)
-		assert.Len(t, spanID, len(emptySID))
-	})
+			logData := map[string]any{}
+			require.NoError(t, json.NewDecoder(logDest).Decode(&logData))
+			assert.Equal(t, "HTTP API Called", logData["msg"])
 
-	// With tracing disabled no span is started, so the fields must be absent
-	t.Run("no span in the request context", func(t *testing.T) {
-		router := newRouter("0")
+			if !test.expectID {
+				assert.NotContains(t, logData, "trace_id")
+				assert.NotContains(t, logData, "span_id")
+				return
+			}
 
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		router.ServeHTTP(httptest.NewRecorder(), req)
+			assert.Equal(t, traceID, logData["trace_id"])
+			spanID, ok := logData["span_id"].(string)
+			require.True(t, ok)
+			// The span daprd started, not the one the caller sent.
+			assert.NotEqual(t, parentSID, spanID)
+			assert.Regexp(t, "^[0-9a-f]{16}$", spanID)
+			assert.NotEqual(t, "0000000000000000", spanID)
+		})
+	}
+}
 
-		logData := map[string]any{}
-		require.NoError(t, dec.Decode(&logData))
+// mustHex decodes a hex string into bytes, failing the test if it is not valid.
+func mustHex(t *testing.T, s string) []byte {
+	t.Helper()
 
-		assert.Equal(t, "HTTP API Called", logData["msg"])
-		assert.NotContains(t, logData, "trace_id")
-		assert.NotContains(t, logData, "span_id")
-	})
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return b
 }
 
 func TestAPILoggingOmitHealthChecks(t *testing.T) {
