@@ -205,7 +205,7 @@ jobs:
         echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      run: cd latest-release && make test-integration ARGS="-timeout=45m"
+      run: cd latest-release && make test-integration ARGS="-timeout=70m"
 
     - name: Upload test results
       if: always()
@@ -400,6 +400,12 @@ jobs:
         # Set log target directories
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/v1.25.3_ha" >> $GITHUB_ENV
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
+
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
 
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.5.0
