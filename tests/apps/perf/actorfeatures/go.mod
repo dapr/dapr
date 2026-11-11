@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/tester
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/dapr/dapr v1.13.4
