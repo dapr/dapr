@@ -174,6 +174,28 @@ func TestResolver_Bound(t *testing.T) {
 	})
 }
 
+func TestResolver_BoundStoreCapabilities(t *testing.T) {
+	r := NewResolver(ResolverOptions{
+		Bindings: map[string]string{"TransactionActor": "wallet-transactions"},
+		Stores: &fakeStores{
+			stores: map[string]contribstate.Store{
+				"default":             daprt.NewFakeStateStore(),
+				"wallet-transactions": &daprt.MockStateStore{},
+			},
+			actorName: "default",
+		},
+	})
+
+	_, _, err := r.Resolve("TransactionActor")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, messages.ErrActorStateStoreNotFound)
+	assert.Contains(t, err.Error(), `"wallet-transactions"`)
+	assert.Contains(t, err.Error(), `"TransactionActor"`)
+	assert.Contains(t, err.Error(), "ETag")
+	assert.Contains(t, err.Error(), "transactional")
+	assert.NotContains(t, err.Error(), "actorStateStore")
+}
+
 func TestResolver_Unresolved(t *testing.T) {
 	t.Run("lists the bindings whose store is not loaded", func(t *testing.T) {
 		r := NewResolver(ResolverOptions{

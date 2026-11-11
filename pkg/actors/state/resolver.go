@@ -15,6 +15,7 @@ package state
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 
 	contribstate "github.com/dapr/components-contrib/state"
@@ -83,7 +84,7 @@ func (r *Resolver) resolveBound(actorType, storeName string) (string, Backend, e
 
 	store, ok := capable(storeS)
 	if !ok {
-		return "", nil, errors.New(errStateStoreNotConfigured)
+		return "", nil, fmt.Errorf("actors: state store %q bound to actor type %q must support both the ETag and transactional features required for actor state", storeName, actorType)
 	}
 
 	return storeName, store, nil
