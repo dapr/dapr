@@ -58,6 +58,24 @@ func (r *routing) Setup(t *testing.T) []framework.Option {
 	r.balType = "BalanceActor"
 	r.plainType = "PlainActor"
 
+	return r.setup(t, `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: actorstatestores
+spec:
+  actors:
+    stateStores:
+    - name: wallet-transactions
+      actorTypes: ["`+r.txType+`"]
+    - name: wallet-balance
+      actorTypes: ["`+r.balType+`"]
+`)
+}
+
+// setup starts the stores and the app, with daprd loading each of the given
+// Configuration manifests as its own --config file.
+func (r *routing) setup(t *testing.T, configs ...string) []framework.Option {
 	r.defaultDB = sqlite.New(t,
 		sqlite.WithName("default"),
 		sqlite.WithActorStateStore(true),
@@ -80,19 +98,7 @@ func (r *routing) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypeHandler(r.txType, noop),
 		actors.WithActorTypeHandler(r.balType, noop),
 		actors.WithActorTypeHandler(r.plainType, noop),
-		actors.WithDaprdOptions(daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: actorstatestores
-spec:
-  actors:
-    stateStores:
-    - name: wallet-transactions
-      actorTypes: ["`+r.txType+`"]
-    - name: wallet-balance
-      actorTypes: ["`+r.balType+`"]
-`)),
+		actors.WithDaprdOptions(daprd.WithConfigManifests(t, configs...)),
 	)
 
 	return []framework.Option{

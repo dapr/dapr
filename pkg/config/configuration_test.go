@@ -237,6 +237,64 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
+	// Unlike other lists, actor state store bindings from several files add
+	// up: a later file must not drop the bindings of an earlier one, and the
+	// validation sees the bindings of every file together.
+	t.Run("multiple configurations with actor state store bindings", func(t *testing.T) {
+		writeConfig := func(t *testing.T, actors string) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(path, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: config
+spec:
+`+actors), 0o600))
+			return path
+		}
+		transactions := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-transactions
+        actorTypes: ["TransactionActor"]
+`)
+		balance := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-balance
+        actorTypes: ["BalanceActor"]
+`)
+		conflicting := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-balance
+        actorTypes: ["TransactionActor"]
+`)
+		noActors := writeConfig(t, `
+  features:
+    - name: Actor.Reentrancy
+      enabled: true
+`)
+		nullActors := writeConfig(t, `
+  actors:
+`)
+
+		t.Run("bindings from every file are kept", func(t *testing.T) {
+			config, err := LoadStandaloneConfiguration(transactions, balance, noActors, nullActors)
+			require.NoError(t, err)
+			assert.Equal(t, map[string]string{
+				"TransactionActor": "wallet-transactions",
+				"BalanceActor":     "wallet-balance",
+			}, config.Spec.ActorsSpec.StateStoreByActorType())
+		})
+
+		t.Run("an actor type bound in two files is rejected", func(t *testing.T) {
+			_, err := LoadStandaloneConfiguration(transactions, conflicting, nullActors)
+			require.ErrorContains(t, err, `actor type "TransactionActor" is bound to more than one state store: "wallet-transactions" and "wallet-balance"`)
+		})
+	})
+
 	t.Run("tracing spec headers and timeout", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/tracing_config.yaml")
 		require.NoError(t, err)

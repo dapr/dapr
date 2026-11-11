@@ -958,7 +958,11 @@ func LoadDefaultConfiguration() *Configuration {
 func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	conf := LoadDefaultConfiguration()
 
-	// Load all config files and apply them on top of the default config
+	// Load all config files and apply them on top of the default config.
+	// Decoding a file replaces lists, so the actor state store bindings of
+	// each file are collected and set once all files are decoded: every
+	// file's bindings apply, and validation sees them together.
+	var bindings []ActorStateStoreBinding
 	for _, config := range configs {
 		_, err := os.Stat(config)
 		if err != nil {
@@ -973,10 +977,23 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		// Parse environment variables from yaml
 		b = []byte(os.ExpandEnv(string(b)))
 
+		if conf.Spec.ActorsSpec != nil {
+			conf.Spec.ActorsSpec.StateStores = nil
+		}
 		err = yaml.Unmarshal(b, conf)
 		if err != nil {
 			return nil, err
 		}
+		if conf.Spec.ActorsSpec != nil {
+			bindings = append(bindings, conf.Spec.ActorsSpec.StateStores...)
+		}
+	}
+	// A later file may set spec.actors to null, which drops the struct.
+	if len(bindings) > 0 && conf.Spec.ActorsSpec == nil {
+		conf.Spec.ActorsSpec = &ActorsSpec{}
+	}
+	if conf.Spec.ActorsSpec != nil {
+		conf.Spec.ActorsSpec.StateStores = bindings
 	}
 
 	if err := conf.validate(); err != nil {
