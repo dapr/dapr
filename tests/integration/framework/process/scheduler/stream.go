@@ -90,6 +90,15 @@ func (s *Stream) Result(id uint64, status schedulerv1pb.WatchJobsRequestResultSt
 	}})
 }
 
+// ResultFor answers a pull reminder by reference, as a sidecar does for one
+// delivered on an earlier stream.
+func (s *Stream) ResultFor(ref *schedulerv1pb.ActorReminderRef, status schedulerv1pb.WatchJobsRequestResultStatus) {
+	s.t.Helper()
+	s.send(&schedulerv1pb.WatchJobsRequest{WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+		Result: &schedulerv1pb.WatchJobsRequestResult{Reminder: ref, Status: status},
+	}})
+}
+
 func (s *Stream) PullSlots(actorType string, free uint32) {
 	s.t.Helper()
 	s.send(&schedulerv1pb.WatchJobsRequest{WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_PullSlots{
