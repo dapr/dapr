@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
+	"github.com/dapr/dapr/tests/integration/framework/tracing"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -37,8 +38,8 @@ func init() {
 	suite.Register(new(httpAPILogging))
 }
 
-// httpAPILogging asserts that the HTTP API log line for a request carries the
-// trace and span IDs of the span daprd exported for that same request.
+// httpAPILogging asserts that the HTTP API log line for a sampled request
+// carries the trace and span IDs of the span daprd exported for it.
 type httpAPILogging struct {
 	daprd     *daprd.Daprd
 	collector *otel.Collector
@@ -68,7 +69,7 @@ func (h *httpAPILogging) Run(t *testing.T, ctx context.Context) {
 	h.collector.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	traceID, traceparent := newTraceparent(t)
+	traceID, traceparent := tracing.Traceparent(t, true)
 
 	url := fmt.Sprintf("http://%s/v1.0/metadata", h.daprd.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -82,7 +83,7 @@ func (h *httpAPILogging) Run(t *testing.T, ctx context.Context) {
 
 	var line string
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		line = apiLogLine(h.logline.StdoutBuffer(), "HTTP API Called", traceID)
+		line = tracing.APILogLine(h.logline.StdoutBuffer(), "HTTP API Called", traceID.String())
 		assert.NotEmpty(c, line, "no HTTP API Called line for trace %s", traceID)
 	}, time.Second*15, time.Millisecond*10)
 
@@ -90,9 +91,9 @@ func (h *httpAPILogging) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		spans = h.collector.TraceSpans(traceID)
 		assert.NotEmpty(c, spans, "no exported spans for trace %s", traceID)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	// The logged span is one daprd exported, so the log line and the trace can
-	// be joined on both IDs.
-	assert.Contains(t, exportedSpanIDs(spans), logSpanID(t, line))
+	// The logged span is one daprd exported, not the caller's: only daprd's
+	// own spans reach the collector.
+	assert.Contains(t, tracing.ExportedSpanIDs(spans), tracing.SpanID(t, line))
 }

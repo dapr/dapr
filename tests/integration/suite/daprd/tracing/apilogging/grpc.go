@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
+	"github.com/dapr/dapr/tests/integration/framework/tracing"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -36,8 +37,8 @@ func init() {
 	suite.Register(new(grpcAPILogging))
 }
 
-// grpcAPILogging asserts that the gRPC API log line for a request carries the
-// trace and span IDs of the span daprd exported for that same request.
+// grpcAPILogging asserts that the gRPC API log line for a sampled request
+// carries the trace and span IDs of the span daprd exported for it.
 type grpcAPILogging struct {
 	daprd     *daprd.Daprd
 	collector *otel.Collector
@@ -67,7 +68,7 @@ func (g *grpcAPILogging) Run(t *testing.T, ctx context.Context) {
 	g.collector.WaitUntilRunning(t, ctx)
 	g.daprd.WaitUntilRunning(t, ctx)
 
-	traceID, traceparent := newTraceparent(t)
+	traceID, traceparent := tracing.Traceparent(t, true)
 
 	reqctx := grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", traceparent)
 	_, err := g.daprd.GRPCClient(t, ctx).GetMetadata(reqctx, new(rtv1.GetMetadataRequest))
@@ -75,7 +76,7 @@ func (g *grpcAPILogging) Run(t *testing.T, ctx context.Context) {
 
 	var line string
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		line = apiLogLine(g.logline.StdoutBuffer(), "gRPC API Called", traceID)
+		line = tracing.APILogLine(g.logline.StdoutBuffer(), "gRPC API Called", traceID.String())
 		assert.NotEmpty(c, line, "no gRPC API Called line for trace %s", traceID)
 	}, time.Second*15, time.Millisecond*10)
 
@@ -83,9 +84,9 @@ func (g *grpcAPILogging) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		spans = g.collector.TraceSpans(traceID)
 		assert.NotEmpty(c, spans, "no exported spans for trace %s", traceID)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
-	// The logged span is one daprd exported, so the log line and the trace can
-	// be joined on both IDs.
-	assert.Contains(t, exportedSpanIDs(spans), logSpanID(t, line))
+	// The logged span is one daprd exported, not the caller's: only daprd's
+	// own spans reach the collector.
+	assert.Contains(t, tracing.ExportedSpanIDs(spans), tracing.SpanID(t, line))
 }

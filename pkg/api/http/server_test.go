@@ -490,6 +490,9 @@ func TestAPILoggingTraceContext(t *testing.T) {
 		return func(r *http.Request) {
 			ctx := trace.ContextWithRemoteSpanContext(r.Context(), parent)
 			_, span := tp.Tracer("test").Start(ctx, "test")
+			// Ending the span does not change its span context, which is all
+			// the API logging middleware reads.
+			defer span.End()
 			diagUtils.AddSpanToRequest(r, span)
 		}
 	}

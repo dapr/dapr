@@ -261,7 +261,10 @@ func TestGrpcAPILoggingTraceContext(t *testing.T) {
 	// given inbound span context.
 	daprdSpan := func(parent trace.SpanContext) func(context.Context) context.Context {
 		return func(ctx context.Context) context.Context {
-			ctx, _ = tp.Tracer("test").Start(trace.ContextWithRemoteSpanContext(ctx, parent), "test")
+			ctx, span := tp.Tracer("test").Start(trace.ContextWithRemoteSpanContext(ctx, parent), "test")
+			// Ending the span does not change its span context, which is all
+			// the API logging interceptor reads.
+			span.End()
 			return ctx
 		}
 	}

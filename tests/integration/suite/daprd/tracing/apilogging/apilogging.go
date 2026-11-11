@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,62 +14,66 @@ limitations under the License.
 package apilogging
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"regexp"
-	"strings"
+	"context"
+	"fmt"
+	"net/http"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
-	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	grpcMetadata "google.golang.org/grpc/metadata"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/tracing"
 )
 
-// spanIDField matches the span_id field of an API log line, in either the text
-// or the JSON log format.
-var spanIDField = regexp.MustCompile(`span_id[=:]"?([0-9a-f]{16})"?`)
+// The suites that expect no trace fields drive both APIs with the same
+// traceparent and make the same assertion, so they share the two below.
 
-// newTraceparent returns a random trace ID and a traceparent header carrying it.
-func newTraceparent(t *testing.T) (trace.TraceID, string) {
+const (
+	httpMethod = "/v1.0/metadata"
+	grpcMethod = "/dapr.proto.runtime.v1.Dapr/GetMetadata"
+)
+
+// callAPIs calls the HTTP and gRPC metadata APIs with the given traceparent.
+func callAPIs(t *testing.T, ctx context.Context, procd *daprd.Daprd, traceparent string) {
 	t.Helper()
 
-	var (
-		traceID trace.TraceID
-		spanID  trace.SpanID
-	)
-	_, err := rand.Read(traceID[:])
+	url := fmt.Sprintf("http://%s%s", procd.HTTPAddress(), httpMethod)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
-	_, err = rand.Read(spanID[:])
-	require.NoError(t, err)
+	req.Header.Set("traceparent", traceparent)
 
-	return traceID, "00-" + traceID.String() + "-" + spanID.String() + "-01"
+	resp, err := client.HTTP(t).Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	reqctx := grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", traceparent)
+	_, err = procd.GRPCClient(t, ctx).GetMetadata(reqctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
 }
 
-// apiLogLine returns the API log line that daprd wrote for the given trace, or
-// an empty string if it has not written one yet.
-func apiLogLine(stdout []byte, msg string, traceID trace.TraceID) string {
-	for line := range strings.SplitSeq(string(stdout), "\n") {
-		if strings.Contains(line, msg) && strings.Contains(line, traceID.String()) {
-			return line
-		}
-	}
-	return ""
-}
-
-// logSpanID returns the span ID that the given API log line reports.
-func logSpanID(t *testing.T, line string) string {
+// assertNoTraceFields asserts that both API calls were logged, and that
+// neither log line carries a trace or span ID.
+func assertNoTraceFields(t *testing.T, ll *logline.LogLine) {
 	t.Helper()
 
-	match := spanIDField.FindStringSubmatch(line)
-	require.Len(t, match, 2, "no span_id field in API log line: %s", line)
-	return match[1]
-}
+	for _, api := range []struct{ msg, method string }{
+		{"HTTP API Called", httpMethod},
+		{"gRPC API Called", grpcMethod},
+	} {
+		var line string
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			line = tracing.APILogLine(ll.StdoutBuffer(), api.msg, api.method)
+			assert.NotEmpty(c, line, "no %s line for %s", api.msg, api.method)
+		}, time.Second*15, time.Millisecond*10)
 
-// exportedSpanIDs returns the IDs of the given exported spans.
-func exportedSpanIDs(spans []*tracepb.Span) []string {
-	ids := make([]string, 0, len(spans))
-	for _, span := range spans {
-		ids = append(ids, hex.EncodeToString(span.GetSpanId()))
+		assert.NotContains(t, line, "trace_id", "%s should carry no trace ID", api.msg)
+		assert.NotContains(t, line, "span_id", "%s should carry no span ID", api.msg)
 	}
-	return ids
 }
