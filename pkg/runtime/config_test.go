@@ -57,6 +57,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, 4<<10, intc.readBufferSize)
 	assert.Empty(t, intc.unixDomainSocket)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
+	assert.Equal(t, time.Second, intc.closeGracefulShutdownDuration)
 	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
 	assert.Equal(t, new(true), intc.enableAPILogging)
 	assert.True(t, intc.disableBuiltinK8sSecretStore)
@@ -173,6 +174,45 @@ func TestDisableInitEndpointsConfiguration(t *testing.T) {
 			assert.NoError(t, err, "Value '%s' should be valid but returned error: %v", value, err)
 		}
 	})
+}
+
+func Test_toInternal_closeGracefulShutdownDuration(t *testing.T) {
+	tests := map[string]struct {
+		graceful      int
+		close         int
+		expGraceful   time.Duration
+		expCloseGrace time.Duration
+	}{
+		"close unset follows the graceful shutdown": {
+			graceful: 3, close: 0,
+			expGraceful: 3 * time.Second, expCloseGrace: 3 * time.Second,
+		},
+		"a longer close grace only extends closing": {
+			graceful: 3, close: 40,
+			expGraceful: 3 * time.Second, expCloseGrace: 40 * time.Second,
+		},
+		"a shorter close grace never shortens the graceful shutdown": {
+			graceful: 30, close: 10,
+			expGraceful: 30 * time.Second, expCloseGrace: 30 * time.Second,
+		},
+		"default graceful shutdown": {
+			graceful: -1, close: 0,
+			expGraceful: DefaultGracefulShutdownDuration, expCloseGrace: DefaultGracefulShutdownDuration,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			cfg := defaultTestConfig()
+			cfg.DaprGracefulShutdownSeconds = test.graceful
+			cfg.CloseGracefulShutdownSeconds = test.close
+
+			intc, err := cfg.toInternal()
+			require.NoError(t, err)
+			assert.Equal(t, test.expGraceful, intc.gracefulShutdownDuration)
+			assert.Equal(t, test.expCloseGrace, intc.closeGracefulShutdownDuration)
+		})
+	}
 }
 
 func defaultTestConfig() Config {
