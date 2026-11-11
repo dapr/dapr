@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -441,12 +442,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		request.MaxTokens = &maxTokens
 	}
 	if req.ReasoningEffort != nil {
-		if req.GetReasoningEffort() == "" {
+		reasoningEffort := strings.TrimSpace(req.GetReasoningEffort())
+		if reasoningEffort == "" {
 			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "reasoning_effort must not be empty when set")
 			a.logger.Debug(err)
 			return nil, err
 		}
-		reasoningEffort := req.GetReasoningEffort()
 		request.ReasoningEffort = &reasoningEffort
 	}
 	toolChoice := req.GetToolChoice()

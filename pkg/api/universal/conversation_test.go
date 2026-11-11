@@ -136,6 +136,22 @@ func TestConverseAlpha2InvalidParams(t *testing.T) {
 			},
 			expectedReason: "reasoning_effort must not be empty when set",
 		},
+		"whitespace-only reasoning effort": {
+			req: &runtimev1pb.ConversationRequestAlpha2{
+				Name:            componentName,
+				ReasoningEffort: ptr.Of(" \t\n"),
+				Inputs: []*runtimev1pb.ConversationInputAlpha2{{
+					Messages: []*runtimev1pb.ConversationMessage{{
+						MessageTypes: &runtimev1pb.ConversationMessage_OfUser{
+							OfUser: &runtimev1pb.ConversationMessageOfUser{
+								Content: []*runtimev1pb.ConversationMessageContent{{Text: "hello"}},
+							},
+						},
+					}},
+				}},
+			},
+			expectedReason: "reasoning_effort must not be empty when set",
+		},
 	}
 
 	for name, tc := range tests {
@@ -201,6 +217,11 @@ func TestConverseAlpha2Reasoning(t *testing.T) {
 		},
 		"reasoning effort reaches the component": {
 			effort:         ptr.Of("high"),
+			messages:       []*runtimev1pb.ConversationMessage{user},
+			expectedResult: ptr.Of("reasoning effort: high"),
+		},
+		"reasoning effort reaches the component trimmed": {
+			effort:         ptr.Of(" high\n"),
 			messages:       []*runtimev1pb.ConversationMessage{user},
 			expectedResult: ptr.Of("reasoning effort: high"),
 		},
