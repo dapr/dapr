@@ -74,6 +74,18 @@ func (s *stream) recv() error {
 		return errors.New("received nil result from stream")
 	}
 
+	if ref := result.GetReminder(); ref != nil {
+		s.nsLoop.Enqueue(&loops.PullResult{
+			Namespace:    s.ns,
+			StreamIDx:    s.idx,
+			AppID:        s.appID,
+			ActorAddress: s.address,
+			Reminder:     ref,
+			Status:       result.GetStatus(),
+		})
+		return nil
+	}
+
 	inf, ok := s.inflight.LoadAndDelete(result.GetId())
 	if !ok {
 		// A result whose id matches no inflight entry is a duplicate or
