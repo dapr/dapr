@@ -111,6 +111,13 @@ message JobMetadata {
   // value in addition to any type-level gate. For workflow activities this is
   // the activity name, for workflows this is the workflow name.
   optional string concurrency_key = 4;
+
+  // pull requests pull dispatch for an actor reminder trigger: the scheduler
+  // delivers it to a sidecar hosting the actor type that reported free slots
+  // (see PullSlots) and marks the delivery with WatchJobsResponse.pull. A
+  // scheduler without pull dispatch, or with no connected sidecar reporting
+  // slots for the actor type, routes the trigger as a regular actor reminder.
+  optional bool pull = 5;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -119,6 +126,11 @@ message WatchJobsRequest {
   oneof watch_job_request_type {
     WatchJobsRequestInitial initial = 1;
     WatchJobsRequestResult result = 2;
+
+    // pull_slots updates the free pull slots this sidecar reports for an
+    // actor type. Only sent to schedulers advertising
+    // Host.supports_pull_slots.
+    PullSlots pull_slots = 3;
   }
 }
 
@@ -161,6 +173,29 @@ message WatchJobsRequestInitial {
   // the well-known service name still withholds the placement leader
   // advertisement while it runs.
   repeated string placement_addresses = 8;
+
+  // pull_slots are the free pull slots this sidecar offers per actor type when
+  // the stream opens. A sidecar is eligible for pull-dispatched triggers of an
+  // actor type only when it reports slots for it and lists it in actor_types.
+  // Later changes are sent as WatchJobsRequest.pull_slots.
+  repeated PullSlots pull_slots = 9;
+}
+
+// PullSlots reports the number of pull-dispatched actor reminder triggers of
+// actor_type a sidecar can accept right now. It is the sidecar's activity cap
+// minus all activity work it holds, so every scheduler sees the same count.
+// A scheduler takes a slot off its copy of the count for every delivery and
+// only puts one back on the next report, so the sidecar must send its current
+// count after every change (an activity accepted, finished or refused), even
+// when it equals the last count sent. Reports may be coalesced as long as the
+// latest count always goes out.
+message PullSlots {
+  // actor_type is the actor type the slots apply to (e.g., the activity actor
+  // type).
+  string actor_type = 1;
+
+  // free is the number of free slots.
+  uint32 free = 2;
 }
 
 // ConcurrencyLimit defines a global concurrency limit enforced by the
@@ -203,6 +238,12 @@ enum WatchJobsRequestResultStatus {
 
   // The job was processed with an error.
   FAILED = 1;
+
+  // NO_CAPACITY is sent for a pull-dispatched trigger the sidecar refused
+  // because it had no free slot left. The job was not executed: the scheduler
+  // queues it again without applying the failure policy. Only sent to
+  // schedulers advertising Host.supports_pull_slots.
+  NO_CAPACITY = 2;
 }
 
 // WatchJobsRequestResult is the result of a job execution to allow the job to
@@ -229,6 +270,13 @@ message WatchJobsResponse {
 
   // The metadata associated with the job.
   JobMetadata metadata = 4;
+
+  // pull marks a delivery the scheduler made against a free slot the sidecar
+  // reported (see PullSlots): the sidecar executes it locally instead of
+  // forwarding it to the placement owner, and answers NO_CAPACITY if the slot
+  // is gone. The stored JobMetadata.pull alone does not make a delivery pull:
+  // a scheduler without pull dispatch passes it through unchanged.
+  optional bool pull = 5;
 }
 
 message ScheduleJobRequest {
@@ -326,6 +374,11 @@ message Host {
   // placement (started with placement enabled). Used to elect the placement
   // leader among capable hosts only, keeping mixed-version clusters safe.
   bool scheduler_placement_enabled = 3;
+
+  // supports_pull_slots is true when this scheduler accepts
+  // WatchJobsRequest.pull_slots and the NO_CAPACITY result status. Sidecars
+  // only use pull dispatch while every scheduler host advertises it.
+  bool supports_pull_slots = 4;
 }
 
 // DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.
