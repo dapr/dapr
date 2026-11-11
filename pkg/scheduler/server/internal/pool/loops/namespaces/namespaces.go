@@ -91,6 +91,9 @@ func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 	case *loops.PullSlotsUpdate:
 		n.forward(e.Namespace, e)
 		return nil
+	case *loops.PullResult:
+		n.forward(e.Namespace, e)
+		return nil
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
 	default:

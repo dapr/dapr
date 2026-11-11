@@ -254,6 +254,19 @@ func Test_Initial(t *testing.T) {
 			expCode:     ptr.Of(codes.PermissionDenied),
 			nonMTlSCode: ptr.Of(codes.PermissionDenied),
 		},
+		"other app internal in-flight reminder should error": {
+			ctx: pki.ClientGRPCCtx(t),
+			initial: &schedulerv1pb.WatchJobsRequestInitial{
+				AppId:      "app1",
+				Namespace:  "ns1",
+				ActorTypes: []string{"dapr.internal.ns1.app1.workflow"},
+				InflightReminders: []*schedulerv1pb.ActorReminderRef{
+					{ActorType: "dapr.internal.ns1.app2.activity", ActorId: "instance1::0", Name: "run-activity"},
+				},
+			},
+			expCode:     ptr.Of(codes.PermissionDenied),
+			nonMTlSCode: ptr.Of(codes.PermissionDenied),
+		},
 	}
 
 	for name, test := range tests {
