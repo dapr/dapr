@@ -47,6 +47,10 @@ type TriggerRequest struct {
 	*streambase
 	Job      *internalsv1pb.JobEvent
 	ResultFn func(api.TriggerResponseResult)
+
+	// Repark is set on a pull-dispatched trigger. The stream calls it instead
+	// of ResultFn when the sidecar answers NO_CAPACITY.
+	Repark func()
 }
 
 // StreamShutdown is the event for shutting down the scheduler stream.
@@ -85,6 +89,26 @@ type ConnCloseNamespace struct {
 type ConcurrencyRelease struct {
 	*connbase
 	GateKeys []string
+}
+
+// PullSlotsUpdate carries the free pull slots a sidecar reported on a stream,
+// with the stream's identity as it connected.
+type PullSlotsUpdate struct {
+	*nsbase
+	*connbase
+	Namespace    string
+	StreamIDx    uint64
+	AppID        string
+	ActorAddress string
+	ActorType    string
+	Free         uint32
+}
+
+// ConnRun runs Fn on the connections loop. Used by the hooks the loop
+// installs on the triggers it dispatches.
+type ConnRun struct {
+	*connbase
+	Fn func()
 }
 
 // SchedulerInfoUpdate propagates the current scheduler cluster size and this
