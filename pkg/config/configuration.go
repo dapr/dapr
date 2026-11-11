@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -203,10 +203,6 @@ type ActorStateStoreBinding struct {
 	ActorTypes []string `json:"actorTypes" yaml:"actorTypes"`
 }
 
-// internalActorTypePrefix prefixes the actor types Dapr uses internally, such
-// as the workflow actors. It mirrors pkg/actors/hostauthz.
-const internalActorTypePrefix = "dapr.internal."
-
 // Validate returns every violation of the actor state store binding rules:
 // each binding names a store and at least one non-empty actor type, an actor
 // type is bound to at most one store, and internal actor types (dapr.internal
@@ -219,23 +215,16 @@ func (a *ActorsSpec) Validate() error {
 	var errs []error
 	storeByType := make(map[string]string)
 	for i, binding := range a.StateStores {
-		errs = append(errs, binding.validate(i)...)
-		for _, actorType := range slices.Compact(slices.Sorted(slices.Values(binding.ActorTypes))) {
-			if actorType == "" {
-				continue
-			}
-			if store, ok := storeByType[actorType]; ok && store != binding.Name {
-				errs = append(errs, fmt.Errorf("spec.actors.stateStores: actor type %q is bound to more than one state store: %q and %q", actorType, store, binding.Name))
-				continue
-			}
-			storeByType[actorType] = binding.Name
-		}
+		errs = append(errs, binding.validate(i, storeByType)...)
 	}
 	return errors.Join(errs...)
 }
 
-// validate returns the violations within one binding, at index idx.
-func (b ActorStateStoreBinding) validate(idx int) []error {
+// validate returns the violations of the binding at index idx. It records the
+// binding's actor types in storeByType, which holds the store each actor type
+// was bound to by the earlier bindings, to report an actor type bound to more
+// than one store.
+func (b ActorStateStoreBinding) validate(idx int, storeByType map[string]string) []error {
 	var errs []error
 	if b.Name == "" {
 		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d]: name is required", idx))
@@ -246,17 +235,24 @@ func (b ActorStateStoreBinding) validate(idx int) []error {
 
 	seen := make(map[string]struct{}, len(b.ActorTypes))
 	for _, actorType := range b.ActorTypes {
-		switch {
-		case actorType == "":
+		if actorType == "" {
 			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type must not be empty", idx, b.Name))
 			continue
-		case actorType == strings.TrimSuffix(internalActorTypePrefix, ".") || strings.HasPrefix(actorType, internalActorTypePrefix):
+		}
+		if reserved.IsInternalActorType(actorType) {
 			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is reserved for Dapr internal actors", idx, b.Name, actorType))
 		}
 		if _, ok := seen[actorType]; ok {
 			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is listed more than once", idx, b.Name, actorType))
+			continue
 		}
 		seen[actorType] = struct{}{}
+
+		if store, ok := storeByType[actorType]; ok && store != b.Name {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores: actor type %q is bound to more than one state store: %q and %q", actorType, store, b.Name))
+			continue
+		}
+		storeByType[actorType] = b.Name
 	}
 	return errs
 }

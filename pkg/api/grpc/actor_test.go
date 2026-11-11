@@ -151,6 +151,7 @@ func TestInvokeActorRejectsInternalActorType(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	for _, actorType := range []string{
+		"dapr.internal",
 		"dapr.internal.default.fakeAPI.workflow",
 		"dapr.internal.default.fakeAPI.activity",
 		"dapr.internal.default.fakeAPI.executor",

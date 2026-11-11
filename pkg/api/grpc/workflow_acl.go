@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/security/spiffe"
@@ -96,7 +97,7 @@ func (a *api) callActorReminderValidateWorkflowACL(ctx context.Context, in *inte
 // loaded. Without mTLS there is no caller identity, so these calls are
 // denied when a policy is loaded and allowed otherwise.
 func (a *api) validateSameAppInternalActor(ctx context.Context, actorType, operation string) error {
-	if !workflowacl.IsInternalActorType(actorType) {
+	if !reserved.IsInternalActorType(actorType) {
 		return nil
 	}
 
