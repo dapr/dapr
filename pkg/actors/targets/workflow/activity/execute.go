@@ -66,10 +66,16 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 	// Under the fast path a local drive that runs out of retries creates
 	// the run-activity reminder, unordered with a purge of its workflow.
 	// Ack such a reminder rather than run the activity of a purged workflow.
-	if gated && a.parentPurged(ctx, workflowID, invocation) {
-		log.Infof("Activity actor '%s': workflow '%s' was purged; dropping its run-activity reminder", a.actorID, workflowID)
-		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusPurgedDropped)
-		return nil
+	if gated {
+		purged, perr := a.parentPurged(ctx, workflowID, invocation)
+		if perr != nil {
+			return wferrors.NewRecoverable(fmt.Errorf("failed to read the workflow metadata row: %w", perr))
+		}
+		if purged {
+			log.Infof("Activity actor '%s': workflow '%s' was purged; dropping its run-activity reminder", a.actorID, workflowID)
+			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusPurgedDropped)
+			return nil
+		}
 	}
 	for {
 		call, owner, err := a.claim(ctx, key, workflowID, taskID, reminder.SkipLock)
@@ -208,17 +214,27 @@ func (a *activity) gate(ctx context.Context, key string, owned *inflight.Call) (
 	return false, err
 }
 
-// parentPurged reports whether the activity's workflow has no state left.
-// False when the read fails, and for a workflow of another app, whose state
-// this daprd cannot read.
-func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) bool {
+// parentPurged reports whether the activity's workflow has no state left. An
+// empty read is confirmed once, as a store may not yet serve its own write
+// (see the orchestrator's saveInternalState). False for a workflow of another
+// app, whose state this daprd cannot read.
+func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) (bool, error) {
 	if src := invocation.GetHistoryEvent().GetRouter().GetSourceAppID(); src != "" && src != a.appID {
-		return false
+		return false, nil
 	}
-	res, err := a.state.Get(ctx, &actorapi.GetStateRequest{
+	req := &actorapi.GetStateRequest{
 		ActorType: a.workflowActorType,
 		ActorID:   workflowID,
 		Key:       wfenginestate.MetadataKey,
-	}, false)
-	return err == nil && res != nil && len(res.Data) == 0
+	}
+	for range 2 {
+		res, err := a.state.Get(ctx, req, false)
+		if err != nil {
+			return false, err
+		}
+		if res == nil || len(res.Data) > 0 {
+			return false, nil
+		}
+	}
+	return true, nil
 }
