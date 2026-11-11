@@ -42,6 +42,7 @@ var buildTags = []string{
 	"middleware_http_routeralias",
 	"middleware_http_wasm",
 	"conversation_echo",
+	"conversation_anthropic",
 	"search_inmemory",
 	"vector_inmemory",
 	// state_spiffeprobe compiles in an integration-test-only state store that
@@ -58,6 +59,9 @@ var buildTags = []string{
 	// assert which metadata daprd forwards to a component. Never set for
 	// released daprd flavors.
 	"bindings_metadataprobe",
+	// nameresolution_sqlite compiles in the SQLite name resolver, which daprd
+	// uses on darwin where mDNS multicast is blocked on CI runners.
+	"nameresolution_sqlite",
 	// middleware_http_bodyprobe compiles in an integration-test-only HTTP
 	// middleware that records how many request body bytes it can read,
 	// letting a test assert the max body size limit is applied before the

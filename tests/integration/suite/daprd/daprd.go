@@ -19,6 +19,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/config"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/grpcserver"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpendpoints"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpserver"

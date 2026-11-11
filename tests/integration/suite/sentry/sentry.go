@@ -15,6 +15,7 @@ package sentry
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/helm"
+	_ "github.com/dapr/dapr/tests/integration/suite/sentry/jwt"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/oidc"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/usergroup"

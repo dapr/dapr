@@ -64,6 +64,7 @@ type options struct {
 	enableMTLS                 bool
 	sentryAddress              string
 	sentryRequestJwtAudiences  []string
+	workloadKeyAlgorithm       string
 	controlPlaneAddress        string
 	disableK8sSecretStore      *bool
 	gracefulShutdownSeconds    *int
@@ -77,6 +78,7 @@ type options struct {
 	schedulerJobStreams        *uint
 	disableInitEndpoints       []string
 	maxBodySize                *string
+	readBufferSize             *string
 	allowedOrigins             *string
 }
 
@@ -334,6 +336,12 @@ func WithSentryRequestJwtAudiences(audiences ...string) Option {
 	}
 }
 
+func WithWorkloadKeyAlgorithm(alg string) Option {
+	return func(o *options) {
+		o.workloadKeyAlgorithm = alg
+	}
+}
+
 func WithControlPlaneAddress(address string) Option {
 	return func(o *options) {
 		o.controlPlaneAddress = address
@@ -452,6 +460,12 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithReadBufferSize(size string) Option {
+	return func(o *options) {
+		o.readBufferSize = &size
 	}
 }
 

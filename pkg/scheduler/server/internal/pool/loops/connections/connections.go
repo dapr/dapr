@@ -24,6 +24,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/pull"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
@@ -37,6 +38,7 @@ var (
 	connsCache  = sync.Pool{New: func() any {
 		return &connections{
 			streams:          make(map[uint64]context.CancelFunc),
+			streamLoops:      make(map[uint64]loop.Interface[loops.EventStream]),
 			streamPool:       store.New(),
 			concurrencyGates: make(map[string]*concurrencyGate),
 			streamGateKeys:   make(map[uint64][]string),
@@ -68,11 +70,14 @@ type connections struct {
 	schedulerIdx   uint32
 
 	streams          map[uint64]context.CancelFunc
+	streamLoops      map[uint64]loop.Interface[loops.EventStream]
 	streamIDx        uint64
 	streamPool       *store.Store
 	concurrencyGates map[string]*concurrencyGate
 	streamGateKeys   map[uint64][]string
-	wg               sync.WaitGroup
+	pull             *pull.Dispatcher
+
+	wg sync.WaitGroup
 }
 
 func New(opts Options) loop.Interface[loops.EventConn] {
@@ -86,7 +91,31 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 	conns.schedulerIdx = 0
 
 	conns.loop = loopFactory.NewLoop(conns)
+	conns.pull = conns.newPull()
 	return conns.loop
+}
+
+// newPull returns the pull dispatch state for this loop, wired to its streams
+// and concurrency gates.
+func (c *connections) newPull() *pull.Dispatcher {
+	return pull.New(pull.Options{
+		Loop: c.loop,
+		StreamLoop: func(streamIDx uint64) (loop.Interface[loops.EventStream], bool) {
+			streamLoop, ok := c.streamLoops[streamIDx]
+			return streamLoop, ok
+		},
+		AcquireGates: c.acquireTriggerGates,
+		ReleaseGates: func(keys []string) {
+			// A pull trigger without gates frees nothing on its way out:
+			// only a slot report does.
+			if len(keys) == 0 {
+				return
+			}
+			c.handleConcurrencyRelease(&loops.ConcurrencyRelease{GateKeys: keys})
+		},
+		Requeue:   c.handleTriggerRequest,
+		MaxParked: maxPendingPerGate,
+	})
 }
 
 func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
@@ -101,6 +130,10 @@ func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 		c.handleConcurrencyRelease(e)
 	case *loops.SchedulerInfoUpdate:
 		c.handleSchedulerInfoUpdate(e)
+	case *loops.PullSlotsUpdate:
+		c.pull.HandleSlots(e)
+	case *loops.ConnRun:
+		e.Fn()
 	case *loops.Shutdown:
 		c.handleShutdown()
 	default:
@@ -118,12 +151,14 @@ func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 	c.schedulerCount = max(uint32(e.Count), 1)
 	//nolint:gosec // idx is non-negative
 	c.schedulerIdx = uint32(e.Idx)
+	c.pull.SetRotation(int(c.schedulerIdx))
 
 	for key, gate := range c.concurrencyGates {
 		if gate.pendingLen() > 0 {
 			c.drainPending(key, gate)
 		}
 	}
+	c.pull.Drain()
 }
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
@@ -157,8 +192,11 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorTypes:   add.Request.GetActorTypes(),
 		ActorAddress: add.Request.ActorAddress,
 	})
+	c.streamLoops[streamIDx] = streamLoop
 
 	c.updateConcurrencyLimits(streamIDx, add.Request)
+	c.pull.AddStream(streamIDx, add.Request)
+	c.pull.Drain()
 
 	return nil
 }
@@ -223,6 +261,21 @@ func (c *connections) acquireGates(gateKeys []string) (acquired []string, ok boo
 	return acquired, true
 }
 
+// acquireTriggerGates acquires all of req's shared concurrency gates or none,
+// returning the keys held, or the key of the gate that was full.
+func (c *connections) acquireTriggerGates(req *loops.TriggerRequest) ([]string, string, bool) {
+	keys := c.gateKeysForTrigger(req)
+	acquired, ok := c.acquireGates(keys)
+	if !ok {
+		c.releaseGates(acquired)
+		return nil, keys[len(acquired)], false
+	}
+	for _, key := range keys {
+		monitoring.RecordConcurrencyInflight(key, int64(c.concurrencyGates[key].current))
+	}
+	return keys, "", true
+}
+
 func (c *connections) releaseGates(keys []string) {
 	for _, key := range keys {
 		if gate, ok := c.concurrencyGates[key]; ok {
@@ -232,6 +285,10 @@ func (c *connections) releaseGates(keys []string) {
 }
 
 func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
+	if c.pull.HandleTrigger(req) {
+		return
+	}
+
 	streamLoop, ok := c.getStreamLoop(req.Job.GetMetadata())
 	if !ok {
 		req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
@@ -317,6 +374,10 @@ func (c *connections) dispatchWithGates(streamLoop loop.Interface[loops.EventStr
 	streamLoop.Enqueue(req)
 }
 
+// handleConcurrencyRelease releases every gate the trigger held before
+// draining any of them. Pending triggers wait on their first gate, so
+// draining that gate while a later gate of the same trigger is still held
+// would fail to acquire it, and nothing would retry once it was released.
 func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 	for _, key := range rel.GateKeys {
 		gate, ok := c.concurrencyGates[key]
@@ -326,9 +387,19 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 
 		gate.release()
 		monitoring.RecordConcurrencyInflight(key, int64(gate.current))
-
-		c.drainPending(key, gate)
 	}
+
+	for _, key := range rel.GateKeys {
+		if gate, ok := c.concurrencyGates[key]; ok {
+			c.drainPending(key, gate)
+		}
+	}
+
+	// A pull trigger may be parked behind a type or per-name gate. Hashed
+	// pending is drained first, so behind a shared gate, such as a global
+	// activity limit over activities with mixed dispatch modes, pull work
+	// waits until the hashed queue for that gate is empty.
+	c.pull.Drain()
 }
 
 // drainPending scans the pending queue to find a trigger that can acquire all
@@ -406,10 +477,13 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
+	delete(c.streamLoops, closeStream.StreamIDx)
 	delete(c.streamGateKeys, closeStream.StreamIDx)
 	cancel()
 
+	c.pull.CloseStream(closeStream.StreamIDx)
 	c.removeOrphanedGates()
+	c.pull.Drain()
 
 	// This loop owns the authoritative stream set: confirm emptiness to the
 	// namespaces loop so it can delete the namespace. Deleting on the
@@ -430,12 +504,14 @@ func (c *connections) handleShutdown() {
 	}
 
 	clear(c.streams)
+	clear(c.streamLoops)
 
 	for _, gate := range c.concurrencyGates {
 		for req := gate.dequeue(); req != nil; req = gate.dequeue() {
 			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 		}
 	}
+	c.pull.Shutdown()
 	clear(c.concurrencyGates)
 	clear(c.streamGateKeys)
 

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -51,7 +52,19 @@ func (s *strandedactivity) Setup(t *testing.T) []framework.Option {
 	// execution claim is still live, and that path skips the durable-reminder
 	// escalation (activity/drive.go), leaving the orchestrator janitor as the
 	// only re-driver. Its default 20s period exceeds the bound below.
-	s.workflow = workflow.NewClustered(t, 2, daprd.WithWorkflowJanitorPeriod(t, 2*time.Second))
+	dopts := []daprd.Option{
+		daprd.WithAppID(uuid.NewString()),
+		daprd.WithWorkflowJanitorPeriod(t, 2*time.Second),
+	}
+	s.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+		workflow.WithClusteredDeployment(true),
+		// Asserts the stranded host unregisters the actor types while no
+		// daprd has a worker, which the staged operations preview does not do.
+		workflow.WithStagedOperations(false),
+		workflow.WithDaprdOptions(0, dopts...),
+		workflow.WithDaprdOptions(1, dopts...),
+	)
 	return []framework.Option{
 		framework.WithProcesses(s.workflow),
 	}

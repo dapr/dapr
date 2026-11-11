@@ -22,7 +22,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
@@ -34,12 +33,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byte) error {
-	var createWorkflowInstanceRequest backend.CreateWorkflowInstanceRequest
-	if err := proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
-		return fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
-	}
-
+func (o *orchestrator) createWorkflowInstance(ctx context.Context, createWorkflowInstanceRequest *backend.CreateWorkflowInstanceRequest) error {
 	startEvent := createWorkflowInstanceRequest.GetStartEvent()
 	if es := startEvent.GetExecutionStarted(); es == nil {
 		return errors.New("invalid execution start event")
@@ -61,7 +55,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		}
 	}
 
-	state, _, err := o.loadInternalState(ctx)
+	state, err := o.loadStateForCreate(ctx)
 	if err != nil {
 		return err
 	}

@@ -80,9 +80,11 @@ type Options struct {
 
 	// Fallback, if set, reports whether this daprd hosts the workflow actor
 	// type as a fallback host (the WorkflowsStagedOperations preview): with no
-	// local executor. A fallback host serves every operation, and takes the
-	// durable reminder path for them rather than the WorkflowsFastPath local
-	// drives. Nil when the feature is off.
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
 	Fallback func() bool
 
 	// Detached runs work that must outlive an invocation or claim context, on
@@ -340,6 +342,22 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	}
 
 	return errors.Join(errs.Slice()...)
+}
+
+// CancelWakes cancels the detached local wakes as HaltAll does, without
+// deactivating the actors, for a daprd turning into a fallback host in place.
+// It has no local executor left to drive them, and a wake parked in a stall
+// hold would keep its actor's turn until the wake times out, failing every
+// janitor delivery meanwhile. The janitor drives what they leave once a
+// daprd has an executor.
+func (f *factory) CancelWakes() {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.wakeLock.Lock()
+	defer f.wakeLock.Unlock()
+	f.wakeCancel()
+	f.wakeCtx, f.wakeCancel = context.WithCancel(context.Background())
 }
 
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
