@@ -14,6 +14,7 @@ limitations under the License.
 package pull
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
@@ -105,6 +106,34 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 		return true
 	}
 	return false
+}
+
+// remove takes the parked trigger of the job stored under key out of the
+// queue, or returns nil.
+func (q *queue) remove(key string) *loops.TriggerRequest {
+	for pos, group := range q.ring {
+		reqs := q.groups[group]
+		i := slices.IndexFunc(reqs, func(req *loops.TriggerRequest) bool { return req.Job.GetKey() == key })
+		if i < 0 {
+			continue
+		}
+		req := reqs[i]
+		if len(reqs) > 1 {
+			q.groups[group] = slices.Delete(reqs, i, i+1)
+		} else {
+			delete(q.groups, group)
+			q.ring = slices.Delete(q.ring, pos, pos+1)
+			if q.next > pos {
+				q.next--
+			}
+			if q.next >= len(q.ring) {
+				q.next = 0
+			}
+		}
+		q.n--
+		return req
+	}
+	return nil
 }
 
 // drainAll removes every parked trigger, passing each to fn.

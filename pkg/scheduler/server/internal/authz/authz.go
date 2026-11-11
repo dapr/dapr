@@ -94,10 +94,10 @@ func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMet
 	return nil
 }
 
-// WatchInitial authorizes a WatchJobs stream. Declared actor types and the
-// actor types of concurrency limits must not be another app's reserved
-// internal actor types, else the stream would receive, or throttle, that
-// app's reminder triggers.
+// WatchInitial authorizes a WatchJobs stream. Declared actor types, the actor
+// types of concurrency limits and of in-flight reminders must not be another
+// app's reserved internal actor types, else the stream would receive,
+// throttle, or hold back that app's reminder triggers.
 func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {
 	ns, appID := initial.GetNamespace(), initial.GetAppId()
 	if err := a.authz(ctx, ns, appID); err != nil {
@@ -107,6 +107,9 @@ func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJo
 	actorTypes := slices.Clone(initial.GetActorTypes())
 	for _, limit := range initial.GetConcurrencyLimits() {
 		actorTypes = append(actorTypes, limit.GetActor().GetType())
+	}
+	for _, ref := range initial.GetInflightReminders() {
+		actorTypes = append(actorTypes, ref.GetActorType())
 	}
 
 	for _, actorType := range actorTypes {

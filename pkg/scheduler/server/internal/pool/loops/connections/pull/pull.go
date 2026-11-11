@@ -14,15 +14,25 @@ limitations under the License.
 package pull
 
 import (
+	"time"
+
 	"github.com/diagridio/go-etcd-cron/api"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections.pull")
+
+// defaultReattachGrace is how long a pull trigger whose stream closed while it
+// ran waits for its sidecar to reconnect and report it as still running. A
+// sidecar that does keeps the activity, so a live activity is not run twice;
+// the activity of a sidecar that does not is delivered again after this long.
+const defaultReattachGrace = 30 * time.Second
 
 // Options wires a Dispatcher to the connections loop of its namespace.
 type Options struct {
@@ -43,6 +53,9 @@ type Options struct {
 	// Requeue routes a trigger again from the start.
 	Requeue func(req *loops.TriggerRequest)
 
+	// Idle is called when the last unresolved pull trigger has resolved.
+	Idle func()
+
 	// MaxParked bounds the parked pull triggers per actor type. A trigger
 	// beyond it is resolved FAILED, so its failure policy retries it later.
 	MaxParked int
@@ -52,14 +65,17 @@ type Options struct {
 // loop. pools lists, per actor type, the sidecars reporting pull slots; a
 // sidecar's several streams share one pool. pending parks pull triggers per
 // actor type while no pool has a free slot. sidecars holds each sidecar's
-// stream count and the pull triggers dispatched to it that are not yet
-// resolved. rotate offsets the slot search so equally loaded pools take turns.
+// stream count and the pull triggers dispatched to it, which outlive the
+// stream that delivered them. rotate offsets the slot search so equally
+// loaded pools take turns.
 type Dispatcher struct {
-	opts Options
+	opts  Options
+	grace time.Duration
 
 	streams  map[uint64]string
 	pools    map[string][]*pool
 	pending  map[string]*queue
+	claims   map[string]*claim
 	sidecars map[string]*sidecar
 	backlog  *gauge
 	inflight *gauge
@@ -69,13 +85,21 @@ type Dispatcher struct {
 func New(opts Options) *Dispatcher {
 	return &Dispatcher{
 		opts:     opts,
+		grace:    defaultReattachGrace,
 		streams:  make(map[uint64]string),
 		pools:    make(map[string][]*pool),
 		pending:  make(map[string]*queue),
+		claims:   make(map[string]*claim),
 		sidecars: make(map[string]*sidecar),
 		backlog:  newGauge(monitoring.RecordWorkflowActivityBacklog),
 		inflight: newGauge(monitoring.RecordWorkflowActivityInflight),
 	}
+}
+
+// refKey is the stored job key of the reminder ref names, the key the cron
+// sets on its triggers.
+func refKey(namespace string, ref *schedulerv1pb.ActorReminderRef) string {
+	return serialize.ActorReminderKey(namespace, ref.GetActorType(), ref.GetActorId(), ref.GetName())
 }
 
 // SetRotation seeds the slot search, so equally loaded sidecars are not all
@@ -95,9 +119,18 @@ func (d *Dispatcher) Shutdown() {
 	}
 	for _, sc := range d.sidecars {
 		for _, f := range sc.flights {
+			f.stopTimer()
 			f.req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 			// The loop is closing, so the flight's own end never runs.
 			d.inflight.add(f.req, -1)
+		}
+	}
+	for _, c := range d.claims {
+		if c.timer != nil {
+			c.timer.Stop()
+		}
+		if c.req != nil {
+			c.req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 		}
 	}
 }

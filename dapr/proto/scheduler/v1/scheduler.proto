@@ -179,6 +179,21 @@ message WatchJobsRequestInitial {
   // actor type only when it reports slots for it and lists it in actor_types.
   // Later changes are sent as WatchJobsRequest.pull_slots.
   repeated PullSlots pull_slots = 9;
+
+  // inflight_reminders are the pull-dispatched actor reminders an earlier
+  // stream of this sidecar to this scheduler delivered which are still
+  // executing, or whose result has not been sent yet. The scheduler keeps
+  // waiting for their results instead of delivering them again, and their
+  // results are sent with WatchJobsRequestResult.reminder.
+  repeated ActorReminderRef inflight_reminders = 10;
+}
+
+// ActorReminderRef identifies an actor reminder job of the stream's
+// namespace and app.
+message ActorReminderRef {
+  string actor_type = 1;
+  string actor_id = 2;
+  string name = 3;
 }
 
 // PullSlots reports the number of pull-dispatched actor reminder triggers of
@@ -254,6 +269,11 @@ message WatchJobsRequestResult {
 
   // status is the status of the job processing.
   WatchJobsRequestResultStatus status = 2;
+
+  // reminder identifies the job instead of id for the result of a
+  // pull-dispatched reminder delivered on an earlier stream (see
+  // WatchJobsRequestInitial.inflight_reminders). id is 0 when it is set.
+  optional ActorReminderRef reminder = 3;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
@@ -376,8 +396,9 @@ message Host {
   bool scheduler_placement_enabled = 3;
 
   // supports_pull_slots is true when this scheduler accepts
-  // WatchJobsRequest.pull_slots and the NO_CAPACITY result status. Sidecars
-  // only use pull dispatch while every scheduler host advertises it.
+  // WatchJobsRequest.pull_slots, the NO_CAPACITY result status and
+  // reattachment of in-flight jobs. Sidecars only use pull dispatch while
+  // every scheduler host advertises it.
   bool supports_pull_slots = 4;
 }
 
