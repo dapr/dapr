@@ -96,11 +96,12 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	s.proxy.ArmFailures(proxy.MethodGetJob, 1_000_000, codes.Unavailable, nil)
 
 	// The client gives up on the create well before the Scheduler is back,
-	// as an SDK call with a request timeout would.
+	// as an SDK call with a request timeout would. It is cancelled below once
+	// the claim has been handed off, so the timeout is only a backstop.
+	cctx, ccancel := context.WithTimeout(ctx, 20*time.Second)
+	defer ccancel()
 	createErr := make(chan error, 1)
 	go func() {
-		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
 		_, err := gclient.StartWorkflowBeta1(cctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "wf",
@@ -146,6 +147,11 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	// The claim cancel abandons the create and its retries cannot register
 	// the reminder before the client gives up: the client gets an error and,
 	// like a status-guarding client, never re-issues the create.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Positive(c, s.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
+			"the cancelled claim must have handed the start reminder create to the detached retry")
+	}, 15*time.Second, 10*time.Millisecond)
+	ccancel()
 	select {
 	case err := <-createErr:
 		require.Error(t, err, "the create must fail while the Scheduler is unreachable")
@@ -160,8 +166,6 @@ func (s *start) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, "PENDING", resp.GetRuntimeStatus(), "the committed start must be visible as PENDING")
 	require.Zero(t, s.scheduler.JobKeyCount(t, ctx, "||start-es-"), "no start reminder can exist during the outage")
-	assert.Positive(t, s.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
-		"the cancelled claim must have handed the start reminder create to the detached retry")
 
 	// Scheduler back.
 	s.proxy.ArmFailures(proxy.MethodScheduleJob, 0, codes.Unavailable, nil)

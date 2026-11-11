@@ -46,6 +46,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -54,6 +55,7 @@ import (
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	actorsstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
+	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	timersfake "github.com/dapr/dapr/pkg/actors/timers/fake"
 	daprerrors "github.com/dapr/dapr/pkg/api/errors"
@@ -82,7 +84,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
@@ -2174,6 +2178,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	})
 }
 
+func TestPublicEndpointsReadOnly(t *testing.T) {
+	eps := NewAPI(APIOpts{}).PublicEndpoints()
+	routes := make([]string, 0, len(eps))
+	for _, e := range eps {
+		assert.Equal(t, []string{nethttp.MethodGet}, e.Methods, e.Route)
+		routes = append(routes, e.Route)
+	}
+	assert.ElementsMatch(t, []string{"metadata", "healthz", "healthz/outbound"}, routes)
+}
+
 func createExporters(buffer *string) {
 	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
 	exporter.Register("fakeID")
@@ -3108,6 +3122,88 @@ func TestV1Workflow(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
+	})
+}
+
+// TestV1WorkflowStaged checks that a workflow operation a fallback host
+// served says so in its body, and that any other keeps the response it had
+// before staged existed: the same status code and body.
+func TestV1WorkflowStaged(t *testing.T) {
+	newServer := func(t *testing.T, fallback bool) *fakeHTTPServer {
+		t.Helper()
+
+		cs := compstore.New()
+		require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
+
+		r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			res := new(internalsv1pb.InternalInvokeResponse)
+			if fallback {
+				wfcommon.SetFallback(res)
+			}
+			return res, nil
+		})
+		actors := actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+			return r, nil
+		})
+		wfe, err := wfengine.New(wfengine.Options{
+			AppID:             "myapp",
+			Namespace:         "default",
+			ComponentStore:    cs,
+			Actors:            actors,
+			InProcessExecutor: inprocess.NewExecutor(),
+		})
+		require.NoError(t, err)
+
+		testAPI := &api{
+			healthz: healthz.New(),
+			universal: universal.New(universal.Options{
+				Logger:         logger.NewLogger("fakeLogger"),
+				CompStore:      cs,
+				Resiliency:     resiliency.New(nil),
+				WorkflowEngine: wfe,
+				Actors:         actors,
+			}),
+		}
+
+		f := newFakeHTTPServer()
+		t.Cleanup(f.Shutdown)
+		f.StartServer(testAPI.constructWorkflowEndpoints(), nil)
+		return f
+	}
+
+	paths := map[string]string{
+		"terminate":   "v1.0/workflows/dapr/myInstanceID/terminate",
+		"raise event": "v1.0/workflows/dapr/myInstanceID/raiseEvent/myEvent",
+		"pause":       "v1.0/workflows/dapr/myInstanceID/pause",
+		"resume":      "v1.0/workflows/dapr/myInstanceID/resume",
+	}
+
+	t.Run("served by a fallback host", func(t *testing.T) {
+		srv := newServer(t, true)
+
+		resp := srv.DoRequest("POST", "v1.0/workflows/dapr/myWorkflow/start?instanceID=myInstanceID", nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.JSONEq(t, `{"instanceID":"myInstanceID","staged":true}`, string(resp.RawBody))
+
+		for name, path := range paths {
+			resp := srv.DoRequest("POST", path, nil, nil)
+			assert.Equal(t, 202, resp.StatusCode, name)
+			assert.JSONEq(t, `{"staged":true}`, string(resp.RawBody), name)
+		}
+	})
+
+	t.Run("served by a host with an executor", func(t *testing.T) {
+		srv := newServer(t, false)
+
+		resp := srv.DoRequest("POST", "v1.0/workflows/dapr/myWorkflow/start?instanceID=myInstanceID", nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.JSONEq(t, `{"instanceID":"myInstanceID"}`, string(resp.RawBody))
+
+		for name, path := range paths {
+			resp := srv.DoRequest("POST", path, nil, nil)
+			assert.Equal(t, 202, resp.StatusCode, name)
+			assert.Equal(t, "{}", string(resp.RawBody), name)
+		}
 	})
 }
 
@@ -4171,6 +4267,21 @@ func (c fakeStateStore) Multi(ctx context.Context, request *state.TransactionalS
 	return nil
 }
 
+type multiContextKey struct{}
+
+type multiContextStore struct {
+	fakeStateStore
+	hasDeadline atomic.Bool
+	hasIdentity atomic.Bool
+}
+
+func (c *multiContextStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
+	_, ok := ctx.Deadline()
+	c.hasDeadline.Store(ok)
+	c.hasIdentity.Store(ctx.Value(multiContextKey{}) == "identity")
+	return nil
+}
+
 type fakeStateStoreQuerier struct {
 	state.Store
 	state.TransactionalStore
@@ -4630,6 +4741,47 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
+}
+
+func TestV1TransactionResiliencyContext(t *testing.T) {
+	store := &multiContextStore{fakeStateStore: newFakeStateStore()}
+	compStore := compstore.New()
+	compStore.AddStateStore("failStore", store)
+
+	res := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
+	res.SetComponentContextDecorator(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, multiContextKey{}, "identity")
+	})
+	testAPI := &api{
+		healthz: healthz.New(),
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: res,
+		}),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
+	}
+
+	f := newFakeHTTPServer()
+	t.Cleanup(f.Shutdown)
+	f.StartServer(testAPI.constructStateEndpoints(), nil)
+
+	b, err := json.Marshal(stateTransactionRequestBody{
+		Operations: []stateTransactionRequestBodyOperation{
+			{
+				Operation: string(state.OperationDelete),
+				Request:   map[string]string{"key": "key1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resp := f.DoRequest("POST", "v1.0/state/failStore/transaction", b, nil)
+
+	assert.Equal(t, 204, resp.StatusCode)
+	assert.True(t, store.hasDeadline.Load(), "store must receive the context with the resiliency timeout")
+	assert.True(t, store.hasIdentity.Load(), "store must receive the component context")
 }
 
 func TestV1TransactionEndpoints(t *testing.T) {

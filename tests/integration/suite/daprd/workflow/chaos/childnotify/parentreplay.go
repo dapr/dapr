@@ -160,8 +160,8 @@ func (p *parentreplay) Run(t *testing.T, ctx context.Context) {
 	require.Eventually(t, func() bool { return runs.Load() == 1 }, time.Second*20, time.Millisecond*10)
 	close(releaseCh)
 	// The child's send and the parent's replay can hold each other's lock
-	// until the send times out (detachedReminderTimeout, 30s) and the retry
-	// reminder re-sends it, so the drop can take over 30s to land.
+	// until the send times out (defaultParentNotifyTimeout, 5s) and the retry
+	// reminder re-sends it, possibly more than once.
 	select {
 	case <-dropped:
 	case <-time.After(time.Second * 40):

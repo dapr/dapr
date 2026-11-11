@@ -120,18 +120,15 @@ func AddBulkResponseEntry(bulkResponses *[]contribpubsub.BulkSubscribeResponseEn
 	*bulkResponses = append(*bulkResponses, resp)
 }
 
-func NewBulkSubIngressDiagnostics() BulkSubIngressDiagnostics {
+func NewBulkSubIngressDiagnostics() *BulkSubIngressDiagnostics {
 	statusWiseCountDiag := make(map[string]int64, 3)
 	statusWiseCountDiag[string(contribpubsub.Success)] = 0
 	statusWiseCountDiag[string(contribpubsub.Drop)] = 0
 	statusWiseCountDiag[string(contribpubsub.Retry)] = 0
-	bulkSubDiag := BulkSubIngressDiagnostics{
-		StatusWiseDiag: statusWiseCountDiag,
-		Elapsed:        0,
-		RetryReported:  false,
-	}
 
-	return bulkSubDiag
+	return &BulkSubIngressDiagnostics{
+		statusWiseDiag: statusWiseCountDiag,
+	}
 }
 
 func ReportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *BulkSubIngressDiagnostics) {
@@ -139,9 +136,11 @@ func ReportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *Bu
 		return
 	}
 
-	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, rtpubsub.MetadataKeyPubSub, topic, bulkSubDiag.Elapsed)
+	statusWiseDiag, elapsed := bulkSubDiag.snapshot()
 
-	for status, count := range bulkSubDiag.StatusWiseDiag {
+	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, rtpubsub.MetadataKeyPubSub, topic, elapsed)
+
+	for status, count := range statusWiseDiag {
 		diag.DefaultComponentMonitoring.BulkPubsubIngressEventEntries(ctx, rtpubsub.MetadataKeyPubSub, topic, status, count)
 	}
 }

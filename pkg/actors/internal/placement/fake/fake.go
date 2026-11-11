@@ -26,6 +26,7 @@ type Fake struct {
 	fnLock          func(ctx context.Context, actorType string) (context.Context, context.CancelCauseFunc, error)
 	fnLookupActor   func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	fnIsActorHosted func(context.Context, string, string) bool
+	fnWatchRemote   func(context.Context, string) <-chan bool
 }
 
 func New() *Fake {
@@ -40,6 +41,9 @@ func New() *Fake {
 		},
 		fnIsActorHosted: func(ctx context.Context, actorType, actorID string) bool {
 			return false
+		},
+		fnWatchRemote: func(context.Context, string) <-chan bool {
+			return nil
 		},
 	}
 }
@@ -69,6 +73,11 @@ func (f *Fake) WithIsActorHosted(fn func(context.Context, string, string) bool) 
 	return f
 }
 
+func (f *Fake) WithWatchRemoteHosts(fn func(context.Context, string) <-chan bool) *Fake {
+	f.fnWatchRemote = fn
+	return f
+}
+
 func (f *Fake) Run(ctx context.Context) error {
 	return f.fnRun(ctx)
 }
@@ -87,6 +96,10 @@ func (f *Fake) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*a
 
 func (f *Fake) IsActorHosted(ctx context.Context, actorType, actorID string) bool {
 	return f.fnIsActorHosted(ctx, actorType, actorID)
+}
+
+func (f *Fake) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
+	return f.fnWatchRemote(ctx, actorType)
 }
 
 func (f *Fake) SetDrainOngoingCallTimeout(*bool, *time.Duration) {

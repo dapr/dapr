@@ -55,9 +55,22 @@ type Options struct {
 
 	WorkflowsRemoteActivityReminder bool
 
+	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
+	// It bounds how long a result publish in flight at shutdown keeps its
+	// context (see publishAndSettle). Zero ends the publish when shutdown
+	// starts.
+	GracefulShutdownDuration time.Duration
+
 	// FastPath drives certified activity executions locally in place of
 	// their run-activity reminder (WorkflowsFastPath preview feature).
 	FastPath bool
+
+	// Fallback, if set, reports whether this daprd hosts the activity actor
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
+	// local executor. A fallback host creates the durable run-activity
+	// reminder in place of a local drive, which would run the activity
+	// here. Nil when the feature is off.
+	Fallback func() bool
 
 	// Detached runs the work that must outlive a placement churn (the
 	// drive-failure escalations and the handed-off result publishes) on the
@@ -118,6 +131,7 @@ type factory struct {
 	// fastPath enables the detached local activity drives (see drive.go) in
 	// place of the run-activity reminder fire.
 	fastPath bool
+	fallback func() bool
 
 	// drives is the churn-scoped runner carrying those local drives: HaltAll
 	// (which also fires on placement disconnection) aborts and drains it, then
@@ -139,6 +153,10 @@ type factory struct {
 	// the result publish handed off by an owner whose caller went away (see
 	// publish.go).
 	detached *detached.Runner
+
+	// publishGrace bounds every result publish: it ends one graceful
+	// shutdown duration after detached's context (see newPublishGrace).
+	publishGrace context.Context
 
 	// claims owns the durable execution-claim guards and gate (see the claim
 	// subpackage).
@@ -204,6 +222,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorType:        opts.ActivityActorType,
 		inflight:         inflightFor(opts.ActivityActorType),
 		fastPath:         opts.FastPath,
+		fallback:         opts.Fallback,
 		executionHeld:    opts.ExecutionHeld,
 		registerResolver: opts.RegisterResolver,
 		staleClaimAfter:  2 * common.JanitorPeriod(),
@@ -220,6 +239,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		driveCancel:            driveCancel,
 		rootCtx:                ctx,
 		detached:               det,
+		publishGrace:           newPublishGrace(det.Context(), opts.GracefulShutdownDuration),
 		router:                 router,
 		reminders:              sreminders,
 		scheduler:              opts.Scheduler,

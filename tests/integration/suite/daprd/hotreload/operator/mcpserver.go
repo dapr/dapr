@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -41,9 +42,11 @@ func init() {
 type mcpserver struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
+	url      string
 }
 
 func (m *mcpserver) Setup(t *testing.T) []framework.Option {
+	m.url = prochttp.NotFoundURL(t) + "/mcp"
 	sentry := sentry.New(t)
 
 	m.operator = operator.New(t,
@@ -75,11 +78,11 @@ func (m *mcpserver) Run(t *testing.T, ctx context.Context) {
 	weatherMCP := mcpserverapi.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "weather-mcp", Namespace: "default"},
 		Spec: mcpserverapi.MCPServerSpec{
-			// example.com is unreachable; ignoreErrors keeps daprd up.
+			// The URL answers 404; ignoreErrors keeps daprd up.
 			IgnoreErrors: true,
 			Endpoint: mcpserverapi.MCPEndpoint{
 				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
-					URL: "http://example.com/mcp",
+					URL: m.url,
 				},
 			},
 		},

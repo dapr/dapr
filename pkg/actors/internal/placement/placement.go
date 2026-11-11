@@ -60,6 +60,17 @@ type Interface interface {
 	Ready() bool
 	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 	SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration)
+
+	// WatchRemoteHosts returns a channel which receives whether a daprd
+	// other than this one hosts actorType in the placement tables: at the end
+	// of the next dissemination round, then whenever that changes. Every
+	// daprd receives the tables of its namespace whether or not it hosts
+	// actors. The last answer is kept while the placement stream is down.
+	// It blocks until the placement loop handles the watch, or ctx is done.
+	// The channel is closed once ctx is done, or when placement stops. A
+	// watch made after placement stopped is never handled: it returns a
+	// closed channel once ctx is done.
+	WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool
 }
 
 type Options struct {
@@ -268,6 +279,7 @@ func grpcOptions(sec security.Handler, id spiffeid.ID) []grpc.DialOption {
 
 func (p *placement) Run(ctx context.Context) error {
 	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
+	reminderCh := p.table.SubscribeToReminderTypeUpdates(ctx)
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
@@ -288,6 +300,8 @@ func (p *placement) Run(ctx context.Context) error {
 					p.loop.Enqueue(&loops.UpdateTypes{
 						ActorTypes: atypes,
 					})
+				case <-reminderCh:
+					p.loop.Enqueue(new(loops.ReloadReminderTypes))
 				case <-ctx.Done():
 					log.Info("Placement client shutting down")
 					p.loop.Close(&loops.Shutdown{Error: ctx.Err()})
@@ -362,6 +376,27 @@ func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Durati
 		Drain:   drain,
 		Timeout: timeout,
 	})
+}
+
+func (p *placement) WatchRemoteHosts(ctx context.Context, actorType string) <-chan bool {
+	resp := make(chan chan bool, 1)
+	p.loop.Enqueue(&loops.WatchRemoteHosts{
+		ActorType: actorType,
+		Ctx:       ctx,
+		Resp:      resp,
+	})
+
+	select {
+	case ch := <-resp:
+		return ch
+	case <-ctx.Done():
+		// The loop has not handled the watch, and may never: it has stopped.
+		// Should it handle it still, it closes the channel it replies with,
+		// as ctx is done.
+		ch := make(chan bool)
+		close(ch)
+		return ch
+	}
 }
 
 func (p *placement) SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration) {

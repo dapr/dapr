@@ -288,7 +288,7 @@ func TestDeliverBulkDoesNotPropagateEntryContext(t *testing.T) {
 	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
 	bscData := todo.BulkSubscribeCallData{
 		BulkResponses:   &bulkResponses,
-		BulkSubDiag:     &bulkSubDiag,
+		BulkSubDiag:     bulkSubDiag,
 		EntryIdIndexMap: &entryIDIndexMap,
 		PsName:          psm.Pubsub,
 		Topic:           psm.Topic,
@@ -670,7 +670,7 @@ func TestDeliverBulkNonStringTraceID(t *testing.T) {
 
 	bscData := todo.BulkSubscribeCallData{
 		BulkResponses:   &bulkResponses,
-		BulkSubDiag:     &bulkSubDiag,
+		BulkSubDiag:     bulkSubDiag,
 		EntryIdIndexMap: &entryIdIndexMap,
 		PsName:          "testpubsub",
 		Topic:           "topic1",

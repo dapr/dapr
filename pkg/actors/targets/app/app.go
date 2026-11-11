@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -25,7 +26,9 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/app/transport"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
 )
@@ -35,7 +38,8 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 type app struct {
 	*factory
 
-	actorID string
+	actorID      string
+	activationMD *internalv1pb.ListStringValue
 
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to
@@ -56,7 +60,39 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	defer cancel()
 
 	a.touchIdle()
-	return a.transport.Invoke(ctx, req)
+
+	md := make(map[string]*internalv1pb.ListStringValue, len(req.GetMetadata())+1)
+	for k, v := range req.GetMetadata() {
+		if !strings.EqualFold(k, transport.ActivationIDHeader) {
+			md[k] = v
+		}
+	}
+	md[transport.ActivationIDHeader] = a.activationMD
+	return a.transport.Invoke(ctx, &internalv1pb.InternalInvokeRequest{
+		Ver:      req.GetVer(),
+		Actor:    req.GetActor(),
+		Message:  copyMessage(req.GetMessage()),
+		Metadata: md,
+	})
+}
+
+// copyMessage keeps the transport's in-place method rewrite off the caller's retry.
+func copyMessage(msg *commonv1pb.InvokeRequest) *commonv1pb.InvokeRequest {
+	if msg == nil {
+		return nil
+	}
+	cp := &commonv1pb.InvokeRequest{
+		Method:      msg.GetMethod(),
+		Data:        msg.GetData(),
+		ContentType: msg.GetContentType(),
+	}
+	if ext := msg.GetHttpExtension(); ext != nil {
+		cp.HttpExtension = &commonv1pb.HTTPExtension{
+			Verb:        ext.GetVerb(),
+			Querystring: ext.GetQuerystring(),
+		}
+	}
+	return cp
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
@@ -75,6 +111,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	defer cancel()
 
 	a.touchIdle()
+	a.setActivationID(lockReq)
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	if err := a.transport.InvokeReminder(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -92,13 +129,24 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	lockReq := internalv1pb.NewInternalInvokeRequest("timer/"+reminder.Name).
 		WithActor(reminder.ActorType, reminder.ActorID)
 
-	ctx, cancel, err := a.lock.LockRequest(ctx, lockReq)
+	wctx, removed, wcancel := reminder.UntilRemoved(ctx)
+	defer wcancel()
+
+	ctx, cancel, err := a.lock.LockRequest(wctx, lockReq)
+	if removed() {
+		if err == nil {
+			cancel()
+		}
+		log.Debugf("Dropping timer %s: timer was removed", reminder.Key())
+		return actorerrors.ErrTimerFireStale
+	}
 	if err != nil {
 		return err
 	}
 	defer cancel()
 
 	a.touchIdle()
+	a.setActivationID(lockReq)
 	log.Debug("Executing timer for actor " + reminder.Key())
 
 	if err := a.transport.InvokeTimer(ctx, reminder, lockReq.GetMetadata()); err != nil {
@@ -153,6 +201,13 @@ func (a *app) InvokeStream(context.Context,
 	func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
 	return errors.New("not implemented")
+}
+
+func (a *app) setActivationID(req *internalv1pb.InternalInvokeRequest) {
+	if req.GetMetadata() == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
+	}
+	req.GetMetadata()[transport.ActivationIDHeader] = a.activationMD
 }
 
 // touchIdle bumps the actor's idle deadline and re-enqueues it in the idler

@@ -86,6 +86,10 @@ type Interface interface {
 
 	// HostsWatch adds a watch for hosts to the connection pool.
 	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
+
+	// GetQueueState returns the in-flight and staged job counts of the jobs
+	// this scheduler owns, or empty counts if the cron is not ready.
+	GetQueueState() *api.QueueState
 }
 
 type cron struct {
@@ -142,6 +146,7 @@ func (c *cron) Run(ctx context.Context) error {
 		Workers:         new(c.workers),
 		Backend:         c.backend,
 		BackendConfig:   c.backendConfig,
+		QueueStateKey:   serialize.QueueStateKey,
 	}
 
 	if c.backend == nil || *c.backend == etcdcron.BackendEtcd {
@@ -253,6 +258,17 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 		return c.etcdcron, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// GetQueueState returns the in-flight and staged job counts of the jobs this
+// scheduler owns, or empty counts if the cron is not ready.
+func (c *cron) GetQueueState() *api.QueueState {
+	select {
+	case <-c.readyCh:
+		return c.etcdcron.GetQueueState()
+	default:
+		return api.NewQueueState()
 	}
 }
 

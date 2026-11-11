@@ -126,6 +126,9 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
 		loadtest.WithAppID("k6-tester-pubsub-subscribe-http"),
+		// Bulk publish holds every in-flight message in daprd. With a slow broker
+		// the default 512Mi limit gets the sidecar OOM-killed mid-test.
+		loadtest.WithMemoryLimits("256Mi", "1Gi", "256Mi", "1024Mi"),
 		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", component.Name),

@@ -178,6 +178,9 @@ func decrypt(value []byte, key Key) ([]byte, error) {
 	}
 
 	nsize := key.cipherObj.NonceSize()
+	if len(enc) < nsize {
+		return value, errors.New("ciphertext is shorter than the nonce size")
+	}
 	nonce, ciphertext := enc[:nsize], enc[nsize:]
 
 	return key.cipherObj.Open(nil, nonce, ciphertext, nil)

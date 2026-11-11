@@ -158,8 +158,16 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// Drop completion events whose resolution is already in history or the
 	// inbox; otherwise an inbox redelivery (e.g. an activity actor reminder
 	// firing twice during pod migration) would pin the workflow in a replay/spin
-	// loop.
+	// loop. A duplicate re-drives the wake-up so an inbox row whose wake-up
+	// failed to arm is not stranded, but a completed workflow never processes
+	// its inbox again: it acks the duplicate instead (after confirming the
+	// cache), since re-arming would turn every late redelivery, thousands after
+	// a fan-out whose activities re-ran, into a reminder create, a fire and a
+	// turn.
 	if dedup.IsDuplicateCompletion(e, state.History, state.Inbox) {
+		if runtimestate.IsCompleted(o.rstate) {
+			return admission{reason: reasonDuplicateOfCompleted}
+		}
 		log.Debugf("Workflow actor '%s': dropping duplicate completion already in history/inbox; re-driving the wake-up", o.actorID)
 		return admission{outcome: admitDuplicate}
 	}
@@ -169,6 +177,9 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	// timestamp). Distinct RaiseEvents get distinct timestamps at ingestion
 	// (Actors.uniqueEventTimestamp) even when raced onto the same nanosecond.
 	if dedup.IsDuplicateExternalEvent(e, state.History, state.Inbox) {
+		if runtimestate.IsCompleted(o.rstate) {
+			return admission{reason: reasonDuplicateOfCompleted}
+		}
 		log.Debugf("Workflow actor '%s': dropping duplicate external event already present in history/inbox; re-driving the wake-up so the inbox row is not stranded", o.actorID)
 		return admission{outcome: admitDuplicate}
 	}
@@ -202,6 +213,10 @@ func (o *orchestrator) classifyEvent(e *backend.HistoryEvent, state *wfenginesta
 	return admission{outcome: admitFold}
 }
 
+// reasonDuplicateOfCompleted acks a redelivered event a completed workflow
+// already recorded.
+const reasonDuplicateOfCompleted = "it duplicates an event of the completed workflow"
+
 // admitEvent runs the completion-admission decision for an inbound event and
 // applies its outcome. With canFold (the WorkflowsFastPath AddWorkflowEvent
 // entry) a held event's entry is returned for the caller to wait on after
@@ -230,8 +245,9 @@ func (o *orchestrator) admitEvent(ctx context.Context, e *backend.HistoryEvent, 
 		// it or dropped it, so a completed instance's ID becomes reusable.
 		// Not for a forged one: the task's real result is still in flight,
 		// and releasing the guard here would let the forger recreate the
-		// instance under it.
-		if !a.unauthorized && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
+		// instance under it. Nor for a duplicate: its first delivery already
+		// released the guard, which a later activity may hold by now.
+		if !a.unauthorized && a.reason != reasonDuplicateOfCompleted && (e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil) {
 			o.activityResultAwaited.CompareAndSwap(true, false)
 		}
 		log.Debugf("Workflow actor '%s': dropping completion (sender '%s'): %s", o.actorID, sender.instanceID, a.reason)

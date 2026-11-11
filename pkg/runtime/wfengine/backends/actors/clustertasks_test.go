@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
@@ -56,13 +57,26 @@ func newClusterTasksTestBackendPlaced(t *testing.T, local bool) (*ClusterTasksBa
 	const executorType = "dapr.internal.default.test.executor"
 	p := pending.New()
 
+	// Like the real router, retry a call that landed on an executor actor
+	// closing after an empty claim: the close removes it from the table, so
+	// the retry reaches a fresh actor.
 	var execFactory targets.Factory
 	routerFake := routerfake.New().
 		WithCallFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-			return execFactory.GetOrCreate(req.GetActor().GetActorId()).InvokeMethod(ctx, req)
+			for {
+				res, err := execFactory.GetOrCreate(req.GetActor().GetActorId()).InvokeMethod(ctx, req)
+				if !targetserrors.IsClosed(err) || ctx.Err() != nil {
+					return res, err
+				}
+			}
 		}).
 		WithCallStreamFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
-			return execFactory.GetOrCreate(req.GetActor().GetActorId()).InvokeStream(ctx, req, stream)
+			for {
+				err := execFactory.GetOrCreate(req.GetActor().GetActorId()).InvokeStream(ctx, req, stream)
+				if !targetserrors.IsClosed(err) || ctx.Err() != nil {
+					return err
+				}
+			}
 		})
 	actorsFake := actorsfake.New().
 		WithRouter(func(context.Context) (router.Interface, error) {

@@ -40,8 +40,9 @@ permissions: {}
 jobs:
   # Dapr guarantees that the control plane and Dapr sidecars may have a version
   # skew of N-1 and still be fully functional. This workflow verifies this
-  # guarantee holds for master and the previous release (or overridden version
-  # reference).
+  # guarantee holds for the branch that triggered the run and the release
+  # before it (or overridden version reference). master runs against the
+  # latest release, and a release-X.Y branch against the latest X.(Y-1) patch.
 
   # This workflow runs the previous releases integration tests against the
   # matrix of master/latest-release daprd/control-plane. This ensures the
@@ -59,38 +60,52 @@ jobs:
         mode:
         - control-plane-master
         - dapr-sidecar-master
+    env:
+      # Integration-test-only components that some tests need in daprd. The
+      # framework compiles them in when it builds daprd itself; here daprd is
+      # prebuilt, so build it with them. Passed through the environment, so
+      # the Makefile still adds the component flavor.
+      DAPR_PROBE_TAGS: state_spiffeprobe,secretstores_spiffeprobe,bindings_metadataprobe,middleware_http_bodyprobe
     steps:
-    - name: Set up for Dapr lastest release
+    - name: Set up for the previous Dapr release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        # Authenticate the API call (anonymous requests are aggressively rate
-        # limited and would otherwise return an error body with no tag_name,
-        # silently yielding a bogus ref like "vull" and failing the checkout).
+        # Dapr guarantees N-1, so test each branch against the release before
+        # it. master tests against the latest release. A release-X.Y branch
+        # tests against the latest X.(Y-1) patch, because the latest release
+        # can be X.Y itself or a newer minor.
+        resolve() {
+          if [[ "$GITHUB_REF_NAME" =~ ^release-([0-9]+)\.([0-9]+)$ ]]; then
+            local prefix="v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1))."
+            gh api --paginate repos/dapr/dapr/releases \
+              -q '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' \
+              | awk -v p="$prefix" 'index($0, p) == 1' | sort -V | tail -n 1
+          else
+            gh api repos/dapr/dapr/releases/latest -q '.tag_name'
+          fi
+        }
         tag=""
         for i in 1 2 3 4 5; do
-          tag="$(curl -sSf \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/dapr/dapr/releases/latest \
-            | jq -r '.tag_name // empty')"
+          tag="$(resolve || true)"
           if [ -n "$tag" ]; then
             break
           fi
-          echo "Attempt $i: could not resolve latest Dapr release tag, retrying..." >&2
+          echo "Attempt $i: could not resolve the previous Dapr release tag, retrying..." >&2
           sleep $((i * 5))
         done
         if [ -z "$tag" ]; then
-          echo "Failed to resolve the latest Dapr release tag" >&2
+          echo "Failed to resolve the previous Dapr release tag for $GITHUB_REF_NAME" >&2
           exit 1
         fi
+        echo "Testing $GITHUB_REF_NAME against $tag"
         echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
-    - name: Set up for master
+    - name: Set up for the triggering branch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Setup test output
       shell: bash
@@ -160,7 +175,7 @@ jobs:
     - name: Build & download binaries
       run: |
         go mod tidy -v
-        make build
+        DAPR_GO_BUILD_TAGS=${{ env.DAPR_PROBE_TAGS }} make build
         mkdir -p downloads && cd downloads
         curl -so daprd_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/daprd_linux_amd64.tar.gz
         curl -so sentry_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/sentry_linux_amd64.tar.gz
@@ -175,10 +190,14 @@ jobs:
         tar xvf operator_linux_amd64.tar.gz
         tar xvf scheduler_linux_amd64.tar.gz
 
+    - name: Build the latest release daprd with the test-only components - control-plane master
+      if: matrix.mode == 'control-plane-master'
+      run: cd latest-release && DAPR_GO_BUILD_TAGS=${{ env.DAPR_PROBE_TAGS }} make build BINARIES=daprd REL_VERSION=${{ env.DAPR_PREV_VERSION }}
+
     - name: Setup DAPR_INTEGRATION_X_PATH - control-plane master
       if: matrix.mode == 'control-plane-master'
       run: |
-        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/downloads/daprd" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/latest-release/dist/linux_amd64/release/daprd" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/dist/linux_amd64/release/placement" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
@@ -196,9 +215,9 @@ jobs:
         echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      # The v1.18.2 suite takes over 45 minutes to run, so give plenty of
-      # headroom before the go test binary panics on timeout.
-      run: cd latest-release && make test-integration ARGS="-timeout=70m"
+      # Run in parallel, as master's own integration jobs do: run serially,
+      # the v1.19.0 suite takes about 70 minutes.
+      run: cd latest-release && make test-integration-parallel ARGS="-timeout=70m"
 
     - name: Upload test results
       if: always()
@@ -270,37 +289,45 @@ jobs:
         - control-plane-master
         - dapr-sidecar-master
     steps:
-    - name: Set up for Dapr lastest release
+    - name: Set up for the previous Dapr release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        # Authenticate the API call (anonymous requests are aggressively rate
-        # limited and would otherwise return an error body with no tag_name,
-        # silently yielding a bogus ref like "vull" and failing the checkout).
+        # Dapr guarantees N-1, so test each branch against the release before
+        # it. master tests against the latest release. A release-X.Y branch
+        # tests against the latest X.(Y-1) patch, because the latest release
+        # can be X.Y itself or a newer minor.
+        resolve() {
+          if [[ "$GITHUB_REF_NAME" =~ ^release-([0-9]+)\.([0-9]+)$ ]]; then
+            local prefix="v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1))."
+            gh api --paginate repos/dapr/dapr/releases \
+              -q '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' \
+              | awk -v p="$prefix" 'index($0, p) == 1' | sort -V | tail -n 1
+          else
+            gh api repos/dapr/dapr/releases/latest -q '.tag_name'
+          fi
+        }
         tag=""
         for i in 1 2 3 4 5; do
-          tag="$(curl -sSf \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/dapr/dapr/releases/latest \
-            | jq -r '.tag_name // empty')"
+          tag="$(resolve || true)"
           if [ -n "$tag" ]; then
             break
           fi
-          echo "Attempt $i: could not resolve latest Dapr release tag, retrying..." >&2
+          echo "Attempt $i: could not resolve the previous Dapr release tag, retrying..." >&2
           sleep $((i * 5))
         done
         if [ -z "$tag" ]; then
-          echo "Failed to resolve the latest Dapr release tag" >&2
+          echo "Failed to resolve the previous Dapr release tag for $GITHUB_REF_NAME" >&2
           exit 1
         fi
+        echo "Testing $GITHUB_REF_NAME against $tag"
         echo "DAPR_PREV_VERSION=${tag#v}" >> $GITHUB_ENV
-    - name: Set up for master
+    - name: Set up for the triggering branch
       if: github.event_name != 'repository_dispatch'
       run: |
         echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=$GITHUB_REF" >> $GITHUB_ENV
       shell: bash
     - name: Parse test payload
       if: github.event_name == 'repository_dispatch'
@@ -389,6 +416,12 @@ jobs:
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/v1.25.3_ha" >> $GITHUB_ENV
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
 
+    - name: Raise inotify limits
+      # KinD nodes share the runner kernel's inotify limits. The ubuntu-26.04
+      # image leaves max_user_instances at the kernel default of 128, which the
+      # cluster exhausts, crashing the .NET test apps at startup.
+      run: sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
+
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.5.0
       with:
@@ -467,6 +500,10 @@ jobs:
         make setup-test-env-kafka
         make setup-test-env-zipkin
         make setup-test-env-postgres
+        # Releases before v1.19 have no meilisearch tests or target.
+        if grep -q '^setup-test-env-meilisearch:' tests/dapr_tests.mk; then
+          make setup-test-env-meilisearch
+        fi
         make setup-test-components
 
     - name: Free up some diskspace

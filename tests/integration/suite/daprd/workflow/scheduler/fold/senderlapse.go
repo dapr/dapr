@@ -108,11 +108,14 @@ func (f *senderlapse) Run(t *testing.T, ctx context.Context) {
 
 	folded := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded")
 	nacked := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked")
+	// A janitor fire landing inside a held completion's fold wait commits it
+	// before the wait lapses, so that first submit is acked, not nacked.
+	recovered := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered")
 	assert.GreaterOrEqual(t, folded, float64(2),
 		"non-terminal captive entries must fold: any committing turn takes them first")
 	assert.LessOrEqual(t, folded, float64(3), "folded is commit-attributed: at most one record per completion")
-	assert.GreaterOrEqual(t, nacked, float64(3),
-		"every completion's first submit must lapse at the shortened fold wait")
+	assert.GreaterOrEqual(t, nacked+recovered, float64(3),
+		"every completion's first submit must lapse at the shortened fold wait unless a janitor turn folded it first")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")

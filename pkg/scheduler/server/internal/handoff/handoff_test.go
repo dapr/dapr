@@ -369,6 +369,37 @@ func TestReadyFiresOnChange(t *testing.T) {
 	assert.Positive(t, fired.Load())
 }
 
+func TestCancelledDetectionIsNotASighting(t *testing.T) {
+	t.Parallel()
+
+	h := New(Options{Security: fake.New()})
+	var changes atomic.Int64
+	h.SetOnChange(func() { changes.Add(1) })
+	h.SetPlacementAddresses(func() []string { return []string{"127.0.0.1:1"} })
+	h.RequestDetection(true)
+	changes.Store(0)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	// The scheduler shuts down while the probe is in flight: the probe's
+	// stream fails with Canceled, which the protocol check reads as a
+	// placement service.
+	h.probe = func(context.Context, string, spiffeid.ID) bool {
+		cancel()
+		return true
+	}
+
+	h.refreshDetection(ctx)
+
+	assert.False(t, h.PlacementConfirmed(), "a cancelled detection must not sight a placement service")
+	assert.Zero(t, changes.Load(), "a cancelled detection changes nothing")
+	assert.True(t, h.PlacementPresent(), "the unprobed address is still pending")
+
+	// The same probe answer on a live context is a sighting.
+	h.probe = func(context.Context, string, spiffeid.ID) bool { return true }
+	h.refreshDetection(t.Context())
+	assert.True(t, h.PlacementConfirmed())
+}
+
 func TestProbeReportedAddresses(t *testing.T) {
 	t.Parallel()
 

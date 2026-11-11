@@ -25,6 +25,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -272,6 +274,54 @@ func TestPolicyRetry(t *testing.T) {
 	}
 }
 
+func TestTimeoutError(t *testing.T) {
+	// The status a proxied gRPC call fails with once its context is
+	// cancelled, which pkg/api/grpc/proxy wraps for retry matching.
+	statusErr := NewCodeError(int32(codes.DeadlineExceeded), status.Error(codes.DeadlineExceeded, "deadline exceeded"))
+
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+
+	require.ErrorIs(t, timeoutError(expired, statusErr), context.DeadlineExceeded, "an error returned after the deadline is the timeout")
+	require.ErrorIs(t, timeoutError(expired, errors.New("any")), context.DeadlineExceeded)
+	require.NoError(t, timeoutError(expired, nil), "a result returned as the deadline passes is still a result")
+	require.NoError(t, timeoutError(t.Context(), statusErr), "an error before the deadline is the operation's own")
+
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, timeoutError(cancelled, statusErr), context.Canceled, "a cancelled attempt reports its cancellation")
+
+	// The deadline has passed on the clock but the timer which cancels the
+	// context has not run yet: a downstream enforcing the same deadline
+	// answers in this gap.
+	stale := staleDeadline{Context: t.Context(), deadline: time.Now().Add(-time.Millisecond)}
+	require.ErrorIs(t, timeoutError(stale, statusErr), context.DeadlineExceeded, "an error after the deadline instant is the timeout")
+	require.NoError(t, timeoutError(stale, nil))
+	due := staleDeadline{Context: t.Context(), deadline: time.Now().Add(time.Minute)}
+	require.NoError(t, timeoutError(due, statusErr), "an error well before the deadline is the operation's own")
+
+	// On Windows the clock can still read before the deadline when a
+	// downstream enforcing the propagated deadline answers.
+	near := staleDeadline{Context: t.Context(), deadline: time.Now().Add(deadlineClockTolerance / 2)}
+	require.ErrorIs(t, timeoutError(near, statusErr), context.DeadlineExceeded, "a gRPC DeadlineExceeded within the clock tolerance is the timeout")
+	canceledErr := NewCodeError(int32(codes.Canceled), status.Error(codes.Canceled, "stream terminated by RST_STREAM with error code: CANCEL"))
+	require.ErrorIs(t, timeoutError(near, canceledErr), context.DeadlineExceeded, "a gRPC Canceled within the clock tolerance is the timeout")
+	require.NoError(t, timeoutError(due, canceledErr), "a gRPC Canceled well before the deadline is the operation's own")
+	unavailableErr := NewCodeError(int32(codes.Unavailable), status.Error(codes.Unavailable, "unavailable"))
+	require.NoError(t, timeoutError(near, unavailableErr), "other codes within the clock tolerance are the operation's own")
+	require.NoError(t, timeoutError(near, errors.New("any")))
+}
+
+type staleDeadline struct {
+	context.Context
+	deadline time.Time
+}
+
+func (s staleDeadline) Deadline() (time.Time, bool) {
+	return s.deadline, true
+}
+
 func TestPolicyRetryWithMatch(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -333,6 +383,73 @@ func TestPolicyRetryWithMatch(t *testing.T) {
 			if err != nil {
 				assert.NotContains(t, err.Error(), "expected attempt in context to be")
 			}
+			assert.Equal(t, test.expected, called.Load())
+		})
+	}
+}
+
+func TestPolicyRetryWithMatchDeadlineExceeded(t *testing.T) {
+	match, err := ParseRetryConditionMatch(&resiliencyV1alpha.RetryMatching{GRPCStatusCodes: "2"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		// wait returns how long the first attempt waits before failing with
+		// code, given the time left until its deadline.
+		wait     func(left time.Duration) time.Duration
+		code     codes.Code
+		expected int32
+	}{
+		{
+			name:     "app DeadlineExceeded well before the deadline is not retried",
+			wait:     func(time.Duration) time.Duration { return 0 },
+			code:     codes.DeadlineExceeded,
+			expected: 1,
+		},
+		{
+			name: "DeadlineExceeded within the clock tolerance is retried as the timeout",
+			wait: func(left time.Duration) time.Duration {
+				return left - deadlineClockTolerance/2
+			},
+			code:     codes.DeadlineExceeded,
+			expected: 2,
+		},
+		{
+			name:     "app Canceled well before the deadline is not retried",
+			wait:     func(time.Duration) time.Duration { return 0 },
+			code:     codes.Canceled,
+			expected: 1,
+		},
+		{
+			name: "Canceled within the clock tolerance is retried as the timeout",
+			wait: func(left time.Duration) time.Duration {
+				return left - deadlineClockTolerance/2
+			},
+			code:     codes.Canceled,
+			expected: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			called := atomic.Int32{}
+			fn := func(ctx context.Context) (struct{}, error) {
+				if called.Add(1) > 1 {
+					return struct{}{}, nil
+				}
+				deadline, _ := ctx.Deadline()
+				time.Sleep(test.wait(time.Until(deadline)))
+				//nolint:gosec
+				return struct{}{}, NewCodeError(int32(test.code), status.Error(test.code, "attempt failed"))
+			}
+
+			policy := NewRunner[struct{}](t.Context(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    200 * time.Millisecond,
+				r:    NewRetry(retry.Config{Policy: retry.PolicyConstant, Duration: time.Millisecond, MaxRetries: 5}, match),
+			})
+			_, _ = policy(fn)
 			assert.Equal(t, test.expected, called.Load())
 		})
 	}

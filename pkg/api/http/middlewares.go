@@ -14,8 +14,8 @@ limitations under the License.
 package http
 
 import (
+	"crypto/subtle"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 
@@ -26,13 +26,27 @@ import (
 )
 
 // MaxBodySizeMiddleware limits the body size to the given size (in bytes).
-func MaxBodySizeMiddleware(maxSize int64) func(next http.Handler) http.Handler {
+// Register it before middleware that reads request bodies. Requests matching
+// exempt are unlimited; chi handles wildcard and regex parameter matching.
+func MaxBodySizeMiddleware(maxSize int64, exempt *chi.Mux) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			if exempt == nil || !exempt.Match(chi.NewRouteContext(), r.Method, routePath(r)) {
+				r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// routePath returns the path the router will match against: the cleaned route
+// path when a middleware such as CleanPath has set it, else the escaped URL
+// path.
+func routePath(r *http.Request) string {
+	if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePath != "" {
+		return rctx.RoutePath
+	}
+	return r.URL.EscapedPath()
 }
 
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.
@@ -44,7 +58,7 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			v := r.Header.Get(securityConsts.APITokenHeader)
-			if v != token && !isRouteExcludedFromAPITokenAuth(r.Method, r.URL) {
+			if subtle.ConstantTimeCompare([]byte(v), []byte(token)) != 1 && !isRouteExcludedFromAPITokenAuth(r) {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
 				return
 			}
@@ -55,13 +69,14 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 	}
 }
 
-func isRouteExcludedFromAPITokenAuth(method string, u *url.URL) bool {
-	path := strings.Trim(u.Path, "/")
-	switch path {
+// Match on the path the router uses, not the decoded URL path, so encoded
+// variants that route elsewhere are not exempt.
+func isRouteExcludedFromAPITokenAuth(r *http.Request) bool {
+	switch strings.Trim(routePath(r), "/") {
 	case apiVersionV1 + "/healthz":
-		return method == http.MethodGet
+		return r.Method == http.MethodGet
 	case apiVersionV1 + "/healthz/outbound":
-		return method == http.MethodGet
+		return r.Method == http.MethodGet
 	default:
 		return false
 	}

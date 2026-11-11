@@ -22,9 +22,10 @@ import (
 )
 
 type Fake struct {
-	callFn         func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	callReminderFn func(context.Context, *api.Reminder) error
-	callStreamFn   func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
+	callFn               func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	callWithoutRetriesFn func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	callReminderFn       func(context.Context, *api.Reminder) error
+	callStreamFn         func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 }
 
 func New() *Fake {
@@ -48,6 +49,13 @@ func (f *Fake) WithCallFn(fn func(context.Context, *internalv1pb.InternalInvokeR
 	return f
 }
 
+// WithCallWithoutRetriesFn sets the CallWithoutRetries function. Unset,
+// CallWithoutRetries calls the Call function.
+func (f *Fake) WithCallWithoutRetriesFn(fn func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)) *Fake {
+	f.callWithoutRetriesFn = fn
+	return f
+}
+
 func (f *Fake) WithCallReminderFn(fn func(context.Context, *api.Reminder) error) *Fake {
 	f.callReminderFn = fn
 	return f
@@ -59,6 +67,13 @@ func (f *Fake) WithCallStreamFn(fn func(ctx context.Context, req *internalv1pb.I
 }
 
 func (f *Fake) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	return f.callFn(ctx, req)
+}
+
+func (f *Fake) CallWithoutRetries(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if f.callWithoutRetriesFn != nil {
+		return f.callWithoutRetriesFn(ctx, req)
+	}
 	return f.callFn(ctx, req)
 }
 

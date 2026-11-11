@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -30,7 +32,9 @@ import (
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/yaml"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -40,7 +44,10 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	informerfake "github.com/dapr/dapr/pkg/operator/api/informer/fake"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -763,6 +770,370 @@ func TestListScopes(t *testing.T) {
 
 		assert.ElementsMatch(t, exp, res.GetComponents())
 	})
+
+	t.Run("list http endpoints scoping", func(t *testing.T) {
+		av, kind := httpendpointapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "app2-token",
+				Namespace: "namespace-a",
+			},
+			Data: map[string][]byte{"token": []byte("app2-only")},
+		}
+		ep1 := &httpendpointapi.HTTPEndpoint{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj1",
+				Namespace: "namespace-a",
+			},
+		}
+		ep2 := &httpendpointapi.HTTPEndpoint{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj2",
+				Namespace: "namespace-a",
+			},
+			Scoped: commonapi.Scoped{Scopes: []string{"app1", "app2"}},
+		}
+		ep3 := &httpendpointapi.HTTPEndpoint{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj3",
+				Namespace: "namespace-a",
+			},
+			Spec: httpendpointapi.HTTPEndpointSpec{
+				Headers: []commonapi.NameValuePair{{
+					Name: "Authorization",
+					SecretKeyRef: commonapi.SecretKeyRef{
+						Name: "app2-token",
+						Key:  "token",
+					},
+				}},
+			},
+			Scoped: commonapi.Scoped{Scopes: []string{"notapp1", "app2"}},
+		}
+
+		s := runtime.NewScheme()
+		require.NoError(t, scheme.AddToScheme(s))
+		require.NoError(t, corev1.AddToScheme(s))
+		require.NoError(t, httpendpointapi.AddToScheme(s))
+
+		cl := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(secret, ep1, ep2, ep3).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+
+		res, err := api.ListHTTPEndpoints(pki.ClientGRPCCtx(t), &operatorv1pb.ListHTTPEndpointsRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+
+		names := make([]string, 0, len(res.GetHttpEndpoints()))
+		for _, b := range res.GetHttpEndpoints() {
+			var endpoint httpendpointapi.HTTPEndpoint
+			require.NoError(t, json.Unmarshal(b, &endpoint))
+			names = append(names, endpoint.Name)
+			assert.NotContains(t, string(b), base64.StdEncoding.EncodeToString([]byte("app2-only")))
+		}
+		assert.ElementsMatch(t, []string{"obj1", "obj2"}, names)
+	})
+
+	t.Run("list mcp servers scoping", func(t *testing.T) {
+		av, kind := mcpserverapi.SchemeGroupVersion.WithKind("MCPServer").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		endpoint := mcpserverapi.MCPEndpoint{
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "https://mcp.example.com/mcp/"},
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "app2-token",
+				Namespace: "namespace-a",
+			},
+			Data: map[string][]byte{"token": []byte("app2-only")},
+		}
+		srv1 := &mcpserverapi.MCPServer{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj1",
+				Namespace: "namespace-a",
+			},
+			Spec: mcpserverapi.MCPServerSpec{Endpoint: endpoint},
+		}
+		srv2 := &mcpserverapi.MCPServer{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj2",
+				Namespace: "namespace-a",
+			},
+			Spec:   mcpserverapi.MCPServerSpec{Endpoint: endpoint},
+			Scoped: commonapi.Scoped{Scopes: []string{"app1", "app2"}},
+		}
+		srv3 := &mcpserverapi.MCPServer{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj3",
+				Namespace: "namespace-a",
+			},
+			Spec: mcpserverapi.MCPServerSpec{
+				Endpoint: mcpserverapi.MCPEndpoint{
+					StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+						URL: "https://mcp.example.com/mcp/",
+						Headers: []commonapi.NameValuePair{{
+							Name: "Authorization",
+							SecretKeyRef: commonapi.SecretKeyRef{
+								Name: "app2-token",
+								Key:  "token",
+							},
+						}},
+					},
+				},
+			},
+			Scoped: commonapi.Scoped{Scopes: []string{"notapp1", "app2"}},
+		}
+
+		s := runtime.NewScheme()
+		require.NoError(t, scheme.AddToScheme(s))
+		require.NoError(t, corev1.AddToScheme(s))
+		require.NoError(t, mcpserverapi.AddToScheme(s))
+
+		cl := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(secret, srv1, srv2, srv3).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+
+		res, err := api.ListMCPServers(pki.ClientGRPCCtx(t), &operatorv1pb.ListMCPServersRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+
+		names := make([]string, 0, len(res.GetMcpServers()))
+		for _, b := range res.GetMcpServers() {
+			var srv mcpserverapi.MCPServer
+			require.NoError(t, json.Unmarshal(b, &srv))
+			names = append(names, srv.Name)
+			assert.NotContains(t, string(b), base64.StdEncoding.EncodeToString([]byte("app2-only")))
+		}
+		assert.ElementsMatch(t, []string{"obj1", "obj2"}, names)
+	})
+
+	scopedObjectMeta := func(name string) metav1.ObjectMeta {
+		return metav1.ObjectMeta{Name: name, Namespace: "namespace-a"}
+	}
+	newScheme := func(t *testing.T, addToScheme func(*runtime.Scheme) error) *runtime.Scheme {
+		t.Helper()
+		s := runtime.NewScheme()
+		require.NoError(t, scheme.AddToScheme(s))
+		require.NoError(t, addToScheme(s))
+		return s
+	}
+
+	t.Run("list subscriptions scoping", func(t *testing.T) {
+		av, kind := subscriptionsapiV2alpha1.SchemeGroupVersion.WithKind("Subscription").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{Kind: kind, APIVersion: av}
+		cl := fake.NewClientBuilder().
+			WithScheme(newScheme(t, subscriptionsapiV2alpha1.AddToScheme)).
+			WithObjects(
+				&subscriptionsapiV2alpha1.Subscription{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj1")},
+				&subscriptionsapiV2alpha1.Subscription{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj2"), Scopes: []string{"app1", "app2"}},
+				&subscriptionsapiV2alpha1.Subscription{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj3"), Scopes: []string{"notapp1", "app2"}},
+			).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+		res, err := api.ListSubscriptionsV2(pki.ClientGRPCCtx(t), &operatorv1pb.ListSubscriptionsRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"obj1", "obj2"}, resourceNames(t, res.GetSubscriptions()))
+	})
+
+	t.Run("list and get resiliencies scoping", func(t *testing.T) {
+		av, kind := resiliencyapi.SchemeGroupVersion.WithKind("Resiliency").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{Kind: kind, APIVersion: av}
+		cl := fake.NewClientBuilder().
+			WithScheme(newScheme(t, resiliencyapi.AddToScheme)).
+			WithObjects(
+				&resiliencyapi.Resiliency{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj1")},
+				&resiliencyapi.Resiliency{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj2"), Scopes: []string{"app1", "app2"}},
+				&resiliencyapi.Resiliency{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj3"), Scopes: []string{"notapp1", "app2"}},
+			).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+		res, err := api.ListResiliency(pki.ClientGRPCCtx(t), &operatorv1pb.ListResiliencyRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"obj1", "obj2"}, resourceNames(t, res.GetResiliencies()))
+
+		for _, name := range []string{"obj1", "obj2"} {
+			_, err = api.GetResiliency(pki.ClientGRPCCtx(t), &operatorv1pb.GetResiliencyRequest{Name: name, Namespace: "namespace-a"})
+			require.NoError(t, err, name)
+		}
+		_, err = api.GetResiliency(pki.ClientGRPCCtx(t), &operatorv1pb.GetResiliencyRequest{Name: "obj3", Namespace: "namespace-a"})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+		_, errMissing := api.GetResiliency(pki.ClientGRPCCtx(t), &operatorv1pb.GetResiliencyRequest{Name: "obj4", Namespace: "namespace-a"})
+		assert.Equal(t, codes.NotFound, status.Code(errMissing))
+		assert.Equal(t, strings.ReplaceAll(errMissing.Error(), "obj4", "obj3"), err.Error())
+	})
+
+	t.Run("list workflow access policies scoping", func(t *testing.T) {
+		av, kind := wfaclapi.SchemeGroupVersion.WithKind("WorkflowAccessPolicy").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{Kind: kind, APIVersion: av}
+		cl := fake.NewClientBuilder().
+			WithScheme(newScheme(t, wfaclapi.AddToScheme)).
+			WithObjects(
+				&wfaclapi.WorkflowAccessPolicy{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj1")},
+				&wfaclapi.WorkflowAccessPolicy{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj2"), Scoped: commonapi.Scoped{Scopes: []string{"app1", "app2"}}},
+				&wfaclapi.WorkflowAccessPolicy{TypeMeta: typeMeta, ObjectMeta: scopedObjectMeta("obj3"), Scoped: commonapi.Scoped{Scopes: []string{"notapp1", "app2"}}},
+			).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+		res, err := api.ListWorkflowAccessPolicy(pki.ClientGRPCCtx(t), &operatorv1pb.ListWorkflowAccessPolicyRequest{
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"obj1", "obj2"}, resourceNames(t, res.GetPolicies()))
+	})
+}
+
+func TestGetConfigurationAssignment(t *testing.T) {
+	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
+	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
+	pki := test.GenPKI(t, test.PKIOptions{
+		LeafID:   serverID,
+		ClientID: appID,
+	})
+
+	s := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(s))
+	require.NoError(t, corev1.AddToScheme(s))
+	require.NoError(t, configurationapi.AddToScheme(s))
+
+	av, kind := configurationapi.SchemeGroupVersion.WithKind("Configuration").ToAPIVersionAndKind()
+	typeMeta := metav1.TypeMeta{Kind: kind, APIVersion: av}
+	configs := []client.Object{
+		&configurationapi.Configuration{TypeMeta: typeMeta, ObjectMeta: metav1.ObjectMeta{Name: "cfg1", Namespace: "namespace-a"}},
+		&configurationapi.Configuration{TypeMeta: typeMeta, ObjectMeta: metav1.ObjectMeta{Name: "cfg2", Namespace: "namespace-a"}},
+		&configurationapi.Configuration{TypeMeta: typeMeta, ObjectMeta: metav1.ObjectMeta{Name: "cfg3", Namespace: "namespace-a"}},
+	}
+	daprPod := func(name, app, config string) *corev1.Pod {
+		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "namespace-a",
+			Labels:    map[string]string{injectorconsts.SidecarAppIDLabel: app},
+			Annotations: map[string]string{
+				annotations.KeyEnabled: "true",
+				annotations.KeyAppID:   app,
+				annotations.KeyConfig:  config,
+			},
+		}}
+	}
+
+	get := func(t *testing.T, api *apiServer, name string) error {
+		t.Helper()
+		_, err := api.GetConfiguration(pki.ClientGRPCCtx(t), &operatorv1pb.GetConfigurationRequest{
+			Name:      name,
+			Namespace: "namespace-a",
+		})
+		return err
+	}
+
+	t.Run("only configurations assigned to the app's pods are returned", func(t *testing.T) {
+		// Mid rollout: old and new pods of app1 carry different configurations.
+		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).WithObjects(
+			daprPod("app1-old", "app1", "cfg1"),
+			daprPod("app1-new", "app1", "cfg2"),
+			daprPod("app2", "app2", "cfg3"),
+		).Build()
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+
+		require.NoError(t, get(t, api, "cfg1"))
+		require.NoError(t, get(t, api, "cfg2"))
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg3")))
+	})
+
+	t.Run("comma separated annotation resolves to the first configuration, as daprd loads", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).WithObjects(
+			daprPod("app1", "app1", "cfg1,cfg2"),
+		).Build()
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+
+		require.NoError(t, get(t, api, "cfg1"))
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg2")))
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg1,cfg2")))
+	})
+
+	t.Run("a cached pod is trusted without reading the API server", func(t *testing.T) {
+		cached := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).WithObjects(daprPod("app1", "app1", "")).Build()
+		apiReader := fake.NewClientBuilder().WithScheme(s).WithObjects(daprPod("app1", "app1", "cfg1")).Build()
+		api := NewAPIServer(Options{Client: cached, PodAPIReader: apiReader}).(*apiServer)
+
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg1")))
+		assigned, err := api.appAssignedConfiguration(t.Context(), "namespace-a", "app1")
+		require.NoError(t, err)
+		assert.Empty(t, assigned)
+	})
+
+	t.Run("cache errors fall back to the API reader", func(t *testing.T) {
+		cached := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).WithInterceptorFuncs(interceptor.Funcs{
+			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+				return errors.New("cache not started")
+			},
+		}).Build()
+		apiReader := fake.NewClientBuilder().WithScheme(s).WithObjects(daprPod("app1", "app1", "cfg1")).Build()
+		api := NewAPIServer(Options{Client: cached, PodAPIReader: apiReader}).(*apiServer)
+
+		require.NoError(t, get(t, api, "cfg1"))
+	})
+
+	t.Run("configuration updates fall back to the API reader when the pod is not cached", func(t *testing.T) {
+		cached := fake.NewClientBuilder().WithScheme(s).Build()
+		apiReader := fake.NewClientBuilder().WithScheme(s).WithObjects(daprPod("app1", "app1", "cfg1")).Build()
+		api := NewAPIServer(Options{Client: cached, PodAPIReader: apiReader}).(*apiServer)
+
+		assigned, err := api.appAssignedConfiguration(t.Context(), "namespace-a", "app1")
+		require.NoError(t, err)
+		assert.Equal(t, "cfg1", assigned)
+	})
+
+	t.Run("app without a pod is denied", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).Build()
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg1")))
+	})
+
+	t.Run("falls back to the API reader when the pod is not cached yet", func(t *testing.T) {
+		cached := fake.NewClientBuilder().WithScheme(s).WithObjects(configs...).Build()
+		apiReader := fake.NewClientBuilder().WithScheme(s).WithObjects(daprPod("app1", "app1", "cfg1")).Build()
+		api := NewAPIServer(Options{Client: cached, PodAPIReader: apiReader}).(*apiServer)
+
+		require.NoError(t, get(t, api, "cfg1"))
+		assert.Equal(t, codes.PermissionDenied, status.Code(get(t, api, "cfg2")))
+	})
+}
+
+func resourceNames(t *testing.T, items [][]byte) []string {
+	t.Helper()
+	names := make([]string, 0, len(items))
+	for _, b := range items {
+		var obj metav1.PartialObjectMetadata
+		require.NoError(t, json.Unmarshal(b, &obj))
+		names = append(names, obj.Name)
+	}
+	return names
 }
 
 func TestListsNamespaced(t *testing.T) {

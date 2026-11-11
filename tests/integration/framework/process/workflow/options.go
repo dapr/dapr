@@ -43,13 +43,15 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds          int
-	skipDB          bool
-	mtls            bool
-	signingDisabled []int
-	clustered       *bool
-	fastPath        *bool
-	signing         *bool
+	daprds           int
+	skipDB           bool
+	mtls             bool
+	signingDisabled  []int
+	clustered        *bool
+	fastPath         *bool
+	stagedOperations *bool
+	stagedN          map[int]bool
+	signing          *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -184,6 +186,29 @@ func WithClusteredDeployment(enabled bool) Option {
 func WithFastPath(enabled bool) Option {
 	return func(o *options) {
 		o.fastPath = &enabled
+	}
+}
+
+// WithStagedOperations explicitly enables or disables the
+// WorkflowsStagedOperations feature flag on every daprd in the workflow,
+// overriding the DAPR_INTEGRATION_WORKFLOW_STAGED environment variable.
+func WithStagedOperations(enabled bool) Option {
+	return func(o *options) {
+		o.stagedOperations = &enabled
+	}
+}
+
+// WithStagedOperationsN explicitly enables or disables the
+// WorkflowsStagedOperations feature flag on the daprd at index only,
+// overriding WithStagedOperations and the environment variable for that
+// daprd, so one cluster can run daprds with the feature on next to daprds
+// with it off.
+func WithStagedOperationsN(index int, enabled bool) Option {
+	return func(o *options) {
+		if o.stagedN == nil {
+			o.stagedN = map[int]bool{}
+		}
+		o.stagedN[index] = enabled
 	}
 }
 

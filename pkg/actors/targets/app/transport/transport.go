@@ -37,6 +37,9 @@ const (
 	// ReminderCancelHeader is set by the app on a reminder or timer
 	// response to ask Dapr to stop firing the recurring callback.
 	ReminderCancelHeader = "X-Daprremindercancel"
+
+	// ActivationIDHeader is new each time daprd activates the actor.
+	ActivationIDHeader = "Dapr-Actor-Activation-Id"
 )
 
 // Invoker delivers actor callbacks to the user application.

@@ -110,6 +110,7 @@ func newDriveHarness(t *testing.T) *driveHarness {
 	})
 
 	driveCtx, driveCancel := context.WithCancel(t.Context())
+	det := detached.New(t.Context())
 	h.fact = &factory{
 		appID:             "testapp",
 		actorType:         "dapr.internal.default.testapp.activity",
@@ -121,7 +122,8 @@ func newDriveHarness(t *testing.T) *driveHarness {
 		drives:            detached.New(driveCtx),
 		driveCancel:       driveCancel,
 		rootCtx:           t.Context(),
-		detached:          detached.New(t.Context()),
+		detached:          det,
+		publishGrace:      newPublishGrace(det.Context(), time.Minute),
 	}
 	return h
 }

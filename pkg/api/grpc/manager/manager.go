@@ -187,7 +187,15 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	return grpc.DialContext(ctx, dialPrefix+address, opts...) //nolint:staticcheck
 }
 
-// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
+// remoteConnKey identifies a pooled connection by its address (host:port) and
+// the peer identity its dial credentials pin (namespace and app ID), so an
+// address reused by another app never hands out the old connection. Dial
+// options are not part of the key.
+func remoteConnKey(address, namespace, id string) string {
+	return address + "/" + namespace + "/" + id
+}
+
+// GetGRPCConnection returns a new grpc connection for a given address, namespace and app ID and inits one if doesn't exist.
 func (g *Manager) GetGRPCConnection(
 	parentCtx context.Context,
 	address string,
@@ -195,16 +203,32 @@ func (g *Manager) GetGRPCConnection(
 	namespace string,
 	customOpts ...grpc.DialOption,
 ) (conn *grpc.ClientConn, teardown func(destroy bool), err error) {
+	key := remoteConnKey(address, namespace, id)
+
 	// Load or create a connection
-	var connI grpc.ClientConnInterface
-	connI, err = g.remoteConns.Get(address, func() (grpc.ClientConnInterface, error) {
-		return g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+	var (
+		connI   grpc.ClientConnInterface
+		created bool
+	)
+	connI, err = g.remoteConns.Get(key, func() (grpc.ClientConnInterface, error) {
+		c, cerr := g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+		created = cerr == nil
+		return c, cerr
 	})
 	if err != nil {
 		return nil, nopTeardown, err
 	}
 	conn = connI.(*grpc.ClientConn)
-	return conn, g.connTeardownFactory(address, conn), nil
+
+	// Another identity at this address means it was handed to a different app,
+	// so connections pinned to the previous one can only fail their handshakes
+	// and keep redialing. Close those nobody is using; the rest are left to
+	// their callers and the idle purge. This must run after Get returns, as Get
+	// holds the lock of this key's pool while it creates the connection.
+	if created {
+		g.remoteConns.CloseIdleWithPrefix(address+"/", key)
+	}
+	return conn, g.connTeardownFactory(key, conn), nil
 }
 
 func (g *Manager) connectRemote(
@@ -248,12 +272,13 @@ func (g *Manager) connectRemote(
 	return conn, nil
 }
 
-func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) func(destroy bool) {
+// connTeardownFactory returns the teardown for conn; key must be the one conn was obtained with from remoteConns.Get.
+func (g *Manager) connTeardownFactory(key string, conn *grpc.ClientConn) func(destroy bool) {
 	return func(destroy bool) {
 		if destroy {
-			g.remoteConns.Destroy(address, conn)
+			g.remoteConns.Destroy(key, conn)
 		} else {
-			g.remoteConns.Release(address, conn)
+			g.remoteConns.Release(key, conn)
 		}
 	}
 }

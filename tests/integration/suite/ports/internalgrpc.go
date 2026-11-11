@@ -18,18 +18,16 @@ import (
 	"fmt"
 	"net"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
-	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -43,8 +41,8 @@ func init() {
 // connection can be assigned this port as an ephemeral source port.
 type internalgrpc struct {
 	daprd       *procdaprd.Daprd
-	initEntered chan struct{}
-	release     chan struct{}
+	initEntered <-chan struct{}
+	release     func()
 }
 
 func (i *internalgrpc) Setup(t *testing.T) []framework.Option {
@@ -52,17 +50,13 @@ func (i *internalgrpc) Setup(t *testing.T) []framework.Option {
 		t.Skip("skipping unix socket based test on windows")
 	}
 
-	i.initEntered = make(chan struct{})
-	i.release = make(chan struct{})
+	held := fault.New(t)
+	i.initEntered, i.release = held.ArmInitHold()
 
 	sock := socket.New(t)
 	store := statestore.New(t,
 		statestore.WithSocket(sock),
-		statestore.WithStateStore(&blockingStore{
-			Store:       inmemory.New(t),
-			initEntered: i.initEntered,
-			release:     i.release,
-		}),
+		statestore.WithStateStore(held),
 	)
 
 	i.daprd = procdaprd.New(t,
@@ -106,32 +100,6 @@ func (i *internalgrpc) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, 10*time.Millisecond, "internal gRPC port (%s) was not reserved before component init", addr)
 
 	// Unblock initialization and confirm daprd finishes starting up.
-	close(i.release)
+	i.release()
 	i.daprd.WaitUntilRunning(t, ctx)
-}
-
-// blockingStore wraps a state store and blocks in Init until released,
-// signalling initEntered the first time Init is called.
-type blockingStore struct {
-	state.Store
-	initEntered chan struct{}
-	release     chan struct{}
-	once        sync.Once
-}
-
-func (b *blockingStore) Init(ctx context.Context, meta state.Metadata) error {
-	// The test framework calls Init once during its own setup with empty
-	// metadata (see statestore.go). Only gate the Init initiated by daprd over
-	// the pluggable gRPC channel, which always carries a non-empty component
-	// name (see the pluggable statestore component wrapper).
-	if meta.Name == "" {
-		return b.Store.Init(ctx, meta)
-	}
-	b.once.Do(func() { close(b.initEntered) })
-	select {
-	case <-b.release:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return b.Store.Init(ctx, meta)
 }

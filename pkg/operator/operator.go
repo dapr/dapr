@@ -234,6 +234,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
 			PodReader:     podMetaCache,
+			PodAPIReader:  mgr.GetAPIReader(),
 			Security:      secProvider,
 			Port:          opts.APIPort,
 			ListenAddress: opts.APIListenAddress,

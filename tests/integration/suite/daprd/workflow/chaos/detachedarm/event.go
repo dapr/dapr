@@ -100,10 +100,12 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	failedCh := make(chan struct{})
 	e.proxy.ArmFailures(proxy.MethodScheduleJob, 1_000_000, codes.Unavailable, failedCh)
 
+	// Cancelled below once the claim has been handed off, so the timeout is
+	// only a backstop.
+	rctx, rcancel := context.WithTimeout(ctx, 20*time.Second)
+	defer rcancel()
 	raiseErr := make(chan error, 1)
 	go func() {
-		rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
 		raiseErr <- cl.RaiseEvent(rctx, id, "go")
 	}()
 
@@ -136,6 +138,11 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 			"the placement authority must disseminate for the new daprd")
 	}, 15*time.Second, 10*time.Millisecond)
 
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Positive(c, e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
+			"the cancelled claim must have handed the wake-up reminder create to the detached retry")
+	}, 15*time.Second, 10*time.Millisecond)
+	rcancel()
 	select {
 	case rerr := <-raiseErr:
 		require.Error(t, rerr, "the raise must fail while the Scheduler is unreachable")
@@ -149,8 +156,6 @@ func (e *event) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, "RUNNING", resp.GetRuntimeStatus())
 	require.Zero(t, e.scheduler.JobKeyCount(t, ctx, "||new-event-"), "no wake-up reminder can exist during the outage")
-	assert.Positive(t, e.workflow.Dapr().Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:reminder_arm_detached"),
-		"the cancelled claim must have handed the wake-up reminder create to the detached retry")
 
 	e.proxy.ArmFailures(proxy.MethodScheduleJob, 0, codes.Unavailable, nil)
 

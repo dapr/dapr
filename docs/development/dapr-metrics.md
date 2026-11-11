@@ -273,6 +273,20 @@ Ingress metrics are tagged with `process_status` and `status`; egress metrics ar
 * dapr_component_conversation_count: The number of operations performed on the conversation component
 * dapr_component_conversation_latencies: The latency of the response from the conversation component
 
+### Search metrics
+
+* dapr_component_search_count: The number of operations performed on the search component
+* dapr_component_search_latencies: The latency of the response from the search component
+
+Both are tagged with `operation`: `create_index`, `get_index`, `list_indexes`, `delete_index`, `index_documents`, `get_documents`, `delete_documents` or `search`.
+
+### Vector metrics
+
+* dapr_component_vector_count: The number of operations performed on the vector component
+* dapr_component_vector_latencies: The latency of the response from the vector component
+
+Both are tagged with `operation`: `create_collection`, `get_collection`, `list_collections`, `delete_collection`, `upsert`, `get`, `delete`, `query` or `batch_query`.
+
 ### Cryptography metrics
 
 * dapr_component_crypto_count: The number of operations performed on the crypto component

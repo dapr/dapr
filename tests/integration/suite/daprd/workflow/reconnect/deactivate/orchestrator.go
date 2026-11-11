@@ -43,7 +43,9 @@ type orchestrator struct {
 
 func (a *orchestrator) Setup(t *testing.T) []framework.Option {
 	a.waitCh = make(chan struct{})
-	a.workflow = workflow.New(t)
+	// Asserts the workflow actor types are unregistered once the worker
+	// leaves, which the staged operations preview does not do.
+	a.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),
@@ -97,5 +99,8 @@ func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
-	assert.Equal(t, int64(3), a.called.Load())
+	// The first run, the replay after the reconnect, and the replay after the
+	// activity. A turn cancelled by a dissemination round runs again, so
+	// there can be more.
+	assert.GreaterOrEqual(t, a.called.Load(), int64(3))
 }

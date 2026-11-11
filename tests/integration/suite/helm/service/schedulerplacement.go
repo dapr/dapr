@@ -100,8 +100,13 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("default has placement disabled on the scheduler", func(t *testing.T) {
+		// Disabled is the binary's default, and leaving the flag out keeps the
+		// args valid for a pre-1.19 scheduler image after a --reuse-values
+		// upgrade.
 		args := schedulerArgs(t, s.schedulerOff)
-		assert.True(t, hasArg(args, "--placement-enabled=false"), "scheduler args: %v", args)
+		for _, arg := range args {
+			assert.NotContains(t, arg, "--placement-enabled", "scheduler args: %v", args)
+		}
 	})
 
 	t.Run("enabling the value enables it on the scheduler", func(t *testing.T) {

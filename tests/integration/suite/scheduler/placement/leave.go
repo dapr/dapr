@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -166,6 +167,57 @@ func (l *leave) Run(t *testing.T, ctx context.Context) {
 	})
 	<-errB
 
+	want := []string{"127.0.0.1:40001", "127.0.0.1:40003", "127.0.0.1:40005"}
+	converged := func(order *schedulerv1pb.PlacementOrder) bool {
+		if order.GetOperation() != schedulerv1pb.Operation_OPERATION_UPDATE {
+			return false
+		}
+		hosts := hostsOf(order, "typeA")
+		slices.Sort(hosts)
+		return slices.Equal(hosts, want)
+	}
+	// Each stream reads and acks every order from the moment it opens until
+	// the test ends, like a real sidecar: an unread stream leaves a round
+	// unacked and the scheduler evicts it after the disseminate timeout.
+	type convergence struct {
+		order *schedulerv1pb.PlacementOrder
+		err   error
+	}
+	ackAll := func(stream schedulerv1pb.Scheduler_ReportActorTypesClient) <-chan convergence {
+		ch := make(chan convergence, 1)
+		go func() {
+			reported := false
+			for {
+				order, err := stream.Recv()
+				if err == nil {
+					err = sendAck(stream, order)
+				}
+				if err != nil {
+					if !reported {
+						ch <- convergence{err: err}
+					}
+					return
+				}
+				if !reported && converged(order) {
+					reported = true
+					ch <- convergence{order: order}
+				}
+			}
+		}()
+		return ch
+	}
+	wait := func(ch <-chan convergence) convergence {
+		t.Helper()
+		select {
+		case c := <-ch:
+			return c
+		case <-time.After(time.Second * 20):
+			require.Fail(t, "no order converged on typeA hosts A, C and E")
+			return convergence{}
+		}
+	}
+	convA := ackAll(streamA)
+
 	// A third host joins, and mid-round the survivor of the last round
 	// closes without acking: the round still completes for the remaining
 	// streams.
@@ -177,6 +229,7 @@ func (l *leave) Run(t *testing.T, ctx context.Context) {
 		Namespace:  "default",
 		ActorTypes: []string{"typeA"},
 	})
+	convC := ackAll(streamC)
 
 	dctx, dcancel := context.WithCancel(ctx)
 	streamD := openAndReport(dctx, &schedulerv1pb.ActorHost{
@@ -196,59 +249,16 @@ func (l *leave) Run(t *testing.T, ctx context.Context) {
 		Namespace:  "default",
 		ActorTypes: []string{"typeA"},
 	})
+	convE := ackAll(streamE)
 	_, err := streamD.Recv()
 	require.NoError(t, err)
 	dcancel()
 
-	converged := func(order *schedulerv1pb.PlacementOrder) bool {
-		if order.GetOperation() != schedulerv1pb.Operation_OPERATION_UPDATE {
-			return false
-		}
-		hosts := hostsOf(order, "typeA")
-		return len(hosts) == 3
-	}
-	errC := make(chan error, 1)
-	var updateC *schedulerv1pb.PlacementOrder
-	go func() {
-		for {
-			order, cerr := streamC.Recv()
-			if cerr != nil {
-				errC <- cerr
-				return
-			}
-			if cerr = sendAck(streamC, order); cerr != nil {
-				errC <- cerr
-				return
-			}
-			if converged(order) {
-				updateC = order
-				errC <- nil
-				return
-			}
-		}
-	}()
-	errE := make(chan error, 1)
-	go func() {
-		for {
-			order, eerr := streamE.Recv()
-			if eerr != nil {
-				errE <- eerr
-				return
-			}
-			if eerr = sendAck(streamE, order); eerr != nil {
-				errE <- eerr
-				return
-			}
-			if converged(order) {
-				errE <- nil
-				return
-			}
-		}
-	}()
-	updateA := ackOrdersUntil(streamA, converged)
-	require.NoError(t, <-errC)
-	require.NoError(t, <-errE)
-	want := []string{"127.0.0.1:40001", "127.0.0.1:40003", "127.0.0.1:40005"}
-	assert.ElementsMatch(t, want, hostsOf(updateA, "typeA"))
-	assert.ElementsMatch(t, want, hostsOf(updateC, "typeA"))
+	updateA := wait(convA)
+	require.NoError(t, updateA.err)
+	updateC := wait(convC)
+	require.NoError(t, updateC.err)
+	require.NoError(t, wait(convE).err)
+	assert.ElementsMatch(t, want, hostsOf(updateA.order, "typeA"))
+	assert.ElementsMatch(t, want, hostsOf(updateC.order, "typeA"))
 }

@@ -72,6 +72,12 @@ func (r *Runner) GoKeyed(key string, fn func(ctx context.Context)) (started, inf
 	return started, false
 }
 
+// Context returns the root context of the goroutines. It is done once the
+// Runner is closed or its parent context is done.
+func (r *Runner) Context() context.Context {
+	return r.ctx
+}
+
 // InFlight reports whether a goroutine for key is running.
 func (r *Runner) InFlight(key string) bool {
 	_, ok := r.keyed.Load(key)

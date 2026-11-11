@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -54,9 +55,11 @@ type mcpserverreconcile struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
 	daprdLog *log.Log
+	url      string
 }
 
 func (m *mcpserverreconcile) Setup(t *testing.T) []framework.Option {
+	m.url = prochttp.NotFoundURL(t) + "/mcp"
 	sentry := sentry.New(t)
 
 	m.daprdLog = log.New()
@@ -100,7 +103,7 @@ func (m *mcpserverreconcile) Run(t *testing.T, ctx context.Context) {
 			IgnoreErrors: true,
 			Endpoint: mcpserverapi.MCPEndpoint{
 				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
-					URL: "http://example.com/mcp",
+					URL: m.url,
 					Headers: []commonapi.NameValuePair{{
 						Name:         "Authorization",
 						SecretKeyRef: commonapi.SecretKeyRef{Name: "weather-secret", Key: "token"},

@@ -1,4 +1,4 @@
-//go:build allcomponents
+//go:build allcomponents || nameresolution_sqlite
 
 /*
 Copyright 2023 The Dapr Authors

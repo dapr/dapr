@@ -62,6 +62,12 @@ type componentMetrics struct {
 	conversationCount   *stats.Int64Measure
 	conversationLatency *stats.Float64Measure
 
+	searchCount   *stats.Int64Measure
+	searchLatency *stats.Float64Measure
+
+	vectorCount   *stats.Int64Measure
+	vectorLatency *stats.Float64Measure
+
 	cryptoCount   *stats.Int64Measure
 	cryptoLatency *stats.Float64Measure
 
@@ -166,6 +172,22 @@ func newComponentMetrics() *componentMetrics {
 			"component/conversation/latencies",
 			"The latency of the response from the conversation component.",
 			stats.UnitMilliseconds),
+		searchCount: stats.Int64(
+			"component/search/count",
+			"The number of operations performed on the search component.",
+			stats.UnitDimensionless),
+		searchLatency: stats.Float64(
+			"component/search/latencies",
+			"The latency of the response from the search component.",
+			stats.UnitMilliseconds),
+		vectorCount: stats.Int64(
+			"component/vector/count",
+			"The number of operations performed on the vector component.",
+			stats.UnitDimensionless),
+		vectorLatency: stats.Float64(
+			"component/vector/latencies",
+			"The latency of the response from the vector component.",
+			stats.UnitMilliseconds),
 		cryptoCount: stats.Int64(
 			"component/crypto/count",
 			"The number of operations performed on the crypto component.",
@@ -221,6 +243,10 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 		diagUtils.NewMeasureView(c.secretCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.conversationLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.searchLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.searchCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.vectorLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.vectorCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.jobLatency, []tag.Key{appIDKey, namespaceKey, operationKey, successKey}, latencyDistribution),
@@ -438,6 +464,35 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 				stats.WithTags(diagUtils.WithTags(c.secretLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
 				stats.WithMeasurements(c.secretLatency.M(elapsed)))
 		}
+	}
+}
+
+// SearchInvoked records the metrics for a search event.
+func (c *componentMetrics) SearchInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
+	c.recordOperation(ctx, c.searchCount, c.searchLatency, component, operation, success, elapsed)
+}
+
+// VectorInvoked records the metrics for a vector event.
+func (c *componentMetrics) VectorInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
+	c.recordOperation(ctx, c.vectorCount, c.vectorLatency, component, operation, success, elapsed)
+}
+
+func (c *componentMetrics) recordOperation(ctx context.Context, count *stats.Int64Measure, latency *stats.Float64Measure, component, operation string, success bool, elapsed float64) {
+	if !c.enabled {
+		return
+	}
+	stats.RecordWithOptions(
+		ctx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(diagUtils.WithTags(count.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
+		stats.WithMeasurements(count.M(1)))
+
+	if elapsed > 0 {
+		stats.RecordWithOptions(
+			ctx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(diagUtils.WithTags(latency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
+			stats.WithMeasurements(latency.M(elapsed)))
 	}
 }
 

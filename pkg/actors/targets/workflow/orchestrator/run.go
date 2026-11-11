@@ -14,6 +14,7 @@ limitations under the License.
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -42,8 +43,25 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
+// logEmptyInboxAck is logged by every ack of a wake-up with nothing to do.
+const logEmptyInboxAck = "Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty"
+
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (completed todo.RunCompleted, err error) {
+	// A held completion is consumed by a turn, never acked off the record.
+	if o.settled != nil && len(o.foldPending) == 0 {
+		unchanged, serr := o.settledUnchanged(ctx)
+		if serr != nil {
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to confirm the settled terminal state: %w", serr))
+		}
+		if unchanged {
+			log.Debugf(logEmptyInboxAck, o.actorID, reminder.Name)
+			return todo.RunCompletedTrue, nil
+		}
+	}
+	o.settled = nil
+
 	var state *wfenginestate.State
+	fresh := o.state == nil
 	state, _, err = o.loadInternalState(ctx)
 	if err != nil {
 		// Treat load failures as recoverable so the reminder is retried.
@@ -79,7 +97,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return c, cerr
 	}
 
-	state, emptyDone, emptyCompleted, emptyErr := o.handleEmptyInbox(ctx, reminder, state)
+	state, emptyDone, emptyCompleted, emptyErr := o.handleEmptyInbox(ctx, reminder, state, fresh)
 	if emptyDone {
 		return emptyCompleted, emptyErr
 	}
@@ -583,7 +601,7 @@ func (o *orchestrator) injectCascadeTerminateEvent(reminder *actorapi.Reminder, 
 // handleEmptyInbox covers a fire with nothing to process: reload in case the
 // cache trails a peer, then settle a terminal instance and ack. Returns the
 // possibly reloaded state.
-func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.Reminder, state *wfenginestate.State) (*wfenginestate.State, bool, todo.RunCompleted, error) {
+func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.Reminder, state *wfenginestate.State, fresh bool) (*wfenginestate.State, bool, todo.RunCompleted, error) {
 	if len(state.Inbox) == 0 && len(o.foldPending) == 0 {
 		// The in-memory cache may be stale: during a placement cluster failure
 		// daprds will roll over the actor, so a peer host may have written a new
@@ -595,15 +613,32 @@ func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.
 		// instance-ID reuse the store may already hold the new generation's
 		// pending start, and acking off the stale cache would delete its
 		// reminder.
-		o.invalidateCachedState()
-		var lerr error
-		state, _, lerr = o.loadInternalState(ctx)
-		if lerr != nil {
-			return state, true, todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state on empty-inbox path: %w", lerr))
+		// The reload reads every history row, and a fan-out leaves about one
+		// already-drained wake-up per activity, so it runs only when the
+		// cache cannot be shown current: a state this turn loaded is, and so
+		// is a cached running one the store's metadata row agrees with. A
+		// terminal cache always reloads: settling it reads what the row does
+		// not cover (the parent-notify row a peer may have set, and the
+		// completion time of an instance recreated after a purge restarted
+		// its generation).
+		current := fresh
+		if !current && !runtimestate.IsCompleted(o.rstate) {
+			var cerr error
+			if current, cerr = o.cachedInboxCurrent(ctx, state); cerr != nil {
+				return state, true, todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state on empty-inbox path: %w", cerr))
+			}
 		}
-		if state == nil {
-			log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
-			return state, true, todo.RunCompletedTrue, nil
+		if !current {
+			o.invalidateCachedState()
+			var lerr error
+			state, _, lerr = o.loadInternalState(ctx)
+			if lerr != nil {
+				return state, true, todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to reload state on empty-inbox path: %w", lerr))
+			}
+			if state == nil {
+				log.Warnf("No workflow state found for actor '%s' after reload, terminating execution", o.actorID)
+				return state, true, todo.RunCompletedTrue, nil
+			}
 		}
 	}
 
@@ -622,13 +657,27 @@ func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.
 		rst := o.rstate
 		completed := runtimestate.IsCompleted(rst)
 		if completed {
+			owed := state.ParentNotifyPending
 			// A failure nacks the driving reminder; any driver other than the
 			// dedicated retry reminder also arms it.
 			if serr := o.settleTerminal(ctx, state, rst, reminder.Name != reminderNameParentNotify); serr != nil {
 				return state, true, todo.RunCompletedFalse, serr
 			}
+			// A terminal cache always reloads above, so this state was read
+			// whole this turn. A re-sent notification saved, and the refreshed
+			// ETag may be a peer's: leave that to the next wake-up's reload.
+			// The first row is cloned so the record does not pin the load's
+			// buffers.
+			if etag := state.MetadataETag(); !owed && etag != nil && len(state.RawHistory) > 0 {
+				o.settled = &settledTerminal{
+					etag:          *etag,
+					generation:    state.Generation,
+					historyLength: uint64(len(state.History)),
+					firstRow:      bytes.Clone(state.RawHistory[0]),
+				}
+			}
 		}
-		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		log.Debugf(logEmptyInboxAck, o.actorID, reminder.Name)
 		if o.fastPath && !completed {
 			// Returning RunCompletedTrue deactivates the actor, and a
 			// concurrent fold submit can append a held completion the moment

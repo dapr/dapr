@@ -36,7 +36,9 @@ func init() {
 // reusevalues renders the chart without global.scheduler.placement, as
 // `helm upgrade --reuse-values` does from a release installed before 1.19,
 // whose values never had the key and are used in place of the new chart
-// defaults.
+// defaults. Those old values also keep the old global.tag, so the rendered
+// scheduler runs a pre-1.19 image: its args must not carry a flag that
+// binary does not know.
 type reusevalues struct {
 	helm *helm.Helm
 }
@@ -70,5 +72,8 @@ func (r *reusevalues) Run(t *testing.T, ctx context.Context) {
 	require.Contains(t, stss, "dapr-scheduler-server")
 	sched := stss["dapr-scheduler-server"]
 	require.NotEmpty(t, sched.Spec.Template.Spec.Containers)
-	assert.Contains(t, sched.Spec.Template.Spec.Containers[0].Args, "--placement-enabled=false")
+	for _, arg := range sched.Spec.Template.Spec.Containers[0].Args {
+		assert.NotContains(t, arg, "--placement-enabled",
+			"a pre-1.19 scheduler image exits on the unknown flag --placement-enabled")
+	}
 }

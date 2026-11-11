@@ -16,10 +16,12 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -225,6 +228,208 @@ func Test_runOwned_inHandResultOutlivesCaller(t *testing.T) {
 		require.ErrorIs(t, <-ownerErr, errPublishAbandoned)
 		require.True(t, call.Settled())
 		require.ErrorIs(t, call.Err(), errPublishAbandoned)
+	})
+}
+
+// Test_runOwned_busyParentIsNotAFailedPublish pins that a result publish has
+// no deadline of its own. The parent's AddWorkflowEvent waits for the
+// parent's turn lock, which every completion of a fan-out queues on. A
+// deadline on that wait settled the execution as failed, the run-activity
+// reminder ran the body again, and each re-run queued on the same lock.
+func Test_runOwned_busyParentIsNotAFailedPublish(t *testing.T) {
+	t.Parallel()
+
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
+
+	// busyParent takes the result only once release is closed, as a parent
+	// whose turn lock is held. Each call reports on entered whether its
+	// context carries a deadline.
+	type busyParent struct {
+		entered chan bool
+		release chan struct{}
+		calls   atomic.Int64
+	}
+	newBusyParent := func(f *factory) *busyParent {
+		b := &busyParent{entered: make(chan bool, 4), release: make(chan struct{})}
+		f.router = routerfake.New().WithCallFn(func(ctx context.Context, _ *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			b.calls.Add(1)
+			_, hasDeadline := ctx.Deadline()
+			b.entered <- hasDeadline
+			select {
+			case <-b.release:
+				return &internalsv1pb.InternalInvokeResponse{}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+		return b
+	}
+	recvEntered := func(t *testing.T, b *busyParent) bool {
+		t.Helper()
+		select {
+		case hasDeadline := <-b.entered:
+			return hasDeadline
+		case <-time.After(time.Second * 5):
+			t.Fatal("the result was never published")
+			return false
+		}
+	}
+
+	t.Run("the owner's publish waits for a busy parent", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		b := newBusyParent(f)
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		ownerErr := make(chan error, 1)
+		go func() {
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+		}()
+		wi := recvWorkItem(t, scheduled)
+		call, ok := f.inflight.Peek(key)
+		require.True(t, ok)
+
+		completeWorkItem(t, wi)
+		assert.False(t, recvEntered(t, b), "a deadline on the publish turns a busy parent into a failed execution")
+		assert.False(t, call.Settled(), "the execution stays in flight while the parent is busy")
+
+		close(b.release)
+		require.NoError(t, <-ownerErr, "the owner reports the delivery once the parent takes it")
+		f.detached.Wait()
+
+		assert.Equal(t, int64(1), b.calls.Load(), "one delivery")
+		assert.Empty(t, scheduled, "the body must not be dispatched again")
+		require.True(t, call.Settled())
+		require.NoError(t, call.Err(), "the entry caches the success so a retry acks instead of re-executing")
+	})
+
+	t.Run("a handed-off publish waits for a busy parent", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		b := newBusyParent(f)
+
+		// Cut the owner mid-execution so runOwned hands the queued WorkItem
+		// to the watcher (watchAndPublish).
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		ctx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		ownerErr := make(chan error, 1)
+		go func() {
+			ownerErr <- a.executeActivity(ctx, testReminder(), testInvocation())
+		}()
+		wi := recvWorkItem(t, scheduled)
+		call, ok := f.inflight.Peek(key)
+		require.True(t, ok)
+		cancel()
+		require.ErrorIs(t, <-ownerErr, context.Canceled)
+
+		completeWorkItem(t, wi)
+		assert.False(t, recvEntered(t, b), "a deadline on the publish turns a busy parent into a failed execution")
+
+		close(b.release)
+		f.detached.Wait()
+
+		assert.Equal(t, int64(1), b.calls.Load(), "one delivery")
+		assert.Empty(t, scheduled, "the body must not be dispatched again")
+		require.True(t, call.Settled())
+		require.NoError(t, call.Err())
+	})
+
+	t.Run("shutdown keeps the publish in flight for the grace", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		rootCtx, rootCancel := context.WithCancel(t.Context())
+		f.detached = detached.New(rootCtx)
+		f.publishGrace = newPublishGrace(f.detached.Context(), time.Minute)
+		b := newBusyParent(f)
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		ownerErr := make(chan error, 1)
+		go func() {
+			ownerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+		}()
+		wi := recvWorkItem(t, scheduled)
+		call, ok := f.inflight.Peek(key)
+		require.True(t, ok)
+
+		completeWorkItem(t, wi)
+		recvEntered(t, b)
+		// The runtime shuts down. The publish stays in flight, and the parent
+		// then takes the result within the grace. The fake router ignores
+		// shutdown, so this checks the grace timer only. In daprd the router
+		// cancels the call at once (see publishAndSettle). The integration
+		// tests busyparentshutdown and busyparentabandon cover that order.
+		rootCancel()
+		select {
+		case err := <-ownerErr:
+			t.Fatalf("shutdown ended the publish before the grace: %v", err)
+		case <-time.After(time.Millisecond * 100):
+		}
+		close(b.release)
+		require.NoError(t, <-ownerErr)
+		f.detached.Wait()
+
+		require.True(t, call.Settled())
+		require.NoError(t, call.Err(), "a result the parent takes within the grace is delivered")
+	})
+}
+
+// Test_publish_notFoundIsNotCachedAsDelivered pins that a result the parent
+// refuses as instance not found acks its caller without being cached as
+// delivered. It used to be cached for InflightCacheTTL, so when a lagging
+// state read made a live parent answer not found, every janitor re-dispatch
+// was acked from the cache and the activity never ran again.
+func Test_publish_notFoundIsNotCachedAsDelivered(t *testing.T) {
+	t.Parallel()
+
+	key := inflight.Key("wf::3::0", testInvocation().GetHistoryEvent())
+
+	t.Run("the owner acks and the next arrival re-executes", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+		f.router = routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			return nil, fmt.Errorf("api error: %w", api.ErrInstanceNotFound)
+		})
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		run := func() chan error {
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+			}()
+			return errCh
+		}
+
+		ownerErr := run()
+		wi := recvWorkItem(t, scheduled)
+		call, ok := f.inflight.Peek(key)
+		require.True(t, ok)
+
+		completeWorkItem(t, wi)
+		require.NoError(t, <-ownerErr, "a refused result is acked, not retried into a purged instance")
+		require.True(t, call.Settled())
+		require.ErrorIs(t, call.Err(), errResultUndelivered)
+		_, ok = f.inflight.Peek(key)
+		require.False(t, ok, "a refused result must not be cached as delivered")
+
+		retryErr := run()
+		completeWorkItem(t, recvWorkItem(t, scheduled))
+		require.NoError(t, <-retryErr)
+	})
+
+	t.Run("a follower of a refused result acks", func(t *testing.T) {
+		t.Parallel()
+		f, scheduled := newExecHarness(t)
+
+		// Finished but not yet released: the instant inside settle at which a
+		// follower can still find the entry.
+		call, owner := f.inflight.Acquire(key)
+		require.True(t, owner)
+		call.Finish(errResultUndelivered)
+
+		a := f.GetOrCreate("wf::3::0").(*activity)
+		require.NoError(t, a.executeActivity(t.Context(), testReminder(), testInvocation()))
+		assert.Empty(t, scheduled, "a follower must not dispatch a work item")
 	})
 }
 

@@ -16,12 +16,15 @@ package placement
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/stretchr/testify/assert"
@@ -339,5 +342,87 @@ func TestLeaderlessSchedulerKeepsSchedulerPlacement(t *testing.T) {
 		require.Error(t, p.handleReconnect(ctx, &loops.PlacementReconnect{}))
 		assert.Positive(t, v1.calls.Load())
 		assert.False(t, p.schedulerPlacement)
+	})
+}
+
+// dialConnector dials a new connection on every Connect, as the static and
+// DNS connectors do, and records each one.
+type dialConnector struct {
+	t     *testing.T
+	mu    sync.Mutex
+	conns []*grpc.ClientConn
+}
+
+func (d *dialConnector) Connect(context.Context) (*grpc.ClientConn, error) {
+	conn, err := grpc.NewClient("passthrough:///127.0.0.1:1",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	d.t.Cleanup(func() { conn.Close() })
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.conns = append(d.conns, conn)
+	return conn, nil
+}
+
+func (d *dialConnector) Address() string { return "127.0.0.1:1" }
+
+// open returns the number of recorded connections which are not closed.
+func (d *dialConnector) open() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var n int
+	for _, conn := range d.conns {
+		if conn.GetState() != connectivity.Shutdown {
+			n++
+		}
+	}
+	return n
+}
+
+// TestTryConnectClosesConn asserts tryConnect closes the connection when the
+// stream fails to open and when the stream ends. Every attempt dials a new
+// connection, so a connection left open keeps redialing placement.
+func TestTryConnectClosesConn(t *testing.T) {
+	t.Parallel()
+
+	t.Run("streams which fail to open close their connections", func(t *testing.T) {
+		t.Parallel()
+		d := &dialConnector{t: t}
+		p := &placement{
+			connector: d,
+			streamFactory: func(context.Context, *grpc.ClientConn) (transport.Transport, error) {
+				return nil, errors.New("no stream")
+			},
+		}
+		for range 5 {
+			_, _, err := p.tryConnect(t.Context(), t.Context())
+			require.Error(t, err)
+		}
+		assert.Len(t, d.conns, 5)
+		assert.Zero(t, d.open())
+	})
+
+	t.Run("ending the stream closes the connection", func(t *testing.T) {
+		t.Parallel()
+		d := &dialConnector{t: t}
+		var streamCtx context.Context
+		p := &placement{
+			connector: d,
+			streamFactory: func(ctx context.Context, _ *grpc.ClientConn) (transport.Transport, error) {
+				streamCtx = ctx
+				return nil, nil
+			},
+		}
+		_, streamCancel, err := p.tryConnect(t.Context(), t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 1, d.open())
+
+		streamCancel()
+		require.ErrorIs(t, streamCtx.Err(), context.Canceled)
+		assert.Zero(t, d.open())
 	})
 }

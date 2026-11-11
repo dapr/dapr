@@ -79,7 +79,9 @@ func (p *pendingstartretry) Run(t *testing.T, ctx context.Context) {
 
 	const instanceID = "pending-start-retry"
 
-	p.scheduler.Kill(t)
+	// Stopped cleanly so it revokes its leadership lease. After a kill, the
+	// restarted scheduler serves no jobs until that lease expires (20s).
+	p.scheduler.Cleanup(t)
 
 	gclient := p.daprd.GRPCClient(t, ctx)
 

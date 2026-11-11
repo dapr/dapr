@@ -80,6 +80,9 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 		// scheduler's retry acks without dispatching the activity again.
 		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, reminder.Name)
 		if stale, ferr := a.follow(ctx, call, workflowID, taskID); !stale {
+			if errors.Is(ferr, errResultUndelivered) {
+				return nil
+			}
 			return ferr
 		}
 		// claim() evicts the stale entry (unblocking parked followers into

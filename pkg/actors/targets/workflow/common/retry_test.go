@@ -150,3 +150,74 @@ func Test_CreateReminderWithRetry_AlreadyExistsIsSuccess(t *testing.T) {
 	require.NoError(t, CreateReminderWithRetryForever(t.Context(), creator, req))
 	assert.Equal(t, 1, creator.calls)
 }
+
+// failNDeleter fails the first n DeleteByActorID calls with err, then succeeds.
+type failNDeleter struct {
+	n     int
+	err   error
+	calls int
+}
+
+func (f *failNDeleter) DeleteByActorID(ctx context.Context, req *actorapi.DeleteRemindersByActorIDRequest) error {
+	f.calls++
+	if f.calls <= f.n {
+		return f.err
+	}
+	return nil
+}
+
+func Test_DeleteRemindersWithRetry(t *testing.T) {
+	t.Parallel()
+
+	req := &actorapi.DeleteRemindersByActorIDRequest{ActorType: "wf", ActorID: "id"}
+
+	tests := map[string]struct {
+		n         int
+		err       error
+		wantErr   bool
+		wantCalls int
+	}{
+		// A daprd whose scheduler connection was reset sees Unavailable on
+		// the next call; purge must not give up on it after its rows are gone.
+		"unavailable is retried": {
+			n: 2, err: status.Error(codes.Unavailable, "error reading from server: EOF"), wantCalls: 3,
+		},
+		"unknown wire error is retried": {
+			n: 2, err: status.Error(codes.Unknown, "cron is closed"), wantCalls: 3,
+		},
+		"not found means nothing is left to delete": {
+			n: 5, err: status.Error(codes.NotFound, "no jobs"), wantCalls: 1,
+		},
+		"permanent request error is not retried": {
+			n: 5, err: status.Error(codes.PermissionDenied, "denied"), wantErr: true, wantCalls: 1,
+		},
+		"resource exhausted is not retried": {
+			n: 5, err: status.Error(codes.ResourceExhausted, "etcdserver: mvcc: database space exceeded"), wantErr: true, wantCalls: 1,
+		},
+		"local error is not retried": {
+			n: 5, err: errors.New("reminder storage is not set"), wantErr: true, wantCalls: 1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := &failNDeleter{n: tc.n, err: tc.err}
+			err := DeleteRemindersWithRetry(t.Context(), d, req)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.wantCalls, d.calls)
+		})
+	}
+
+	t.Run("a cancelled context stops the retries", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		d := &failNDeleter{n: 100, err: status.Error(codes.Unavailable, "down")}
+		require.ErrorIs(t, DeleteRemindersWithRetry(ctx, d, req), context.Canceled)
+	})
+}

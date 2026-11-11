@@ -30,6 +30,53 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 	d.inflight.Acquire(req)
 }
 
+// completeRound runs at the end of every dissemination round on this
+// stream, once its tables are installed.
+func (d *disseminator) completeRound(ctx context.Context) {
+	d.roundCompleted = true
+	// A type in a round still in progress keeps draining: its installed
+	// table is not final until that round completes.
+	pendingAll, pending := d.pendingTypes()
+	d.actorTable.CompleteDrains(ctx, func(actorType string) bool {
+		_, ok := pending[actorType]
+		return pendingAll || ok || d.inflight.HasLocalHost(actorType)
+	})
+	d.placementLoop.Enqueue(&loops.RoundCompleted{
+		Remote:     d.inflight.RemoteHostTypes(),
+		Pending:    pending,
+		PendingAll: pendingAll,
+	})
+	d.reloadReminderTypes()
+}
+
+// reloadReminderTypes advertises the actor types this host takes reminders
+// for to the scheduler.
+func (d *disseminator) reloadReminderTypes() {
+	d.scheduler.ReloadActorTypes(d.actorTable.ReminderTypes())
+}
+
+// pendingTypes returns the actor types whose tables a dissemination round
+// still in progress may change, or all if such a round is the startup
+// snapshot: a v2 round with an empty scope covers every type.
+func (d *disseminator) pendingTypes() (bool, map[string]struct{}) {
+	pending := make(map[string]struct{}, len(d.roundChangedTypes))
+	for actorType := range d.roundChangedTypes {
+		pending[actorType] = struct{}{}
+	}
+	for _, r := range d.v2Rounds {
+		if len(r.scope) == 0 {
+			return true, nil
+		}
+		for _, actorType := range r.scope {
+			pending[actorType] = struct{}{}
+		}
+		for actorType := range r.changed {
+			pending[actorType] = struct{}{}
+		}
+	}
+	return false, pending
+}
+
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 	d.streamLoop.Enqueue(&loops.StreamSend{
 		Report: report.Report,
@@ -139,10 +186,10 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		)
 
 		d.currentOperation = loops.OrderUnlock
-		d.scheduler.ReloadActorTypes(d.actorTable.Types())
+		clear(d.roundChangedTypes)
+		d.completeRound(ctx)
 
 		d.inflight.UnlockTypes(toUnlock)
-		clear(d.roundChangedTypes)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Ack: &loops.Ack{

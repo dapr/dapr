@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	kitstrings "github.com/dapr/kit/strings"
@@ -51,6 +52,23 @@ type FileEntry struct {
 	Content []byte
 }
 
+const (
+	// readAttempts bounds the retries of a read refused by a sharing
+	// violation, which a scanner on Windows causes for a few milliseconds
+	// after a file is written.
+	readAttempts   = 5
+	readRetryDelay = 20 * time.Millisecond
+)
+
+// ErrLocked reports a file still held exclusively by another process after
+// the read retries. The scan is incomplete rather than failed: a caller must
+// retry it instead of reconciling the partial result, which would unload the
+// resources the file holds.
+var ErrLocked = errors.New("resource file held by another process")
+
+// readFileFn is replaced in tests to inject read errors.
+var readFileFn = os.ReadFile
+
 // ReadDirs reads all YAML files from the given directories into memory.
 func ReadDirs(dirs []string) (*DirData, error) {
 	data := &DirData{
@@ -79,7 +97,7 @@ func readDir(dir string) (*DirEntry, error) {
 		if !kitstrings.IsYaml(f.Name()) {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		content, err := readFile(filepath.Join(dir, f.Name()))
 		if err != nil {
 			// File may have been deleted between the directory listing and
 			// the read (e.g. during a rapid write/delete cycle or shutdown).
@@ -91,9 +109,29 @@ func readDir(dir string) (*DirEntry, error) {
 			if errors.Is(err, fs.ErrNotExist) || isDeletePending(err) {
 				continue
 			}
+			if isLocked(err) {
+				return nil, fmt.Errorf("%w: %s: %w", ErrLocked, filepath.Join(dir, f.Name()), err)
+			}
 			return nil, fmt.Errorf("failed to read file %s: %w", filepath.Join(dir, f.Name()), err)
 		}
 		entry.Files = append(entry.Files, FileEntry{Name: f.Name(), Content: content})
 	}
 	return entry, nil
+}
+
+// readFile reads the file, retrying briefly while another process holds it
+// exclusively.
+func readFile(path string) ([]byte, error) {
+	var content []byte
+	var err error
+	for attempt := range readAttempts {
+		if attempt > 0 {
+			time.Sleep(readRetryDelay)
+		}
+		content, err = readFileFn(path)
+		if err == nil || !isLocked(err) {
+			return content, err
+		}
+	}
+	return nil, err
 }

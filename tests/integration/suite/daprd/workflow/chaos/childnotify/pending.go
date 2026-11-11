@@ -149,7 +149,7 @@ func (p *pending) Run(t *testing.T, ctx context.Context) {
 
 	err = client.PurgeWorkflowState(ctx, childID)
 	require.ErrorContains(t, err, api.ErrNotCompleted.Error(), "an unacknowledged completion is not purgeable")
-	// Refused as Unavailable, which the client retries: bound the attempt.
+	// The start API retries the refusal: bound the attempt.
 	reuseCtx, reuseCancel := context.WithTimeout(ctx, time.Second*3)
 	t.Cleanup(reuseCancel)
 	_, err = client.ScheduleNewWorkflow(reuseCtx, "child", api.WithInstanceID(childID))

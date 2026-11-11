@@ -98,7 +98,7 @@ func (l *listhttp) Run(t *testing.T, ctx context.Context) {
 	assert.JSONEq(t, `{"reminders":[]}`, body)
 
 	// Registered reminders are listed with the same representation as GET.
-	register(t, "abc-1", "r1", `{"dueTime":"1000s","period":"10s","data":"hello"}`)
+	register(t, "abc-1", "r1", `{"dueTime":"1000s","period":"10s","ttl":"2552-01-01T00:00:00Z","data":"hello"}`)
 	register(t, "abc-1", "r0", `{"dueTime":"1000s","data":{"k":[1,2]}}`)
 
 	code, body = httpList(t, "foo", "abc-1")
@@ -118,7 +118,7 @@ func (l *listhttp) Run(t *testing.T, ctx context.Context) {
 	require.Contains(t, byName, "r1")
 	assert.Equal(t, map[string]any{
 		"name": "r1", "actorType": "foo", "actorID": "abc-1",
-		"dueTime": "1000s", "period": "@every 10s", "data": "hello",
+		"dueTime": "1000s", "period": "@every 10s", "ttl": "2552-01-01T00:00:00Z", "data": "hello",
 	}, byName["r1"])
 	assert.Equal(t, map[string]any{
 		"name": "r0", "actorType": "foo", "actorID": "abc-1",

@@ -222,7 +222,7 @@ func TestDeliverBulkDoesNotPropagateEntryContext(t *testing.T) {
 	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
 	bscData := todo.BulkSubscribeCallData{
 		BulkResponses:   &bulkResponses,
-		BulkSubDiag:     &bulkSubDiag,
+		BulkSubDiag:     bulkSubDiag,
 		EntryIdIndexMap: &entryIDIndexMap,
 		PsName:          psm.Pubsub,
 		Topic:           psm.Topic,
@@ -456,7 +456,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 				},
 			})
 
-			err = g.Deliver(t.Context(), tc.message)
+			err := g.Deliver(t.Context(), tc.message)
 			if tc.expectedError != nil {
 				assert.Equal(t, err.Error(), tc.expectedError.Error())
 			} else {

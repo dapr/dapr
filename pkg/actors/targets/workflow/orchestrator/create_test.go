@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -41,6 +41,9 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
+
+// testETag is the etag the fake state store hands back in these tests.
+const testETag = "etag"
 
 // createHarness captures every state save and reminder create in a single
 // ordered operation log so tests can assert save-before-create ordering.
@@ -61,6 +64,15 @@ type createHarness struct {
 	// getErr, when non-nil, is returned by the reminders Get fake: the
 	// scheduler could not be reached to check the reminder.
 	getErr error
+
+	// storedMeta, when set, answers metadata-row reads until the first save:
+	// what the store holds for an instance primed into the cache, or nil
+	// data for one deleted underneath it.
+	storedMeta func() (*actorapi.StateResponse, error)
+	// storedBulk answers bulk reads: the rows a reload loads.
+	storedBulk actorapi.BulkStateResponse
+	// refreshErr, when set, fails the metadata read after a save.
+	refreshErr error
 
 	orch *orchestrator
 }
@@ -102,11 +114,25 @@ func newCreateHarness(t *testing.T, instanceID string) *createHarness {
 			// No stored state until the first save: fresh instance. After a
 			// save the metadata row exists, as the post-save etag refresh
 			// expects.
+			if !h.saved && h.storedMeta != nil && req.Key == wfenginestate.MetadataKey {
+				return h.storedMeta()
+			}
+			if h.saved && h.refreshErr != nil && req.Key == wfenginestate.MetadataKey {
+				return nil, h.refreshErr
+			}
 			if h.saved && req.Key == wfenginestate.MetadataKey {
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil
+		}).
+		WithGetBulkFn(func(context.Context, *actorapi.GetBulkStateRequest, bool) (actorapi.BulkStateResponse, error) {
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			if h.storedBulk == nil {
+				return actorapi.BulkStateResponse{}, nil
+			}
+			return h.storedBulk, nil
 		}).
 		WithTransactionalStateOperationFn(func(context.Context, bool, *actorapi.TransactionalRequest, bool) error {
 			h.lock.Lock()
@@ -172,16 +198,15 @@ func (h *createHarness) primePendingStart(savedStart *backend.HistoryEvent, extr
 	}
 
 	h.orch.state = state
+	cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+	h.orch.cachedExecutionID = &cachedID
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, nil)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, savedStart.GetExecutionStarted())
 	return state
 }
 
-func createRequestBytes(t *testing.T, startEvent *backend.HistoryEvent) []byte {
-	t.Helper()
-	b, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{StartEvent: startEvent})
-	require.NoError(t, err)
-	return b
+func createRequest(startEvent *backend.HistoryEvent) *backend.CreateWorkflowInstanceRequest {
+	return &backend.CreateWorkflowInstanceRequest{StartEvent: startEvent}
 }
 
 func Test_scheduleWorkflowStart_savesBeforeReminderCreate(t *testing.T) {
@@ -190,7 +215,7 @@ func Test_scheduleWorkflowStart_savesBeforeReminderCreate(t *testing.T) {
 	ts := time.Now()
 	h := newCreateHarness(t, instanceID)
 
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, startEventFor(instanceID, ts, nil))))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, ts, nil))))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -218,7 +243,7 @@ func Test_scheduleWorkflowStart_honorsScheduledStartTimestamp(t *testing.T) {
 	start := startEventFor(instanceID, ts, func(es *protos.ExecutionStartedEvent) {
 		es.ScheduledStartTimestamp = timestamppb.New(delayed)
 	})
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -233,7 +258,7 @@ func Test_scheduleWorkflowStart_reminderCreateFailureReturnsErrorAfterSave(t *te
 	h := newCreateHarness(t, instanceID)
 	h.createErr = errors.New("scheduler exploded")
 
-	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, startEventFor(instanceID, time.Now(), nil)))
+	err := h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), nil)))
 	require.ErrorContains(t, err, "scheduler exploded")
 
 	h.lock.Lock()
@@ -255,7 +280,7 @@ func Test_createWorkflowInstance_pendingStartReassertsByDeterministicName(t *tes
 	// A client retry of the same logical create regenerates timestamp (and
 	// ExecutionId); the re-assert must derive the name from the SAVED event.
 	incoming := startEventFor(instanceID, time.Now(), nil)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -277,7 +302,7 @@ func Test_createWorkflowInstance_pendingStartWithArmedReminderAlreadyExists(t *t
 	h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
 
 	incoming := startEventFor(instanceID, time.Now(), nil)
-	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+	err := h.orch.createWorkflowInstance(t.Context(), createRequest(incoming))
 	require.Error(t, err)
 	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 
@@ -303,7 +328,7 @@ func Test_createWorkflowInstance_pendingStartParentWithArmedReminderNoop(t *test
 	// The duplicate child creation is ignored as before; with the reminder
 	// armed there is nothing to re-drive.
 	incoming := startEventFor(instanceID, time.Now(), parent)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -322,7 +347,7 @@ func Test_createWorkflowInstance_pendingStartMismatchAlreadyExists(t *testing.T)
 			h.primePendingStart(startEventFor(instanceID, time.Now().Add(-time.Minute), nil))
 
 			incoming := startEventFor(instanceID, time.Now(), mutate)
-			err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+			err := h.orch.createWorkflowInstance(t.Context(), createRequest(incoming))
 			require.Error(t, err)
 			assert.Equal(t, codes.AlreadyExists, status.Code(err))
 
@@ -350,7 +375,7 @@ func Test_createWorkflowInstance_pendingStartSameParentReasserts(t *testing.T) {
 	// The parent re-executes and re-issues the child creation with a fresh
 	// timestamp: the pending-start child must be re-driven, not ignored.
 	incoming := startEventFor(instanceID, time.Now(), parent)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -384,7 +409,7 @@ func Test_createWorkflowInstance_sameParentSameExecutionDedups(t *testing.T) {
 	// A crash-replay duplicate carries the same parent ExecutionId and is
 	// ignored exactly as when no ExecutionId is present at all.
 	incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -410,7 +435,7 @@ func Test_createWorkflowInstance_parentExecutionMismatchAlreadyExists(t *testing
 			h.armedReminder = armed
 
 			incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
-			err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+			err := h.orch.createWorkflowInstance(t.Context(), createRequest(incoming))
 			require.Error(t, err)
 			assert.Equal(t, codes.AlreadyExists, status.Code(err))
 			assert.Contains(t, err.Error(), "already exists")
@@ -438,7 +463,7 @@ func Test_createWorkflowInstance_parentExecutionNilEitherSideDedups(t *testing.T
 			h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
 
 			incoming := startEventFor(instanceID, time.Now(), parentWithExec(execs.incoming))
-			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 			h.lock.Lock()
 			defer h.lock.Unlock()
@@ -493,7 +518,7 @@ func Test_createWorkflowInstance_pendingStartWithRaisedEventStillReasserts(t *te
 	)
 
 	incoming := startEventFor(instanceID, time.Now(), nil)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -523,6 +548,8 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		})
 		state.SetParentNotifyPending(true)
 		h.orch.state = state
+		cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+		h.orch.cachedExecutionID = &cachedID
 		h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
 		h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, start.GetExecutionStarted())
 		return h
@@ -531,7 +558,7 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 	t.Run("the creating parent's replay is a no-op", func(t *testing.T) {
 		h := prime(t)
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 		h.lock.Lock()
 		defer h.lock.Unlock()
 		assert.Empty(t, h.ops, "no reset, no new start")
@@ -542,7 +569,7 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		h.orch.state.SetParentNotifyPending(false)
 		h.orch.state.ResetChangeTracking()
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-a"))
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 		h.lock.Lock()
 		defer h.lock.Unlock()
 		assert.Equal(t, []string{"save", "create:" + reminderNameParentNotify}, h.ops,
@@ -550,16 +577,54 @@ func Test_createWorkflowInstance_completedChildWithPendingNotification(t *testin
 		assert.True(t, h.orch.state.ParentNotifyPending)
 	})
 
-	t.Run("any other creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
+	t.Run("a later execution of the parent recreates the id, acknowledging the completion", func(t *testing.T) {
 		h := prime(t)
 		incoming := startEventFor(instanceID, time.Now(), parentWithExec("exec-b"))
-		err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
-		require.Error(t, err)
-		assert.Equal(t, codes.Unavailable, status.Code(err))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
+		assert.False(t, h.orch.state.ParentNotifyPending, "the recreate's save clears the marker")
 		h.lock.Lock()
 		defer h.lock.Unlock()
-		assert.Empty(t, h.ops)
+		assert.Contains(t, h.ops, "save")
 	})
+
+	t.Run("a later execution naming the local app recreates the id of a child saved without one", func(t *testing.T) {
+		h := prime(t)
+		localApp := "testapp"
+		incoming := startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.AppID = &localApp
+		})
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
+		assert.False(t, h.orch.state.ParentNotifyPending, "the recreate's save clears the marker")
+	})
+
+	otherApp := "otherapp"
+	for name, mutate := range map[string]func(*protos.ExecutionStartedEvent){
+		"a client": nil,
+		"another parent": func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.WorkflowInstance.InstanceId = "parent-2"
+		},
+		"another app's parent": func(es *protos.ExecutionStartedEvent) {
+			parentWithExec("exec-b")(es)
+			es.ParentInstance.AppID = &otherApp
+		},
+	} {
+		t.Run(name+" creation is refused, retryably, until the parent acknowledged", func(t *testing.T) {
+			h := prime(t)
+			incoming := startEventFor(instanceID, time.Now(), mutate)
+			err := h.orch.createWorkflowInstance(t.Context(), createRequest(incoming))
+			require.Error(t, err)
+			// The actor router must not retry the refusal inside the creating
+			// turn, which holds the caller's lock.
+			assert.False(t, router.IsRetryableRemoteError(err),
+				"the refusal must not be retried by the actor router under the caller's lock, got %s", status.Code(err))
+			assert.Equal(t, codes.Aborted, status.Code(err))
+			h.lock.Lock()
+			defer h.lock.Unlock()
+			assert.Empty(t, h.ops)
+		})
+	}
 }
 
 func Test_scheduleWorkflowStart_claimCancelledCreateArmsDetached(t *testing.T) {
@@ -583,7 +648,7 @@ func Test_scheduleWorkflowStart_claimCancelledCreateArmsDetached(t *testing.T) {
 	}
 
 	startTS := time.Now()
-	err := h.orch.createWorkflowInstance(ctx, createRequestBytes(t, startEventFor(instanceID, startTS, nil)))
+	err := h.orch.createWorkflowInstance(ctx, createRequest(startEventFor(instanceID, startTS, nil)))
 	require.ErrorIs(t, err, context.Canceled, "the caller still sees the failure: the create is not acknowledged before a driver exists")
 
 	h.orch.detached.Wait()
@@ -602,7 +667,7 @@ func Test_scheduleWorkflowStart_permanentCreateFailureDoesNotArmDetached(t *test
 	h := newCreateHarness(t, instanceID)
 	h.createErr = status.Error(codes.InvalidArgument, "malformed")
 
-	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, startEventFor(instanceID, time.Now(), nil)))
+	err := h.orch.createWorkflowInstance(t.Context(), createRequest(startEventFor(instanceID, time.Now(), nil)))
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
@@ -657,7 +722,7 @@ func Test_createWorkflowInstance_pendingStartReminderCheckFailsOpen(t *testing.T
 	h.getErr = status.Error(codes.Internal, "failed to get job: rpc error: code = Unavailable")
 
 	incoming := startEventFor(instanceID, time.Now(), nil)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -682,7 +747,7 @@ func Test_createWorkflowInstance_pendingStartSameParentReminderCheckFailsOpen(t 
 	h.getErr = status.Error(codes.Unavailable, "connection refused")
 
 	incoming := startEventFor(instanceID, time.Now(), parent)
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -812,6 +877,8 @@ func (h *createHarness) primeHistory(events ...*backend.HistoryEvent) *wfengines
 		state.AddToHistory(e)
 	}
 	h.orch.state = state
+	cachedID := executionIDOf(h.orch.getExecutionStartedEvent(state))
+	h.orch.cachedExecutionID = &cachedID
 	h.orch.rstate = runtimestate.NewWorkflowRuntimeState(h.orch.actorID, nil, state.History)
 	h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, events[0].GetExecutionStarted())
 	return state
@@ -835,7 +902,7 @@ func Test_createWorkflowInstance_sameExecutionRetryPending(t *testing.T) {
 		h.primePendingStart(saved)
 		h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
 
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, saved)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(saved)))
 
 		h.lock.Lock()
 		defer h.lock.Unlock()
@@ -848,7 +915,7 @@ func Test_createWorkflowInstance_sameExecutionRetryPending(t *testing.T) {
 		h := newCreateHarness(t, instanceID)
 		h.primePendingStart(saved)
 
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, saved)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(saved)))
 
 		h.lock.Lock()
 		defer h.lock.Unlock()
@@ -865,7 +932,7 @@ func Test_createWorkflowInstance_pendingDifferentExecutionAlreadyExists(t *testi
 	h.armedReminder = &actorapi.Reminder{Name: "start-es-1"}
 
 	incoming := startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
-	err := h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming))
+	err := h.orch.createWorkflowInstance(t.Context(), createRequest(incoming))
 	require.Error(t, err)
 	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 
@@ -881,7 +948,7 @@ func Test_createWorkflowInstance_sameExecutionRetryRunning(t *testing.T) {
 	h := newCreateHarness(t, instanceID)
 	h.primeHistory(start)
 
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -895,7 +962,7 @@ func Test_createWorkflowInstance_sameExecutionRetryCompletedNoop(t *testing.T) {
 	h := newCreateHarness(t, instanceID)
 	state := h.primeHistory(start, completedEvent())
 
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -916,7 +983,7 @@ func Test_createWorkflowInstance_completedDifferentExecutionRecreates(t *testing
 
 			newTS := time.Now()
 			incoming := startEventFor(instanceID, newTS, withExecutionID(execID))
-			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, incoming)))
+			require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(incoming)))
 
 			h.lock.Lock()
 			defer h.lock.Unlock()
@@ -929,10 +996,8 @@ func Test_createWorkflowInstance_completedDifferentExecutionRecreates(t *testing
 func Test_createWorkflowInstance_enforceUniqueSameExecutionRetry(t *testing.T) {
 	const instanceID = "test-retry-unique"
 
-	reqBytes := func(t *testing.T, e *backend.HistoryEvent) []byte {
-		b, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{StartEvent: e, EnforceUniqueInstanceId: true})
-		require.NoError(t, err)
-		return b
+	uniqueRequest := func(e *backend.HistoryEvent) *backend.CreateWorkflowInstanceRequest {
+		return &backend.CreateWorkflowInstanceRequest{StartEvent: e, EnforceUniqueInstanceId: true}
 	}
 
 	start := startEventFor(instanceID, time.Now().Add(-time.Minute), withExecutionID("exec-1"))
@@ -940,7 +1005,7 @@ func Test_createWorkflowInstance_enforceUniqueSameExecutionRetry(t *testing.T) {
 	t.Run("matching execution ID answers success", func(t *testing.T) {
 		h := newCreateHarness(t, instanceID)
 		h.primeHistory(start, completedEvent())
-		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), reqBytes(t, start)))
+		require.NoError(t, h.orch.createWorkflowInstance(t.Context(), uniqueRequest(start)))
 
 		h.lock.Lock()
 		defer h.lock.Unlock()
@@ -951,7 +1016,7 @@ func Test_createWorkflowInstance_enforceUniqueSameExecutionRetry(t *testing.T) {
 		h := newCreateHarness(t, instanceID)
 		h.primeHistory(start, completedEvent())
 		incoming := startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
-		err := h.orch.createWorkflowInstance(t.Context(), reqBytes(t, incoming))
+		err := h.orch.createWorkflowInstance(t.Context(), uniqueRequest(incoming))
 		require.Error(t, err)
 		assert.Equal(t, codes.AlreadyExists, status.Code(err))
 	})
@@ -964,7 +1029,7 @@ func Test_createWorkflowInstance_completedChildSameExecutionNotifiesParent(t *te
 	h := newCreateHarness(t, instanceID)
 	h.primeHistory(start, completedEvent())
 
-	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequestBytes(t, start)))
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
 
 	h.lock.Lock()
 	defer h.lock.Unlock()

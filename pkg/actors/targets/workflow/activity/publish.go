@@ -33,10 +33,24 @@ import (
 	"github.com/dapr/durabletask-go/api"
 )
 
-// detachedPublishTimeout bounds a result publish. Its context is the caller's
-// minus cancellation, which also strips the caller's deadline, so a fresh one
-// keeps a misbehaving downstream from blocking the runner indefinitely.
-const detachedPublishTimeout = 30 * time.Second
+// newPublishGrace returns the context that bounds every result publish of a
+// factory (see publishAndSettle). It ends grace after runCtx ends, and
+// nothing else ends it. grace is the runtime's graceful shutdown duration.
+//
+// This is the only time bound that this package puts on a publish. The
+// publish waits for the parent workflow's turn lock, and in a fan-out every
+// completion queues on that one lock behind the turn that scheduled the
+// activities, so the wait grows with the fan-out. The wait is backpressure,
+// not a failure. A deadline on it settled the execution as failed, the
+// run-activity reminder ran the body again, and the re-run queued on the same
+// lock.
+func newPublishGrace(runCtx context.Context, grace time.Duration) context.Context {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(runCtx))
+	context.AfterFunc(runCtx, func() {
+		time.AfterFunc(grace, cancel)
+	})
+	return ctx
+}
 
 // errPublishAbandoned settles an execution whose result can no longer be
 // published because the runtime is shutting down. Recoverable: followers
@@ -44,6 +58,14 @@ const detachedPublishTimeout = 30 * time.Second
 // a watcher that will never report.
 var errPublishAbandoned = wferrors.NewRecoverable(errors.New(
 	"activity result publish abandoned at shutdown; the work item is re-dispatched on the next owner"))
+
+// errResultUndelivered settles an execution whose result the parent workflow
+// refused as instance not found. The refusal does not prove the instance is
+// gone: a state read that lags a write answers the same. So the outcome is
+// not cached as delivered, which would ack every janitor re-dispatch of a
+// live instance for InflightCacheTTL. A purged instance has no janitor left
+// to re-dispatch, so nothing re-executes for it.
+var errResultUndelivered = errors.New("activity result refused by the parent workflow as instance not found")
 
 // watchAndPublish hands an execution whose owner's ctx cancelled to the
 // factory's runtime-lifetime runner, so the WorkItem already in the
@@ -57,14 +79,20 @@ func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 	started := f.detached.Go(func(ctx context.Context) {
 		select {
 		case completed := <-ex.callback:
-			pubCtx, cancel := context.WithTimeout(context.WithoutCancel(origCtx), detachedPublishTimeout)
-			defer cancel()
 			// There is no caller left to return the outcome to: it is
 			// recorded in metrics and carried on the settled call, which is
 			// what parked followers read.
-			_ = f.publishAndSettle(pubCtx, ex, completed)
+			_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
 		case <-ctx.Done():
-			f.abandonPublish(ex)
+			// The callback can be ready too, and select picks a ready case at
+			// random. A result already in hand goes through the shutdown
+			// grace like any other.
+			select {
+			case completed := <-ex.callback:
+				_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
+			default:
+				f.abandonPublish(ex)
+			}
 		}
 	})
 	if !started {
@@ -83,7 +111,7 @@ var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PU
 // unresolved task on the next owner. Settling unblocks parked followers into
 // their retry chains rather than leaving them on a call nothing will report.
 func (f *factory) abandonPublish(ex *execution) {
-	log.Warnf("Activity actor '%s': abandoning the result publish for '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, activityReminderName)
+	log.Warnf("Activity actor '%s': abandoning the result publish to workflow '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, ex.workflowID)
 	ex.unregister()
 	f.settle(ex.key, ex.call, errPublishAbandoned)
 }
@@ -98,9 +126,7 @@ func (f *factory) abandonPublish(ex *execution) {
 func (f *factory) publishOwned(ctx context.Context, ex *execution, completed bool) error {
 	done := make(chan error, 1)
 	started := f.detached.Go(func(context.Context) {
-		pubCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedPublishTimeout)
-		defer cancel()
-		done <- f.publishAndSettle(pubCtx, ex, completed)
+		done <- f.publishAndSettle(context.WithoutCancel(ctx), ex, completed)
 	})
 	if !started {
 		f.abandonPublish(ex)
@@ -116,15 +142,49 @@ func (f *factory) publishOwned(ctx context.Context, ex *execution, completed boo
 
 // publishAndSettle posts one activity outcome back to the parent workflow and
 // finalises its inflight entry. Both publishOwned and watchAndPublish call it
-// with a publish context of their own; nothing else differs between the two.
-func (f *factory) publishAndSettle(ctx context.Context, ex *execution, completed bool) error {
+// on the runtime-lifetime runner, with base set to the caller's context minus
+// cancellation; nothing else differs between the two.
+//
+// The publish runs on base, which has no deadline: it waits for a busy parent
+// for as long as the parent takes. Only the factory's publish grace (see
+// newPublishGrace) cancels it.
+//
+// At shutdown, the runner's context ends and the actor router's Run cancels
+// every router call in flight. So an AddWorkflowEvent call that waits for the
+// parent ends at once. The publish context stays live for the graceful
+// shutdown duration after that. With WorkflowsRemoteActivityReminder off, the
+// publish then settles at once with the recoverable "failed to invoke" error.
+// With it on (the default), publishResult creates a durable result reminder
+// for the parent on the publish context, and the grace bounds that create
+// (and the placement lookup before the call):
+//   - The scheduler accepts the reminder: the result is not lost, and the
+//     publish settles as a success.
+//   - The create fails within the grace: the publish settles with the
+//     recoverable "failed to invoke" error.
+//   - The create still retries when the grace ends: the publish is abandoned
+//     (see abandonPublish).
+func (f *factory) publishAndSettle(base context.Context, ex *execution, completed bool) error {
 	// A lost race here means an eviction already finished the call and a
 	// fresh execution is running; publish anyway, the orchestrator's
 	// duplicate-completion dedup absorbs whichever copy arrives second.
 	_ = ex.call.BeginResolve()
+	ctx, cancel := context.WithCancel(base)
+	defer cancel()
+	stop := context.AfterFunc(f.publishGrace, cancel)
+	defer stop()
 	execErr := f.publishResult(ctx, ex, completed)
+	// base never cancels, so a cancelled ctx means the shutdown grace ended
+	// the publish.
+	if execErr != nil && ctx.Err() != nil {
+		f.abandonPublish(ex)
+		return errPublishAbandoned
+	}
 	f.settle(ex.key, ex.call, execErr)
 	ex.unregister()
+	if errors.Is(execErr, errResultUndelivered) {
+		// Acked: retrying the publish into a purged instance cannot succeed.
+		return nil
+	}
 	return execErr
 }
 
@@ -206,7 +266,7 @@ func (f *factory) publishResult(ctx context.Context, ex *execution, completed bo
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", ex.actorID, ex.wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
-			return nil
+			return errResultUndelivered
 		}
 
 		if f.workflowsRemoteActivityReminder {
