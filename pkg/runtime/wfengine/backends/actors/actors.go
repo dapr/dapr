@@ -56,6 +56,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
@@ -550,6 +551,11 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
 		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
 	}
+	for _, id := range []string{req.GetSourceInstanceID(), req.GetNewInstanceID()} {
+		if err := schedule.CheckCreate(ctx, "", id); err != nil {
+			return "", err
+		}
+	}
 
 	// A router targeting another app means the source instance (and therefore
 	// the forked instance) lives on that app: fork on its workflow actor. The
@@ -603,6 +609,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
 	} else {
 		workflowInstanceID = oi.GetInstanceId()
+		if err := schedule.CheckCreate(ctx, es.GetName(), workflowInstanceID); err != nil {
+			return err
+		}
 	}
 
 	// Stamp the local app as the source before marshalling, mirroring the
@@ -1378,6 +1387,7 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 		AppID:             abe.appID,
 		PageSize:          req.PageSize,
 		ContinuationToken: req.ContinuationToken,
+		IDPrefix:          req.GetInstanceIdPrefix(),
 	})
 	if err != nil {
 		return nil, err
