@@ -18,6 +18,7 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
@@ -35,6 +36,18 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 	actor := meta.GetTarget().GetActor()
 	if actor == nil {
 		return false
+	}
+	if key, c := d.claimFor(req); c != nil {
+		if c.status != nil {
+			d.resolveClaim(req, key, c)
+			return true
+		}
+		if len(d.pools[actor.GetType()]) == 0 {
+			// A sidecar is running it; regular routing would run it again
+			// elsewhere. The cron retries once a sidecar can take pull work.
+			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+			return true
+		}
 	}
 	if len(d.pools[actor.GetType()]) == 0 {
 		log.Debugf("Pull trigger %s has no eligible sidecar for its actor type; using regular routing", req.Job.GetName())
@@ -74,19 +87,52 @@ func (d *Dispatcher) park(req *loops.TriggerRequest, throttledKey string, admitt
 // the trigger's type and per-name gates are acquired. When it does not
 // dispatch it leaves no gate held and returns the gate key that was full, or
 // "" when no sidecar had a free slot.
+// A reminder a sidecar claimed as running only goes back to that sidecar,
+// without taking a slot, so it joins the running activity.
 func (d *Dispatcher) tryDispatch(req *loops.TriggerRequest) (dispatched bool, throttledKey string) {
-	p, ok := d.pickPool(req.Job.GetMetadata().GetTarget().GetActor().GetType())
+	actorType := req.Job.GetMetadata().GetTarget().GetActor().GetType()
+	if key, c := d.claimFor(req); c != nil {
+		if c.status != nil {
+			d.resolveClaim(req, key, c)
+			return true, ""
+		}
+		p := d.poolOf(actorType, c.sidecar)
+		if p == nil {
+			return false, ""
+		}
+		dispatched, throttledKey = d.dispatch(req, p, false)
+		if dispatched {
+			delete(d.claims, key)
+		}
+		return dispatched, throttledKey
+	}
+	p, ok := d.pickPool(actorType)
 	if !ok {
 		return false, ""
 	}
-	return d.dispatch(req, p)
+	return d.dispatch(req, p, true)
+}
+
+func (d *Dispatcher) claimFor(req *loops.TriggerRequest) (string, *claim) {
+	key := req.Job.GetKey()
+	return key, d.claims[key]
+}
+
+// resolveClaim resolves req with the result its sidecar already sent.
+func (d *Dispatcher) resolveClaim(req *loops.TriggerRequest, key string, c *claim) {
+	delete(d.claims, key)
+	if *c.status == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
+		req.ResultFn(api.TriggerResponseResult_SUCCESS)
+	} else {
+		req.ResultFn(api.TriggerResponseResult_FAILED)
+	}
 }
 
 // dispatch hands req to p's newest stream once its type and per-name gates
-// are acquired, taking one of p's slots, and tracks it until resolved. When
-// it does not dispatch it leaves no gate held and returns the gate key that
-// was full.
-func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool) (dispatched bool, throttledKey string) {
+// are acquired, taking one of p's slots when takeSlot, and tracks it until
+// resolved. When it does not dispatch it leaves no gate held and returns the
+// gate key that was full.
+func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool, takeSlot bool) (dispatched bool, throttledKey string) {
 	// The sidecar's newest stream: an older one may be draining.
 	streamIDx := p.streams[len(p.streams)-1]
 	streamLoop, ok := d.opts.StreamLoop(streamIDx)
@@ -97,7 +143,9 @@ func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool) (dispatched bo
 	if !ok {
 		return false, full
 	}
-	p.credit--
+	if takeSlot {
+		p.credit--
+	}
 
 	actor := req.Job.GetMetadata().GetTarget().GetActor()
 	f := &flight{
@@ -131,6 +179,15 @@ func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool) (dispatched bo
 			d.repark(f, cronFn, gateKeys)
 		}})
 	}
+	req.Orphan = func() {
+		if f.done.Load() {
+			return
+		}
+		d.opts.Loop.Enqueue(&loops.ConnRun{Fn: func() {
+			d.orphan(f)
+		}})
+	}
+
 	log.Debugf("Dispatching pull trigger %s for actor %s to stream %d (sidecar %s, %d slots left)", req.Job.GetName(), actor.GetId(), streamIDx, p.sidecar, p.credit)
 	streamLoop.Enqueue(req)
 	return true, ""
@@ -172,7 +229,7 @@ func (d *Dispatcher) poolOf(actorType, id string) *pool {
 
 // Drain dispatches as many parked pull triggers as capacity allows, one
 // group-fair rotation at a time per actor type, until no sidecar has a free
-// slot.
+// slot and no parked trigger is claimed by a sidecar running it.
 // ponytail: while a per-name gate is full and a sidecar has a free slot,
 // every release retries the head of each parked group, O(groups) per
 // release; index parked triggers by the gate blocking them if that shows up.
@@ -193,7 +250,7 @@ func (d *Dispatcher) Drain() {
 			continue
 		}
 		typeFull := false
-		for d.hasCredit(actorType) && !typeFull && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
+		for (len(d.claims) > 0 || d.hasCredit(actorType)) && !typeFull && q.tryDispatchOne(func(req *loops.TriggerRequest) bool {
 			if typeFull {
 				return false
 			}

@@ -76,6 +76,7 @@ type connections struct {
 	concurrencyGates map[string]*concurrencyGate
 	streamGateKeys   map[uint64][]string
 	pull             *pull.Dispatcher
+	namespace        string
 
 	wg sync.WaitGroup
 }
@@ -114,6 +115,7 @@ func (c *connections) newPull() *pull.Dispatcher {
 			c.handleConcurrencyRelease(&loops.ConcurrencyRelease{GateKeys: keys})
 		},
 		Requeue:   c.handleTriggerRequest,
+		Idle:      c.maybeCloseNamespace,
 		MaxParked: maxPendingPerGate,
 	})
 }
@@ -132,6 +134,8 @@ func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 		c.handleSchedulerInfoUpdate(e)
 	case *loops.PullSlotsUpdate:
 		c.pull.HandleSlots(e)
+	case *loops.PullResult:
+		c.pull.HandleResult(e)
 	case *loops.ConnRun:
 		e.Fn()
 	case *loops.Shutdown:
@@ -163,6 +167,7 @@ func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
 func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
+	c.namespace = add.Request.GetNamespace()
 	streamIDx := c.streamIDx
 	c.streamIDx++
 
@@ -236,6 +241,7 @@ func (c *connections) removeOrphanedGates() {
 			referenced[key] = struct{}{}
 		}
 	}
+	c.pull.MarkGates(referenced)
 
 	for key, gate := range c.concurrencyGates {
 		if _, ok := referenced[key]; !ok {
@@ -485,12 +491,18 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	c.removeOrphanedGates()
 	c.pull.Drain()
 
-	// This loop owns the authoritative stream set: confirm emptiness to the
-	// namespaces loop so it can delete the namespace. Deleting on the
-	// namespaces loop's own counting alone is unsafe against stray events.
-	if len(c.streams) == 0 {
+	c.maybeCloseNamespace()
+}
+
+// maybeCloseNamespace confirms to the namespaces loop that this loop has no
+// stream left, so it can delete the namespace. This loop owns the
+// authoritative stream set; deleting on the namespaces loop's own counting
+// alone is unsafe against stray events. Unresolved pull triggers keep the
+// loop until they resolve, so their sidecars can reattach.
+func (c *connections) maybeCloseNamespace() {
+	if len(c.streams) == 0 && !c.pull.HasFlights() {
 		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{
-			Namespace: closeStream.Namespace,
+			Namespace: c.namespace,
 		})
 	}
 }
