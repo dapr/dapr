@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
@@ -50,8 +51,8 @@ var (
 )
 
 // ReservedWorkflowNamePrefix is the prefix daprd uses for managed (in-process)
-// workflow names. The Universal API rejects user-supplied names with this prefix
-// and the gRPC executor routes names with this prefix to the in-process executor.
+// workflow names. The gRPC executor routes names with this prefix to the
+// in-process executor.
 const ReservedWorkflowNamePrefix = "dapr.internal."
 
 type Interface interface {
@@ -246,6 +247,7 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
+		backend.WithWorkflowScheduleHandler(schedule.NewHandler(abackend, opts.Namespace, opts.AppID)),
 	)
 	// Installed whatever this app's flag: the target app's flag decides
 	// whether an operation is staged, and a cross-app one may be staged on
