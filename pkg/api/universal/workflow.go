@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/durabletask-go/api"
 )
 
@@ -147,6 +148,10 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 
 	if in.GetWorkflowName() == "" {
 		err := messages.ErrWorkflowNameMissing
+		a.logger.Debug(err)
+		return &runtimev1pb.StartWorkflowResponse{}, err
+	}
+	if err := schedule.CheckCreate(ctx, in.GetWorkflowName(), in.GetInstanceId()); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
