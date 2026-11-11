@@ -1182,8 +1182,14 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			log.Debug(nerr)
 			return
 		}
-	} else if baggage := baggageFromRequest(r); baggage != "" {
-		metadata[diagConsts.BaggageHeader] = baggage
+	} else {
+		span := diagUtils.SpanFromContext(r.Context())
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		metadata[pubsub.TraceIDField] = traceID
+		metadata[pubsub.TraceStateField] = traceState
+		if baggage := baggageFromRequest(r); baggage != "" {
+			metadata[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.PublishRequest{
@@ -1369,8 +1375,21 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				return
 			}
 		}
-	} else if baggage != "" {
-		metadata[diagConsts.BaggageHeader] = baggage
+	} else {
+		for i := range entries {
+			childSpan := diag.StartProducerSpanChildFromParent(r, span)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			spanMap[i] = childSpan
+
+			if entries[i].Metadata == nil {
+				entries[i].Metadata = map[string]string{}
+			}
+			entries[i].Metadata[pubsub.TraceIDField] = traceID
+			entries[i].Metadata[pubsub.TraceStateField] = traceState
+		}
+		if baggage != "" {
+			metadata[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.BulkPublishRequest{

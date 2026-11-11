@@ -503,11 +503,17 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 	}
 	if rawPayload {
 		baggage := baggageFromContext(ctx)
-		if baggage != "" {
-			for i := range entries {
-				if entries[i].Metadata == nil {
-					entries[i].Metadata = map[string]string{}
-				}
+		for i := range entries {
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, spanName)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			spanMap[i] = childSpan
+
+			if entries[i].Metadata == nil {
+				entries[i].Metadata = map[string]string{}
+			}
+			entries[i].Metadata[pubsub.TraceIDField] = traceID
+			entries[i].Metadata[pubsub.TraceStateField] = traceState
+			if baggage != "" {
 				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
 			}
 		}
