@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -61,6 +62,21 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 	key := inflight.Key(a.actorID, taskEvent)
 	taskID := taskEvent.GetEventId()
 	gated := a.fastPath && !reminder.SkipRetries
+
+	// Under the fast path a local drive that runs out of retries creates
+	// the run-activity reminder, unordered with a purge of its workflow.
+	// Ack such a reminder rather than run the activity of a purged workflow.
+	if gated {
+		purged, perr := a.parentPurged(ctx, workflowID, invocation)
+		if perr != nil {
+			return wferrors.NewRecoverable(fmt.Errorf("failed to read the workflow metadata row: %w", perr))
+		}
+		if purged {
+			log.Infof("Activity actor '%s': workflow '%s' was purged; dropping its run-activity reminder", a.actorID, workflowID)
+			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusPurgedDropped)
+			return nil
+		}
+	}
 	for {
 		call, owner, err := a.claim(ctx, key, workflowID, taskID, reminder.SkipLock)
 		if err != nil {
@@ -196,4 +212,41 @@ func (a *activity) gate(ctx context.Context, key string, owned *inflight.Call) (
 		a.settle(key, owned, err)
 	}
 	return false, err
+}
+
+// purgeConfirmWindow is how long after a task was scheduled a missing
+// workflow metadata row is not yet taken as a purge. The row is written when
+// the workflow is created, before any task is scheduled, so a store whose
+// reads lag its writes can still be missing it for a young task. Dropping the
+// reminder of a live workflow can strand it: its janitor is only asserted by
+// a fast path orchestrator.
+const purgeConfirmWindow = 5 * time.Second
+
+// parentPurged reports whether the activity's workflow has no state left. An
+// empty read is confirmed once, as a store may not yet serve its own write
+// (see the orchestrator's saveInternalState), and is an error, for the
+// reminder to retry, while the task is younger than purgeConfirmWindow. False
+// for a workflow of another app, whose state this daprd cannot read.
+func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) (bool, error) {
+	if src := invocation.GetHistoryEvent().GetRouter().GetSourceAppID(); src != "" && src != a.appID {
+		return false, nil
+	}
+	req := &actorapi.GetStateRequest{
+		ActorType: a.workflowActorType,
+		ActorID:   workflowID,
+		Key:       wfenginestate.MetadataKey,
+	}
+	for range 2 {
+		res, err := a.state.Get(ctx, req, false)
+		if err != nil {
+			return false, err
+		}
+		if res == nil || len(res.Data) > 0 {
+			return false, nil
+		}
+	}
+	if age := time.Since(invocation.GetHistoryEvent().GetTimestamp().AsTime()); age < purgeConfirmWindow {
+		return false, fmt.Errorf("workflow '%s' has no metadata row %s after its task was scheduled; not yet taken as purged", workflowID, age.Truncate(time.Millisecond))
+	}
+	return true, nil
 }
