@@ -87,6 +87,8 @@ type Proxy struct {
 
 	// respFn, when set, rewrites every WatchJobsResponse bound for the sidecar.
 	respFn func(*schedulerv1pb.WatchJobsResponse)
+	// reqFn, when set, sees every WatchJobsRequest a sidecar sends.
+	reqFn func(*schedulerv1pb.WatchJobsRequest)
 }
 
 // armConfig captures the per-method failure injection state.
@@ -127,6 +129,12 @@ func New(t *testing.T, sched *scheduler.Scheduler, fopts ...Option) *Proxy {
 // forwarded to the sidecar, so a test can alter what the sidecar sees.
 func WithWatchJobsResponseFn(fn func(*schedulerv1pb.WatchJobsResponse)) Option {
 	return func(p *Proxy) { p.respFn = fn }
+}
+
+// WithWatchJobsRequestFn calls fn on every WatchJobsRequest before it is
+// forwarded to the scheduler, so a test can observe what a sidecar sends.
+func WithWatchJobsRequestFn(fn func(*schedulerv1pb.WatchJobsRequest)) Option {
+	return func(p *Proxy) { p.reqFn = fn }
 }
 
 // waitReady blocks until conn is Ready, returning false if the connection is
@@ -357,6 +365,9 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 			if rerr != nil {
 				errCh <- rerr
 				return
+			}
+			if p.reqFn != nil {
+				p.reqFn(msg)
 			}
 			if serr := upstream.Send(msg); serr != nil {
 				errCh <- serr

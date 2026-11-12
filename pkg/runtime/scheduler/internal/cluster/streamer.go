@@ -103,12 +103,19 @@ func (s *streamer) isPull(job *schedulerv1pb.WatchJobsResponse) bool {
 		job.GetMetadata().GetTarget().GetActor().GetType() == s.pullActorType
 }
 
+// pullReportInterval is how often the reporting stream repeats the free slots
+// when nothing changed. The scheduler overwrites its count with a stream's
+// initial request and zeroes it on a refusal, and neither is ordered with the
+// reports of another stream, so a stale value can land last. The repeat
+// bounds how long work then stays parked.
+const pullReportInterval = 5 * time.Second
+
 // reportPull sends the results of pull reminders that finished while no
 // stream to this scheduler was connected, then reports free slots on every
-// change while this stream is the scheduler's reporting stream. Every change
-// is sent even when the count looks the same: the scheduler takes a slot off
-// its count for each delivery, and an activity that starts and finishes
-// between two reports must still give it back.
+// change, and every pullReportInterval, while this stream is the scheduler's
+// reporting stream. Every change is sent even when the count looks the same:
+// the scheduler takes a slot off its count for each delivery, and an activity
+// that starts and finishes between two reports must still give it back.
 func (s *streamer) reportPull(ctx context.Context) error {
 	if !s.pull.flush(s) {
 		return nil
@@ -130,6 +137,7 @@ func (s *streamer) reportPull(ctx context.Context) error {
 		select {
 		case <-freeChanged:
 		case <-reporterChanged:
+		case <-time.After(pullReportInterval):
 		case <-s.done:
 			return nil
 		case <-ctx.Done():

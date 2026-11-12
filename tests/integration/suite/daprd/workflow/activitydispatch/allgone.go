@@ -120,5 +120,8 @@ func (a *allgone) Run(t *testing.T, ctx context.Context) {
 	close(releaseCh)
 	_, err = newClient.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), startedNew.Load(), "both activities ran on the replacement replica")
+	// At least: a replica killed before the workflow's first turn is
+	// acknowledged has that turn run again, which schedules both activities
+	// a second time.
+	assert.GreaterOrEqual(t, startedNew.Load(), int64(2), "both activities ran on the replacement replica")
 }

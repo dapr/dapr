@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -45,6 +46,9 @@ type reattach struct {
 	sched    *scheduler.Scheduler
 	proxy    *proxy.Proxy
 	workflow *workflow.Workflow
+
+	// reattached counts the streams opened listing a running pull reminder.
+	reattached atomic.Int64
 }
 
 const reattachAppID = "pull-reattach"
@@ -60,7 +64,11 @@ spec:
     activityDispatchMode: pull
 `
 	r.sched = scheduler.New(t)
-	r.proxy = proxy.New(t, r.sched)
+	r.proxy = proxy.New(t, r.sched, proxy.WithWatchJobsRequestFn(func(req *schedulerv1pb.WatchJobsRequest) {
+		if len(req.GetInitial().GetInflightReminders()) > 0 {
+			r.reattached.Add(1)
+		}
+	}))
 	r.workflow = workflow.New(t,
 		workflow.WithSchedulerInstance(r.sched),
 		workflow.WithSchedulerAddress(r.proxy.Address()),
@@ -111,7 +119,14 @@ func (r *reattach) Run(t *testing.T, ctx context.Context) {
 
 	// Twice, so the second drop finds the activity already reattached.
 	for range 2 {
+		before := r.reattached.Load()
 		r.proxy.DropWatchJobs()
+
+		// The scheduler also holds an unlisted activity for its reattach
+		// window, so the listing itself is asserted.
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Greater(c, r.reattached.Load(), before)
+		}, time.Second*20, time.Millisecond*10)
 
 		// Without reattachment the scheduler would deliver the activity again
 		// at once, to the replica with the free slot.

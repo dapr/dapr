@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -457,4 +458,27 @@ func TestPull_ShutdownReportsNothing(t *testing.T) {
 		require.Fail(t, "a reminder cut short by shutdown reports no result", "%v", msg)
 	case <-time.After(100 * time.Millisecond):
 	}
+}
+
+func TestStreamer_ReportPullRepeatsWithoutAChange(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		p := NewPull(t.Context())
+		s := testStreamer(p, "sched-0")
+		p.attach(s)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		errCh := make(chan error, 1)
+		go func() { errCh <- s.reportPull(ctx) }()
+		assert.NotNil(t, (<-s.resultCh).GetPullSlots())
+
+		// Nothing changes, so only the interval produces the next report.
+		start := time.Now()
+		assert.NotNil(t, (<-s.resultCh).GetPullSlots())
+		assert.Equal(t, pullReportInterval, time.Since(start))
+
+		cancel()
+		<-errCh
+		close(s.done)
+	})
 }
