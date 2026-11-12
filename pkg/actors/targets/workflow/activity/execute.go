@@ -34,6 +34,12 @@ import (
 var errStaleClaimEvicted = wferrors.NewRecoverable(errors.New(
 	"in-flight activity claim evicted as stale (its work item is no longer held by the engine); re-executing"))
 
+// ErrNoCapacity is returned by the work item scheduler for a pull delivery
+// that arrives when this sidecar has no free activity slot. It is returned
+// unwrapped so the scheduler stream can tell the scheduler to queue the
+// trigger again instead of retrying it as a failure.
+var ErrNoCapacity = errors.New("no free activity slot for a pull-dispatched activity")
+
 // executeActivity runs one activity delivery. A scheduler-fired reminder is a
 // recovery arrival that can land on a fresh placement owner mid-handoff, so
 // under the fast path a fresh owner consults the durable execution-claim
@@ -88,7 +94,7 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 					return gerr
 				}
 			}
-			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation)
+			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation, reminder.ExecuteLocally)
 		}
 
 		// Another arrival owns this scheduling (in flight, or its outcome is
@@ -99,7 +105,11 @@ func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Remin
 			if errors.Is(ferr, errResultUndelivered) {
 				return nil
 			}
-			return ferr
+			// A refused pull owner did not run the activity: contend again,
+			// under this delivery's own dispatch mode.
+			if !errors.Is(ferr, ErrNoCapacity) {
+				return ferr
+			}
 		}
 		// claim() evicts the stale entry (unblocking parked followers into
 		// their retry chains) and re-contends for ownership.

@@ -160,14 +160,27 @@ type WorkflowSpec struct {
 	// +optional
 	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty"`
 
+	// activityDispatchMode selects how activities of this application are
+	// dispatched to its replicas. Unset means "hashed". "hashed" runs each
+	// activity on the replica its ID hashes to. "pull" lets the scheduler
+	// deliver each activity to any replica with a free slot, where a replica
+	// offers maxConcurrentActivityInvocations slots; that field is required
+	// when any activity uses pull. Per-name entries in activityConcurrencyLimits
+	// override this value. Changing it requires a sidecar restart. A replica's
+	// free slots count every activity it runs, pull or hashed.
+	// +kubebuilder:validation:Enum=hashed;pull
+	// +optional
+	ActivityDispatchMode *string `json:"activityDispatchMode,omitempty"`
+
 	// workflowConcurrencyLimits defines per-workflow-name concurrency limits
 	// enforced globally across all replicas by the scheduler.
 	// +optional
 	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty"`
-	// activityConcurrencyLimits defines per-activity-name concurrency limits
-	// enforced globally across all replicas by the scheduler.
+	// activityConcurrencyLimits defines per-activity-name settings: a
+	// concurrency limit enforced globally across all replicas by the scheduler,
+	// and an optional dispatch mode override.
 	// +optional
-	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
+	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
 
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
@@ -186,6 +199,24 @@ type NamedConcurrencyLimit struct {
 	// replicas.
 	// +optional
 	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+}
+
+// ActivityConcurrencyLimit defines per-name settings for a specific activity
+// name.
+type ActivityConcurrencyLimit struct {
+	// Name is the activity name the entry applies to.
+	// +optional
+	Name *string `json:"name,omitempty"`
+	// MaxConcurrent is the maximum number of concurrent invocations across all
+	// replicas. It is not the per-replica slot count used by pull dispatch;
+	// that is maxConcurrentActivityInvocations.
+	// +optional
+	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+	// DispatchMode overrides the application's activityDispatchMode for this
+	// activity name: "hashed" or "pull". Unset inherits the application value.
+	// +kubebuilder:validation:Enum=hashed;pull
+	// +optional
+	DispatchMode *string `json:"dispatchMode,omitempty"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
