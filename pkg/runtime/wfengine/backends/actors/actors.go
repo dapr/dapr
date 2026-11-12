@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -513,7 +514,7 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 		return nil
 	}
 	actorType, terr := abe.targetWorkflowActorType(targetAppID)
-	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType)) {
+	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType) && !isReminderNotHostedError(err)) {
 		return err
 	}
 	if serr := abe.requireActorStateStore(); serr != nil {
@@ -532,6 +533,13 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 // another app (such as a child purge) is not attributed to the target.
 func isActorNotRegisteredError(err error, actorType string) bool {
 	return err != nil && strings.Contains(err.Error(), "actor type "+actorType+" not registered")
+}
+
+// isReminderNotHostedError reports whether a workflow actor that was still
+// active failed to create a reminder because its host unregistered the
+// workflow actor types mid call.
+func isReminderNotHostedError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), reminders.ErrReminderOpActorNotHosted.Error())
 }
 
 // isActorNoAddressError reports whether placement has no host for actorType.
