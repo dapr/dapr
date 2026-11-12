@@ -1,0 +1,73 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package activitydispatch
+
+import (
+	"context"
+	"testing"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(new(crossapp))
+}
+
+// crossapp asserts that the Configuration of the app an activity runs on
+// decides its dispatch mode, not that of the app calling it.
+type crossapp struct {
+	workflow *workflow.Workflow
+}
+
+func (s *crossapp) Setup(t *testing.T) []framework.Option {
+	s.workflow = workflow.New(t,
+		workflow.WithDaprds(3),
+		workflow.WithFastPath(false),
+		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pullcaller
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 2
+    activityDispatchMode: pull
+`)),
+		workflow.WithDaprdOptions(2, daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pulltarget
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 2
+    activityDispatchMode: pull
+`)),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(s.workflow),
+	}
+}
+
+func (s *crossapp) Run(t *testing.T, ctx context.Context) {
+	s.workflow.WaitUntilRunning(t, ctx)
+
+	assertReminderFlags(t, ctx, s.workflow,
+		call{name: "local", app: 0, pull: true},
+		call{name: "hashedtarget", app: 1, pull: false},
+		call{name: "pulltarget", app: 2, pull: true},
+	)
+}

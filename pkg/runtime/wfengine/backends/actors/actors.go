@@ -112,6 +112,15 @@ type Options struct {
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
 	GracefulShutdownDuration time.Duration
+	// ActivityDispatchPull resolves whether an activity name is
+	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
+	// per-name overrides). Nil means never.
+	ActivityDispatchPull func(activityName string) bool
+
+	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
+	// same value the engine's activity worker is limited to. 0 means no cap.
+	// It bounds the free slots reported for pull dispatch.
+	MaxConcurrentActivityInvocations int32
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
@@ -149,7 +158,14 @@ type Actors struct {
 	workflowsFastPath               bool
 	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
+	activityDispatchPull            func(activityName string) bool
 	pendingCompletions              *pending.Pending
+
+	// activityCommitted counts activity work items handed to the engine and
+	// not yet completed or abandoned, against activityCap. See credits.go.
+	activityCap       int64
+	activityCommitted atomic.Int64
+	activityFree      notifier
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -290,7 +306,9 @@ func New(opts Options) (*Actors, error) {
 		workflowsFastPath:               opts.WorkflowsFastPath,
 		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
+		activityDispatchPull:            opts.ActivityDispatchPull,
 		pendingCompletions:              pendingCompletions,
+		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
 }
 
@@ -379,12 +397,22 @@ func (abe *Actors) factoryOptions() workflow.Options {
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
 
+			pull, _ := wi.Properties[todo.PullProperty].(bool)
 			if err := abe.requireLocalExecutor(); err != nil {
+				if pull {
+					// Nothing here can run it: the scheduler picks another
+					// sidecar instead of failing the trigger.
+					return activity.ErrNoCapacity
+				}
 				return err
+			}
+			if !abe.reserveActivity(pull) {
+				return activity.ErrNoCapacity
 			}
 
 			select {
 			case <-ctx.Done(): // engine is shutting down
+				abe.releaseActivity()
 				return ctx.Err()
 			case abe.activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
 				return nil
@@ -398,6 +426,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		FastPath:                        abe.workflowsFastPath,
 		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
+		DispatchPull:                    abe.activityDispatchPull,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
@@ -797,7 +826,9 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	defer abe.releaseActivity()
+
 	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
@@ -903,7 +934,9 @@ func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	defer abe.releaseActivity()
+
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
