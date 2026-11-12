@@ -16,9 +16,6 @@ package traceparent
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
-	nethttp "net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,10 +27,10 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
+	"github.com/dapr/dapr/tests/integration/framework/process/pubsub/broker"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -48,6 +45,7 @@ func init() {
 type rootspan struct {
 	daprd     *daprd.Daprd
 	collector *otel.Collector
+	broker    *broker.Broker
 
 	ch chan metadata.MD
 }
@@ -55,6 +53,7 @@ type rootspan struct {
 func (r *rootspan) Setup(t *testing.T) []framework.Option {
 	r.ch = make(chan metadata.MD, 1)
 	r.collector = otel.New(t)
+	r.broker = broker.New(t)
 
 	app := app.New(t,
 		app.WithOnTopicEventFn(func(ctx context.Context, _ *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
@@ -80,22 +79,14 @@ func (r *rootspan) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	r.daprd = daprd.New(t,
+	r.daprd = daprd.New(t, r.broker.DaprdOptions(t, "mypub",
 		daprd.WithAppPort(app.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		r.collector.GRPCDaprdConfiguration(t),
-		daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mypub
-spec:
-  type: pubsub.in-memory
-  version: v1
-`))
+	)...)
 
 	return []framework.Option{
-		framework.WithProcesses(r.collector, app, r.daprd),
+		framework.WithProcesses(r.collector, r.broker, app, r.daprd),
 	}
 }
 
@@ -103,18 +94,11 @@ func (r *rootspan) Run(t *testing.T, ctx context.Context) {
 	r.collector.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	// A raw payload publish stands in for a publisher outside Dapr:
+	// The message is handed to daprd straight from the broker, as one
+	// published outside Dapr is: it carries no trace metadata, and
 	// FromRawPayload builds the cloud event on the subscriber side with no
-	// trace fields, and a raw publish puts none in the message metadata.
-	pubURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/mypub/raw-topic?metadata.rawPayload=true", r.daprd.HTTPPort())
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, pubURL, strings.NewReader(`{"message":"hello"}`))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.HTTP(t).Do(req)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	require.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	// trace fields.
+	r.broker.PublishCloudEvents(t, ctx, "raw-topic", "1")
 
 	var md metadata.MD
 
