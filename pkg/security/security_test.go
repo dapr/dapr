@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/crypto/spiffe"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
 )
 
@@ -126,6 +127,9 @@ func Test_Start(t *testing.T) {
 
 		sec, err := p.Handler(ctx)
 		require.NoError(t, err)
+
+		_, ok := spiffecontext.JWTMinterFrom(sec.WithSVIDContext(ctx))
+		assert.True(t, ok, "an overridden certificate request must still provide a JWT SVID minter")
 
 		td, err := sec.CurrentTrustAnchors(ctx)
 		require.NoError(t, err)
