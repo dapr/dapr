@@ -73,7 +73,7 @@ func TestQueue_LevelOfAndWeightOf(t *testing.T) {
 	assert.Equal(t, 3, levelOf(prioritized(h.trigger("wf::9::0", "act"), low, 1)))
 	assert.Equal(t, 4, levelOf(prioritized(h.trigger("wf::3::0", "act"), background, 0)))
 	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::4::0", "act"), normal, 0)), "0 is weight 1")
-	assert.Equal(t, uint64(passPerDelivery), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, passPerDelivery*2)), "a delivery is never free")
+	assert.Equal(t, uint64(oneDispatch), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, oneDispatch*2)), "a dispatch never counts for nothing")
 	assert.Equal(t, 4, levelOf(prioritized(h.trigger("wf::5::0", "act"), schedulerv1pb.PriorityLevel(9), 1)), "an unknown level from a newer sidecar is background")
 	assert.Equal(t, []string{"critical", "high", "normal", "low", "background"},
 		[]string{levelName(0), levelName(1), levelName(2), levelName(3), levelName(4)})

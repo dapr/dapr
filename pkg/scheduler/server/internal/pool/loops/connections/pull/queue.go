@@ -22,9 +22,9 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
 
-// passPerDelivery is what a delivery costs a name at weight 1; weight w costs
-// passPerDelivery / w.
-const passPerDelivery = 1000000
+// oneDispatch is what one dispatch counts for a name at weight 1, so that
+// dividing by the weight stays a whole number.
+const oneDispatch = 1000000
 
 // numLevels is the number of priority levels, critical through background.
 const numLevels = 5
@@ -39,23 +39,24 @@ type queue struct {
 	levels [numLevels]level
 }
 
-// level is the names waiting at one priority level. vclock is where a name
+// level is the names waiting at one priority level. startAt is where a name
 // that starts or resumes waiting begins.
 type level struct {
-	names  map[string]*flow
-	vclock uint64
+	names   map[string]*flow
+	startAt uint64
 }
 
 // flow is the waiting triggers of one name at one level, grouped by workflow
-// instance. The lowest pass is served next.
+// instance. The name with the lowest dispatches ÷ weight is furthest behind
+// its share and is served next.
 type flow struct {
-	name   string
-	seq    uint64
-	pass   uint64
-	groups map[string][]*loops.TriggerRequest
-	ring   []string
-	next   int
-	n      int
+	name                string
+	seq                 uint64
+	dispatchesPerWeight uint64
+	groups              map[string][]*loops.TriggerRequest
+	ring                []string
+	next                int
+	n                   int
 }
 
 func newQueue(maxLen int) *queue {
@@ -77,13 +78,13 @@ func levelName(level int) string {
 }
 
 // weightOf is a trigger's fairness weight, unset meaning 1 and never so large
-// that a delivery is free.
+// that a dispatch counts for nothing.
 func weightOf(req *loops.TriggerRequest) uint64 {
 	w := uint64(req.Job.GetMetadata().GetFairnessWeight())
 	if w == 0 {
 		return 1
 	}
-	return min(w, passPerDelivery)
+	return min(w, oneDispatch)
 }
 
 // instanceKey is the workflow instance ID in an activity actor ID
@@ -116,7 +117,7 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) bool {
 			lv.names = make(map[string]*flow)
 		}
 		q.seq++
-		f = &flow{name: name, seq: q.seq, pass: lv.vclock, groups: make(map[string][]*loops.TriggerRequest)}
+		f = &flow{name: name, seq: q.seq, dispatchesPerWeight: lv.startAt, groups: make(map[string][]*loops.TriggerRequest)}
 		lv.names[name] = f
 	}
 	inst := instanceKey(meta.GetTarget().GetActor().GetId())
@@ -130,8 +131,8 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) bool {
 }
 
 // tryDispatchOne offers parked triggers to fn in serving order until one is
-// accepted, and removes it. The accepted name is charged; the names offered
-// before it at that level are brought up to the clock.
+// accepted, and removes it. The accepted name is charged the dispatch; the
+// names offered before it at that level are brought up to startAt.
 func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	for i := range q.levels {
 		lv := &q.levels[i]
@@ -139,16 +140,16 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 			continue
 		}
 		var skipped []*flow
-		for _, f := range lv.byPass() {
+		for _, f := range lv.furthestBehind() {
 			req, ok := f.offer(fn)
 			if !ok {
 				skipped = append(skipped, f)
 				continue
 			}
-			f.pass += passPerDelivery / weightOf(req)
-			lv.vclock = max(lv.vclock, f.pass)
+			f.dispatchesPerWeight += oneDispatch / weightOf(req)
+			lv.startAt = max(lv.startAt, f.dispatchesPerWeight)
 			for _, s := range skipped {
-				s.pass = max(s.pass, lv.vclock)
+				s.dispatchesPerWeight = max(s.dispatchesPerWeight, lv.startAt)
 			}
 			if f.n == 0 {
 				delete(lv.names, f.name)
@@ -160,14 +161,14 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	return false
 }
 
-// byPass returns the level's names in serving order.
-func (lv *level) byPass() []*flow {
+// furthestBehind returns the level's names in serving order.
+func (lv *level) furthestBehind() []*flow {
 	fs := make([]*flow, 0, len(lv.names))
 	for _, f := range lv.names {
 		fs = append(fs, f)
 	}
 	slices.SortFunc(fs, func(a, b *flow) int {
-		return cmp.Or(cmp.Compare(a.pass, b.pass), cmp.Compare(a.seq, b.seq))
+		return cmp.Or(cmp.Compare(a.dispatchesPerWeight, b.dispatchesPerWeight), cmp.Compare(a.seq, b.seq))
 	})
 	return fs
 }
@@ -252,7 +253,7 @@ func (f *flow) remove(key string) *loops.TriggerRequest {
 func (q *queue) drainAll(fn func(*loops.TriggerRequest)) {
 	for i := range q.levels {
 		lv := &q.levels[i]
-		for _, f := range lv.byPass() {
+		for _, f := range lv.furthestBehind() {
 			for _, inst := range f.ring {
 				for _, req := range f.groups[inst] {
 					fn(req)
