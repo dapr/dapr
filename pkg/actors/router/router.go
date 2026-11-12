@@ -46,6 +46,12 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.router")
 
+// errRouterClosed is the cancellation cause used when the actor runtime shuts
+// down with calls still in flight. It lets those calls report that the sidecar
+// went away (gRPC Unavailable), rather than a plain context cancellation that
+// clients treat as final.
+var errRouterClosed = errors.New("actor runtime is shutting down")
+
 type Interface interface {
 	Run(ctx context.Context) error
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -111,12 +117,23 @@ func (r *router) Run(ctx context.Context) error {
 	r.lock.Unlock()
 
 	r.ctxs.Range(func(key, value any) bool {
-		cancel := value.(context.CancelFunc)
-		cancel()
+		cancel := value.(context.CancelCauseFunc)
+		cancel(errRouterClosed)
 		return true
 	})
 
 	return ctx.Err()
+}
+
+// closedError maps the cancellation of an in-flight call by a router shutdown
+// to a gRPC Unavailable status, so a client blocked on the call (for example a
+// workflow wait) retries against the next sidecar instead of seeing a final
+// Canceled. A cancellation from the caller's own context keeps its error.
+func closedError(ctx context.Context, err error) error {
+	if err != nil && errors.Is(context.Cause(ctx), errRouterClosed) {
+		return status.Error(codes.Unavailable, errRouterClosed.Error())
+	}
+	return err
 }
 
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -153,7 +170,7 @@ func (r *router) call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 		err = errors.Unwrap(err)
 	}
 
-	return res, err
+	return res, closedError(ctx, err)
 }
 
 func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
@@ -161,17 +178,17 @@ func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	defer cancel()
 
 	if req.SkipLock || req.SkipRetries {
-		return r.callReminder(ctx, req)
+		return closedError(ctx, r.callReminder(ctx, req))
 	}
 
 	if r.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
-		return r.callReminder(ctx, req)
+		return closedError(ctx, r.callReminder(ctx, req))
 	} else {
 		policyRunner := resiliency.NewRunner[struct{}](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, r.callReminder(ctx, req)
 		})
-		return err
+		return closedError(ctx, err)
 	}
 }
 
@@ -192,7 +209,7 @@ func (r *router) CallStream(ctx context.Context,
 		return struct{}{}, serr
 	})
 
-	return err
+	return closedError(ctx, err)
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
@@ -500,11 +517,11 @@ func (r *router) withContext(ctx context.Context) (context.Context, context.Canc
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 
 	if r.closed {
-		cancel()
-		return ctx, cancel
+		cancel(errRouterClosed)
+		return ctx, func() { cancel(nil) }
 	}
 
 	id := r.idx.Add(1)
@@ -512,7 +529,7 @@ func (r *router) withContext(ctx context.Context) (context.Context, context.Canc
 	r.ctxs.Store(id, cancel)
 
 	wrappedCancel := func() {
-		cancel()
+		cancel(nil)
 		r.ctxs.Delete(id)
 	}
 

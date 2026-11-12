@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -241,6 +242,52 @@ func TestCallCancelledClaimDoesNotCreateActor(t *testing.T) {
 			assert.Equal(t, 2, r.lookups, "a call whose claim was cancelled was not retried")
 			assert.Equal(t, 1, r.creates, "a target was created for an actor whose claim was cancelled")
 			assert.Equal(t, 1, r.invokes)
+		})
+	}
+}
+
+// TestCallRouterShutdownReturnsUnavailable covers a call that is in flight when
+// the actor runtime shuts down: the router cancels it, and the caller gets a
+// gRPC Unavailable rather than a Canceled that clients treat as final.
+func TestCallRouterShutdownReturnsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	for name, call := range map[string]func(context.Context, router.Interface, *internalv1pb.InternalInvokeRequest) error{
+		"method": func(ctx context.Context, r router.Interface, req *internalv1pb.InternalInvokeRequest) error {
+			_, err := r.Call(ctx, req)
+			return err
+		},
+		"stream": func(ctx context.Context, r router.Interface, req *internalv1pb.InternalInvokeRequest) error {
+			return r.CallStream(ctx, req, func(*internalv1pb.InternalInvokeResponse) (bool, error) { return true, nil })
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var once sync.Once
+			waiting := make(chan struct{})
+			r := newLocalTimerRouter(t, func(ctx context.Context, _ int) (context.Context, error) {
+				once.Do(func() { close(waiting) })
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}, nil)
+
+			runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
+			runDone := make(chan error, 1)
+			go func() { runDone <- r.Run(runtimeCtx) }()
+
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- call(t.Context(), r, internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo"))
+			}()
+
+			<-waiting
+			cancelRuntime()
+
+			err := <-errCh
+			require.Error(t, err)
+			assert.Equal(t, codes.Unavailable, status.Code(err), "got %v", err)
+			require.ErrorIs(t, <-runDone, context.Canceled)
 		})
 	}
 }
