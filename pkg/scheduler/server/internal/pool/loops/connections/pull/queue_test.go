@@ -34,7 +34,7 @@ const (
 )
 
 // prioritized sets a trigger's level and weight.
-func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, weight uint32) *loops.TriggerRequest {
+func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, weight float32) *loops.TriggerRequest {
 	req.Job.Metadata.PriorityLevel = level.Enum()
 	req.Job.Metadata.FairnessWeight = &weight
 	return req
@@ -66,15 +66,21 @@ func TestQueue_LevelOfAndWeightOf(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	unset := h.trigger("wf::1::0", "act")
 	assert.Equal(t, 2, levelOf(unset), "unset is normal")
-	assert.Equal(t, uint64(1), weightOf(unset), "unset is weight 1")
+	assert.Equal(t, uint64(1000), weightOf(unset), "unset is weight 1, in thousandths")
+	assert.Equal(t, uint64(500), weightOf(prioritized(h.trigger("wf::11::0", "act"), normal, 0.5)))
+	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::12::0", "act"), normal, 0.001)))
+	assert.Equal(t, uint64(1000000), weightOf(prioritized(h.trigger("wf::13::0", "act"), normal, 1000)))
+	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::14::0", "act"), normal, 0.0001)), "below the range counts as unset")
+	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::15::0", "act"), normal, -3)), "negative counts as unset")
 	assert.Equal(t, 0, levelOf(prioritized(h.trigger("wf::2::0", "act"), critical, 3)))
 	assert.Equal(t, 1, levelOf(prioritized(h.trigger("wf::7::0", "act"), high, 1)))
 	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::8::0", "act"), normal, 1)))
 	assert.Equal(t, 3, levelOf(prioritized(h.trigger("wf::9::0", "act"), low, 1)))
 	assert.Equal(t, 4, levelOf(prioritized(h.trigger("wf::3::0", "act"), background, 0)))
-	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::4::0", "act"), normal, 0)), "0 is weight 1")
-	assert.Equal(t, uint64(oneDispatch), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, oneDispatch*2)), "a dispatch never counts for nothing")
-	assert.Equal(t, 4, levelOf(prioritized(h.trigger("wf::5::0", "act"), schedulerv1pb.PriorityLevel(9), 1)), "an unknown level from a newer sidecar is background")
+	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::4::0", "act"), normal, 0)), "0 is weight 1")
+	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, 2000)), "above the range counts as unset")
+	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::5::0", "act"), schedulerv1pb.PriorityLevel(9), 1)), "an unknown level counts as unset")
+	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::10::0", "act"), schedulerv1pb.PriorityLevel(-1), 1)), "a negative level counts as unset, not a panic")
 	assert.Equal(t, []string{"critical", "high", "normal", "low", "background"},
 		[]string{levelName(0), levelName(1), levelName(2), levelName(3), levelName(4)})
 }
@@ -165,6 +171,148 @@ func TestQueue_WeightSharesTurns(t *testing.T) {
 	}
 	assert.InDelta(t, 150, counts["heavy"], 1, "weight 3 : 1 is 3 turns in 4")
 	assert.InDelta(t, 50, counts["light"], 1)
+}
+
+func TestQueue_WeightRatioHoldsWhenScaled(t *testing.T) {
+	t.Parallel()
+	q := newQueue(2000)
+	h := newHarness(t, 0, 0)
+	for i := range 500 {
+		require.True(t, q.enqueue(prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "six"), normal, 600), false))
+		require.True(t, q.enqueue(prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "four"), normal, 400), false))
+	}
+
+	counts := map[string]int{}
+	for range 500 {
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			counts[nameOf(r)]++
+			return true
+		}))
+	}
+	assert.InDelta(t, 300, counts["six"], 1, "600 : 400 is the same share as 3 : 2")
+	assert.InDelta(t, 200, counts["four"], 1)
+}
+
+func TestQueue_FractionalWeight(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	for i := range 300 {
+		require.True(t, q.enqueue(prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "half"), normal, 0.5), false))
+		require.True(t, q.enqueue(h.trigger("b::"+strconv.Itoa(i)+"::0", "one"), false))
+	}
+
+	counts := map[string]int{}
+	for range 300 {
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			counts[nameOf(r)]++
+			return true
+		}))
+	}
+	assert.InDelta(t, 100, counts["half"], 1, "0.5 against the default 1 is 1 turn in 3")
+	assert.InDelta(t, 200, counts["one"], 1)
+}
+
+func TestLevel_Rebase(t *testing.T) {
+	t.Parallel()
+
+	// Exact arithmetic: every count and startAt drop by the lowest count,
+	// so the gaps between names are unchanged.
+	lv := &level{names: map[string]*flow{
+		"a": {name: "a", dispatchesPerWeight: 5000},
+		"b": {name: "b", dispatchesPerWeight: 7500},
+		"c": {name: "c", dispatchesPerWeight: 9000},
+	}, startAt: 9000}
+	lv.rebase()
+	assert.Equal(t, uint64(0), lv.names["a"].dispatchesPerWeight)
+	assert.Equal(t, uint64(2500), lv.names["b"].dispatchesPerWeight)
+	assert.Equal(t, uint64(4000), lv.names["c"].dispatchesPerWeight)
+	assert.Equal(t, uint64(4000), lv.startAt)
+
+	// A single name drops to zero, and so does startAt.
+	lv = &level{names: map[string]*flow{"only": {name: "only", dispatchesPerWeight: 123456}}, startAt: 123456}
+	lv.rebase()
+	assert.Equal(t, uint64(0), lv.names["only"].dispatchesPerWeight)
+	assert.Equal(t, uint64(0), lv.startAt)
+
+	// With no names only startAt is left, and it drops to zero.
+	lv = &level{startAt: 42}
+	lv.rebase()
+	assert.Equal(t, uint64(0), lv.startAt)
+
+	// Rebasing twice is a no-op the second time.
+	lv = &level{names: map[string]*flow{"a": {name: "a", dispatchesPerWeight: 10}, "b": {name: "b", dispatchesPerWeight: 30}}, startAt: 30}
+	lv.rebase()
+	lv.rebase()
+	assert.Equal(t, uint64(0), lv.names["a"].dispatchesPerWeight)
+	assert.Equal(t, uint64(20), lv.names["b"].dispatchesPerWeight)
+	assert.Equal(t, uint64(20), lv.startAt)
+}
+
+func TestQueue_RebaseNotBeforeThreshold(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100)
+	h := newHarness(t, 0, 0)
+	require.True(t, q.enqueue(h.trigger("a::1::0", "a"), false))
+	require.True(t, q.enqueue(h.trigger("a::2::0", "a"), false))
+	lv := &q.levels[levelOf(h.trigger("x::1::0", "a"))]
+	lv.names["a"].dispatchesPerWeight = rebaseAt - 2*oneDispatch
+	lv.startAt = rebaseAt - 2*oneDispatch
+
+	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
+	assert.Equal(t, uint64(rebaseAt-oneDispatch), lv.startAt, "one dispatch short of the threshold, no rebase")
+	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
+	assert.Equal(t, uint64(0), lv.startAt, "the dispatch that reaches the threshold rebases the lone name to zero")
+}
+
+func TestQueue_RebaseThenReturningNameStartsLow(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100)
+	h := newHarness(t, 0, 0)
+	for i := range 3 {
+		require.True(t, q.enqueue(h.trigger("s::"+strconv.Itoa(i)+"::0", "stayer"), false))
+	}
+	lv := &q.levels[levelOf(h.trigger("x::1::0", "stayer"))]
+	lv.names["stayer"].dispatchesPerWeight = rebaseAt - 1
+	lv.startAt = rebaseAt - 1
+
+	// The first dispatch crosses the threshold and rebases.
+	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
+	require.Less(t, lv.startAt, uint64(rebaseAt))
+
+	// A name that arrives now starts at the rebased startAt, not the old
+	// huge value, so it is served in turn with the stayer rather than
+	// starving it or being starved.
+	require.True(t, q.enqueue(h.trigger("n::1::0", "newcomer"), false))
+	assert.Equal(t, lv.startAt, lv.names["newcomer"].dispatchesPerWeight)
+	var order []*loops.TriggerRequest
+	for q.tryDispatchOne(accept(&order)) {
+	}
+	assert.Equal(t, []string{"stayer", "newcomer", "stayer"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2])})
+}
+
+func TestQueue_RebaseKeepsOrder(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100)
+	h := newHarness(t, 0, 0)
+	ahead := prioritized(h.trigger("a::1::0", "ahead"), normal, 1)
+	behind := prioritized(h.trigger("b::1::0", "behind"), normal, 1)
+	require.True(t, q.enqueue(ahead, false))
+	require.True(t, q.enqueue(behind, false))
+	require.True(t, q.enqueue(h.trigger("a::2::0", "ahead"), false))
+	require.True(t, q.enqueue(h.trigger("b::2::0", "behind"), false))
+
+	lv := &q.levels[levelOf(ahead)]
+	lv.names["ahead"].dispatchesPerWeight = rebaseAt - 1
+	lv.names["behind"].dispatchesPerWeight = rebaseAt - 1 - oneDispatch
+	lv.startAt = rebaseAt - 1
+
+	var order []*loops.TriggerRequest
+	for q.tryDispatchOne(accept(&order)) {
+	}
+	assert.Equal(t, []string{"behind", "ahead", "behind", "ahead"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2]), nameOf(order[3])})
+	assert.Less(t, lv.startAt, uint64(rebaseAt), "counts were rebased")
+	assert.Equal(t, uint64(2*oneDispatch), lv.startAt, "four dispatches at weight 1 from a rebased zero, two per name")
 }
 
 func TestQueue_ReturningNameEarnsNothing(t *testing.T) {

@@ -124,8 +124,9 @@ message JobMetadata {
   optional PriorityLevel priority_level = 6;
 
   // fairness_weight shares deliveries between the names (concurrency_key)
-  // waiting at the same level in proportion to their weights. Unset means 1.
-  optional uint32 fairness_weight = 7;
+  // waiting at the same level in proportion to their weights, 0.001 to 1000.
+  // Unset means 1.
+  optional float fairness_weight = 7;
 }
 
 // PriorityLevel is the strict order between pull-dispatched triggers waiting

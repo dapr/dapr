@@ -15,6 +15,7 @@ package pull
 
 import (
 	"cmp"
+	"math"
 	"slices"
 	"strings"
 
@@ -22,9 +23,17 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
 
-// oneDispatch is what one dispatch counts for a name at weight 1, so that
-// dividing by the weight stays a whole number.
-const oneDispatch = 1000000
+// Weights are kept in thousandths so that 0.5 and 1000 are whole numbers, and
+// one dispatch at weight 1 counts oneDispatch, so that dividing by the weight
+// stays a whole number. A level's counts are rebased once they reach
+// rebaseAt, a billion billion, long before they could overflow.
+const (
+	MinFairnessWeight = 0.001
+	MaxFairnessWeight = 1000
+	weightScale       = 1000
+	oneDispatch       = 1000000
+	rebaseAt          = 1000000000000000000
+)
 
 // numLevels is the number of priority levels, critical through background.
 const numLevels = 5
@@ -63,28 +72,33 @@ func newQueue(maxLen int) *queue {
 	return &queue{max: maxLen}
 }
 
-// levelOf is the index of a trigger's priority level, unset meaning normal.
+// levelOf is the index of a trigger's priority level. Unset means normal, and
+// so does a level this version does not know: ScheduleJob rejects those, but
+// a job stored by a newer Scheduler can still carry one after a downgrade.
 func levelOf(req *loops.TriggerRequest) int {
 	l := req.Job.GetMetadata().GetPriorityLevel()
-	if l == schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
+	if l < schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL || l > schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND {
 		l = schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL
 	}
-	return min(int(l)-1, numLevels-1)
+	return int(l) - 1
 }
 
-// levelName is the metrics label of a level index.
+// levelNames are the metrics labels of the level indexes.
+var levelNames = [numLevels]string{"critical", "high", "normal", "low", "background"}
+
 func levelName(level int) string {
-	return strings.ToLower(strings.TrimPrefix(schedulerv1pb.PriorityLevel(level+1).String(), "PRIORITY_LEVEL_"))
+	return levelNames[level]
 }
 
-// weightOf is a trigger's fairness weight, unset meaning 1 and never so large
-// that a dispatch counts for nothing.
+// weightOf is a trigger's fairness weight in thousandths. Unset means 1, and
+// so does a weight outside 0.001 to 1000: ScheduleJob rejects those, but a
+// job stored by a newer Scheduler can still carry one after a downgrade.
 func weightOf(req *loops.TriggerRequest) uint64 {
-	w := uint64(req.Job.GetMetadata().GetFairnessWeight())
-	if w == 0 {
-		return 1
+	w := float64(req.Job.GetMetadata().GetFairnessWeight())
+	if w == 0 || math.IsNaN(w) || w < MinFairnessWeight || w > MaxFairnessWeight {
+		return weightScale
 	}
-	return min(w, oneDispatch)
+	return uint64(math.Round(w * weightScale))
 }
 
 // instanceKey is the workflow instance ID in an activity actor ID
@@ -146,7 +160,7 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 				skipped = append(skipped, f)
 				continue
 			}
-			f.dispatchesPerWeight += oneDispatch / weightOf(req)
+			f.dispatchesPerWeight += oneDispatch * weightScale / weightOf(req)
 			lv.startAt = max(lv.startAt, f.dispatchesPerWeight)
 			for _, s := range skipped {
 				s.dispatchesPerWeight = max(s.dispatchesPerWeight, lv.startAt)
@@ -154,11 +168,27 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 			if f.n == 0 {
 				delete(lv.names, f.name)
 			}
+			if lv.startAt >= rebaseAt {
+				lv.rebase()
+			}
 			q.n--
 			return true
 		}
 	}
 	return false
+}
+
+// rebase subtracts the lowest count from every name and from startAt, which
+// keeps their order and keeps the counts from overflowing.
+func (lv *level) rebase() {
+	low := lv.startAt
+	for _, f := range lv.names {
+		low = min(low, f.dispatchesPerWeight)
+	}
+	for _, f := range lv.names {
+		f.dispatchesPerWeight -= low
+	}
+	lv.startAt -= low
 }
 
 // furthestBehind returns the level's names in serving order.

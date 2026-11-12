@@ -14,14 +14,19 @@ limitations under the License.
 package server
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 func Test_schedFPToCron(t *testing.T) {
@@ -225,5 +230,44 @@ func Test_cronFPToSched(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, test.exp, cronFPToSched(test.fp))
 		})
+	}
+}
+
+func Test_validatePriority(t *testing.T) {
+	meta := func(level schedulerv1pb.PriorityLevel, weight float32) *schedulerv1pb.JobMetadata {
+		m := &schedulerv1pb.JobMetadata{}
+		if level != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
+			m.PriorityLevel = level.Enum()
+		}
+		if weight != 0 {
+			m.FairnessWeight = &weight
+		}
+		return m
+	}
+
+	require.NoError(t, validatePriority(nil))
+	require.NoError(t, validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, 0)))
+	for _, level := range []schedulerv1pb.PriorityLevel{
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_HIGH,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_LOW,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND,
+	} {
+		require.NoError(t, validatePriority(meta(level, 1)), level.String())
+	}
+	for _, weight := range []float32{0.001, 0.5, 1, 1000} {
+		require.NoError(t, validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL, weight)))
+	}
+
+	for _, level := range []schedulerv1pb.PriorityLevel{-1, 6, 100} {
+		err := validatePriority(meta(level, 0))
+		require.Equal(t, codes.InvalidArgument, status.Code(err), level.String())
+		require.ErrorContains(t, err, "not a known level")
+	}
+	for _, weight := range []float32{0.0001, -1, 1000.5, float32(math.Inf(1)), float32(math.NaN())} {
+		err := validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, weight))
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "%g", weight)
+		require.ErrorContains(t, err, "must be between 0.001 and 1000")
 	}
 }

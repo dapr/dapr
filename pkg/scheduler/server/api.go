@@ -29,12 +29,29 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/pull"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 )
+
+// validatePriority rejects a priority level that is not one of the known
+// levels, or a fairness weight outside 0.001 to 1000.
+func validatePriority(meta *schedulerv1pb.JobMetadata) error {
+	if l := meta.GetPriorityLevel(); l < schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED || l > schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND {
+		return status.Errorf(codes.InvalidArgument, "priority_level %d is not a known level", l)
+	}
+	if w := meta.GetFairnessWeight(); w != 0 && !(w >= pull.MinFairnessWeight && w <= pull.MaxFairnessWeight) {
+		return status.Errorf(codes.InvalidArgument, "fairness_weight %g must be between %g and %g", w, float32(pull.MinFairnessWeight), float32(pull.MaxFairnessWeight))
+	}
+	return nil
+}
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	cron, err := s.cron.Client(ctx)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = validatePriority(req.GetMetadata()); err != nil {
 		return nil, err
 	}
 
