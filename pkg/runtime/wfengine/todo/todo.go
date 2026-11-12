@@ -23,6 +23,10 @@ import (
 const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
+	// PullProperty marks an activity work item delivered by pull dispatch. The
+	// backend refuses it, instead of queueing it, when the sidecar has no free
+	// activity slot.
+	PullProperty = "dapr.pull"
 
 	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
 	AddWorkflowEventMethod            = "AddWorkflowEvent"
