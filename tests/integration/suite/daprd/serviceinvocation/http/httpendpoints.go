@@ -55,6 +55,10 @@ func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
 		})
+		handler.HandleFunc("/echo/", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(r.URL.Path))
+		})
 
 		return prochttp.New(t, prochttp.WithHandler(handler))
 	}
@@ -239,5 +243,22 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(ct, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 			}, 20*time.Second, 10*time.Millisecond)
 		}, h.daprd2)
+	})
+
+	// The original dapr/dapr#7686 scenario: invoking a non-Dapr HTTPEndpoint
+	// target with a trailing slash in the method must deliver that trailing
+	// slash to the endpoint, not silently strip it.
+	t.Run("trailing slash preserved to HTTPEndpoint", func(t *testing.T) {
+		httpClient := client.HTTP(t)
+		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/mywebsite/method/echo/foo/bar/", h.daprd1.HTTPPort())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "/echo/foo/bar/", string(body))
 	})
 }
