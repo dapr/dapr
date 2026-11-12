@@ -1386,9 +1386,9 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			}
 			entries[i].Metadata[pubsub.TraceIDField] = traceID
 			entries[i].Metadata[pubsub.TraceStateField] = traceState
-		}
-		if baggage != "" {
-			metadata[diagConsts.BaggageHeader] = baggage
+			if baggage != "" {
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
+			}
 		}
 	}
 

@@ -91,6 +91,7 @@ func (r *raw) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("traceparent", tp)
+		req.Header.Set("baggage", "key1=value1")
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		require.Less(t, resp.StatusCode, 300)
@@ -105,6 +106,7 @@ func (r *raw) Run(t *testing.T, ctx context.Context) {
 				traceparent := headers.Get("traceparent")
 				require.Len(t, traceparent, len(tp))
 				assert.Equal(t, tp[3:35], traceparent[3:35])
+				assert.Equal(t, "key1=value1", headers.Get("baggage"))
 			case <-time.After(time.Second * 10):
 				assert.Fail(t, "Timed out waiting for pubsub event to be delivered to app")
 			}
