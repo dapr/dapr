@@ -35,6 +35,7 @@ type Fake struct {
 	waitForReadyFn       func(context.Context) error
 	clientFn             func() backend.TaskHubClient
 	runtimeMetadataFn    func() *runtimev1pb.MetadataWorkflows
+	activityFreeSlotsFn  func() (uint32, <-chan struct{})
 }
 
 func New() *Fake {
@@ -104,6 +105,18 @@ func (f *Fake) ActivityActorType() string {
 
 func (f *Fake) WorkflowActorType() string {
 	return ""
+}
+
+func (f *Fake) WithActivityFreeSlots(fn func() (uint32, <-chan struct{})) *Fake {
+	f.activityFreeSlotsFn = fn
+	return f
+}
+
+func (f *Fake) ActivityFreeSlots() (uint32, <-chan struct{}) {
+	if f.activityFreeSlotsFn == nil {
+		return 0, nil
+	}
+	return f.activityFreeSlotsFn()
 }
 
 func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

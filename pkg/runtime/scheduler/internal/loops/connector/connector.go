@@ -58,6 +58,12 @@ type connector struct {
 	currentActorAddress string
 	clients             []schedulerv1pb.SchedulerClient
 	closeConns          []context.CancelFunc
+	addresses           []string
+	supportsPullSlots   bool
+
+	// pull is the sidecar's pull dispatch state. It outlives the clusters so
+	// pull activities keep running across scheduler stream reconnects.
+	pull *cluster.Pull
 
 	closeCluster context.CancelFunc
 }
@@ -97,6 +103,17 @@ func (c *connector) handleConnect(ctx context.Context, e *loops.Connect) {
 
 	c.clients = e.Clients
 	c.closeConns = e.CloseConns
+	c.addresses = e.Addresses
+	c.supportsPullSlots = e.SupportsPullSlots
+	if c.pull == nil {
+		c.pull = cluster.NewPull(ctx)
+	}
+	// With pull off no stream will take a held result.
+	if e.SupportsPullSlots {
+		c.pull.Retain(e.Addresses)
+	} else {
+		c.pull.Retain(nil)
+	}
 	c.maybeClientConnect(ctx)
 }
 
@@ -153,6 +170,10 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 		ActorTypes:   c.currentActorTypes,
 		ActorAddress: c.currentActorAddress,
 		Clients:      c.clients,
+
+		Addresses:         c.addresses,
+		SupportsPullSlots: c.supportsPullSlots,
+		Pull:              c.pull,
 	})
 
 	ctx, cancel := context.WithCancel(ctx)

@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
@@ -68,6 +69,15 @@ func Test_ReloadClients_IdempotentForUnchangedAddresses(t *testing.T) {
 		Addresses: []string{"127.0.0.1:3"},
 	}))
 	require.Len(t, conn.connects, 2)
+
+	// So does the same set once every scheduler supports pull dispatch.
+	require.NoError(t, h.handleReloadClients(t.Context(), &loops.ReloadClients{
+		Addresses:         []string{"127.0.0.1:3"},
+		SupportsPullSlots: true,
+	}))
+	require.Len(t, conn.connects, 3)
+	assert.True(t, conn.connects[2].SupportsPullSlots)
+	assert.Equal(t, []string{"127.0.0.1:3"}, conn.connects[2].Addresses, "each client's scheduler address is passed on")
 }
 
 var _ loop.Interface[loops.EventConn] = (*fakeConnector)(nil)

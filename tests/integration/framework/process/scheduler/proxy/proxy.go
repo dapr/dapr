@@ -76,11 +76,17 @@ type Proxy struct {
 	done     chan struct{}
 	serveErr chan error
 
-	mu       sync.Mutex
-	armed    map[string]armConfig
-	failures atomic.Int32
+	mu    sync.Mutex
+	armed map[string]armConfig
+	// watchJobs holds a channel per live WatchJobs stream, closed by
+	// DropWatchJobs. Guarded by mu.
+	watchJobs map[chan struct{}]struct{}
+	failures  atomic.Int32
 
 	partitioned atomic.Bool
+
+	// respFn, when set, rewrites every WatchJobsResponse bound for the sidecar.
+	respFn func(*schedulerv1pb.WatchJobsResponse)
 }
 
 // armConfig captures the per-method failure injection state.
@@ -115,6 +121,12 @@ func New(t *testing.T, sched *scheduler.Scheduler, fopts ...Option) *Proxy {
 		fopt(p)
 	}
 	return p
+}
+
+// WithWatchJobsResponseFn calls fn on every WatchJobsResponse before it is
+// forwarded to the sidecar, so a test can alter what the sidecar sees.
+func WithWatchJobsResponseFn(fn func(*schedulerv1pb.WatchJobsResponse)) Option {
+	return func(p *Proxy) { p.respFn = fn }
 }
 
 // waitReady blocks until conn is Ready, returning false if the connection is
@@ -319,6 +331,19 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
+	dropped := make(chan struct{})
+	p.mu.Lock()
+	if p.watchJobs == nil {
+		p.watchJobs = make(map[chan struct{}]struct{})
+	}
+	p.watchJobs[dropped] = struct{}{}
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		delete(p.watchJobs, dropped)
+		p.mu.Unlock()
+	}()
+
 	upstream, err := p.client.WatchJobs(ctx)
 	if err != nil {
 		return err
@@ -340,12 +365,17 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 		}
 	}()
 
+	toClient := make(chan struct{})
 	go func() {
+		defer close(toClient)
 		for {
 			msg, rerr := upstream.Recv()
 			if rerr != nil {
 				errCh <- rerr
 				return
+			}
+			if p.respFn != nil {
+				p.respFn(msg)
 			}
 			if serr := stream.Send(msg); serr != nil {
 				errCh <- serr
@@ -354,13 +384,34 @@ func (p *Proxy) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error 
 		}
 	}()
 
-	first := <-errCh
+	var first error
+	select {
+	case first = <-errCh:
+	case <-dropped:
+		// Both legs end now. The leg sending to the client must stop before
+		// the handler returns; the other ends when the handler does.
+		cancel()
+		<-toClient
+		return status.Error(codes.Unavailable, "watch jobs stream dropped by proxy")
+	}
 	cancel()
 	<-errCh
 	if errors.Is(first, io.EOF) {
 		return nil
 	}
 	return first
+}
+
+// DropWatchJobs ends every live WatchJobs stream through the proxy on both
+// legs, as a network blip would. Streams opened afterwards are proxied as
+// usual.
+func (p *Proxy) DropWatchJobs() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for ch := range p.watchJobs {
+		close(ch)
+	}
+	clear(p.watchJobs)
 }
 
 func (p *Proxy) ReportActorTypes(stream schedulerv1pb.Scheduler_ReportActorTypesServer) error {
