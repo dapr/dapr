@@ -159,11 +159,11 @@ func (m *Modes) SetupN(t *testing.T, perMode int, opts func(staged bool, i int) 
 	for k, staged := range []bool{false, true} {
 		for i := range perMode {
 			index := k*perMode + i
+			// Pinned per daprd, so the off mode stays off when
+			// DAPR_INTEGRATION_WORKFLOW_STAGED turns the preview on.
+			wopts = append(wopts, workflow.WithStagedOperationsN(index, staged))
 			if staged {
-				wopts = append(wopts,
-					workflow.WithStagedOperationsN(index),
-					workflow.WithFallbackSettleN(t, index),
-				)
+				wopts = append(wopts, workflow.WithFallbackSettleN(t, index))
 			}
 			if opts != nil {
 				wopts = append(wopts, workflow.WithDaprdOptions(index, opts(staged, i)...))
@@ -274,16 +274,15 @@ func (m Mode) StartWith(t *testing.T, ctx context.Context, i int, name, exp stri
 	m.WaitNoWorker(t, ctx, i)
 }
 
-// Owner waits until one of the mode's first n daprds holds a workflow actor
-// and returns its index in the mode.
-func (m Mode) Owner(t *testing.T, ctx context.Context, n int) int {
-	t.Helper()
-
-	idx := make([]int, n)
+// holder returns the index in the mode of the first of its first n daprds
+// that holds a workflow actor, or -1 when none does.
+func (m Mode) holder(c assert.TestingT, ctx context.Context, n int) int {
 	for i := range n {
-		idx[i] = m.Idx(i)
+		if cnt, _ := m.WF.DaprN(m.Idx(i)).ActiveActorCount(c, ctx, m.WF.WorkflowActorType(m.Idx(i))); cnt > 0 {
+			return i
+		}
 	}
-	return m.WF.OwnerIndex(t, ctx, idx...) - m.first
+	return -1
 }
 
 // PurgeThroughNonOwner runs on two daprds of one app. It starts id on the
@@ -299,18 +298,27 @@ func (m Mode) PurgeThroughNonOwner(t *testing.T, ctx context.Context, id api.Ins
 	m.WaitNoWorker(t, ctx, 1)
 	mgmt := []*client.TaskHubGrpcClient{m.Mgmt(t, ctx, 0), m.Mgmt(t, ctx, 1)}
 
-	got := m.Call(ctx, func(ctx context.Context) error {
-		return mgmt[0].RaiseEvent(ctx, id, "other")
-	})
-	assert.Equal(t, Want(m.Staged, NoWorker, Accepted), got)
+	raise := func(ctx context.Context) error { return mgmt[0].RaiseEvent(ctx, id, "other") }
+	assert.Equal(t, Want(m.Staged, NoWorker, Accepted), m.Call(ctx, raise))
 
-	// With the preview off, no daprd holds the actor.
+	// With the preview off, no daprd holds the actor. With it on, the raise
+	// loaded it on its owner, unless the daprd that handled the raise had
+	// not yet applied the table that places the type on both daprds: it
+	// then activated the actor on itself, the table's update halted it as
+	// not placed there, and nothing loads it again before the next raise.
 	purger := 1
 	if m.Staged {
-		purger = 1 - m.Owner(t, ctx, 2)
+		owner := -1
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			if owner = m.holder(c, ctx, 2); owner < 0 {
+				assert.Equal(c, Accepted, m.Call(ctx, raise))
+				assert.Fail(c, "no daprd holds the actor")
+			}
+		}, time.Second*10, time.Millisecond*500)
+		purger = 1 - owner
 	}
 
-	got = m.Call(ctx, func(ctx context.Context) error {
+	got := m.Call(ctx, func(ctx context.Context) error {
 		return mgmt[purger].PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
 	})
 	assert.Equal(t, Accepted, got)

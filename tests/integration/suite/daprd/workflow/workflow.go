@@ -15,6 +15,7 @@ package workflow
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/activitydispatch"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/admission"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/attestation"
@@ -56,6 +57,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reuseid"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/schedule"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler/activityv2/escalationreap"
