@@ -80,7 +80,7 @@ func (f *factory) settle(key string, call *inflight.Call, err error) {
 // ctx cancellation it hands off to the factory's detached watcher so the
 // WorkItem already in the durabletask queue still has its result published,
 // and returns ctx.Err() so the caller can surface the cancellation.
-func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation) error {
+func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call, activityName, workflowID string, taskEvent *backend.HistoryEvent, invocation *protos.ActivityInvocation, pull bool) error {
 	// The app reports completion through this callback channel; there is no
 	// execution timeout, activities may run for hours.
 	callback := make(chan bool, 1)
@@ -97,7 +97,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 			SequenceNumber:  int64(taskEvent.GetEventId()),
 			InstanceID:      api.InstanceID(workflowID),
 			NewEvent:        taskEvent,
-			Properties:      map[string]any{todo.CallbackChannelProperty: callback},
+			Properties:      map[string]any{todo.CallbackChannelProperty: callback, todo.PullProperty: pull},
 			IncomingHistory: invocation.GetPropagatedHistory(),
 		},
 	}
@@ -110,6 +110,13 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	err := a.scheduler(ctx, ex.wi)
 	elapsed := diag.ElapsedSince(start)
 
+	if errors.Is(err, ErrNoCapacity) {
+		// Not executed: the scheduler queues the trigger again. Released, not
+		// cached, so followers unpark into their own retries.
+		ex.unregister()
+		a.settle(key, call, err)
+		return err
+	}
 	if err != nil {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		wfErr := wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
