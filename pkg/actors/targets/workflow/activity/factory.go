@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 	"github.com/dapr/dapr/pkg/actors/router"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
@@ -102,6 +103,7 @@ type factory struct {
 
 	router                 router.Interface
 	reminders              scheduler.Interface
+	state                  actorstate.Interface
 	placement              placement.Interface
 	actorTypeBuilder       *common.ActorTypeBuilder
 	workflowAccessPolicies *workflowacl.Holder
@@ -242,6 +244,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		publishGrace:           newPublishGrace(det.Context(), opts.GracefulShutdownDuration),
 		router:                 router,
 		reminders:              sreminders,
+		state:                  state,
 		scheduler:              opts.Scheduler,
 		placement:              placement,
 		workflowActorType:      opts.WorkflowActorType,

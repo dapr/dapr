@@ -19,18 +19,21 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -152,12 +155,15 @@ func newClaimHarness(t *testing.T) (*factory, *recordStore, chan *backend.Activi
 		workflowActorType: "dapr.internal.default.testapp.workflow",
 		router:            routerfake.New(),
 		reminders:         &stubScheduler{},
-		signing:           &signing.Signing{Namespace: "default"},
-		fastPath:          true,
-		rootCtx:           t.Context(),
-		detached:          det,
-		publishGrace:      newPublishGrace(det.Context(), time.Minute),
-		staleClaimAfter:   time.Hour,
+		state: statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+			return &actorsapi.StateResponse{Data: []byte("metadata")}, nil
+		}),
+		signing:         &signing.Signing{Namespace: "default"},
+		fastPath:        true,
+		rootCtx:         t.Context(),
+		detached:        det,
+		publishGrace:    newPublishGrace(det.Context(), time.Minute),
+		staleClaimAfter: time.Hour,
 		claims: claim.New(claim.Options{
 			ActorType:      "dapr.internal.default.testapp.activity",
 			State:          store.fake(),
@@ -622,6 +628,87 @@ func Test_checkClaimRecord(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, claim.Defer, outcome)
 	})
+}
+
+// Test_executeActivity_purgedWorkflow: a scheduler-fired arrival for a
+// purged workflow of this app acks without running the activity.
+func Test_executeActivity_purgedWorkflow(t *testing.T) {
+	t.Parallel()
+
+	row := &actorsapi.StateResponse{Data: []byte("metadata")}
+	empty := &actorsapi.StateResponse{}
+
+	for name, tc := range map[string]struct {
+		// One per metadata read, the last repeating. nil: the read fails.
+		reads       []*actorsapi.StateResponse
+		sourceApp   string
+		skipRetries bool
+		// young: the task was scheduled within purgeConfirmWindow.
+		young   bool
+		runs    bool
+		retried bool
+	}{
+		"live workflow runs":                     {reads: []*actorsapi.StateResponse{row}, runs: true},
+		"purged workflow is dropped":             {reads: []*actorsapi.StateResponse{empty}},
+		"purged workflow of this app is dropped": {reads: []*actorsapi.StateResponse{empty}, sourceApp: "testapp"},
+		"lagging read of a live workflow runs":   {reads: []*actorsapi.StateResponse{empty, row}, runs: true},
+		"failed read is retried":                 {reads: []*actorsapi.StateResponse{nil}, retried: true},
+		"missing row of a young task is retried": {reads: []*actorsapi.StateResponse{empty}, young: true, retried: true},
+		"lagging reads of a young task then run": {reads: []*actorsapi.StateResponse{empty, empty, row}, young: true, runs: true},
+		"workflow of another app runs":           {reads: []*actorsapi.StateResponse{empty}, sourceApp: "otherapp", runs: true},
+		"local drive of a purged workflow runs":  {reads: []*actorsapi.StateResponse{empty}, skipRetries: true, runs: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f, _, scheduled := newClaimHarness(t)
+			// The result publish of a routed activity resolves its workflow
+			// actor type through the builder.
+			f.actorTypeBuilder = common.NewActorTypeBuilder("default")
+			var n atomic.Int32
+			f.state = statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
+				if res := tc.reads[min(int(n.Add(1)), len(tc.reads))-1]; res != nil {
+					return res, nil
+				}
+				return nil, errors.New("state store unavailable")
+			})
+			invocation := testInvocation()
+			invocation.HistoryEvent.Router = &protos.TaskRouter{SourceAppID: tc.sourceApp}
+			reminder := testReminder()
+			reminder.SkipRetries = tc.skipRetries
+
+			if tc.young {
+				invocation.HistoryEvent.Timestamp = timestamppb.Now()
+			}
+
+			a := f.GetOrCreate("wf::3::0").(*activity)
+			errCh := make(chan error, 1)
+			// Retried as the scheduler retries a recoverable failure.
+			go func() {
+				err := a.executeActivity(t.Context(), reminder, invocation)
+				for tc.runs && wferrors.IsRecoverable(err) {
+					err = a.executeActivity(t.Context(), reminder, invocation)
+				}
+				errCh <- err
+			}()
+			if tc.runs {
+				completeWorkItem(t, recvWorkItem(t, scheduled))
+				return
+			}
+			select {
+			case err := <-errCh:
+				if tc.retried {
+					require.Error(t, err)
+					assert.True(t, wferrors.IsRecoverable(err), "a failed read must be retried, not failed terminally")
+				} else {
+					require.NoError(t, err)
+				}
+			case <-scheduled:
+				t.Fatal("the activity must not run")
+			case <-time.After(time.Second * 5):
+				t.Fatal("timed out waiting for the arrival to return")
+			}
+		})
+	}
 }
 
 // Test_executeActivity_recoveryGate: live defers, completed acks, stale
