@@ -118,6 +118,25 @@ message JobMetadata {
   // scheduler without pull dispatch, or with no connected sidecar reporting
   // slots for the actor type, routes the trigger as a regular actor reminder.
   optional bool pull = 5;
+
+  // priority_level orders pull-dispatched triggers waiting for a free slot:
+  // a higher level is always delivered first. Unset means NORMAL.
+  optional PriorityLevel priority_level = 6;
+
+  // fairness_weight shares deliveries between the names (concurrency_key)
+  // waiting at the same level in proportion to their weights. Unset means 1.
+  optional uint32 fairness_weight = 7;
+}
+
+// PriorityLevel is the strict order between pull-dispatched triggers waiting
+// for a free slot, highest first. Unspecified is treated as normal.
+enum PriorityLevel {
+  PRIORITY_LEVEL_UNSPECIFIED = 0;
+  PRIORITY_LEVEL_CRITICAL = 1;
+  PRIORITY_LEVEL_HIGH = 2;
+  PRIORITY_LEVEL_NORMAL = 3;
+  PRIORITY_LEVEL_LOW = 4;
+  PRIORITY_LEVEL_BACKGROUND = 5;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
