@@ -226,10 +226,12 @@ func (c *components) notifyActorStateStoreChanged() func() {
 // as the actor state store. It takes comp with its secret and environment
 // variable references resolved, as the processor resolves them before init,
 // and applies the processor's own check, so that duplicate entries and
-// resolved values are decided the same way. A reference that cannot be
-// resolved yet, for example because its secret store is not loaded, counts as
-// marked: skipping the component is recoverable, while a second actor state
-// store fails its init and exits daprd.
+// resolved values are decided the same way. A value that cannot be known yet
+// counts as marked: skipping the component is recoverable, while a second
+// actor state store fails its init and exits daprd. That covers a reference
+// that cannot be resolved yet, for example because its secret store is not
+// loaded, and an {appID} or {podName} placeholder, which the processor only
+// expands at init.
 func isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string)) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
@@ -240,12 +242,18 @@ func isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Co
 
 	resolved, unready := resolve()
 
-	// Build the properties as the processor does: the last entry of a name wins.
+	// Build the properties as the processor does: the last entry of a name
+	// wins, so only that entry decides whether the value is known.
+	last := make(map[string]int, len(resolved.Spec.Metadata))
+	for i, item := range resolved.Spec.Metadata {
+		last[item.Name] = i
+	}
 	props := make(map[string]string, len(resolved.Spec.Metadata))
 	for i, item := range resolved.Spec.Metadata {
-		props[item.Name] = item.Value.String()
+		value := item.Value.String()
+		props[item.Name] = value
 
-		if !isActorStateStoreItem(item) {
+		if !isActorStateStoreItem(item) || last[item.Name] != i {
 			continue
 		}
 		// Resolution stops at the first secret whose store is not loaded, so
@@ -255,6 +263,9 @@ func isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Co
 			return true
 		}
 		if item.SecretKeyRef.Name != "" && !item.HasValue() {
+			return true
+		}
+		if strings.Contains(value, "{appID}") || strings.Contains(value, "{podName}") {
 			return true
 		}
 	}

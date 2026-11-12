@@ -373,6 +373,36 @@ func Test_components_actorStateStore(t *testing.T) {
 				metadata: []commonapi.NameValuePair{withValue(secretRef("true"), "false")},
 				skipped:  true,
 			},
+			// Names differing only in case are separate properties; the
+			// processor marks the store if any of them is truthy.
+			"case-variant names, one is truthy": {
+				metadata: []commonapi.NameValuePair{
+					literal("false"),
+					{Name: "ACTORSTATESTORE", Value: literal("true").Value},
+				},
+				skipped: true,
+			},
+			// The processor keeps only the last entry of a name, so an earlier
+			// unresolved reference does not decide anything.
+			"unresolved secretKeyRef shadowed by a later literal false": {
+				metadata:    []commonapi.NameValuePair{secretRef("missing"), literal("false")},
+				secretStore: true,
+			},
+			"unresolved secretKeyRef after an earlier literal false": {
+				metadata:    []commonapi.NameValuePair{literal("false"), secretRef("missing")},
+				secretStore: true,
+				skipped:     true,
+			},
+			// Placeholders are expanded by the processor at init, and {appID}
+			// or {podName} may expand to a truthy value, so they count as marked.
+			"appID placeholder": {
+				metadata: []commonapi.NameValuePair{literal("{appID}")},
+				skipped:  true,
+			},
+			"podName placeholder": {
+				metadata: []commonapi.NameValuePair{literal("{podName}")},
+				skipped:  true,
+			},
 		}
 
 		for name, test := range tests {

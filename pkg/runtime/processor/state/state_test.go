@@ -300,4 +300,13 @@ func TestIsActorStateStore(t *testing.T) {
 			assert.Equal(t, test.want, state.IsActorStateStore(test.props))
 		})
 	}
+
+	// Map iteration order is random, so names differing only in case must not
+	// decide the result by whichever is visited first.
+	t.Run("case-variant names, one is truthy", func(t *testing.T) {
+		props := map[string]string{"actorStateStore": "false", "ACTORSTATESTORE": "true", "ActorStateStore": "0"}
+		for range 100 {
+			require.True(t, state.IsActorStateStore(props))
+		}
+	})
 }

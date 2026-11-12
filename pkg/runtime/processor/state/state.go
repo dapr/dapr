@@ -40,13 +40,15 @@ var log = logger.NewLogger("dapr.runtime.processor.state")
 
 // IsActorStateStore reports whether the metadata properties of a state store
 // mark it as the actor state store: its "actorStateStore" property, matched
-// case-insensitively, is truthy. The hot reload reconciler applies the same
-// check before processing a component, so both must agree.
+// case-insensitively, is truthy. Names differing only in case are separate
+// properties; the store is marked if any of them is truthy, so the result does
+// not depend on map iteration order. The hot reload reconciler applies the
+// same check before processing a component, so both must agree.
 func IsActorStateStore(props map[string]string) bool {
 	for k, v := range props {
 		//nolint:gocritic
-		if strings.ToLower(k) == PropertyKeyActorStateStore {
-			return kitstrings.IsTruthy(v)
+		if strings.ToLower(k) == PropertyKeyActorStateStore && kitstrings.IsTruthy(v) {
+			return true
 		}
 	}
 	return false
