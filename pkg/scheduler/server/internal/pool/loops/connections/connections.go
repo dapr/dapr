@@ -76,6 +76,11 @@ type connections struct {
 	concurrencyGates map[string]*concurrencyGate
 	streamGateKeys   map[uint64][]string
 	pull             *pull.Dispatcher
+	namespace        string
+
+	// gatesRetained: a gate is kept only for pull triggers that outlived
+	// their stream, and goes once they release it.
+	gatesRetained bool
 
 	wg sync.WaitGroup
 }
@@ -89,6 +94,7 @@ func New(opts Options) loop.Interface[loops.EventConn] {
 	conns.streamIDx = 0
 	conns.schedulerCount = 1
 	conns.schedulerIdx = 0
+	conns.gatesRetained = false
 
 	conns.loop = loopFactory.NewLoop(conns)
 	conns.pull = conns.newPull()
@@ -114,6 +120,7 @@ func (c *connections) newPull() *pull.Dispatcher {
 			c.handleConcurrencyRelease(&loops.ConcurrencyRelease{GateKeys: keys})
 		},
 		Requeue:   c.handleTriggerRequest,
+		Idle:      c.maybeCloseNamespace,
 		MaxParked: maxPendingPerGate,
 	})
 }
@@ -132,6 +139,8 @@ func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 		c.handleSchedulerInfoUpdate(e)
 	case *loops.PullSlotsUpdate:
 		c.pull.HandleSlots(e)
+	case *loops.PullResult:
+		c.pull.HandleResult(e)
 	case *loops.ConnRun:
 		e.Fn()
 	case *loops.Shutdown:
@@ -163,6 +172,7 @@ func (c *connections) handleSchedulerInfoUpdate(e *loops.SchedulerInfoUpdate) {
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
 func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
+	c.namespace = add.Request.GetNamespace()
 	streamIDx := c.streamIDx
 	c.streamIDx++
 
@@ -236,6 +246,7 @@ func (c *connections) removeOrphanedGates() {
 			referenced[key] = struct{}{}
 		}
 	}
+	c.gatesRetained = c.pull.MarkGates(referenced)
 
 	for key, gate := range c.concurrencyGates {
 		if _, ok := referenced[key]; !ok {
@@ -389,6 +400,10 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 		monitoring.RecordConcurrencyInflight(key, int64(gate.current))
 	}
 
+	if c.gatesRetained {
+		c.removeOrphanedGates()
+	}
+
 	for _, key := range rel.GateKeys {
 		if gate, ok := c.concurrencyGates[key]; ok {
 			c.drainPending(key, gate)
@@ -485,12 +500,18 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	c.removeOrphanedGates()
 	c.pull.Drain()
 
-	// This loop owns the authoritative stream set: confirm emptiness to the
-	// namespaces loop so it can delete the namespace. Deleting on the
-	// namespaces loop's own counting alone is unsafe against stray events.
-	if len(c.streams) == 0 {
+	c.maybeCloseNamespace()
+}
+
+// maybeCloseNamespace confirms to the namespaces loop that this loop has no
+// stream left, so it can delete the namespace. This loop owns the
+// authoritative stream set; deleting on the namespaces loop's own counting
+// alone is unsafe against stray events. Unresolved pull triggers keep the
+// loop until they resolve, so their sidecars can reattach.
+func (c *connections) maybeCloseNamespace() {
+	if len(c.streams) == 0 && !c.pull.HasFlights() {
 		c.nsLoop.Enqueue(&loops.ConnCloseNamespace{
-			Namespace: closeStream.Namespace,
+			Namespace: c.namespace,
 		})
 	}
 }

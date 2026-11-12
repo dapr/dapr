@@ -25,6 +25,7 @@ import (
 
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -63,6 +64,7 @@ func TestNoWorkerError(t *testing.T) {
 		"remote not registered":    {err: remoteNotRegistered, target: "otherapp", appID: "otherapp"},
 		"remote no address":        {err: remoteNoAddress, target: "otherapp", appID: "otherapp"},
 		"target same as local app": {err: noAddress, target: "myapp", appID: "myapp"},
+		"reminder not hosted":      {err: fmt.Errorf("failed to raise event: %w", reminders.ErrReminderOpActorNotHosted), appID: "myapp"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := newBackend(t, true).noWorkerError(test.err, test.target)
