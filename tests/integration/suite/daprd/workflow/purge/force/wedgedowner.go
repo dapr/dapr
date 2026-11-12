@@ -65,10 +65,18 @@ func (w *wedgedowner) Run(t *testing.T, ctx context.Context) {
 	var entered sync.Once
 	inTurn := make(chan struct{})
 	hold := make(chan struct{})
+	scheduled := make(chan struct{})
 	reg := dworkflow.NewRegistry()
-	reg.AddActivityN("noop", func(dworkflow.ActivityContext) (any, error) { return nil, nil })
+	reg.AddActivityN("noop", func(dworkflow.ActivityContext) (any, error) {
+		select {
+		case <-scheduled:
+		case <-ctx.Done():
+		}
+		return nil, nil
+	})
 	// The second turn, after the activity completes, holds the turn lock
-	// until the test releases it.
+	// until the test releases it. The schedule's wait-for-start needs that
+	// lock too, so the activity is held until the schedule has returned.
 	reg.AddWorkflowN("wedge", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		if err := ctx.CallActivity("noop").Await(nil); err != nil {
 			return nil, err
@@ -102,6 +110,7 @@ func (w *wedgedowner) Run(t *testing.T, ctx context.Context) {
 	const id = "wedgedowner"
 	_, err := clients[0].ScheduleWorkflow(ctx, "wedge", dworkflow.WithInstanceID(id))
 	require.NoError(t, err)
+	close(scheduled)
 	select {
 	case <-inTurn:
 	case <-ctx.Done():
