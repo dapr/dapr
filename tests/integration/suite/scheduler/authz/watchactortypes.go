@@ -37,9 +37,10 @@ func init() {
 }
 
 // watchactortypes asserts an app cannot open a WatchJobs stream which
-// declares, or sets a concurrency limit on, another app's reserved internal
-// actor type (dapr.internal.<namespace>.<appid>.*), so it can neither receive
-// nor throttle that app's reminder triggers, while its own internal types and
+// declares, sets a concurrency limit on, or lists an in-flight reminder of
+// another app's reserved internal actor type
+// (dapr.internal.<namespace>.<appid>.*), so it can neither receive, throttle,
+// nor hold back that app's reminder triggers, while its own internal types and
 // user actor types remain allowed.
 type watchactortypes struct {
 	sentry    *sentry.Sentry
@@ -117,10 +118,22 @@ func (w *watchactortypes) Run(t *testing.T, ctx context.Context) {
 		}))
 	})
 
+	t.Run("in-flight reminder of another app's internal actor type is denied", func(t *testing.T) {
+		denied(t, watch(t, &schedulerv1pb.WatchJobsRequestInitial{
+			ActorTypes: []string{ownWF},
+			InflightReminders: []*schedulerv1pb.ActorReminderRef{
+				{ActorType: victimAct, ActorId: "instance1::0", Name: "run-activity"},
+			},
+		}))
+	})
+
 	t.Run("own internal and user actor types are allowed", func(t *testing.T) {
 		stream := watch(t, &schedulerv1pb.WatchJobsRequestInitial{
 			ActorTypes:        []string{ownWF, "myactor"},
 			ConcurrencyLimits: []*schedulerv1pb.ConcurrencyLimit{actorLimit(ownWF), actorLimit("myactor")},
+			InflightReminders: []*schedulerv1pb.ActorReminderRef{
+				{ActorType: ownWF, ActorId: "instance2", Name: "run-activity"},
+			},
 		})
 		_, err := appA.ScheduleJob(ctx, w.scheduler.JobNowActor("own-event", watchActorTypesNamespace, "app-a", ownWF, "instance1"))
 		require.NoError(t, err)

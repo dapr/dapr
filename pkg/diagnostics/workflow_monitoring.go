@@ -37,10 +37,12 @@ const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
 	// The activity actor's escalation of a lost local drive to its durable
-	// run-activity reminder.
+	// run-activity reminder. purged_dropped: a run-activity reminder fired for
+	// a purged workflow, and was acked without running the activity.
 	StatusEscalated        = "escalated"
 	StatusEscalateFailed   = "escalate_failed"
 	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusPurgedDropped    = "purged_dropped"
 	StatusJanitorRecovered = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,

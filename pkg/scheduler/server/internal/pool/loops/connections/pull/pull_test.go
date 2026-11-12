@@ -24,6 +24,7 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/kit/events/loop"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
@@ -49,6 +50,7 @@ type harness struct {
 	routed []*loops.TriggerRequest
 	// acquires counts gate acquisition attempts.
 	acquires int
+	idles    int
 }
 
 type gate struct {
@@ -76,6 +78,7 @@ func newHarness(t *testing.T, streams int, slots uint32) *harness {
 		AcquireGates: h.acquire,
 		ReleaseGates: h.release,
 		Requeue:      h.handle,
+		Idle:         func() { h.idles++ },
 		MaxParked:    100,
 	})
 
@@ -160,7 +163,11 @@ func sidecarOf(i int) string {
 }
 
 func key(actorID string) string {
-	return "actorreminder||default||" + testActorType + "||" + actorID + "||run-activity"
+	return serialize.ActorReminderKey("default", testActorType, actorID, "run-activity")
+}
+
+func ref(actorID string) *schedulerv1pb.ActorReminderRef {
+	return &schedulerv1pb.ActorReminderRef{ActorType: testActorType, ActorId: actorID, Name: "run-activity"}
 }
 
 func (h *harness) pool(i int) *pool {
@@ -197,15 +204,15 @@ func (h *harness) addStreamFor(t *testing.T, i int, actorAddress string, req *sc
 }
 
 // closeStream closes stream idx the way the connections loop and stream loop
-// do: the connections loop reaps the stream, then the stream resolves the
-// triggers it still had in flight undeliverable.
+// do: the connections loop reaps the stream, then the stream orphans the pull
+// triggers it still had in flight.
 func (h *harness) closeStream(t *testing.T, idx uint64, inflight ...*loops.TriggerRequest) {
 	t.Helper()
 	delete(h.streams, idx)
 	h.d.CloseStream(idx)
 	h.d.Drain()
 	for _, req := range inflight {
-		req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+		req.Orphan()
 	}
 	h.pump(t)
 }
@@ -250,6 +257,11 @@ func (h *harness) report(i int, free uint32) {
 // reportOn delivers a free slot count reported by sidecar i on stream idx.
 func (h *harness) reportOn(idx uint64, i int, free uint32) {
 	h.d.HandleSlots(&loops.PullSlotsUpdate{StreamIDx: idx, AppID: testAppID, ActorAddress: addr(i), ActorType: testActorType, Free: free})
+}
+
+// result delivers a result by reference from sidecar i.
+func (h *harness) result(i int, ref *schedulerv1pb.ActorReminderRef, status schedulerv1pb.WatchJobsRequestResultStatus) {
+	h.d.HandleResult(&loops.PullResult{Namespace: "default", AppID: testAppID, ActorAddress: addr(i), Reminder: ref, Status: status})
 }
 
 // resultOf returns req's result, failing if the trigger was never resolved:
