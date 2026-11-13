@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -453,4 +454,79 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, "hello", captured.Get("X-Static"))
+}
+
+func TestCallTimeout(t *testing.T) {
+	d := &metav1.Duration{Duration: 45 * time.Second}
+	tests := map[string]struct {
+		endpoint mcpserverapi.MCPEndpoint
+		want     time.Duration
+	}{
+		"no transport": {want: DefaultCallTimeout},
+		"streamableHTTP without a timeout": {
+			endpoint: mcpserverapi.MCPEndpoint{StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "http://x"}},
+			want:     DefaultCallTimeout,
+		},
+		"streamableHTTP timeout": {
+			endpoint: mcpserverapi.MCPEndpoint{StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "http://x", Timeout: d}},
+			want:     45 * time.Second,
+		},
+		"sse timeout": {
+			endpoint: mcpserverapi.MCPEndpoint{SSE: &mcpserverapi.MCPSSE{URL: "http://x", Timeout: d}},
+			want:     45 * time.Second,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			srv := namedServer("s", mcpserverapi.MCPServerSpec{Endpoint: tc.endpoint})
+			assert.Equal(t, tc.want, CallTimeout(&srv))
+		})
+	}
+}
+
+// A server that answers in plain JSON sends its response headers only with the
+// result, so the client's wait for them is the whole tool call. It must be the
+// MCPServer's own timeout rather than a fixed bound: a fixed one cuts a call
+// that is still within the configured timeout, and ignores a shorter one.
+func TestBuildHTTPClient_ResponseHeaderWaitIsTheServerTimeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(time.Second):
+		case <-r.Context().Done():
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	call := func(t *testing.T, timeout time.Duration) error {
+		t.Helper()
+		srv := namedServer("s", mcpserverapi.MCPServerSpec{
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL:     ts.URL,
+					Timeout: &metav1.Duration{Duration: timeout},
+				},
+			},
+		})
+		client, err := BuildHTTPClient(context.Background(), context.Background(), &srv, nil, nil)
+		require.NoError(t, err)
+		resp, err := client.Get(ts.URL)
+		if err == nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+
+	t.Run("a server slower than its timeout is cut at that timeout", func(t *testing.T) {
+		start := time.Now()
+		err := call(t, 100*time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "timeout awaiting response headers")
+		assert.Less(t, time.Since(start), time.Second, "the call outlived the server's timeout")
+	})
+
+	t.Run("a server within its timeout is waited for", func(t *testing.T) {
+		require.NoError(t, call(t, 10*time.Second))
+	})
 }
