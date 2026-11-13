@@ -270,4 +270,9 @@ func Test_validatePriority(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err), "%g", weight)
 		require.ErrorContains(t, err, "must be between 0.001 and 1000")
 	}
+
+	// An explicit 0 is set, so it is outside the range, unlike unset.
+	err := validatePriority(&schedulerv1pb.JobMetadata{FairnessWeight: new(float32(0))})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "fairness_weight 0 must be between 0.001 and 1000")
 }

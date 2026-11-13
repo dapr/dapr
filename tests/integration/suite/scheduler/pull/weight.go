@@ -64,7 +64,9 @@ func (w *weight) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	stream.NoRecv(time.Second * 2)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, float64(2*each), w.scheduler.Metrics(t, ctx).SumWithLabels("dapr_scheduler_workflow_activity_backlog", "app_id:"+appID), 0)
+	}, time.Second*20, time.Millisecond*10)
 
 	counts := map[string]int{}
 	for range each {

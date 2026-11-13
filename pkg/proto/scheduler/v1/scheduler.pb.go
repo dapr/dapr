@@ -491,12 +491,13 @@ type JobMetadata struct {
 	// scheduler without pull dispatch, or with no connected sidecar reporting
 	// slots for the actor type, routes the trigger as a regular actor reminder.
 	Pull *bool `protobuf:"varint,5,opt,name=pull,proto3,oneof" json:"pull,omitempty"`
-	// priority_level orders pull-dispatched triggers waiting for a free slot:
-	// a higher level is always delivered first. Unset means NORMAL.
+	// priority_level orders pull-dispatched triggers waiting for a free slot on
+	// the same scheduler instance: a higher level is delivered first. Unset
+	// means NORMAL.
 	PriorityLevel *PriorityLevel `protobuf:"varint,6,opt,name=priority_level,json=priorityLevel,proto3,enum=dapr.proto.scheduler.v1.PriorityLevel,oneof" json:"priority_level,omitempty"`
 	// fairness_weight shares deliveries between the names (concurrency_key)
-	// waiting at the same level in proportion to their weights, 0.001 to 1000.
-	// Unset means 1.
+	// waiting at the same level on the same scheduler instance, in proportion
+	// to their weights, 0.001 to 1000. Unset means 1.
 	FairnessWeight *float32 `protobuf:"fixed32,7,opt,name=fairness_weight,json=fairnessWeight,proto3,oneof" json:"fairness_weight,omitempty"`
 }
 

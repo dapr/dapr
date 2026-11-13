@@ -40,6 +40,14 @@ func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, w
 	return req
 }
 
+// mustEnqueue parks a trigger that must fit without evicting another.
+func mustEnqueue(t *testing.T, q *queue, req *loops.TriggerRequest) {
+	t.Helper()
+	evicted, ok := q.enqueue(req, false)
+	require.True(t, ok)
+	require.Nil(t, evicted)
+}
+
 // accept records the order triggers are offered in and accepts them all.
 func accept(order *[]*loops.TriggerRequest) func(*loops.TriggerRequest) bool {
 	return func(r *loops.TriggerRequest) bool {
@@ -98,7 +106,7 @@ func TestQueue_TryDispatchOneRotates(t *testing.T) {
 	}
 	a1, a2, a3, b1, c1 := mk("a::1::0"), mk("a::2::0"), mk("a::3::0"), mk("b::1::0"), mk("c::1::0")
 	for _, r := range []*loops.TriggerRequest{a1, a2, a3, b1, c1} {
-		require.True(t, q.enqueue(r, false))
+		mustEnqueue(t, q, r)
 	}
 	require.Equal(t, 5, q.len())
 
@@ -111,8 +119,8 @@ func TestQueue_TryDispatchOneRotates(t *testing.T) {
 	assert.Zero(t, q.levels[levelOf(a1)].names[""].n)
 
 	// A rejected head does not block another instance's head.
-	require.True(t, q.enqueue(a1, false))
-	require.True(t, q.enqueue(b1, false))
+	mustEnqueue(t, q, a1)
+	mustEnqueue(t, q, b1)
 	order = nil
 	require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
 		order = append(order, r)
@@ -134,7 +142,7 @@ func TestQueue_LevelsAreStrict(t *testing.T) {
 	c := prioritized(h.trigger("wf::3::0", "act"), critical, 1)
 	hi := prioritized(h.trigger("wf::4::0", "act"), high, 1)
 	for _, r := range []*loops.TriggerRequest{bg, n, lo, c, hi} {
-		require.True(t, q.enqueue(r, false))
+		mustEnqueue(t, q, r)
 	}
 
 	var order []*loops.TriggerRequest
@@ -143,8 +151,8 @@ func TestQueue_LevelsAreStrict(t *testing.T) {
 	assert.Equal(t, []*loops.TriggerRequest{c, hi, n, lo, bg}, order, "arrival order does not matter across levels, the same name at two levels is two names")
 
 	// A critical head that cannot go does not hold a lower level back.
-	require.True(t, q.enqueue(c, false))
-	require.True(t, q.enqueue(n, false))
+	mustEnqueue(t, q, c)
+	mustEnqueue(t, q, n)
 	order = nil
 	require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
 		order = append(order, r)
@@ -159,8 +167,8 @@ func TestQueue_WeightSharesTurns(t *testing.T) {
 	q := newQueue(1000)
 	h := newHarness(t, 0, 0)
 	for i := range 200 {
-		require.True(t, q.enqueue(prioritized(h.trigger("h::"+strconv.Itoa(i)+"::0", "heavy"), normal, 3), false))
-		require.True(t, q.enqueue(prioritized(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), normal, 1), false))
+		mustEnqueue(t, q, prioritized(h.trigger("h::"+strconv.Itoa(i)+"::0", "heavy"), normal, 3))
+		mustEnqueue(t, q, prioritized(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), normal, 1))
 	}
 
 	counts := map[string]int{}
@@ -179,8 +187,8 @@ func TestQueue_WeightRatioHoldsWhenScaled(t *testing.T) {
 	q := newQueue(2000)
 	h := newHarness(t, 0, 0)
 	for i := range 500 {
-		require.True(t, q.enqueue(prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "six"), normal, 600), false))
-		require.True(t, q.enqueue(prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "four"), normal, 400), false))
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "six"), normal, 600))
+		mustEnqueue(t, q, prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "four"), normal, 400))
 	}
 
 	counts := map[string]int{}
@@ -199,8 +207,8 @@ func TestQueue_FractionalWeight(t *testing.T) {
 	q := newQueue(1000)
 	h := newHarness(t, 0, 0)
 	for i := range 300 {
-		require.True(t, q.enqueue(prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "half"), normal, 0.5), false))
-		require.True(t, q.enqueue(h.trigger("b::"+strconv.Itoa(i)+"::0", "one"), false))
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "half"), normal, 0.5))
+		mustEnqueue(t, q, h.trigger("b::"+strconv.Itoa(i)+"::0", "one"))
 	}
 
 	counts := map[string]int{}
@@ -254,8 +262,8 @@ func TestQueue_RebaseNotBeforeThreshold(t *testing.T) {
 	t.Parallel()
 	q := newQueue(100)
 	h := newHarness(t, 0, 0)
-	require.True(t, q.enqueue(h.trigger("a::1::0", "a"), false))
-	require.True(t, q.enqueue(h.trigger("a::2::0", "a"), false))
+	mustEnqueue(t, q, h.trigger("a::1::0", "a"))
+	mustEnqueue(t, q, h.trigger("a::2::0", "a"))
 	lv := &q.levels[levelOf(h.trigger("x::1::0", "a"))]
 	lv.names["a"].dispatchesPerWeight = rebaseAt - 2*oneDispatch
 	lv.startAt = rebaseAt - 2*oneDispatch
@@ -271,7 +279,7 @@ func TestQueue_RebaseThenReturningNameStartsLow(t *testing.T) {
 	q := newQueue(100)
 	h := newHarness(t, 0, 0)
 	for i := range 3 {
-		require.True(t, q.enqueue(h.trigger("s::"+strconv.Itoa(i)+"::0", "stayer"), false))
+		mustEnqueue(t, q, h.trigger("s::"+strconv.Itoa(i)+"::0", "stayer"))
 	}
 	lv := &q.levels[levelOf(h.trigger("x::1::0", "stayer"))]
 	lv.names["stayer"].dispatchesPerWeight = rebaseAt - 1
@@ -284,8 +292,8 @@ func TestQueue_RebaseThenReturningNameStartsLow(t *testing.T) {
 	// A name that arrives now starts at the rebased startAt, not the old
 	// huge value, so it is served in turn with the stayer rather than
 	// starving it or being starved.
-	require.True(t, q.enqueue(h.trigger("n::1::0", "newcomer"), false))
-	assert.Equal(t, lv.startAt, lv.names["newcomer"].dispatchesPerWeight)
+	mustEnqueue(t, q, h.trigger("n::1::0", "newcomer"))
+	assert.Equal(t, lv.names["stayer"].dispatchesPerWeight, lv.names["newcomer"].dispatchesPerWeight)
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
 	}
@@ -298,10 +306,10 @@ func TestQueue_RebaseKeepsOrder(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	ahead := prioritized(h.trigger("a::1::0", "ahead"), normal, 1)
 	behind := prioritized(h.trigger("b::1::0", "behind"), normal, 1)
-	require.True(t, q.enqueue(ahead, false))
-	require.True(t, q.enqueue(behind, false))
-	require.True(t, q.enqueue(h.trigger("a::2::0", "ahead"), false))
-	require.True(t, q.enqueue(h.trigger("b::2::0", "behind"), false))
+	mustEnqueue(t, q, ahead)
+	mustEnqueue(t, q, behind)
+	mustEnqueue(t, q, h.trigger("a::2::0", "ahead"))
+	mustEnqueue(t, q, h.trigger("b::2::0", "behind"))
 
 	lv := &q.levels[levelOf(ahead)]
 	lv.names["ahead"].dispatchesPerWeight = rebaseAt - 1
@@ -321,14 +329,14 @@ func TestQueue_ReturningNameEarnsNothing(t *testing.T) {
 	q := newQueue(1000)
 	h := newHarness(t, 0, 0)
 	for i := range 200 {
-		require.True(t, q.enqueue(prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "backlog"), normal, 3), false))
+		mustEnqueue(t, q, prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "backlog"), normal, 3))
 	}
 
 	// A name that empties and re-enters after every delivery still gets 1 in 4.
 	backlogServed := 0
 	for i := range 20 {
 		next := prioritized(h.trigger("t::"+strconv.Itoa(i)+"::0", "trickle"), normal, 1)
-		require.True(t, q.enqueue(next, false))
+		mustEnqueue(t, q, next)
 		for {
 			var served *loops.TriggerRequest
 			require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
@@ -349,7 +357,7 @@ func TestQueue_HeavyReturningNameKeepsItsShare(t *testing.T) {
 	q := newQueue(1000)
 	h := newHarness(t, 0, 0)
 	for i := range 400 {
-		require.True(t, q.enqueue(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), false))
+		mustEnqueue(t, q, h.trigger("l::"+strconv.Itoa(i)+"::0", "light"))
 	}
 
 	// A weight 3 name that always has exactly one trigger waiting, sent as
@@ -357,7 +365,7 @@ func TestQueue_HeavyReturningNameKeepsItsShare(t *testing.T) {
 	counts := map[string]int{}
 	next := 0
 	enqueueHeavy := func() {
-		require.True(t, q.enqueue(prioritized(h.trigger("h::"+strconv.Itoa(next)+"::0", "heavy"), normal, 3), false))
+		mustEnqueue(t, q, prioritized(h.trigger("h::"+strconv.Itoa(next)+"::0", "heavy"), normal, 3))
 		next++
 	}
 	enqueueHeavy()
@@ -380,9 +388,9 @@ func TestQueue_LongGoneNameStartsLikeNew(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	lv := &q.levels[2]
 	for i := range 20 {
-		require.True(t, q.enqueue(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), false))
+		mustEnqueue(t, q, h.trigger("l::"+strconv.Itoa(i)+"::0", "light"))
 	}
-	require.True(t, q.enqueue(prioritized(h.trigger("h::0::0", "heavy"), normal, 3), false))
+	mustEnqueue(t, q, prioritized(h.trigger("h::0::0", "heavy"), normal, 3))
 
 	// Serve heavy once; its queue is now empty but its count is kept. One
 	// weight 1 dispatch is a full round, so one more light serve moves the
@@ -400,8 +408,8 @@ func TestQueue_LongGoneNameStartsLikeNew(t *testing.T) {
 	require.Equal(t, "light", served())
 	assert.NotContains(t, lv.names, "heavy", "a round later it is forgotten")
 
-	require.True(t, q.enqueue(prioritized(h.trigger("h::1::0", "heavy"), normal, 3), false))
-	assert.Equal(t, lv.startAt, lv.names["heavy"].dispatchesPerWeight, "and comes back like a new name")
+	mustEnqueue(t, q, prioritized(h.trigger("h::1::0", "heavy"), normal, 3))
+	assert.Equal(t, lv.names["light"].dispatchesPerWeight, lv.names["heavy"].dispatchesPerWeight, "and comes back like a new name, level with the name waiting")
 }
 
 func TestQueue_SkippedNameIsCharged(t *testing.T) {
@@ -410,7 +418,7 @@ func TestQueue_SkippedNameIsCharged(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	for i := range 400 {
 		for _, name := range []string{"x", "y", "z"} {
-			require.True(t, q.enqueue(h.trigger(name+"::"+strconv.Itoa(i)+"::0", name), false))
+			mustEnqueue(t, q, h.trigger(name+"::"+strconv.Itoa(i)+"::0", name))
 		}
 	}
 
@@ -446,7 +454,7 @@ func TestQueue_InstancesRotateWithinAName(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	a1, a2, b1 := h.trigger("a::1::0", "act"), h.trigger("a::2::0", "act"), h.trigger("b::1::0", "act")
 	for _, r := range []*loops.TriggerRequest{a1, a2, b1} {
-		require.True(t, q.enqueue(r, false))
+		mustEnqueue(t, q, r)
 	}
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
@@ -460,8 +468,8 @@ func TestQueue_DrainAll(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	n := h.trigger("wf::1::0", "act")
 	c := prioritized(h.trigger("wf::2::0", "act"), critical, 1)
-	require.True(t, q.enqueue(n, false))
-	require.True(t, q.enqueue(c, false))
+	mustEnqueue(t, q, n)
+	mustEnqueue(t, q, c)
 	var drained []*loops.TriggerRequest
 	q.drainAll(func(r *loops.TriggerRequest) { drained = append(drained, r) })
 	assert.Equal(t, []*loops.TriggerRequest{c, n}, drained)
@@ -473,10 +481,111 @@ func TestQueue_Bound(t *testing.T) {
 	t.Parallel()
 	q := newQueue(1)
 	h := newHarness(t, 0, 0)
-	require.True(t, q.enqueue(h.trigger("wf::1::0", "act"), false))
-	assert.False(t, q.enqueue(h.trigger("wf::2::0", "act"), false), "a full queue refuses a new trigger")
-	assert.True(t, q.enqueue(h.trigger("wf::3::0", "act"), true), "an admitted trigger parks past the bound")
+	mustEnqueue(t, q, h.trigger("wf::1::0", "act"))
+	_, ok := q.enqueue(h.trigger("wf::2::0", "act"), false)
+	assert.False(t, ok, "a full queue refuses a new trigger of the same level")
+	evicted, ok := q.enqueue(h.trigger("wf::3::0", "act"), true)
+	assert.True(t, ok, "an admitted trigger parks past the bound")
+	assert.Nil(t, evicted)
 	assert.Equal(t, 2, q.len())
+}
+
+func TestQueue_HigherLevelEvictsNewestOfLowest(t *testing.T) {
+	t.Parallel()
+	q := newQueue(3)
+	h := newHarness(t, 0, 0)
+	bg1 := prioritized(h.trigger("b::1::0", "bg"), background, 1)
+	bg2 := prioritized(h.trigger("b::2::0", "bg"), background, 1)
+	lo := prioritized(h.trigger("l::1::0", "lo"), low, 1)
+	for _, r := range []*loops.TriggerRequest{bg1, lo, bg2} {
+		mustEnqueue(t, q, r)
+	}
+
+	// Full of low and background: a critical trigger evicts the newest
+	// background one, not the low one and not the oldest.
+	c := prioritized(h.trigger("c::1::0", "c"), critical, 1)
+	evicted, ok := q.enqueue(c, false)
+	require.True(t, ok)
+	assert.Same(t, bg2, evicted)
+	assert.Equal(t, 3, q.len())
+
+	// A background trigger is refused while background is the lowest waiting.
+	_, ok = q.enqueue(prioritized(h.trigger("b::3::0", "bg"), background, 1), false)
+	assert.False(t, ok)
+
+	// Once no background is left, low is the lowest and a normal one evicts it.
+	evicted, ok = q.enqueue(prioritized(h.trigger("n::1::0", "n"), normal, 1), false)
+	require.True(t, ok)
+	assert.Same(t, bg1, evicted)
+	evicted, ok = q.enqueue(prioritized(h.trigger("n::2::0", "n"), normal, 1), false)
+	require.True(t, ok)
+	assert.Same(t, lo, evicted)
+	_, ok = q.enqueue(prioritized(h.trigger("n::3::0", "n"), normal, 1), false)
+	assert.False(t, ok, "normal cannot evict normal")
+
+	var order []*loops.TriggerRequest
+	for q.tryDispatchOne(accept(&order)) {
+	}
+	assert.Equal(t, []string{"c", "n", "n"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2])})
+	assert.Equal(t, 0, q.len())
+}
+
+func TestQueue_NewNameStartsAtTheFloor(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100000)
+	h := newHarness(t, 0, 0)
+	for i := range 5000 {
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "A"), normal, 1))
+	}
+	mustEnqueue(t, q, prioritized(h.trigger("l::0::0", "L"), normal, 0.001))
+
+	// Serve A, then the one L trigger, which moves the highest count a
+	// thousand rounds ahead of A.
+	served := func() string {
+		var name string
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool { name = nameOf(r); return true }))
+		return name
+	}
+	require.Equal(t, "A", served())
+	require.Equal(t, "L", served())
+
+	// A new weight 1 name starts level with A, not with L, so the two
+	// alternate from the start.
+	for i := range 3000 {
+		mustEnqueue(t, q, prioritized(h.trigger("c::"+strconv.Itoa(i)+"::0", "C"), normal, 1))
+	}
+	counts := map[string]int{}
+	for range 200 {
+		counts[served()]++
+	}
+	assert.InDelta(t, 100, counts["A"], 1)
+	assert.InDelta(t, 100, counts["C"], 1)
+}
+
+func TestQueue_BlockedHeavyNameKeepsItsShare(t *testing.T) {
+	t.Parallel()
+	q := newQueue(2000)
+	h := newHarness(t, 0, 0)
+	for i := range 500 {
+		mustEnqueue(t, q, prioritized(h.trigger("h::"+strconv.Itoa(i)+"::0", "heavy"), normal, 3))
+		mustEnqueue(t, q, h.trigger("l::"+strconv.Itoa(i)+"::0", "light"))
+	}
+
+	// Heavy's own gate is full on every 4th dispatch. Those are the only
+	// turns light has to get, so heavy still gets 3 in 4.
+	counts := map[string]int{}
+	for i := range 400 {
+		blocked := i%4 == 3
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			if blocked && nameOf(r) == "heavy" {
+				return false
+			}
+			counts[nameOf(r)]++
+			return true
+		}))
+	}
+	assert.InDelta(t, 300, counts["heavy"], 3)
+	assert.InDelta(t, 100, counts["light"], 3)
 }
 
 func TestQueue_Remove(t *testing.T) {
@@ -486,7 +595,7 @@ func TestQueue_Remove(t *testing.T) {
 	n1, n2 := h.trigger("wf::1::0", "act"), h.trigger("wf::2::0", "act")
 	c := prioritized(h.trigger("wf::3::0", "act"), critical, 1)
 	for _, r := range []*loops.TriggerRequest{n1, n2, c} {
-		require.True(t, q.enqueue(r, false))
+		mustEnqueue(t, q, r)
 	}
 	assert.Nil(t, q.remove(key("missing::1::0")))
 	assert.Same(t, n1, q.remove(key("wf::1::0")))

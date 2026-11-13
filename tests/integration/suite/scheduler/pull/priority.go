@@ -66,7 +66,9 @@ func (p *priority) Run(t *testing.T, ctx context.Context) {
 	schedule("high", schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH)
 	schedule("critical", schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL)
 
-	stream.NoRecv(time.Second * 2)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, 5.0, p.scheduler.Metrics(t, ctx).SumWithLabels("dapr_scheduler_workflow_activity_backlog", "app_id:"+appID), 0)
+	}, time.Second*20, time.Millisecond*10)
 
 	for _, want := range []string{"critical", "high", "unset", "low", "background"} {
 		stream.PullSlots(actorType, 1)

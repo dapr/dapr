@@ -39,8 +39,10 @@ func validatePriority(meta *schedulerv1pb.JobMetadata) error {
 	if l := meta.GetPriorityLevel(); l < schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED || l > schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND {
 		return status.Errorf(codes.InvalidArgument, "priority_level %d is not a known level", l)
 	}
-	if w := meta.GetFairnessWeight(); w != 0 && !(w >= pull.MinFairnessWeight && w <= pull.MaxFairnessWeight) {
-		return status.Errorf(codes.InvalidArgument, "fairness_weight %g must be between %g and %g", w, float32(pull.MinFairnessWeight), float32(pull.MaxFairnessWeight))
+	if meta != nil && meta.FairnessWeight != nil {
+		if w := meta.GetFairnessWeight(); !(w >= pull.MinFairnessWeight && w <= pull.MaxFairnessWeight) {
+			return status.Errorf(codes.InvalidArgument, "fairness_weight %g must be between %g and %g", w, float32(pull.MinFairnessWeight), float32(pull.MaxFairnessWeight))
+		}
 	}
 	return nil
 }

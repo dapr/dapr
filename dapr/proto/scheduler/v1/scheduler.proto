@@ -119,13 +119,14 @@ message JobMetadata {
   // slots for the actor type, routes the trigger as a regular actor reminder.
   optional bool pull = 5;
 
-  // priority_level orders pull-dispatched triggers waiting for a free slot:
-  // a higher level is always delivered first. Unset means NORMAL.
+  // priority_level orders pull-dispatched triggers waiting for a free slot on
+  // the same scheduler instance: a higher level is delivered first. Unset
+  // means NORMAL.
   optional PriorityLevel priority_level = 6;
 
   // fairness_weight shares deliveries between the names (concurrency_key)
-  // waiting at the same level in proportion to their weights, 0.001 to 1000.
-  // Unset means 1.
+  // waiting at the same level on the same scheduler instance, in proportion
+  // to their weights, 0.001 to 1000. Unset means 1.
   optional float fairness_weight = 7;
 }
 
