@@ -99,6 +99,7 @@ func (w *workerdisconnect) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), started[0].Load())
 	}, time.Second*20, time.Millisecond*10)
+	w.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-workerdisconnect")
 	time.Sleep(time.Second)
 	assert.Equal(t, int64(0), started[1].Load(), "a replica without a worker must not receive pull deliveries")
 

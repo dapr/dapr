@@ -112,6 +112,8 @@ func (p *pername) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), cheap.Load())
 	}, time.Second*20, time.Millisecond*10)
 
+	p.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-pername", "activity_name:Transcode")
+
 	time.Sleep(time.Second)
 	assert.Equal(t, int64(1), transcoding.Load())
 

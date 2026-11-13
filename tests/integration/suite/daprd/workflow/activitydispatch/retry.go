@@ -67,6 +67,7 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	var attempts atomic.Int64
+	releaseCh := make(chan struct{})
 	for i := range 2 {
 		r.workflow.RegistryN(i).AddWorkflowN("retrying", func(ctx *task.WorkflowContext) (any, error) {
 			var out string
@@ -83,6 +84,7 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 			if attempts.Add(1) < 3 {
 				return nil, errors.New("not yet")
 			}
+			<-releaseCh
 			return "done", nil
 		})
 	}
@@ -92,6 +94,15 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 
 	id, err := client.ScheduleNewWorkflow(ctx, "retrying", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
+
+	// The third attempt is held: it was delivered by pull dispatch, like the
+	// two that failed before it.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(3), attempts.Load())
+	}, time.Second*20, time.Millisecond*10)
+	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-retry")
+	close(releaseCh)
+
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())

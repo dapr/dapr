@@ -101,12 +101,14 @@ func (r *redeliver) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*20, time.Millisecond*10)
 	survivor := 1 - victim
+	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-redeliver")
 
 	r.workflow.DaprN(victim).Kill(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), started[survivor].Load(), "the scheduler must redeliver the lost activity to the surviving sidecar")
 	}, time.Second*60, time.Millisecond*10)
+	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-redeliver")
 
 	close(release[survivor])
 	_, err = clients[survivor].WaitForWorkflowCompletion(ctx, id)

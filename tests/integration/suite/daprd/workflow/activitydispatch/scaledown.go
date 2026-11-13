@@ -123,6 +123,7 @@ func (s *scaledown) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 	host := int(scheduledOn.Load())
 	idle := 1 - host
+	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-scaledown")
 
 	// Remove the replica that is not running the activity, and wait for the
 	// scheduler to drop its streams: a delivery that races the kill waits
@@ -142,6 +143,7 @@ func (s *scaledown) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, count(host, "second"), 1)
 	}, time.Second*20, time.Millisecond*10)
 	assert.Equal(t, 0, count(idle, "second"), "the removed replica must not receive pull deliveries")
+	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-scaledown")
 
 	close(release["second"])
 	_, err = clients[host].WaitForWorkflowCompletion(ctx, id)
