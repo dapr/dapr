@@ -104,6 +104,7 @@ spec:
                             type: string
                           minItems: 1
                           type: array
+                          x-kubernetes-list-type: set
                         name:
                           description: name is the name of the state store component.
                           minLength: 1
@@ -113,6 +114,9 @@ spec:
                       - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                 type: object
               api:
                 description: APISpec describes the configuration for Dapr APIs.

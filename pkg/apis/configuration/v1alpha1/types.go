@@ -143,6 +143,8 @@ type ActorsSpec struct {
 	// actor state store. A bound actor type uses only its bound store and
 	// never falls back to the default one.
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty"`
 }
 
@@ -154,6 +156,7 @@ type ActorStateStoreBinding struct {
 	// actorTypes are the actor types whose state is kept in this store.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:items:MinLength=1
+	// +listType=set
 	ActorTypes []string `json:"actorTypes"`
 }
 
