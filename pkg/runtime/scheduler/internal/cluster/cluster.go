@@ -158,6 +158,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 		pullActorType = c.wfengine.ActivityActorType()
 	} else {
 		pull = nil
+		if !c.supportsPullSlots && c.workflowSpec.HasPullActivityDispatch() {
+			log.Warnf("Pull activity dispatch is configured but not every scheduler in %v supports it: activities use regular dispatch until they all do", c.addresses)
+		}
 	}
 
 	// Accept engine to be nil, and ignore the disabled error.

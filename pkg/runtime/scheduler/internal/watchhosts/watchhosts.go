@@ -174,7 +174,10 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 	// closes the stream on the messages it adds.
 	supportsPull := len(resp.GetHosts()) > 0
 	for _, host := range resp.GetHosts() {
-		supportsPull = supportsPull && host.GetSupportsPullSlots()
+		if !host.GetSupportsPullSlots() {
+			supportsPull = false
+			log.Debugf("Scheduler host %s does not support pull dispatch", host.GetAddress())
+		}
 		gotAddrs = append(gotAddrs, host.GetAddress())
 		if host.GetLeader() {
 			leader = host.GetAddress()

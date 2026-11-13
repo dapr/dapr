@@ -28,7 +28,6 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 )
@@ -146,12 +145,12 @@ func Test_handleJob_markedDeliveryExecutesLocally(t *testing.T) {
 	}
 }
 
-func Test_handleJob_pullToUnhostedType(t *testing.T) {
+func Test_handleJob_pullCreateFailureIsNotARefusal(t *testing.T) {
 	t.Parallel()
 
 	const activityType = "dapr.internal.default.myapp.activity"
 	actors := routerfake.New().WithCallReminderFn(func(context.Context, *actorapi.Reminder) error {
-		return backoff.Permanent(fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, activityType))
+		return backoff.Permanent(fmt.Errorf("%w: actor hosting is suspended", actorerrors.ErrCreatingActor))
 	})
 	s := &streamer{actors: actors, wfengine: wfenginefake.New(), pull: NewPull(t.Context()), pullActorType: activityType}
 	job := func(pull bool) *schedulerv1pb.WatchJobsResponse {
@@ -167,8 +166,8 @@ func Test_handleJob_pullToUnhostedType(t *testing.T) {
 			},
 		}
 	}
-	assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY, s.handleJob(t.Context(), job(true)),
-		"the scheduler picks another sidecar for a pull delivery this host cannot run")
+	assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_FAILED, s.handleJob(t.Context(), job(true)),
+		"only ErrNoCapacity is a refusal")
 	assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_FAILED, s.handleJob(t.Context(), job(false)))
 }
 
@@ -176,7 +175,7 @@ func Test_handleJob_noCapacity(t *testing.T) {
 	t.Parallel()
 
 	actors := routerfake.New().WithCallReminderFn(func(context.Context, *actorapi.Reminder) error {
-		return backoff.Permanent(activity.ErrNoCapacity)
+		return backoff.Permanent(actorerrors.ErrNoCapacity)
 	})
 	s := &streamer{actors: actors, wfengine: wfenginefake.New()}
 	job := &schedulerv1pb.WatchJobsResponse{

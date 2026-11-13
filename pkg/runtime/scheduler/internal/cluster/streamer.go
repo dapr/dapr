@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/router"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -266,12 +265,8 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
-		if errors.Is(err, activity.ErrNoCapacity) {
-			return schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY
-		}
-		// A pull delivery to a host that no longer hosts the actor type, such
-		// as one whose worker just left: the scheduler picks another sidecar.
-		if s.isPull(job) && errors.Is(err, actorerrors.ErrCreatingActor) {
+		if errors.Is(err, actorerrors.ErrNoCapacity) {
+			log.Debugf("Refused pull reminder %s for actor %s: %s", job.GetName(), t.Actor.GetId(), err)
 			return schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY
 		}
 
@@ -377,7 +372,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		SourceAppID:    job.GetMetadata().GetAppId(),
 		ExecuteLocally: s.isPull(job),
 	})
-	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+	// A refused pull delivery ran nothing, so it is not a failed fire.
+	if !errors.Is(err, actorerrors.ErrNoCapacity) {
+		diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+	}
 
 	if err != nil {
 		return err

@@ -45,6 +45,10 @@ type pullJobKey struct {
 	addr, actorType, actorID, name string
 }
 
+func (k pullJobKey) reminder() string {
+	return k.actorType + "/" + k.actorID + "/" + k.name
+}
+
 type pullJob struct {
 	key pullJobKey
 	s   *streamer
@@ -157,6 +161,7 @@ func (p *Pull) finish(job *pullJob, status schedulerv1pb.WatchJobsRequestResultS
 		case current && (p.retained == nil || p.retained[job.key.addr]):
 			job.status = &status
 		case current:
+			log.Infof("Dropping the result of pull reminder %s: scheduler %s is no longer retained, it will deliver the reminder again", job.key.reminder(), job.key.addr)
 			delete(p.jobs, job.key)
 		}
 		p.lock.Unlock()
@@ -227,6 +232,7 @@ func (p *Pull) Retain(addrs []string) {
 	}
 	for key, job := range p.jobs {
 		if job.status != nil && !p.retained[key.addr] {
+			log.Infof("Dropping the held result of pull reminder %s: scheduler %s left, it will deliver the reminder again", key.reminder(), key.addr)
 			delete(p.jobs, key)
 		}
 	}

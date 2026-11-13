@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
@@ -275,7 +276,7 @@ func Test_claimStaleEviction(t *testing.T) {
 }
 
 // Test_executeActivity_pullNoCapacity pins that a pull delivery the engine
-// refuses for lack of a slot surfaces ErrNoCapacity unwrapped, so the
+// refuses for lack of a slot surfaces actorerrors.ErrNoCapacity unwrapped, so the
 // scheduler stream can queue it again, and leaves nothing cached: the next
 // delivery executes.
 func Test_executeActivity_followerOfRefusedPullOwnerRuns(t *testing.T) {
@@ -286,7 +287,7 @@ func Test_executeActivity_followerOfRefusedPullOwnerRuns(t *testing.T) {
 		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
 			close(entered)
 			<-refuse
-			return ErrNoCapacity
+			return actorerrors.ErrNoCapacity
 		}
 		scheduled <- wi
 		return nil
@@ -309,7 +310,7 @@ func Test_executeActivity_followerOfRefusedPullOwnerRuns(t *testing.T) {
 	}()
 	time.Sleep(100 * time.Millisecond)
 	close(refuse)
-	require.ErrorIs(t, <-ownerErr, ErrNoCapacity)
+	require.ErrorIs(t, <-ownerErr, actorerrors.ErrNoCapacity)
 
 	// The follower runs the activity itself instead of reporting the
 	// owner's refusal.
@@ -327,7 +328,7 @@ func Test_executeActivity_pullNoCapacity(t *testing.T) {
 	f, scheduled := newExecHarness(t)
 	f.scheduler = func(_ context.Context, wi *backend.ActivityWorkItem) error {
 		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
-			return ErrNoCapacity
+			return actorerrors.ErrNoCapacity
 		}
 		scheduled <- wi
 		return nil
@@ -338,8 +339,8 @@ func Test_executeActivity_pullNoCapacity(t *testing.T) {
 	pullReminder.ExecuteLocally = true
 
 	err := a.executeActivity(t.Context(), pullReminder, testInvocation())
-	require.ErrorIs(t, err, ErrNoCapacity)
-	assert.Equal(t, ErrNoCapacity, err, "returned unwrapped, not as a recoverable error")
+	require.ErrorIs(t, err, actorerrors.ErrNoCapacity)
+	assert.Equal(t, actorerrors.ErrNoCapacity, err, "returned unwrapped, not as a recoverable error")
 
 	done := make(chan error, 1)
 	go func() {

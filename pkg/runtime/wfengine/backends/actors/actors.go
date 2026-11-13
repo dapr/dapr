@@ -403,12 +403,12 @@ func (abe *Actors) factoryOptions() workflow.Options {
 				if pull {
 					// Nothing here can run it: the scheduler picks another
 					// sidecar instead of failing the trigger.
-					return activity.ErrNoCapacity
+					return actorerrors.ErrNoCapacity
 				}
 				return err
 			}
 			if !abe.reserveActivity(pull) {
-				return activity.ErrNoCapacity
+				return actorerrors.ErrNoCapacity
 			}
 
 			select {
