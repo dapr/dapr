@@ -53,8 +53,11 @@ type attemptsCtxKey struct{}
 
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
-	log                       logger.Logger
-	name                      string
+	log  logger.Logger
+	name string
+	// Names of the timeout and retry policies in the Resiliency spec, for log lines.
+	timeoutName               string
+	retryName                 string
 	t                         time.Duration
 	r                         *Retry
 	cb                        *breaker.CircuitBreaker
@@ -89,6 +92,25 @@ func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *Ret
 		r:    r,
 		cb:   cb,
 	}
+}
+
+// policyName returns the configured policy name, falling back to the policy
+// definition's name for policies built without one.
+func (p PolicyDefinition) policyName(name string) string {
+	if name != "" {
+		return name
+	}
+	return p.name
+}
+
+// logTimeout logs a timeout at warning level the first time it fires for an
+// operation, and at debug level after that, to keep log volume down.
+func (p PolicyDefinition) logTimeout(first bool) {
+	logf := p.log.Debugf
+	if first {
+		logf = p.log.Warnf
+	}
+	logf("Resiliency timeout (%s): operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -214,6 +236,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 	var zero T
 	timeoutMetricsActivated := atomic.Bool{}
+	timeoutLogged := atomic.Bool{}
 	return func(oper Operation[T]) (T, error) {
 		operation := oper
 		if def.t > 0 {
@@ -247,6 +270,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 						if opts.Disposer != nil && !isZero(v.res) {
 							opts.Disposer(v.res)
 						}
+						def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
 						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 							def.addTimeoutActivatedMetric()
 						}
@@ -269,6 +293,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 							opts.Disposer(v.res)
 						}
 					}
+					def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
@@ -321,7 +346,9 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 		// Use retry/back off
 		b := def.r.NewBackOffWithContext(ctx)
 		attempts := atomic.Int32{}
-		return retry.NotifyRecoverWithData(
+		retried := atomic.Bool{}
+		retryName := def.policyName(def.retryName)
+		res, err := backoff.RetryNotifyWithData(
 			func() (T, error) {
 				attempt := attempts.Add(1)
 				opCtx := context.WithValue(ctx, attemptsCtxKey{}, attempt)
@@ -342,17 +369,25 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				return rRes, rErr
 			},
 			b,
+			// Called before every retry. The first retry of an operation is logged
+			// at warning level and the rest at debug level, to keep log volume down.
 			func(opErr error, d time.Duration) {
-				if def.addRetryActivatedMetric != nil {
-					def.addRetryActivatedMetric()
+				logf := def.log.Debugf
+				if retried.CompareAndSwap(false, true) {
+					logf = def.log.Warnf
+					// The activation metric counts operations that needed a retry, not retries.
+					if def.addRetryActivatedMetric != nil {
+						def.addRetryActivatedMetric()
+					}
 				}
-				def.log.Warnf("Error processing operation %s. Retrying in %v…", def.name, d)
+				logf("Resiliency retry (%s): error processing operation %s. Retrying in %v…", retryName, def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
-			func() {
-				def.log.Infof("Recovered processing operation %s after %d attempts", def.name, attempts.Load())
-			},
 		)
+		if err == nil && retried.Load() {
+			def.log.Infof("Resiliency retry (%s): recovered processing operation %s after %d attempts", retryName, def.name, attempts.Load())
+		}
+		return res, err
 	}
 }
 
