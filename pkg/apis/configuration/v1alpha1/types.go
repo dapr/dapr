@@ -418,9 +418,8 @@ type WorkflowMetrics struct {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-	// TODO: [MetricsCardinality] Change default in 1.15+
+	// If true (default), metrics for the HTTP server are collected with increased cardinality.
+	// Set to false, or use pathMatching, to reduce cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 	// +optional

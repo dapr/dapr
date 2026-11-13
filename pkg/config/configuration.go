@@ -630,9 +630,7 @@ func (m MetricSpec) GetEnabled() bool {
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-		// TODO: [MetricsCardinality] Change default in 1.15+
-		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		log.Warn("'spec.metrics.http.increasedCardinality' is not set and defaults to 'true'. Set it to 'false' or configure 'pathMatching' to reduce the cardinality of HTTP metrics")
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality
@@ -713,9 +711,8 @@ func (m MetricSpec) GetRecordErrorCodes() bool {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-	// TODO: [MetricsCardinality] Change default in 1.15+
+	// If true (default), metrics for the HTTP server are collected with increased cardinality.
+	// Set to false, or use pathMatching, to reduce cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	// +optional
