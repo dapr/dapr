@@ -14,6 +14,8 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
@@ -217,4 +219,113 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 
 	t.Run("without user agent", runTest(""))
 	t.Run("with user agent", runTest("daprtest/1"))
+}
+
+func TestGrpcAPILoggingTraceContext(t *testing.T) {
+	logDest := &bytes.Buffer{}
+	infoLog := logger.NewLogger("test-api-logging-trace")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
+
+	const (
+		traceID   = "4bf92f3577b34da6a3ce929d0e0e4736"
+		parentSID = "00f067aa0ba902b7"
+	)
+
+	// The provider is deliberately not installed with otel.SetTracerProvider:
+	// diag's package level tracer resolves the global provider once, so the
+	// first call would change what every later test in this package sees.
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())))
+	t.Cleanup(func() {
+		require.NoError(t, tp.Shutdown(context.Background()))
+	})
+
+	s := &server{infoLogger: infoLog}
+	logInterceptor, _ := s.getGRPCAPILoggingMiddlewares()
+	info := &grpcGo.UnaryServerInfo{FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState"}
+	handler := func(ctx context.Context, req any) (any, error) { return nil, nil }
+
+	remoteParent := func(sampled bool) trace.SpanContext {
+		tid, err := trace.TraceIDFromHex(traceID)
+		require.NoError(t, err)
+		sid, err := trace.SpanIDFromHex(parentSID)
+		require.NoError(t, err)
+		cfg := trace.SpanContextConfig{TraceID: tid, SpanID: sid}
+		if sampled {
+			cfg.TraceFlags = trace.FlagsSampled
+		}
+		return trace.NewSpanContext(cfg)
+	}
+
+	// daprdSpan starts a span the way the tracing interceptor does, from the
+	// given inbound span context.
+	daprdSpan := func(parent trace.SpanContext) func(context.Context) context.Context {
+		return func(ctx context.Context) context.Context {
+			ctx, span := tp.Tracer("test").Start(trace.ContextWithRemoteSpanContext(ctx, parent), "test")
+			// Ending the span does not change its span context, which is all
+			// the API logging interceptor reads.
+			span.End()
+			return ctx
+		}
+	}
+
+	for _, test := range []struct {
+		name     string
+		setSpan  func(context.Context) context.Context
+		expectID bool
+	}{
+		{
+			// The span daprd started is exported, so its IDs are logged.
+			name:     "sampled span started by daprd",
+			setSpan:  daprdSpan(remoteParent(true)),
+			expectID: true,
+		},
+		{
+			// ParentBased drops the span, so it is never exported.
+			name:    "unsampled span started by daprd",
+			setSpan: daprdSpan(remoteParent(false)),
+		},
+		{
+			// What the no-op tracer leaves in the context when no tracing
+			// exporter is configured: the caller's span, not one of daprd's.
+			name: "remote span context only",
+			setSpan: func(ctx context.Context) context.Context {
+				return trace.ContextWithRemoteSpanContext(ctx, remoteParent(true))
+			},
+		},
+		{
+			name: "no span",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.MD{})
+
+			logDest.Reset()
+			_, err := metadata.SetMetadataInContextUnary(ctx, nil, info, func(ctx context.Context, req any) (any, error) {
+				if test.setSpan != nil {
+					ctx = test.setSpan(ctx)
+				}
+				return logInterceptor(ctx, req, info, handler)
+			})
+			require.NoError(t, err)
+
+			logData := map[string]any{}
+			require.NoError(t, json.NewDecoder(logDest).Decode(&logData))
+			assert.Equal(t, "gRPC API Called", logData["msg"])
+
+			if !test.expectID {
+				assert.NotContains(t, logData, "trace_id")
+				assert.NotContains(t, logData, "span_id")
+				return
+			}
+
+			assert.Equal(t, traceID, logData["trace_id"])
+			spanID, ok := logData["span_id"].(string)
+			require.True(t, ok)
+			// The span daprd started, not the one the caller sent.
+			assert.NotEqual(t, parentSID, spanID)
+			assert.Regexp(t, "^[0-9a-f]{16}$", spanID)
+			assert.NotEqual(t, "0000000000000000", spanID)
+		})
+	}
 }

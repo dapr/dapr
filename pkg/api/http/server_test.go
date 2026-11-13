@@ -16,6 +16,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,10 +30,13 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -430,6 +434,145 @@ func TestAPILogging(t *testing.T) {
 
 	// Test obfuscate URLs
 	t.Run("obfuscate URL", runTest("daprtest/1", true))
+}
+
+func TestAPILoggingTraceContext(t *testing.T) {
+	// Replace the logger with a custom one for testing
+	prev := infoLog
+	logDest := &bytes.Buffer{}
+	infoLog = logger.NewLogger("test-api-logging-trace")
+	infoLog.EnableJSONOutput(true)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
+	t.Cleanup(func() {
+		infoLog = prev
+	})
+
+	endpoints := []endpoints.Endpoint{
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "state/{storeName}/{key}",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetState",
+			},
+		},
+	}
+
+	const (
+		path      = "/" + apiVersionV1 + "/state/mystate/mykey"
+		traceID   = "4bf92f3577b34da6a3ce929d0e0e4736"
+		parentSID = "00f067aa0ba902b7"
+	)
+
+	// The provider is deliberately not installed with otel.SetTracerProvider:
+	// diag's package level tracer resolves the global provider once, so the
+	// first call would change what every later test in this package sees.
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())))
+	t.Cleanup(func() {
+		require.NoError(t, tp.Shutdown(context.Background()))
+	})
+
+	remoteParent := func(sampled bool) trace.SpanContext {
+		cfg := trace.SpanContextConfig{
+			TraceID: trace.TraceID(mustHex(t, traceID)),
+			SpanID:  trace.SpanID(mustHex(t, parentSID)),
+		}
+		if sampled {
+			cfg.TraceFlags = trace.FlagsSampled
+		}
+		return trace.NewSpanContext(cfg)
+	}
+
+	// daprdSpan starts a span the way the tracing middleware does, from the
+	// given inbound span context.
+	daprdSpan := func(parent trace.SpanContext) func(*http.Request) {
+		return func(r *http.Request) {
+			ctx := trace.ContextWithRemoteSpanContext(r.Context(), parent)
+			_, span := tp.Tracer("test").Start(ctx, "test")
+			// Ending the span does not change its span context, which is all
+			// the API logging middleware reads.
+			defer span.End()
+			diagUtils.AddSpanToRequest(r, span)
+		}
+	}
+
+	for _, test := range []struct {
+		name     string
+		setSpan  func(*http.Request)
+		expectID bool
+	}{
+		{
+			// The span daprd started is exported, so its IDs are logged.
+			name:     "sampled span started by daprd",
+			setSpan:  daprdSpan(remoteParent(true)),
+			expectID: true,
+		},
+		{
+			// ParentBased drops the span, so it is never exported.
+			name:    "unsampled span started by daprd",
+			setSpan: daprdSpan(remoteParent(false)),
+		},
+		{
+			// What the no-op tracer leaves in the context when no tracing
+			// exporter is configured: the caller's span, not one of daprd's.
+			name: "remote span context only",
+			setSpan: func(r *http.Request) {
+				*r = *r.WithContext(trace.ContextWithRemoteSpanContext(r.Context(), remoteParent(true)))
+			},
+		},
+		{
+			name: "no span",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv := newServer()
+			srv.config.EnableAPILogging = true
+
+			router := chi.NewRouter()
+			srv.useContextSetup(router)
+			if test.setSpan != nil {
+				router.Use(func(next http.Handler) http.Handler {
+					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						test.setSpan(r)
+						next.ServeHTTP(w, r)
+					})
+				})
+			}
+			srv.useAPILogging(router)
+			srv.setupRoutes(router, endpoints)
+
+			logDest.Reset()
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+
+			logData := map[string]any{}
+			require.NoError(t, json.NewDecoder(logDest).Decode(&logData))
+			assert.Equal(t, "HTTP API Called", logData["msg"])
+
+			if !test.expectID {
+				assert.NotContains(t, logData, "trace_id")
+				assert.NotContains(t, logData, "span_id")
+				return
+			}
+
+			assert.Equal(t, traceID, logData["trace_id"])
+			spanID, ok := logData["span_id"].(string)
+			require.True(t, ok)
+			// The span daprd started, not the one the caller sent.
+			assert.NotEqual(t, parentSID, spanID)
+			assert.Regexp(t, "^[0-9a-f]{16}$", spanID)
+			assert.NotEqual(t, "0000000000000000", spanID)
+		})
+	}
+}
+
+// mustHex decodes a hex string into bytes, failing the test if it is not valid.
+func mustHex(t *testing.T, s string) []byte {
+	t.Helper()
+
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return b
 }
 
 func TestAPILoggingOmitHealthChecks(t *testing.T) {

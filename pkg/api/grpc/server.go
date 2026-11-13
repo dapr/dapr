@@ -417,13 +417,14 @@ func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, 
 }
 
 func (s *server) printAPILog(ctx context.Context, method string, duration time.Duration, code grpcCodes.Code) {
-	fields := make(map[string]any, 4)
+	fields := make(map[string]any, 6)
 	fields["method"] = method
 	if meta, ok := metadata.FromIncomingContext(ctx); ok {
 		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
 			fields["useragent"] = val[0]
 		}
 	}
+	diag.AddTraceLogFields(ctx, fields)
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
 	// TODO: fix types
