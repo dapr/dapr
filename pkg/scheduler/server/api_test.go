@@ -14,14 +14,19 @@ limitations under the License.
 package server
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 func Test_schedFPToCron(t *testing.T) {
@@ -226,4 +231,48 @@ func Test_cronFPToSched(t *testing.T) {
 			assert.Equal(t, test.exp, cronFPToSched(test.fp))
 		})
 	}
+}
+
+func Test_validatePriority(t *testing.T) {
+	meta := func(level schedulerv1pb.PriorityLevel, weight uint32) *schedulerv1pb.JobMetadata {
+		m := &schedulerv1pb.JobMetadata{}
+		if level != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
+			m.PriorityLevel = level.Enum()
+		}
+		if weight != 0 {
+			m.FairnessWeight = &weight
+		}
+		return m
+	}
+
+	require.NoError(t, validatePriority(nil))
+	require.NoError(t, validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, 0)))
+	for _, level := range []schedulerv1pb.PriorityLevel{
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_HIGH,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_LOW,
+		schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND,
+	} {
+		require.NoError(t, validatePriority(meta(level, 1)), level.String())
+	}
+	for _, weight := range []uint32{1, 2, 500, 1000} {
+		require.NoError(t, validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL, weight)))
+	}
+
+	for _, level := range []schedulerv1pb.PriorityLevel{-1, 6, 100} {
+		err := validatePriority(meta(level, 0))
+		require.Equal(t, codes.InvalidArgument, status.Code(err), level.String())
+		require.ErrorContains(t, err, "not a known level")
+	}
+	for _, weight := range []uint32{1001, 100000, math.MaxUint32} {
+		err := validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, weight))
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "%d", weight)
+		require.ErrorContains(t, err, "must be between 1 and 1000")
+	}
+
+	// An explicit 0 is set, so it is outside the range, unlike unset.
+	err := validatePriority(&schedulerv1pb.JobMetadata{FairnessWeight: new(uint32(0))})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "fairness_weight 0 must be between 1 and 1000")
 }
