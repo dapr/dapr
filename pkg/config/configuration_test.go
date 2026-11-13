@@ -14,6 +14,8 @@ limitations under the License.
 package config
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -27,10 +29,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
 )
 
@@ -1126,4 +1130,77 @@ spec:
 	require.True(t, c.Spec.WorkflowSpec.ActivityDispatchPull("Transcode"))
 	require.False(t, c.Spec.WorkflowSpec.ActivityDispatchPull("SendEmail"))
 	require.Equal(t, int32(5), *c.Spec.WorkflowSpec.ActivityConcurrencyLimits[0].MaxConcurrent)
+}
+
+type fakeConfigOperatorClient struct {
+	operatorv1pb.OperatorClient
+	config []byte
+}
+
+func (f *fakeConfigOperatorClient) GetConfiguration(context.Context, *operatorv1pb.GetConfigurationRequest, ...grpc.CallOption) (*operatorv1pb.GetConfigurationResponse, error) {
+	return &operatorv1pb.GetConfigurationResponse{Configuration: f.config}, nil
+}
+
+func TestDeprecatedMetricSpecWarning(t *testing.T) {
+	const warning = "'spec.metric' field in the Configuration is deprecated"
+
+	var buf bytes.Buffer
+	configLog.SetOutput(&buf)
+	t.Cleanup(func() { configLog.SetOutput(os.Stdout) })
+
+	t.Run("self-hosted", func(t *testing.T) {
+		tests := map[string]struct {
+			spec string
+			warn bool
+		}{
+			"no metrics config":       {spec: "  tracing:\n    samplingRate: \"1\"\n", warn: false},
+			"spec.metrics only":       {spec: "  metrics:\n    enabled: false\n", warn: false},
+			"spec.metric enabled":     {spec: "  metric:\n    enabled: true\n", warn: false},
+			"spec.metric disabled":    {spec: "  metric:\n    enabled: false\n", warn: true},
+			"spec.metric rules":       {spec: "  metric:\n    rules:\n    - name: foo\n", warn: true},
+			"spec.metric and metrics": {spec: "  metric:\n    http:\n      excludeVerbs: true\n  metrics:\n    enabled: true\n", warn: true},
+		}
+		for name, tc := range tests {
+			t.Run(name, func(t *testing.T) {
+				buf.Reset()
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, []byte("apiVersion: dapr.io/v1alpha1\nkind: Configuration\nmetadata:\n  name: c\nspec:\n"+tc.spec), 0o600))
+				_, err := LoadStandaloneConfiguration(path)
+				require.NoError(t, err)
+				if tc.warn {
+					assert.Contains(t, buf.String(), warning)
+				} else {
+					assert.NotContains(t, buf.String(), warning)
+				}
+			})
+		}
+	})
+
+	t.Run("kubernetes", func(t *testing.T) {
+		// The CRD defaults both spec.metric and spec.metrics to {enabled: true}.
+		tests := map[string]struct {
+			spec string
+			warn bool
+		}{
+			"CRD defaults only":    {spec: `{"metric":{"enabled":true},"metrics":{"enabled":true}}`, warn: false},
+			"spec.metrics set":     {spec: `{"metric":{"enabled":true},"metrics":{"enabled":false,"http":{"excludeVerbs":true}}}`, warn: false},
+			"spec.metric disabled": {spec: `{"metric":{"enabled":false},"metrics":{"enabled":true}}`, warn: true},
+			"spec.metric http":     {spec: `{"metric":{"enabled":true,"http":{"increasedCardinality":false}},"metrics":{"enabled":true}}`, warn: true},
+		}
+		for name, tc := range tests {
+			t.Run(name, func(t *testing.T) {
+				buf.Reset()
+				client := &fakeConfigOperatorClient{
+					config: []byte(`{"apiVersion":"dapr.io/v1alpha1","kind":"Configuration","metadata":{"name":"c"},"spec":` + tc.spec + `}`),
+				}
+				_, _, err := LoadKubernetesConfiguration("c", "default", client)
+				require.NoError(t, err)
+				if tc.warn {
+					assert.Contains(t, buf.String(), warning)
+				} else {
+					assert.NotContains(t, buf.String(), warning)
+				}
+			})
+		}
+	})
 }

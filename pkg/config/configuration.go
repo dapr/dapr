@@ -41,6 +41,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var configLog = logger.NewLogger("dapr.configuration")
+
 // Feature Flags section
 
 type Feature string
@@ -172,7 +174,7 @@ type ConfigurationSpec struct {
 	AppHTTPPipelineSpec *PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
 	TracingSpec         *TracingSpec        `json:"tracing,omitempty"         yaml:"tracing,omitempty"`
 	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty"            yaml:"mtls,omitempty"`
-	MetricSpec          *MetricSpec         `json:"metric,omitempty"          yaml:"metric,omitempty"`
+	MetricSpec          *MetricSpec         `json:"metric,omitempty"          yaml:"metric,omitempty"` // spec.metric is deprecated, use spec.metrics. Holds the merged result after loading.
 	MetricsSpec         *MetricSpec         `json:"metrics,omitempty"         yaml:"metrics,omitempty"`
 	Secrets             *SecretsSpec        `json:"secrets,omitempty"         yaml:"secrets,omitempty"`
 	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty"   yaml:"accessControl,omitempty"`
@@ -896,6 +898,7 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		return nil, err
 	}
 
+	conf.warnDeprecatedMetricSpec()
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
 	return conf, nil
@@ -935,6 +938,7 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 		return nil, nil, err
 	}
 
+	conf.warnDeprecatedMetricSpec()
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
 	return conf, &configResource, nil
@@ -1177,6 +1181,28 @@ func (c *Configuration) String() string {
 		return "Failed to marshal Configuration object to YAML: " + err.Error()
 	}
 	return enc
+}
+
+// warnDeprecatedMetricSpec logs a warning if spec.metric holds anything other
+// than the {enabled: true} default that Dapr and the Kubernetes CRD fill in.
+// It must run before sortMetricsSpec merges spec.metrics into spec.metric.
+func (c *Configuration) warnDeprecatedMetricSpec() {
+	if metricSpecSetBeyondDefault(c.Spec.MetricSpec) {
+		configLog.Warn("The 'spec.metric' field in the Configuration is deprecated and will be removed in a future release. Use 'spec.metrics' instead")
+	}
+}
+
+// metricSpecSetBeyondDefault returns true if m holds anything other than {enabled: true}.
+func metricSpecSetBeyondDefault(m *MetricSpec) bool {
+	if m == nil {
+		return false
+	}
+	return (m.Enabled != nil && !*m.Enabled) ||
+		m.RecordErrorCodes != nil ||
+		m.HTTP != nil ||
+		m.LatencyDistributionBuckets != nil ||
+		m.Workflow != nil ||
+		len(m.Rules) > 0
 }
 
 // Apply .metrics if set. If not, retain .metric.
