@@ -42,6 +42,7 @@ type Interface interface {
 	io.Closer
 
 	Types() []string
+	Registered() []string
 	ReminderTypes() []string
 	IsActorTypeHosted(actorType string) bool
 	GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error)
@@ -55,6 +56,7 @@ type Interface interface {
 	CompleteDrains(ctx context.Context, placed func(actorType string) bool)
 	HaltAll(ctx context.Context) error
 	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
+	HaltActorTypes(ctx context.Context, actorTypes ...string) error
 	Len() map[string]int
 	SuspendHosting(ctx context.Context) error
 	ResumeHosting()
@@ -193,6 +195,14 @@ func (t *table) typesLocked() []string {
 	return t.registeredLocked()
 }
 
+// Registered returns the registered actor types, less the draining ones.
+// Unlike Types, it includes them while hosting is suspended.
+func (t *table) Registered() []string {
+	t.flagsLock.Lock()
+	defer t.flagsLock.Unlock()
+	return t.registeredLocked()
+}
+
 // ReminderTypes returns the actor types advertised to the scheduler for
 // reminder delivery: the advertised types, less those registered with
 // NoReminderDelivery.
@@ -285,6 +295,36 @@ func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReque
 		}(key.(string), factory.(targets.Factory))
 		return true
 	})
+	wg.Wait()
+
+	return errors.Join(errs.Slice()...)
+}
+
+// HaltActorTypes deactivates the active actors of the given types and
+// deletes their timers. Unlike HaltNonHosted, the actors stay hosted here, so
+// they are not recorded as rebalanced, and they reactivate on their next call.
+func (t *table) HaltActorTypes(ctx context.Context, actorTypes ...string) error {
+	t.deleteTimersFunc(ctx, func(actorType, _ string) bool {
+		return slices.Contains(actorTypes, actorType)
+	})
+
+	var wg sync.WaitGroup
+	errs := slice.New[error]()
+	for _, actorType := range actorTypes {
+		f, ok := t.factories.Load(actorType)
+		if !ok {
+			continue
+		}
+		factory := f.(targets.Factory)
+		wg.Go(func() {
+			t.waitCreates(actorType)
+			if d, ok := factory.(targets.Deactivator); ok {
+				errs.Append(d.DeactivateAll(ctx))
+				return
+			}
+			errs.Append(factory.HaltAll(ctx))
+		})
+	}
 	wg.Wait()
 
 	return errors.Join(errs.Slice()...)

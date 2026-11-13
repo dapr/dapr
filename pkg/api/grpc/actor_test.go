@@ -151,6 +151,7 @@ func TestInvokeActorRejectsInternalActorType(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	for _, actorType := range []string{
+		"dapr.internal",
 		"dapr.internal.default.fakeAPI.workflow",
 		"dapr.internal.default.fakeAPI.activity",
 		"dapr.internal.default.fakeAPI.executor",
@@ -162,6 +163,61 @@ func TestInvokeActorRejectsInternalActorType(t *testing.T) {
 				ActorId:   "fakeActorID",
 				Method:    "Complete",
 			})
+			require.Error(t, err)
+			assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+		})
+	}
+}
+
+// TestBareInternalActorTypeReserved checks that the bare actor type
+// "dapr.internal", with no trailing dot, is reserved on every actor API, not
+// only the types under the "dapr.internal." prefix.
+func TestBareInternalActorTypeReserved(t *testing.T) {
+	api := &api{
+		Universal: universal.New(universal.Options{
+			AppID:  "fakeAPI",
+			Actors: actorsfake.New(),
+		}),
+	}
+	lis := startDaprAPIServer(t, api, "")
+
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	const actorType = "dapr.internal"
+
+	calls := map[string]func(context.Context) error{
+		"GetActorState": func(ctx context.Context) error {
+			_, err := client.GetActorState(ctx, &runtimev1pb.GetActorStateRequest{ActorType: actorType, ActorId: "id", Key: "k"})
+			return err
+		},
+		"ExecuteActorStateTransaction": func(ctx context.Context) error {
+			_, err := client.ExecuteActorStateTransaction(ctx, &runtimev1pb.ExecuteActorStateTransactionRequest{ActorType: actorType, ActorId: "id"})
+			return err
+		},
+		"RegisterActorReminder": func(ctx context.Context) error {
+			_, err := client.RegisterActorReminder(ctx, &runtimev1pb.RegisterActorReminderRequest{ActorType: actorType, ActorId: "id", Name: "r"})
+			return err
+		},
+		"UnregisterActorReminder": func(ctx context.Context) error {
+			_, err := client.UnregisterActorReminder(ctx, &runtimev1pb.UnregisterActorReminderRequest{ActorType: actorType, ActorId: "id", Name: "r"})
+			return err
+		},
+		"RegisterActorTimer": func(ctx context.Context) error {
+			_, err := client.RegisterActorTimer(ctx, &runtimev1pb.RegisterActorTimerRequest{ActorType: actorType, ActorId: "id", Name: "t"})
+			return err
+		},
+		"UnregisterActorTimer": func(ctx context.Context) error {
+			_, err := client.UnregisterActorTimer(ctx, &runtimev1pb.UnregisterActorTimerRequest{ActorType: actorType, ActorId: "id", Name: "t"})
+			return err
+		},
+	}
+
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			err := call(t.Context())
 			require.Error(t, err)
 			assert.Equal(t, codes.PermissionDenied, status.Code(err))
 			assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")

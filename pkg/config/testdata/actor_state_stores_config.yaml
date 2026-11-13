@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: actorstatestores
+spec:
+  actors:
+    stateStores:
+      - name: wallet-transactions
+        actorTypes: ["TransactionActor", "AuditActor"]
+      - name: wallet-balance
+        actorTypes: ["BalanceActor"]

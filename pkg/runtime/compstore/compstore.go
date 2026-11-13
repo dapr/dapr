@@ -64,7 +64,12 @@ type ComponentStore struct {
 	configurationResources  []configapi.Configuration
 	resiliencyResources     []resiliencyapi.Resiliency
 	workflowAccessPolicies  []wfaclapi.WorkflowAccessPolicy
-	actorStateStore         struct {
+	// stateRevs holds, for each state store name, the revision of its last
+	// add or delete, taken from stateRev, which increments on each.
+	stateRevs map[string]uint64
+	stateRev  uint64
+
+	actorStateStore struct {
 		name  string
 		store state.Store
 		// rev increments on every mutation of the actor state store slot
@@ -89,6 +94,7 @@ type ComponentStore struct {
 func New() *ComponentStore {
 	return &ComponentStore{
 		states:                  make(map[string]state.Store),
+		stateRevs:               make(map[string]uint64),
 		configurations:          make(map[string]configuration.Store),
 		configurationSubscribes: make(map[string]chan struct{}),
 		secretsConfigurations:   make(map[string]config.SecretsScope),

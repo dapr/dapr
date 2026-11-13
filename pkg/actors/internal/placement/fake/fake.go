@@ -107,3 +107,7 @@ func (f *Fake) SetDrainOngoingCallTimeout(*bool, *time.Duration) {
 
 func (f *Fake) SetEntityDrainOngoingCallTimeouts(map[string]time.Duration) {
 }
+
+func (f *Fake) HaltActorTypes(ctx context.Context, _ []string, halt func(context.Context) error) error {
+	return halt(ctx)
+}

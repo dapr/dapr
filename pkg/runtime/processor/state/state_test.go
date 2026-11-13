@@ -203,7 +203,10 @@ func TestActorStateStore(t *testing.T) {
 		assert.Equal(t, "mystore", name)
 	})
 
-	t.Run("unmarked store does not touch the slot or notify", func(t *testing.T) {
+	// Any state store may be bound to actor types, and may be initialized
+	// outside the hot reload reconciler, for example once the secret store it
+	// waits for is loaded, so its init notifies the actor runtime too.
+	t.Run("unmarked store does not touch the slot and notifies on init", func(t *testing.T) {
 		var kicks atomic.Int64
 		proc, compStore := newProc(t, &kicks)
 
@@ -211,9 +214,23 @@ func TestActorStateStore(t *testing.T) {
 
 		_, _, ok := compStore.GetStateStoreActor()
 		assert.False(t, ok)
+		assert.Equal(t, int64(1), kicks.Load())
 
 		require.NoError(t, proc.Close(t.Context(), comp("plain", false)))
-		assert.Equal(t, int64(0), kicks.Load())
+		assert.Equal(t, int64(1), kicks.Load())
+	})
+
+	// The actor runtime must observe a single revision change per init, or
+	// it could act on an intermediate one and then again on the final one.
+	t.Run("init changes the store revision once", func(t *testing.T) {
+		for _, marked := range []bool{true, false} {
+			var kicks atomic.Int64
+			proc, compStore := newProc(t, &kicks)
+
+			// The component store is empty, so a single change is revision 1.
+			require.NoError(t, proc.Init(t.Context(), comp("mystore", marked)))
+			assert.Equal(t, uint64(1), compStore.GetStateStoreRevision("mystore"), "marked=%t", marked)
+		}
 	})
 
 	t.Run("duplicate actor state store surfaces an init error", func(t *testing.T) {

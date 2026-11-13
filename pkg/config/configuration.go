@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -183,6 +184,100 @@ type ConfigurationSpec struct {
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
 	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
+	ActorsSpec          *ActorsSpec         `json:"actors,omitempty"          yaml:"actors,omitempty"`
+}
+
+// ActorsSpec defines the configuration for Dapr actors.
+type ActorsSpec struct {
+	// StateStores binds actor types to state stores other than the default
+	// actor state store. A bound actor type uses only its bound store and
+	// never falls back to the default one.
+	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty" yaml:"stateStores,omitempty"`
+}
+
+// ActorStateStoreBinding binds a set of actor types to one state store.
+type ActorStateStoreBinding struct {
+	// Name is the name of the state store component.
+	Name string `json:"name" yaml:"name"`
+	// ActorTypes are the actor types whose state is kept in this store.
+	ActorTypes []string `json:"actorTypes" yaml:"actorTypes"`
+}
+
+// Validate returns every violation of the actor state store binding rules:
+// each binding names a store and at least one non-empty actor type, an actor
+// type is bound to at most one store, and internal actor types (dapr.internal
+// and dapr.internal.*) cannot be bound.
+func (a *ActorsSpec) Validate() error {
+	if a == nil {
+		return nil
+	}
+
+	var errs []error
+	storeByType := make(map[string]string)
+	for i, binding := range a.StateStores {
+		errs = append(errs, binding.validate(i, storeByType)...)
+	}
+	return errors.Join(errs...)
+}
+
+// validate returns the violations of the binding at index idx. It records the
+// binding's actor types in storeByType, which holds the store each actor type
+// was bound to by the earlier bindings, to report an actor type bound to more
+// than one store.
+func (b ActorStateStoreBinding) validate(idx int, storeByType map[string]string) []error {
+	var errs []error
+	if b.Name == "" {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d]: name is required", idx))
+	}
+	if len(b.ActorTypes) == 0 {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actorTypes is required", idx, b.Name))
+	}
+
+	seen := make(map[string]struct{}, len(b.ActorTypes))
+	for _, actorType := range b.ActorTypes {
+		if actorType == "" {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type must not be empty", idx, b.Name))
+			continue
+		}
+		if reserved.IsInternalActorType(actorType) {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is reserved for Dapr internal actors", idx, b.Name, actorType))
+		}
+		if _, ok := seen[actorType]; ok {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is listed more than once", idx, b.Name, actorType))
+			continue
+		}
+		seen[actorType] = struct{}{}
+
+		if store, ok := storeByType[actorType]; ok && store != b.Name {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores: actor type %q is bound to more than one state store: %q and %q", actorType, store, b.Name))
+			continue
+		}
+		storeByType[actorType] = b.Name
+	}
+	return errs
+}
+
+// StateStoreByActorType returns the name of the state store bound to each
+// actor type. The map is a fresh copy owned by the caller, and is empty when
+// the spec is nil or has no bindings. It assumes the spec is valid: if an
+// actor type appeared in more than one binding, the last one would win.
+func (a *ActorsSpec) StateStoreByActorType() map[string]string {
+	if a == nil {
+		return map[string]string{}
+	}
+
+	var n int
+	for _, binding := range a.StateStores {
+		n += len(binding.ActorTypes)
+	}
+
+	stores := make(map[string]string, n)
+	for _, binding := range a.StateStores {
+		for _, actorType := range binding.ActorTypes {
+			stores[actorType] = binding.Name
+		}
+	}
+	return stores
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.
@@ -863,7 +958,11 @@ func LoadDefaultConfiguration() *Configuration {
 func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	conf := LoadDefaultConfiguration()
 
-	// Load all config files and apply them on top of the default config
+	// Load all config files and apply them on top of the default config.
+	// Decoding a file replaces lists, so the actor state store bindings of
+	// each file are collected and set once all files are decoded: every
+	// file's bindings apply, and validation sees them together.
+	var bindings []ActorStateStoreBinding
 	for _, config := range configs {
 		_, err := os.Stat(config)
 		if err != nil {
@@ -878,18 +977,26 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		// Parse environment variables from yaml
 		b = []byte(os.ExpandEnv(string(b)))
 
+		if conf.Spec.ActorsSpec != nil {
+			conf.Spec.ActorsSpec.StateStores = nil
+		}
 		err = yaml.Unmarshal(b, conf)
 		if err != nil {
 			return nil, err
 		}
+		if conf.Spec.ActorsSpec != nil {
+			bindings = append(bindings, conf.Spec.ActorsSpec.StateStores...)
+		}
+	}
+	// A later file may set spec.actors to null, which drops the struct.
+	if len(bindings) > 0 && conf.Spec.ActorsSpec == nil {
+		conf.Spec.ActorsSpec = &ActorsSpec{}
+	}
+	if conf.Spec.ActorsSpec != nil {
+		conf.Spec.ActorsSpec.StateStores = bindings
 	}
 
-	err := conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
-		return nil, err
-	}
-
-	if err = conf.validateWorkflowSpec(); err != nil {
+	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
@@ -923,12 +1030,7 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 		return nil, nil, err
 	}
 
-	err = conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if err = conf.validateWorkflowSpec(); err != nil {
+	if err = conf.validate(); err != nil {
 		return nil, nil, err
 	}
 
@@ -1205,6 +1307,18 @@ func (c *Configuration) sortMetricsSpec() {
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
 		c.Spec.MetricSpec.RecordErrorCodes = c.Spec.MetricsSpec.RecordErrorCodes
 	}
+}
+
+// validate validates a loaded configuration. It is the single validation
+// entry point shared by the standalone and Kubernetes loaders.
+func (c *Configuration) validate() error {
+	if err := c.sortAndValidateSecretsConfiguration(); err != nil {
+		return err
+	}
+	if err := c.validateWorkflowSpec(); err != nil {
+		return err
+	}
+	return c.Spec.ActorsSpec.Validate()
 }
 
 // Validate the secrets configuration and sort to the allowed and denied lists if present.

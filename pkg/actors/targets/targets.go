@@ -40,6 +40,13 @@ type Factory interface {
 	Len() int
 }
 
+// Deactivator is implemented by a Factory which can halt all its actors
+// without recording them as rebalanced, for actors which stay hosted on this
+// daprd and reactivate on their next call.
+type Deactivator interface {
+	DeactivateAll(context.Context) error
+}
+
 // Retirer is implemented by a Factory with background work of its own which
 // serves its actors. The actor table calls Retire once it has removed the
 // factory for good (unregistered, drained, or replaced by a registration)

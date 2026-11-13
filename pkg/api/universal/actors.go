@@ -25,9 +25,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	actortimers "github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging/method"
@@ -39,7 +39,7 @@ import (
 // owns these actors' lifecycle; direct user access via the generic actor APIs
 // would corrupt workflow state or bypass per-operation policy.
 func (a *Universal) RejectInternalActorType(actorType string) error {
-	if !workflowacl.IsInternalActorType(actorType) {
+	if !reserved.IsInternalActorType(actorType) {
 		return nil
 	}
 	return messages.ErrActorTypeReserved.WithFormat(actorType)

@@ -113,7 +113,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// the actor state store actually changed. Notifying after both the close
 	// and re-init of an updated component means the actor runtime never
 	// observes the transient store-less state in the middle of an update.
-	defer c.notifyActorStateStoreChanged()()
+	defer c.notifyStateStoreChanged(comp.Name)()
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
 
@@ -180,7 +180,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 func (c *components) delete(ctx context.Context, comp compapi.Component) error {
 	c.dropSkippedActorStore(comp.Name)
 
-	defer c.notifyActorStateStoreChanged()()
+	defer c.notifyStateStoreChanged(comp.Name)()
 
 	if err := c.proc.Close(ctx, comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
@@ -219,14 +219,18 @@ func (c *components) replaySkippedActorStore(ctx context.Context) error {
 	return c.update(ctx, *skipped)
 }
 
-// notifyActorStateStoreChanged captures the actor state store revision and
-// returns a func which notifies the actor runtime if the revision has since
-// changed.
-func (c *components) notifyActorStateStoreChanged() func() {
+// notifyStateStoreChanged captures the revisions of the actor state store and
+// of the named state store, and returns a func which notifies the actor
+// runtime if either has since changed. A state store other than the actor
+// state store matters to the actor runtime too, as it may be bound to actor
+// types; the actor runtime ignores changes that do not affect it.
+func (c *components) notifyStateStoreChanged(name string) func() {
 	//nolint:dogsled
-	_, _, before, _ := c.store.GetStateStoreActorWithRevision()
+	_, _, actorBefore, _ := c.store.GetStateStoreActorWithRevision()
+	storeBefore := c.store.GetStateStoreRevision(name)
 	return func() {
-		if _, _, after, _ := c.store.GetStateStoreActorWithRevision(); after != before {
+		_, _, actorAfter, _ := c.store.GetStateStoreActorWithRevision()
+		if actorAfter != actorBefore || c.store.GetStateStoreRevision(name) != storeBefore {
 			c.proc.OnActorStateStoreChanged()
 		}
 	}

@@ -84,6 +84,40 @@ spec:
                   trustDomain:
                     type: string
                 type: object
+              actors:
+                description: ActorsSpec defines the configuration for Dapr actors.
+                properties:
+                  stateStores:
+                    description: |-
+                      stateStores binds actor types to state stores other than the default
+                      actor state store. A bound actor type uses only its bound store and
+                      never falls back to the default one.
+                    items:
+                      description: ActorStateStoreBinding binds a set of actor types
+                        to one state store.
+                      properties:
+                        actorTypes:
+                          description: actorTypes are the actor types whose state
+                            is kept in this store.
+                          items:
+                            minLength: 1
+                            type: string
+                          minItems: 1
+                          type: array
+                          x-kubernetes-list-type: set
+                        name:
+                          description: name is the name of the state store component.
+                          minLength: 1
+                          type: string
+                      required:
+                      - actorTypes
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                type: object
               api:
                 description: APISpec describes the configuration for Dapr APIs.
                 properties:

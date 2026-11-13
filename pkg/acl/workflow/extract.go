@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -27,9 +28,8 @@ import (
 )
 
 const (
-	actorTypePrefix = "dapr.internal."
-	suffixWorkflow  = ".workflow"
-	suffixActivity  = ".activity"
+	suffixWorkflow = ".workflow"
+	suffixActivity = ".activity"
 )
 
 // OperationType represents the type of workflow operation being performed.
@@ -44,7 +44,7 @@ const (
 // actor. Returns the operation type and true if it is a workflow/activity actor,
 // or empty string and false otherwise.
 func ParseActorType(actorType string) (OperationType, bool) {
-	if !strings.HasPrefix(actorType, actorTypePrefix) {
+	if !strings.HasPrefix(actorType, reserved.InternalActorTypePrefix) {
 		return "", false
 	}
 

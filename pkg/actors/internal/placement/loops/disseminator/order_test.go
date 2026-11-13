@@ -14,6 +14,8 @@ limitations under the License.
 package disseminator
 
 import (
+	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -74,6 +76,30 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 	})
 
 	return diss, ht, sched
+}
+
+func TestHandleHaltActorTypes(t *testing.T) {
+	diss, _, _ := newTestDisseminator(t)
+
+	// A type a dissemination round blocks stays blocked after the halt.
+	diss.inflight.LockTypes([]string{"inround"})
+
+	var blockedDuringHalt []bool
+	done := make(chan error, 1)
+	diss.handleHaltActorTypes(t.Context(), &loops.HaltActorTypes{
+		ActorTypes: []string{"bound", "inround"},
+		Halt: func(context.Context) error {
+			blockedDuringHalt = []bool{diss.inflight.IsBlocked("bound"), diss.inflight.IsBlocked("inround")}
+			return errors.New("halt error")
+		},
+		Done: done,
+	})
+
+	require.EqualError(t, <-done, "halt error")
+	// New calls of the halted types wait while their actors halt.
+	assert.Equal(t, []bool{true, true}, blockedDuringHalt)
+	assert.False(t, diss.inflight.IsBlocked("bound"))
+	assert.True(t, diss.inflight.IsBlocked("inround"))
 }
 
 func TestHandleTimeout(t *testing.T) {

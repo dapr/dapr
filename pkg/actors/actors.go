@@ -15,7 +15,9 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -70,6 +72,11 @@ type Options struct {
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
 	Mode               modes.DaprMode
+
+	// ActorStateStores maps an actor type to the name of the state store
+	// bound to it, from the configuration's spec.actors.stateStores. Actor
+	// types not listed use the default actor state store.
+	ActorStateStores map[string]string
 
 	// DisseminationTimeout is the daprd-side timeout for a placement
 	// LOCK -> UPDATE -> UNLOCK round.
@@ -143,6 +150,7 @@ type actors struct {
 	timers          timers.Interface
 	scheduler       scheduler.Interface
 	state           actorstate.Interface
+	stateResolver   *actorstate.Resolver
 	reentrancyStore *reentrancystore.Store
 
 	disabled   *atomic.Pointer[error]
@@ -161,6 +169,13 @@ type actors struct {
 	hostingRev    uint64
 	hostingActive bool
 	hostingName   string
+	// boundStores holds each bound state store as last seen by the converge
+	// runner. Like the hosting fields, it is only touched by Init and the
+	// converge runner.
+	boundStores map[string]boundStore
+	// unhostedLogged holds the bound actor types already logged as not
+	// hosted by this app, so each is logged once per process.
+	unhostedLogged sync.Map
 
 	clock clock.Clock
 	mode  modes.DaprMode
@@ -178,14 +193,18 @@ func New(opts Options) Interface {
 	}
 
 	return &actors{
-		appID:                     opts.AppID,
-		namespace:                 opts.Namespace,
-		port:                      opts.Port,
-		placementAddresses:        opts.PlacementAddresses,
-		healthEndpoint:            opts.HealthEndpoint,
-		resiliency:                opts.Resiliency,
-		security:                  opts.Security,
-		compStore:                 opts.CompStore,
+		appID:              opts.AppID,
+		namespace:          opts.Namespace,
+		port:               opts.Port,
+		placementAddresses: opts.PlacementAddresses,
+		healthEndpoint:     opts.HealthEndpoint,
+		resiliency:         opts.Resiliency,
+		security:           opts.Security,
+		compStore:          opts.CompStore,
+		stateResolver: actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores:   opts.CompStore,
+			Bindings: opts.ActorStateStores,
+		}),
 		stateTTLEnabled:           opts.StateTTLEnabled,
 		clock:                     clock.RealClock{},
 		disabled:                  &disabled,
@@ -204,6 +223,52 @@ func New(opts Options) Interface {
 	}
 }
 
+// warnUnusableStateStores logs a warning, sorted by actor type, for each
+// actor type whose bound state store cannot serve actor state, with the error
+// state operations will return: the store is not loaded, or lacks the ETag or
+// transactional feature. It is not fatal: the store may be loaded or replaced
+// later through hot reload. With actorTypes, only those actor types are
+// checked.
+func warnUnusableStateStores(l logger.Logger, r *actorstate.Resolver, actorTypes ...string) {
+	unusable := r.Unusable()
+	for _, actorType := range slices.Sorted(maps.Keys(unusable)) {
+		if len(actorTypes) > 0 && !slices.Contains(actorTypes, actorType) {
+			continue
+		}
+		err := unusable[actorType]
+		msg := err.Error()
+		// Log the message of an API error without its gRPC code.
+		var apiErr messages.APIError
+		if errors.As(err, &apiErr) {
+			msg = apiErr.Message()
+		}
+		l.Warnf("State operations of actor type %s will fail: %s", actorType, msg)
+	}
+}
+
+// logUnhostedBindings logs, sorted by actor type, each bound actor type that
+// this app does not host, at most once per actor type recorded in logged.
+// That is a valid setup when apps share a Configuration, so it is logged at
+// info level. When a hosted actor type differs from it only in case, the
+// binding is likely a typo, as actor types are case-sensitive, so that is
+// logged as a warning naming the hosted type.
+func logUnhostedBindings(l logger.Logger, logged *sync.Map, bindings map[string]string, hosted []string) {
+	for _, actorType := range slices.Sorted(maps.Keys(bindings)) {
+		if slices.Contains(hosted, actorType) {
+			continue
+		}
+		if _, ok := logged.LoadOrStore(actorType, struct{}{}); ok {
+			continue
+		}
+		idx := slices.IndexFunc(hosted, func(h string) bool { return strings.EqualFold(h, actorType) })
+		if idx >= 0 {
+			l.Warnf("Actor type %s is bound to state store %s, but this app does not host it; did you mean %s? Actor types are case-sensitive", actorType, bindings[actorType], hosted[idx])
+			continue
+		}
+		l.Infof("Actor type %s is bound to state store %s, but this app does not host it; actor state calls this app makes for that type use the bound store", actorType, bindings[actorType])
+	}
+}
+
 func (a *actors) Init(opts InitOptions) error {
 	defer close(a.initDoneCh)
 
@@ -212,9 +277,11 @@ func (a *actors) Init(opts InitOptions) error {
 	}
 
 	_, a.hostingName, a.hostingRev, a.hostingActive = a.compStore.GetStateStoreActorWithRevision()
+	a.boundStores = a.currentBoundStores()
 	if !a.hostingActive {
 		log.Info("Actor state store not configured - actor hosting disabled until one is configured, but invocation enabled")
 	}
+	warnUnusableStateStores(log, a.stateResolver)
 
 	a.table = table.New(table.Options{
 		ReentrancyStore: a.reentrancyStore,
@@ -254,12 +321,13 @@ func (a *actors) Init(opts InitOptions) error {
 		return err
 	}
 
-	// The state facade is always constructed; it resolves the actor state
-	// store from the component store on every call so the store can be hot
-	// reloaded at any point in the runtime's lifetime.
+	// The state facade is always constructed; it resolves each actor type's
+	// state store (its bound store, or the default actor state store) from
+	// the component store on every call, so stores can be hot reloaded at
+	// any point in the runtime's lifetime.
 	a.state = actorstate.New(actorstate.Options{
 		AppID:           a.appID,
-		CompStore:       a.compStore,
+		StoreResolver:   a.stateResolver,
 		Resiliency:      a.resiliency,
 		StateTTLEnabled: a.stateTTLEnabled,
 		Table:           a.table,
@@ -333,6 +401,7 @@ func (a *actors) Run(ctx context.Context) error {
 				case <-a.storeKickCh:
 				}
 				a.convergeHosting(ctx)
+				a.convergeBoundStores(ctx)
 			}
 		},
 		func(ctx context.Context) error {
@@ -542,6 +611,9 @@ func (a *actors) RegisterHosted(ctx context.Context, cfg hostconfig.Config) erro
 			EntityConfigs: entityConfigs,
 		},
 	})
+	// Registered, not Types: Types is empty while hosting is suspended, for
+	// example until a default actor state store is loaded.
+	logUnhostedBindings(log, &a.unhostedLogged, a.stateResolver.Bindings(), a.table.Registered())
 
 	// Update the placement service with the drain settings so that during
 	// dissemination, in-flight actor calls are given the configured time to
@@ -647,6 +719,82 @@ func (a *actors) convergeHosting(ctx context.Context) {
 
 	a.hostingActive = ok
 	a.hostingName = name
+}
+
+// boundStore is a bound state store as last seen by the converge runner.
+type boundStore struct {
+	rev    uint64
+	loaded bool
+}
+
+// convergeBoundStores deactivates the actors of the actor types bound to a
+// state store that was removed or reloaded since the last call. Unlike the
+// default actor state store, a same-name reload is not assumed to keep the
+// same data: the actors' in-memory state, and any state an SDK caches, may no
+// longer match the store, so they are deactivated and reactivated on demand
+// against it. A store that was not loaded and is added deactivates nothing:
+// no state call of its actor types succeeded before, so nothing is stale.
+// In-flight calls of those types drain with the configured timeout first,
+// and the actors' timers are deleted. Hosting itself is unaffected, and other
+// actor types continue.
+func (a *actors) convergeBoundStores(ctx context.Context) {
+	previous, current := a.boundStores, a.currentBoundStores()
+	a.boundStores = current
+
+	typesOf := make(map[string][]string)
+	for actorType, storeName := range a.stateResolver.Bindings() {
+		typesOf[storeName] = append(typesOf[storeName], actorType)
+	}
+
+	var changed, halt []string
+	for _, storeName := range slices.Sorted(maps.Keys(typesOf)) {
+		was, now := previous[storeName], current[storeName]
+		if was == now || (!was.loaded && !now.loaded) {
+			continue
+		}
+		actorTypes := typesOf[storeName]
+		slices.Sort(actorTypes)
+		changed = append(changed, actorTypes...)
+
+		switch {
+		case !was.loaded:
+			log.Infof("Bound actor state store %s added - actor types %v now use it", storeName, actorTypes)
+			continue
+		case !now.loaded:
+			log.Warnf("Bound actor state store %s removed - deactivating actors of types %v", storeName, actorTypes)
+		default:
+			log.Infof("Bound actor state store %s reloaded - deactivating actors of types %v", storeName, actorTypes)
+		}
+		halt = append(halt, actorTypes...)
+	}
+
+	if len(changed) > 0 {
+		warnUnusableStateStores(log, a.stateResolver, changed...)
+	}
+	if len(halt) == 0 {
+		return
+	}
+
+	slices.Sort(halt)
+	if err := a.placement.HaltActorTypes(ctx, halt, func(ctx context.Context) error {
+		return a.table.HaltActorTypes(ctx, halt...)
+	}); err != nil {
+		log.Errorf("Error deactivating actors of types %v after their bound state store changed: %s", halt, err)
+	}
+}
+
+// currentBoundStores returns the current revision of each bound state store,
+// and whether it is loaded.
+func (a *actors) currentBoundStores() map[string]boundStore {
+	stores := make(map[string]boundStore)
+	for _, storeName := range a.stateResolver.Bindings() {
+		_, loaded := a.compStore.GetStateStore(storeName)
+		stores[storeName] = boundStore{
+			rev:    a.compStore.GetStateStoreRevision(storeName),
+			loaded: loaded,
+		}
+	}
+	return stores
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
