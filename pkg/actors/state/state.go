@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/table"
+	compstate "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -231,7 +232,7 @@ func (s *state) executeStateStoreTransaction(ctx context.Context, operations []c
 		return err
 	}
 
-	if maxMulti, ok := store.(contribstate.TransactionalStoreMultiMaxSize); ok {
+	if maxMulti, ok := compstate.As[contribstate.TransactionalStoreMultiMaxSize](store); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
 			return ErrTransactionsTooManyOperations
@@ -259,7 +260,7 @@ func (s *state) stateStore() (string, Backend, error) {
 		return "", nil, messages.ErrActorRuntimeNotFound
 	}
 
-	store, ok := storeS.(Backend)
+	store, ok := compstate.As[Backend](storeS)
 	if !ok || !contribstate.FeatureETag.IsPresent(store.Features()) || !contribstate.FeatureTransactional.IsPresent(store.Features()) {
 		return "", nil, errors.New(errStateStoreNotConfigured)
 	}

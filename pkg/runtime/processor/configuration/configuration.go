@@ -30,20 +30,25 @@ type Options struct {
 	Registry       *compconfig.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
+	// TracingEnabled wraps every configuration store so calls into it emit
+	// spans.
+	TracingEnabled bool
 }
 
 type configuration struct {
-	registry  *compconfig.Registry
-	compStore *compstore.ComponentStore
-	meta      *meta.Meta
-	lock      sync.Mutex
+	registry       *compconfig.Registry
+	compStore      *compstore.ComponentStore
+	meta           *meta.Meta
+	lock           sync.Mutex
+	tracingEnabled bool
 }
 
 func New(opts Options) *configuration {
 	return &configuration{
-		registry:  opts.Registry,
-		compStore: opts.ComponentStore,
-		meta:      opts.Meta,
+		registry:       opts.Registry,
+		compStore:      opts.ComponentStore,
+		meta:           opts.Meta,
+		tracingEnabled: opts.TracingEnabled,
 	}
 }
 
@@ -70,6 +75,10 @@ func (c *configuration) Init(ctx context.Context, comp compapi.Component) error 
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+		}
+
+		if c.tracingEnabled {
+			config = compconfig.WithTracing(config, comp.Name, comp.Spec.Type)
 		}
 
 		c.compStore.AddConfiguration(comp.Name, config)
