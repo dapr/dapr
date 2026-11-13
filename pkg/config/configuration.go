@@ -630,7 +630,7 @@ func (m MetricSpec) GetEnabled() bool {
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		log.Warn("'spec.metric.http.increasedCardinality' is not set and defaults to 'true'. Set it to 'false' or configure 'pathMatching' to reduce the cardinality of HTTP metrics")
+		log.Warn("'spec.metrics.http.increasedCardinality' is not set and defaults to 'true'. Set it to 'false' or configure 'pathMatching' to reduce the cardinality of HTTP metrics")
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality
