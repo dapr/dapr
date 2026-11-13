@@ -110,9 +110,32 @@ func (c *component) Publish(ctx context.Context, req *compv1pb.PublishRequest) (
 	return new(compv1pb.PublishResponse), nil
 }
 
+// BulkPublish publishes each entry on its own, so that a test hooking
+// Publish sees bulk publishes too.
 func (c *component) BulkPublish(ctx context.Context, req *compv1pb.BulkPublishRequest) (*compv1pb.BulkPublishResponse, error) {
-	// TODO:
-	return new(compv1pb.BulkPublishResponse), nil
+	resp := new(compv1pb.BulkPublishResponse)
+	for _, entry := range req.GetEntries() {
+		var contentType *string
+		if len(entry.GetContentType()) != 0 {
+			contentType = &entry.ContentType
+		}
+
+		err := c.impl.Publish(ctx, &pubsub.PublishRequest{
+			Data:        entry.GetEvent(),
+			PubsubName:  req.GetPubsubName(),
+			Topic:       req.GetTopic(),
+			Metadata:    entry.GetMetadata(),
+			ContentType: contentType,
+		})
+		if err != nil {
+			resp.FailedEntries = append(resp.FailedEntries, &compv1pb.BulkPublishResponseFailedEntry{
+				EntryId: entry.GetEntryId(),
+				Error:   err.Error(),
+			})
+		}
+	}
+
+	return resp, nil
 }
 
 func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
