@@ -3,6 +3,10 @@
 # Declare variables to be passed into your templates.
 
 logLevel: info
+# Optional log file path. Ensure the destination is on a writable volume.
+logFile: ""
+# Comma-separated destinations (stdout, stderr, or file paths). Empty preserves logger defaults.
+logOutputs: ""
 component: scheduler
 
 # Override this to use a custom scheduler service image.
