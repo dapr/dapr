@@ -224,18 +224,18 @@ func TestQueue_WeightAgainstUnset(t *testing.T) {
 func TestLevel_Rebase(t *testing.T) {
 	t.Parallel()
 
-	// Exact arithmetic: every count and startAt drop by the lowest count,
-	// so the gaps between names are unchanged.
+	// Exact arithmetic: every count drops by startAt, so the gaps between
+	// names are unchanged, and startAt is zero.
 	lv := &level{names: map[string]*flow{
 		"a": {name: "a", dispatchesPerWeight: 5000},
 		"b": {name: "b", dispatchesPerWeight: 7500},
 		"c": {name: "c", dispatchesPerWeight: 9000},
-	}, startAt: 9000}
+	}, startAt: 5000}
 	lv.rebase()
 	assert.Equal(t, uint64(0), lv.names["a"].dispatchesPerWeight)
 	assert.Equal(t, uint64(2500), lv.names["b"].dispatchesPerWeight)
 	assert.Equal(t, uint64(4000), lv.names["c"].dispatchesPerWeight)
-	assert.Equal(t, uint64(4000), lv.startAt)
+	assert.Equal(t, uint64(0), lv.startAt)
 
 	// A single name drops to zero, and so does startAt.
 	lv = &level{names: map[string]*flow{"only": {name: "only", dispatchesPerWeight: 123456}}, startAt: 123456}
@@ -248,13 +248,18 @@ func TestLevel_Rebase(t *testing.T) {
 	lv.rebase()
 	assert.Equal(t, uint64(0), lv.startAt)
 
+	// A name behind startAt stops at zero rather than wrapping.
+	lv = &level{names: map[string]*flow{"behind": {name: "behind", dispatchesPerWeight: 5}}, startAt: 10}
+	lv.rebase()
+	assert.Equal(t, uint64(0), lv.names["behind"].dispatchesPerWeight)
+
 	// Rebasing twice is a no-op the second time.
-	lv = &level{names: map[string]*flow{"a": {name: "a", dispatchesPerWeight: 10}, "b": {name: "b", dispatchesPerWeight: 30}}, startAt: 30}
+	lv = &level{names: map[string]*flow{"a": {name: "a", dispatchesPerWeight: 10}, "b": {name: "b", dispatchesPerWeight: 30}}, startAt: 10}
 	lv.rebase()
 	lv.rebase()
 	assert.Equal(t, uint64(0), lv.names["a"].dispatchesPerWeight)
 	assert.Equal(t, uint64(20), lv.names["b"].dispatchesPerWeight)
-	assert.Equal(t, uint64(20), lv.startAt)
+	assert.Equal(t, uint64(0), lv.startAt)
 }
 
 func TestQueue_RebaseNotBeforeThreshold(t *testing.T) {
@@ -264,13 +269,15 @@ func TestQueue_RebaseNotBeforeThreshold(t *testing.T) {
 	mustEnqueue(t, q, h.trigger("a::1::0", "a"))
 	mustEnqueue(t, q, h.trigger("a::2::0", "a"))
 	lv := &q.levels[levelOf(h.trigger("x::1::0", "a"))]
-	lv.names["a"].dispatchesPerWeight = rebaseAt - 2*oneDispatch
-	lv.startAt = rebaseAt - 2*oneDispatch
+	lv.names["a"].dispatchesPerWeight = rebaseAt - oneDispatch
+	lv.startAt = rebaseAt - oneDispatch
 
 	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
 	assert.Equal(t, uint64(rebaseAt-oneDispatch), lv.startAt, "one dispatch short of the threshold, no rebase")
+	assert.Equal(t, uint64(rebaseAt), lv.names["a"].dispatchesPerWeight)
 	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
-	assert.Equal(t, uint64(0), lv.startAt, "the dispatch that reaches the threshold rebases the lone name to zero")
+	assert.Equal(t, uint64(0), lv.startAt, "the dispatch that reaches the threshold rebases")
+	assert.Equal(t, uint64(oneDispatch), lv.names["a"].dispatchesPerWeight, "the lone name keeps its one charge past startAt")
 }
 
 func TestQueue_RebaseThenReturningNameStartsLow(t *testing.T) {
@@ -281,22 +288,23 @@ func TestQueue_RebaseThenReturningNameStartsLow(t *testing.T) {
 		mustEnqueue(t, q, h.trigger("s::"+strconv.Itoa(i)+"::0", "stayer"))
 	}
 	lv := &q.levels[levelOf(h.trigger("x::1::0", "stayer"))]
-	lv.names["stayer"].dispatchesPerWeight = rebaseAt - 1
+	lv.names["stayer"].dispatchesPerWeight = rebaseAt
 	lv.startAt = rebaseAt - 1
 
 	// The first dispatch crosses the threshold and rebases.
 	require.True(t, q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }))
-	require.Less(t, lv.startAt, uint64(rebaseAt))
+	require.Equal(t, uint64(0), lv.startAt)
+	require.Equal(t, uint64(oneDispatch), lv.names["stayer"].dispatchesPerWeight)
 
 	// A name that arrives now starts at the rebased startAt, not the old
 	// huge value, so it is served in turn with the stayer rather than
 	// starving it or being starved.
 	mustEnqueue(t, q, h.trigger("n::1::0", "newcomer"))
-	assert.Equal(t, lv.names["stayer"].dispatchesPerWeight, lv.names["newcomer"].dispatchesPerWeight)
+	assert.Equal(t, uint64(0), lv.names["newcomer"].dispatchesPerWeight)
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
 	}
-	assert.Equal(t, []string{"stayer", "newcomer", "stayer"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2])})
+	assert.Equal(t, []string{"newcomer", "stayer", "stayer"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2])})
 }
 
 func TestQueue_RebaseKeepsOrder(t *testing.T) {
@@ -313,14 +321,15 @@ func TestQueue_RebaseKeepsOrder(t *testing.T) {
 	lv := &q.levels[levelOf(ahead)]
 	lv.names["ahead"].dispatchesPerWeight = rebaseAt - 1
 	lv.names["behind"].dispatchesPerWeight = rebaseAt - 1 - oneDispatch
-	lv.startAt = rebaseAt - 1
+	lv.startAt = rebaseAt - 1 - oneDispatch
 
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
 	}
 	assert.Equal(t, []string{"behind", "ahead", "behind", "ahead"}, []string{nameOf(order[0]), nameOf(order[1]), nameOf(order[2]), nameOf(order[3])})
-	assert.Less(t, lv.startAt, uint64(rebaseAt), "counts were rebased")
-	assert.Equal(t, uint64(2*oneDispatch), lv.startAt, "four dispatches at weight 1 from a rebased zero, two per name")
+	assert.Equal(t, uint64(0), lv.startAt, "counts were rebased on the fourth dispatch")
+	assert.Equal(t, uint64(oneDispatch), lv.names["ahead"].dispatchesPerWeight, "and ahead, served last, is still one charge past startAt")
+	assert.NotContains(t, lv.names, "behind", "behind emptied at startAt and was forgotten")
 }
 
 func TestQueue_ReturningNameEarnsNothing(t *testing.T) {
@@ -391,9 +400,9 @@ func TestQueue_LongGoneNameStartsLikeNew(t *testing.T) {
 	}
 	mustEnqueue(t, q, prioritized(h.trigger("h::0::0", "heavy"), normal, 3))
 
-	// Serve heavy once; its queue is now empty but its count is kept. One
-	// weight 1 dispatch is a full round, so one more light serve moves the
-	// clock past it and it is forgotten.
+	// Serve heavy once; its queue is now empty but its count is kept while it
+	// is ahead of startAt. The next light serve starts from a count past it,
+	// so it is forgotten.
 	served := func() string {
 		var name string
 		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool { name = nameOf(r); return true }))
@@ -401,14 +410,15 @@ func TestQueue_LongGoneNameStartsLikeNew(t *testing.T) {
 	}
 	for served() != "heavy" {
 	}
-	assert.Contains(t, lv.names, "heavy", "within a round the count is kept")
+	assert.Contains(t, lv.names, "heavy", "the count is kept")
 	assert.Zero(t, lv.names["heavy"].n)
-	assert.Less(t, lv.names["heavy"].dispatchesPerWeight, lv.startAt, "and it is behind, owed its next turns")
+	assert.Less(t, lv.names["heavy"].dispatchesPerWeight, lv.names["light"].dispatchesPerWeight, "and it is behind, owed its next turns")
 	require.Equal(t, "light", served())
-	assert.NotContains(t, lv.names, "heavy", "a round later it is forgotten")
+	assert.NotContains(t, lv.names, "heavy", "once startAt passes it, it is forgotten")
 
 	mustEnqueue(t, q, prioritized(h.trigger("h::1::0", "heavy"), normal, 3))
-	assert.Equal(t, lv.names["light"].dispatchesPerWeight, lv.names["heavy"].dispatchesPerWeight, "and comes back like a new name, level with the name waiting")
+	assert.Equal(t, lv.startAt, lv.names["heavy"].dispatchesPerWeight, "and comes back like a new name")
+	assert.Less(t, lv.names["heavy"].dispatchesPerWeight, lv.names["light"].dispatchesPerWeight)
 }
 
 func TestQueue_SkippedNameIsCharged(t *testing.T) {
@@ -529,7 +539,7 @@ func TestQueue_HigherLevelEvictsNewestOfLowest(t *testing.T) {
 	assert.Equal(t, 0, q.len())
 }
 
-func TestQueue_NewNameStartsAtTheFloor(t *testing.T) {
+func TestQueue_NewNameStartsAtStartAt(t *testing.T) {
 	t.Parallel()
 	q := newQueue(100000)
 	h := newHarness(t, 0, 0)
@@ -585,6 +595,149 @@ func TestQueue_BlockedHeavyNameKeepsItsShare(t *testing.T) {
 	}
 	assert.InDelta(t, 300, counts["heavy"], 3)
 	assert.InDelta(t, 100, counts["light"], 3)
+}
+
+func TestQueue_ReturningNameAgainstLighterBacklog(t *testing.T) {
+	t.Parallel()
+	for weight, want := range map[uint32]int{2: 667, 4: 800, 1000: 999} {
+		q := newQueue(2000)
+		h := newHarness(t, 0, 0)
+		for i := range 1000 {
+			mustEnqueue(t, q, h.trigger("b::"+strconv.Itoa(i)+"::0", "bulk"))
+		}
+
+		// A name with one trigger at a time, re-sent as soon as it is served,
+		// against a weight 1 backlog gets its weighted share of 1000.
+		counts := map[string]int{}
+		next := 0
+		enqueueSteady := func() {
+			mustEnqueue(t, q, prioritized(h.trigger("s::"+strconv.Itoa(next)+"::0", "steady"), normal, weight))
+			next++
+		}
+		enqueueSteady()
+		for range 1000 {
+			require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+				counts[nameOf(r)]++
+				return true
+			}))
+			if q.levels[2].names["steady"].n == 0 {
+				enqueueSteady()
+			}
+		}
+		assert.InDelta(t, want, counts["steady"], 2, "weight %d", weight)
+	}
+}
+
+func TestQueue_OneSkipCostsOneTurn(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	for i := range 100 {
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "A"), normal, 1000))
+		mustEnqueue(t, q, prioritized(h.trigger("b::"+strconv.Itoa(i)+"::0", "B"), normal, 1000))
+	}
+	mustEnqueue(t, q, prioritized(h.trigger("l::0::0", "L"), normal, 1))
+
+	// Serve until the one L trigger, a weight 1 charge, has gone.
+	served := func(refuse string) string {
+		var name string
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			if nameOf(r) == refuse {
+				return false
+			}
+			name = nameOf(r)
+			return true
+		}))
+		return name
+	}
+	for served("") != "L" {
+	}
+
+	// A's gate is full for one dispatch, so B goes. A is next, not a
+	// thousand B turns later.
+	require.Equal(t, "B", served("A"))
+	assert.Equal(t, "A", served(""))
+}
+
+func TestQueue_RemovedNameDoesNotStarveANewOne(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	a0, a1 := prioritized(h.trigger("a::0::0", "A"), normal, 1000), prioritized(h.trigger("a::1::0", "A"), normal, 1000)
+	mustEnqueue(t, q, a0)
+	mustEnqueue(t, q, a1)
+	mustEnqueue(t, q, prioritized(h.trigger("l::0::0", "L"), normal, 1))
+
+	// A then L are served, then A's other trigger is removed rather than
+	// served, which leaves A empty with its count.
+	var order []*loops.TriggerRequest
+	require.True(t, q.tryDispatchOne(accept(&order)))
+	require.True(t, q.tryDispatchOne(accept(&order)))
+	require.Equal(t, []string{"A", "L"}, []string{nameOf(order[0]), nameOf(order[1])})
+	require.Same(t, a1, q.remove(key("a::1::0")))
+
+	// A new name starts at startAt, which L's one weight 1 charge did not
+	// move, so when A returns the two take turns.
+	for i := range 10 {
+		mustEnqueue(t, q, prioritized(h.trigger("n::"+strconv.Itoa(i)+"::0", "N"), normal, 1000))
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i+2)+"::0", "A"), normal, 1000))
+	}
+	counts := map[string]int{}
+	for range 10 {
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			counts[nameOf(r)]++
+			return true
+		}))
+	}
+	assert.Equal(t, map[string]int{"N": 5, "A": 5}, counts)
+}
+
+func TestQueue_AdmittedIsNeverEvicted(t *testing.T) {
+	t.Parallel()
+	q := newQueue(2)
+	h := newHarness(t, 0, 0)
+	bg1 := prioritized(h.trigger("b::1::0", "bg"), background, 1)
+	bg2 := prioritized(h.trigger("b::2::0", "bg"), background, 1)
+	mustEnqueue(t, q, bg1)
+	mustEnqueue(t, q, bg2)
+	refused := prioritized(h.trigger("b::3::0", "bg"), background, 1)
+	evicted, ok := q.enqueue(refused, true)
+	require.True(t, ok)
+	require.Nil(t, evicted)
+
+	// The admitted trigger is the newest at its level but is passed over.
+	evicted, ok = q.enqueue(prioritized(h.trigger("c::1::0", "c"), critical, 1), false)
+	require.True(t, ok)
+	assert.Same(t, bg2, evicted)
+	evicted, ok = q.enqueue(prioritized(h.trigger("c::2::0", "c"), critical, 1), false)
+	require.True(t, ok)
+	assert.Same(t, bg1, evicted)
+
+	// With only admitted triggers left below, a higher one is refused.
+	_, ok = q.enqueue(prioritized(h.trigger("c::3::0", "c"), critical, 1), false)
+	assert.False(t, ok)
+	assert.Same(t, refused, q.remove(key("b::3::0")))
+}
+
+func TestQueue_NamesShareBeforeInstances(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	for i := range 100 {
+		mustEnqueue(t, q, h.trigger("wf-"+strconv.Itoa(i)+"::0::0", "A"))
+		mustEnqueue(t, q, h.trigger("one::"+strconv.Itoa(i)+"::0", "B"))
+	}
+
+	// 100 instances with one trigger of A and one instance with 100 of B,
+	// neither field set: each name is one share, so B is not 1 in 101.
+	counts := map[string]int{}
+	for range 100 {
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			counts[nameOf(r)]++
+			return true
+		}))
+	}
+	assert.Equal(t, map[string]int{"A": 50, "B": 50}, counts)
 }
 
 func TestQueue_Remove(t *testing.T) {

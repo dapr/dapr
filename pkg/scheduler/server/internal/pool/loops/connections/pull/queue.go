@@ -38,7 +38,9 @@ const numLevels = 5
 
 // queue parks pull triggers of one actor type while no sidecar has a free
 // slot: by priority level, then by name in proportion to fairness weight, then
-// round robin across workflow instances, then arrival order.
+// round robin across workflow instances, then arrival order. Names share
+// turns before instances rotate, also for triggers with neither field set: a
+// name is one share however many instances it has.
 type queue struct {
 	max    int
 	n      int
@@ -46,12 +48,10 @@ type queue struct {
 	levels [numLevels]level
 }
 
-// level is the names at one priority level. A new name starts at the lowest
-// count among the names with triggers waiting. A name whose queue empties
-// keeps its count for one round, so it resumes where it left off; after that
-// it is forgotten. startAt is the highest count reached; a name that could
-// not go is brought up to one round behind it, so it cannot bank more credit
-// than that.
+// level is the names at one priority level. startAt is the highest count a
+// name had when it was served. A new name starts there, a name that could not
+// go is brought up to it, and an empty name is forgotten once it is not ahead
+// of it, so a name that leaves and returns keeps only the turns it is owed.
 type level struct {
 	names   map[string]*flow
 	startAt uint64
@@ -70,10 +70,12 @@ type flow struct {
 	n                   int
 }
 
-// parked is a waiting trigger and its arrival order.
+// parked is a waiting trigger and its arrival order. An admitted one was
+// refused by a sidecar and is never evicted.
 type parked struct {
-	req *loops.TriggerRequest
-	seq uint64
+	req      *loops.TriggerRequest
+	seq      uint64
+	admitted bool
 }
 
 func newQueue(maxLen int) *queue {
@@ -126,12 +128,13 @@ func (q *queue) len() int {
 
 // enqueue parks req. Past the bound a trigger is refused, unless it is
 // admitted (a sidecar already accepted and refused it) or it outranks the
-// lowest level with triggers waiting, in which case the newest trigger of
-// that level is evicted and returned for the caller to resolve.
+// lowest level with a trigger that can be evicted, in which case the newest
+// such trigger of that level is evicted and returned for the caller to
+// resolve.
 func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) (evicted *loops.TriggerRequest, ok bool) {
 	li := levelOf(req)
 	if !admitted && q.n >= q.max {
-		lowest := q.lowestWaiting()
+		lowest := q.lowestEvictable()
 		if lowest <= li {
 			return nil, false
 		}
@@ -148,7 +151,7 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) (evicted *loop
 			lv.names = make(map[string]*flow)
 		}
 		q.seq++
-		f = &flow{name: name, seq: q.seq, dispatchesPerWeight: lv.floor(), groups: make(map[string][]parked)}
+		f = &flow{name: name, seq: q.seq, dispatchesPerWeight: lv.startAt, groups: make(map[string][]parked)}
 		lv.names[name] = f
 	}
 	inst := instanceKey(meta.GetTarget().GetActor().GetId())
@@ -156,19 +159,21 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) (evicted *loop
 		f.ring = append(f.ring, inst)
 	}
 	q.seq++
-	f.groups[inst] = append(f.groups[inst], parked{req: req, seq: q.seq})
+	f.groups[inst] = append(f.groups[inst], parked{req: req, seq: q.seq, admitted: admitted})
 	f.n++
 	q.n++
 	return evicted, true
 }
 
-// lowestWaiting is the index of the lowest level with a trigger waiting, or
-// -1 when none has.
-func (q *queue) lowestWaiting() int {
+// lowestEvictable is the index of the lowest level with a trigger that is not
+// admitted, or -1 when none has.
+func (q *queue) lowestEvictable() int {
 	for i := numLevels - 1; i >= 0; i-- {
 		for _, f := range q.levels[i].names {
-			if f.n > 0 {
-				return i
+			for _, reqs := range f.groups {
+				if slices.ContainsFunc(reqs, func(p parked) bool { return !p.admitted }) {
+					return i
+				}
 			}
 		}
 	}
@@ -177,7 +182,7 @@ func (q *queue) lowestWaiting() int {
 
 // tryDispatchOne offers parked triggers to fn in serving order until one is
 // accepted, and removes it. The accepted name is charged; the names offered
-// before it at that level are brought up to one round behind startAt.
+// before it at that level are brought up to startAt.
 func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	for i := range q.levels {
 		lv := &q.levels[i]
@@ -191,11 +196,10 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 				skipped = append(skipped, f)
 				continue
 			}
-			f.dispatchesPerWeight += oneDispatch / weightOf(req)
 			lv.startAt = max(lv.startAt, f.dispatchesPerWeight)
-			allowance := lv.startAt - min(lv.startAt, oneDispatch)
+			f.dispatchesPerWeight += oneDispatch / weightOf(req)
 			for _, s := range skipped {
-				s.dispatchesPerWeight = max(s.dispatchesPerWeight, allowance)
+				s.dispatchesPerWeight = max(s.dispatchesPerWeight, lv.startAt)
 			}
 			lv.forget()
 			if lv.startAt >= rebaseAt {
@@ -208,40 +212,22 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	return false
 }
 
-// floor is the lowest count among the names with triggers waiting, or
-// startAt when none has any.
-func (lv *level) floor() uint64 {
-	low, waiting := lv.startAt, false
-	for _, f := range lv.names {
-		if f.n > 0 && (!waiting || f.dispatchesPerWeight < low) {
-			low, waiting = f.dispatchesPerWeight, true
-		}
-	}
-	return low
-}
-
-// forget drops the empty names that are a full round or more behind the
-// names with triggers waiting.
+// forget drops the empty names that are not ahead of startAt.
 func (lv *level) forget() {
-	floor := lv.floor()
 	for name, f := range lv.names {
-		if f.n == 0 && f.dispatchesPerWeight+oneDispatch <= floor {
+		if f.n == 0 && f.dispatchesPerWeight <= lv.startAt {
 			delete(lv.names, name)
 		}
 	}
 }
 
-// rebase subtracts the lowest count from every name and from startAt, which
-// keeps their order and keeps the counts from overflowing.
+// rebase subtracts startAt from every name and resets it, which keeps their
+// order and keeps the counts from overflowing.
 func (lv *level) rebase() {
-	low := lv.startAt
 	for _, f := range lv.names {
-		low = min(low, f.dispatchesPerWeight)
+		f.dispatchesPerWeight -= min(f.dispatchesPerWeight, lv.startAt)
 	}
-	for _, f := range lv.names {
-		f.dispatchesPerWeight -= low
-	}
-	lv.startAt -= low
+	lv.startAt = 0
 }
 
 // furthestBehind returns the level's names with triggers waiting, in serving
@@ -260,7 +246,7 @@ func (lv *level) furthestBehind() []*flow {
 }
 
 // evictNewest removes and returns the trigger that arrived last at this
-// level.
+// level among those not admitted.
 func (lv *level) evictNewest() *loops.TriggerRequest {
 	var (
 		newest *flow
@@ -270,8 +256,11 @@ func (lv *level) evictNewest() *loops.TriggerRequest {
 	)
 	for _, f := range lv.names {
 		for key, reqs := range f.groups {
-			if last := len(reqs) - 1; reqs[last].seq > seq {
-				newest, inst, idx, seq = f, key, last, reqs[last].seq
+			for i := len(reqs) - 1; i >= 0; i-- {
+				if !reqs[i].admitted && reqs[i].seq > seq {
+					newest, inst, idx, seq = f, key, i, reqs[i].seq
+					break
+				}
 			}
 		}
 	}
