@@ -61,54 +61,56 @@ func (m *metricsDisabled) Setup(t *testing.T) []framework.Option {
 func (m *metricsDisabled) Run(t *testing.T, ctx context.Context) {
 	m.injector.WaitUntilRunning(t, ctx)
 
-	t.Run("enable-metrics false", func(t *testing.T) {
-		args := m.daprdArgs(t, ctx, "false")
-		assert.Contains(t, args, "--enable-metrics=false")
-		assert.NotContains(t, args, "--metrics-port")
-	})
+	for _, tc := range []struct {
+		enableMetrics string
+		wantArg       string
+		wantPort      bool
+	}{
+		{enableMetrics: "false", wantArg: "--enable-metrics=false", wantPort: false},
+		{enableMetrics: "true", wantArg: "--enable-metrics=true", wantPort: true},
+	} {
+		t.Run("enable-metrics "+tc.enableMetrics, func(t *testing.T) {
+			podBytes := buildPod("dapr-app", map[string]string{
+				"dapr.io/enabled":        "true",
+				"dapr.io/app-id":         "dapr-app",
+				"dapr.io/enable-metrics": tc.enableMetrics,
+			})
+			ar := m.injector.SendAdmission(t, ctx, admissionv1.AdmissionReview{
+				TypeMeta: metav1.TypeMeta{Kind: "AdmissionReview", APIVersion: "admission.k8s.io/v1"},
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "dapr-app",
+					Namespace: "dapr-system",
+					Operation: "CREATE",
+					UserInfo:  authenticationv1.UserInfo{Groups: []string{"system:masters"}},
+					Object:    runtime.RawExtension{Raw: podBytes},
+				},
+			})
+			require.NotNil(t, ar.Response)
+			require.True(t, ar.Response.Allowed)
 
-	t.Run("enable-metrics true", func(t *testing.T) {
-		args := m.daprdArgs(t, ctx, "true")
-		assert.Contains(t, args, "--enable-metrics=true")
-		assert.Contains(t, args, "--metrics-port")
-	})
-}
+			patch, err := jsonpatch.DecodePatch(ar.Response.Patch)
+			require.NoError(t, err)
+			patched, err := patch.Apply(podBytes)
+			require.NoError(t, err)
 
-func (m *metricsDisabled) daprdArgs(t *testing.T, ctx context.Context, enableMetrics string) []string {
-	t.Helper()
+			var pod corev1.Pod
+			require.NoError(t, json.Unmarshal(patched, &pod))
+			var args []string
+			for _, c := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
+				if c.Name == "daprd" {
+					args = c.Args
+				}
+			}
+			require.NotEmpty(t, args, "patch should add daprd container")
 
-	podBytes := buildPod("dapr-app", map[string]string{
-		"dapr.io/enabled":        "true",
-		"dapr.io/app-id":         "dapr-app",
-		"dapr.io/enable-metrics": enableMetrics,
-	})
-	ar := m.injector.SendAdmission(t, ctx, admissionv1.AdmissionReview{
-		TypeMeta: metav1.TypeMeta{Kind: "AdmissionReview", APIVersion: "admission.k8s.io/v1"},
-		Request: &admissionv1.AdmissionRequest{
-			UID:       uuid.NewUUID(),
-			Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
-			Name:      "dapr-app",
-			Namespace: "dapr-system",
-			Operation: "CREATE",
-			UserInfo:  authenticationv1.UserInfo{Groups: []string{"system:masters"}},
-			Object:    runtime.RawExtension{Raw: podBytes},
-		},
-	})
-	require.NotNil(t, ar.Response)
-	require.True(t, ar.Response.Allowed)
-
-	patch, err := jsonpatch.DecodePatch(ar.Response.Patch)
-	require.NoError(t, err)
-	patched, err := patch.Apply(podBytes)
-	require.NoError(t, err)
-
-	var pod corev1.Pod
-	require.NoError(t, json.Unmarshal(patched, &pod))
-	for _, c := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
-		if c.Name == "daprd" {
-			return c.Args
-		}
+			assert.Contains(t, args, tc.wantArg)
+			if tc.wantPort {
+				assert.Contains(t, args, "--metrics-port")
+			} else {
+				assert.NotContains(t, args, "--metrics-port")
+			}
+		})
 	}
-	require.Fail(t, "patch should add daprd container")
-	return nil
 }
