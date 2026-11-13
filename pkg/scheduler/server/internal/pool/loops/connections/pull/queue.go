@@ -15,7 +15,6 @@ package pull
 
 import (
 	"cmp"
-	"math"
 	"slices"
 	"strings"
 
@@ -23,15 +22,13 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 )
 
-// Weights are kept in thousandths so that 0.5 and 1000 are whole numbers, and
-// one dispatch at weight 1 counts oneDispatch. The division by the weight is
-// truncated, an error of at most 0.1%. The range 0.001 to 1000 is Temporal's,
-// so a weight carries over unchanged. A level's counts are rebased once they
-// reach rebaseAt, a billion billion, long before they could overflow.
+// One dispatch at weight 1 counts oneDispatch, and at weight w it counts
+// oneDispatch / w, truncated, an error of at most 0.1%. A level's counts are
+// rebased once they reach rebaseAt, a billion billion, long before they could
+// overflow.
 const (
-	MinFairnessWeight = 0.001
+	MinFairnessWeight = 1
 	MaxFairnessWeight = 1000
-	weightScale       = 1000
 	oneDispatch       = 1000000
 	rebaseAt          = 1000000000000000000
 )
@@ -101,15 +98,15 @@ func levelName(level int) string {
 	return levelNames[level]
 }
 
-// weightOf is a trigger's fairness weight in thousandths. Unset means 1, and
-// so does a weight outside 0.001 to 1000: ScheduleJob rejects those, but a
-// job stored by a newer Scheduler can still carry one after a downgrade.
+// weightOf is a trigger's fairness weight. Unset means 1, and so does a
+// weight above 1000: ScheduleJob rejects those, but a job stored by a newer
+// Scheduler can still carry one after a downgrade.
 func weightOf(req *loops.TriggerRequest) uint64 {
-	w := float64(req.Job.GetMetadata().GetFairnessWeight())
-	if w == 0 || math.IsNaN(w) || w < MinFairnessWeight || w > MaxFairnessWeight {
-		return weightScale
+	w := req.Job.GetMetadata().GetFairnessWeight()
+	if w < MinFairnessWeight || w > MaxFairnessWeight {
+		return 1
 	}
-	return uint64(math.Round(w * weightScale))
+	return uint64(w)
 }
 
 // instanceKey is the workflow instance ID in an activity actor ID
@@ -194,7 +191,7 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 				skipped = append(skipped, f)
 				continue
 			}
-			f.dispatchesPerWeight += oneDispatch * weightScale / weightOf(req)
+			f.dispatchesPerWeight += oneDispatch / weightOf(req)
 			lv.startAt = max(lv.startAt, f.dispatchesPerWeight)
 			allowance := lv.startAt - min(lv.startAt, oneDispatch)
 			for _, s := range skipped {

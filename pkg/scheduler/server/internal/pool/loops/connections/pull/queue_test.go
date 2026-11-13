@@ -34,7 +34,7 @@ const (
 )
 
 // prioritized sets a trigger's level and weight.
-func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, weight float32) *loops.TriggerRequest {
+func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, weight uint32) *loops.TriggerRequest {
 	req.Job.Metadata.PriorityLevel = level.Enum()
 	req.Job.Metadata.FairnessWeight = &weight
 	return req
@@ -74,19 +74,18 @@ func TestQueue_LevelOfAndWeightOf(t *testing.T) {
 	h := newHarness(t, 0, 0)
 	unset := h.trigger("wf::1::0", "act")
 	assert.Equal(t, 2, levelOf(unset), "unset is normal")
-	assert.Equal(t, uint64(1000), weightOf(unset), "unset is weight 1, in thousandths")
-	assert.Equal(t, uint64(500), weightOf(prioritized(h.trigger("wf::11::0", "act"), normal, 0.5)))
-	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::12::0", "act"), normal, 0.001)))
-	assert.Equal(t, uint64(1000000), weightOf(prioritized(h.trigger("wf::13::0", "act"), normal, 1000)))
-	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::14::0", "act"), normal, 0.0001)), "below the range counts as unset")
-	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::15::0", "act"), normal, -3)), "negative counts as unset")
+	assert.Equal(t, uint64(1), weightOf(unset), "unset is weight 1")
+	assert.Equal(t, uint64(2), weightOf(prioritized(h.trigger("wf::11::0", "act"), normal, 2)))
+	assert.Equal(t, uint64(500), weightOf(prioritized(h.trigger("wf::12::0", "act"), normal, 500)))
+	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::13::0", "act"), normal, 1000)))
+	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::14::0", "act"), normal, 1001)), "above the range counts as unset")
 	assert.Equal(t, 0, levelOf(prioritized(h.trigger("wf::2::0", "act"), critical, 3)))
 	assert.Equal(t, 1, levelOf(prioritized(h.trigger("wf::7::0", "act"), high, 1)))
 	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::8::0", "act"), normal, 1)))
 	assert.Equal(t, 3, levelOf(prioritized(h.trigger("wf::9::0", "act"), low, 1)))
 	assert.Equal(t, 4, levelOf(prioritized(h.trigger("wf::3::0", "act"), background, 0)))
-	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::4::0", "act"), normal, 0)), "0 is weight 1")
-	assert.Equal(t, uint64(1000), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, 2000)), "above the range counts as unset")
+	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::4::0", "act"), normal, 0)), "0 is weight 1")
+	assert.Equal(t, uint64(1), weightOf(prioritized(h.trigger("wf::6::0", "act"), normal, 2000)), "above the range counts as unset")
 	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::5::0", "act"), schedulerv1pb.PriorityLevel(9), 1)), "an unknown level counts as unset")
 	assert.Equal(t, 2, levelOf(prioritized(h.trigger("wf::10::0", "act"), schedulerv1pb.PriorityLevel(-1), 1)), "a negative level counts as unset, not a panic")
 	assert.Equal(t, []string{"critical", "high", "normal", "low", "background"},
@@ -202,13 +201,13 @@ func TestQueue_WeightRatioHoldsWhenScaled(t *testing.T) {
 	assert.InDelta(t, 200, counts["four"], 1)
 }
 
-func TestQueue_FractionalWeight(t *testing.T) {
+func TestQueue_WeightAgainstUnset(t *testing.T) {
 	t.Parallel()
 	q := newQueue(1000)
 	h := newHarness(t, 0, 0)
 	for i := range 300 {
-		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "half"), normal, 0.5))
-		mustEnqueue(t, q, h.trigger("b::"+strconv.Itoa(i)+"::0", "one"))
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "two"), normal, 2))
+		mustEnqueue(t, q, h.trigger("b::"+strconv.Itoa(i)+"::0", "unset"))
 	}
 
 	counts := map[string]int{}
@@ -218,8 +217,8 @@ func TestQueue_FractionalWeight(t *testing.T) {
 			return true
 		}))
 	}
-	assert.InDelta(t, 100, counts["half"], 1, "0.5 against the default 1 is 1 turn in 3")
-	assert.InDelta(t, 200, counts["one"], 1)
+	assert.InDelta(t, 200, counts["two"], 1, "weight 2 against the default 1 is 2 turns in 3")
+	assert.InDelta(t, 100, counts["unset"], 1)
 }
 
 func TestLevel_Rebase(t *testing.T) {
@@ -535,9 +534,9 @@ func TestQueue_NewNameStartsAtTheFloor(t *testing.T) {
 	q := newQueue(100000)
 	h := newHarness(t, 0, 0)
 	for i := range 5000 {
-		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "A"), normal, 1))
+		mustEnqueue(t, q, prioritized(h.trigger("a::"+strconv.Itoa(i)+"::0", "A"), normal, 1000))
 	}
-	mustEnqueue(t, q, prioritized(h.trigger("l::0::0", "L"), normal, 0.001))
+	mustEnqueue(t, q, prioritized(h.trigger("l::0::0", "L"), normal, 1))
 
 	// Serve A, then the one L trigger, which moves the highest count a
 	// thousand rounds ahead of A.
@@ -549,10 +548,10 @@ func TestQueue_NewNameStartsAtTheFloor(t *testing.T) {
 	require.Equal(t, "A", served())
 	require.Equal(t, "L", served())
 
-	// A new weight 1 name starts level with A, not with L, so the two
+	// A new weight 1000 name starts level with A, not with L, so the two
 	// alternate from the start.
 	for i := range 3000 {
-		mustEnqueue(t, q, prioritized(h.trigger("c::"+strconv.Itoa(i)+"::0", "C"), normal, 1))
+		mustEnqueue(t, q, prioritized(h.trigger("c::"+strconv.Itoa(i)+"::0", "C"), normal, 1000))
 	}
 	counts := map[string]int{}
 	for range 200 {

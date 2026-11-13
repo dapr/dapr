@@ -33,7 +33,7 @@ func init() {
 }
 
 // weight asserts two names at the same level share deliveries by fairness
-// weight: at 1.5 : 0.5 the heavy name gets 6 of the first 8 slots.
+// weight: at 3 : 1 the heavy name gets 6 of the first 8 slots.
 type weight struct {
 	scheduler *scheduler.Scheduler
 }
@@ -54,7 +54,7 @@ func (w *weight) Run(t *testing.T, ctx context.Context) {
 
 	const each = 8
 	for i := range each {
-		for name, fairness := range map[string]float32{"heavy": 1.5, "light": 0.5} {
+		for name, fairness := range map[string]uint32{"heavy": 3, "light": 1} {
 			job := name + "-" + strconv.Itoa(i)
 			req := w.scheduler.JobNowPull(job, namespace, appID, actorType, job+"::0")
 			req.Metadata.ConcurrencyKey = new(name)

@@ -234,7 +234,7 @@ func Test_cronFPToSched(t *testing.T) {
 }
 
 func Test_validatePriority(t *testing.T) {
-	meta := func(level schedulerv1pb.PriorityLevel, weight float32) *schedulerv1pb.JobMetadata {
+	meta := func(level schedulerv1pb.PriorityLevel, weight uint32) *schedulerv1pb.JobMetadata {
 		m := &schedulerv1pb.JobMetadata{}
 		if level != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
 			m.PriorityLevel = level.Enum()
@@ -256,7 +256,7 @@ func Test_validatePriority(t *testing.T) {
 	} {
 		require.NoError(t, validatePriority(meta(level, 1)), level.String())
 	}
-	for _, weight := range []float32{0.001, 0.5, 1, 1000} {
+	for _, weight := range []uint32{1, 2, 500, 1000} {
 		require.NoError(t, validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL, weight)))
 	}
 
@@ -265,14 +265,14 @@ func Test_validatePriority(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err), level.String())
 		require.ErrorContains(t, err, "not a known level")
 	}
-	for _, weight := range []float32{0.0001, -1, 1000.5, float32(math.Inf(1)), float32(math.NaN())} {
+	for _, weight := range []uint32{1001, 100000, math.MaxUint32} {
 		err := validatePriority(meta(schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, weight))
-		require.Equal(t, codes.InvalidArgument, status.Code(err), "%g", weight)
-		require.ErrorContains(t, err, "must be between 0.001 and 1000")
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "%d", weight)
+		require.ErrorContains(t, err, "must be between 1 and 1000")
 	}
 
 	// An explicit 0 is set, so it is outside the range, unlike unset.
-	err := validatePriority(&schedulerv1pb.JobMetadata{FairnessWeight: new(float32(0))})
+	err := validatePriority(&schedulerv1pb.JobMetadata{FairnessWeight: new(uint32(0))})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, "fairness_weight 0 must be between 0.001 and 1000")
+	require.ErrorContains(t, err, "fairness_weight 0 must be between 1 and 1000")
 }

@@ -34,14 +34,14 @@ import (
 )
 
 // validatePriority rejects a priority level that is not one of the known
-// levels, or a fairness weight outside 0.001 to 1000.
+// levels, or a fairness weight outside 1 to 1000.
 func validatePriority(meta *schedulerv1pb.JobMetadata) error {
 	if l := meta.GetPriorityLevel(); l < schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED || l > schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND {
 		return status.Errorf(codes.InvalidArgument, "priority_level %d is not a known level", l)
 	}
 	if meta != nil && meta.FairnessWeight != nil {
-		if w := meta.GetFairnessWeight(); !(w >= pull.MinFairnessWeight && w <= pull.MaxFairnessWeight) {
-			return status.Errorf(codes.InvalidArgument, "fairness_weight %g must be between %g and %g", w, float32(pull.MinFairnessWeight), float32(pull.MaxFairnessWeight))
+		if w := meta.GetFairnessWeight(); w < pull.MinFairnessWeight || w > pull.MaxFairnessWeight {
+			return status.Errorf(codes.InvalidArgument, "fairness_weight %d must be between %d and %d", w, pull.MinFairnessWeight, pull.MaxFairnessWeight)
 		}
 	}
 	return nil

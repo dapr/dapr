@@ -33,7 +33,7 @@ func init() {
 }
 
 // invalid asserts ScheduleJob rejects an unknown priority level or a
-// fairness weight outside 0.001 to 1000, and accepts the bounds.
+// fairness weight outside 1 to 1000, and accepts the bounds.
 type invalid struct {
 	scheduler *scheduler.Scheduler
 }
@@ -49,7 +49,7 @@ func (i *invalid) Run(t *testing.T, ctx context.Context) {
 	i.scheduler.WaitUntilRunning(t, ctx)
 	client := i.scheduler.Client(t, ctx)
 
-	job := func(name string, level schedulerv1.PriorityLevel, weight float32) *schedulerv1.ScheduleJobRequest {
+	job := func(name string, level schedulerv1.PriorityLevel, weight uint32) *schedulerv1.ScheduleJobRequest {
 		req := i.scheduler.JobNowPull(name, namespace, appID, actorType, name+"::0")
 		req.Metadata.PriorityLevel = level.Enum()
 		req.Metadata.FairnessWeight = &weight
@@ -62,11 +62,11 @@ func (i *invalid) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	_, err = client.ScheduleJob(ctx, job("heavy", schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, 1001))
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	_, err = client.ScheduleJob(ctx, job("light", schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, 0.0001))
+	_, err = client.ScheduleJob(ctx, job("zero", schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, 0))
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	assert.Empty(t, i.scheduler.EtcdJobs(t, ctx), "nothing was stored")
 
-	_, err = client.ScheduleJob(ctx, job("min", schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, 0.001))
+	_, err = client.ScheduleJob(ctx, job("min", schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, 1))
 	require.NoError(t, err)
 	_, err = client.ScheduleJob(ctx, job("max", schedulerv1.PriorityLevel_PRIORITY_LEVEL_BACKGROUND, 1000))
 	require.NoError(t, err)
