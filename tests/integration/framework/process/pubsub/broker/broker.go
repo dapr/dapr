@@ -17,7 +17,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
+
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	compv1 "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
@@ -29,15 +33,18 @@ type Broker struct {
 	pmrReqCh  chan *compv1.PullMessagesRequest
 	pmrRespCh chan *compv1.PullMessagesResponse
 
-	inmem  *pubsub.PubSub
-	socket *socket.Socket
+	inmem           *pubsub.PubSub
+	socket          *socket.Socket
+	published       chan *contribpubsub.PublishRequest
+	recordPublishes bool
 }
 
 // Option configures broker creation.
 type Option func(*brokerOptions)
 
 type brokerOptions struct {
-	pausable bool
+	pausable        bool
+	recordPublishes bool
 }
 
 // WithPausable opts the pluggable server in to the Pause/Resume RPCs.
@@ -46,6 +53,14 @@ type brokerOptions struct {
 func WithPausable() Option {
 	return func(o *brokerOptions) {
 		o.pausable = true
+	}
+}
+
+// WithRecordPublishes records the messages daprd publishes to the broker for
+// NextPublish to return, instead of handing them to the in-memory pubsub.
+func WithRecordPublishes() Option {
+	return func(o *brokerOptions) {
+		o.recordPublishes = true
 	}
 }
 
@@ -58,11 +73,24 @@ func New(t *testing.T, opts ...Option) *Broker {
 	pmrReqCh := make(chan *compv1.PullMessagesRequest, 1)
 	pmrRespCh := make(chan *compv1.PullMessagesResponse, 1)
 
+	published := make(chan *contribpubsub.PublishRequest, 16)
+	var inmemOpts []inmemory.Option
+	if bo.recordPublishes {
+		inmemOpts = append(inmemOpts, inmemory.WithPublishFn(func(ctx context.Context, req *contribpubsub.PublishRequest) error {
+			select {
+			case published <- req:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}))
+	}
+
 	socket := socket.New(t)
 	psOpts := []pubsub.Option{
 		pubsub.WithSocket(socket),
 		pubsub.WithPullMessagesChannel(pmrReqCh, pmrRespCh),
-		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
+		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t, inmemOpts...)),
 	}
 	if bo.pausable {
 		psOpts = append(psOpts, pubsub.WithPausable())
@@ -70,10 +98,12 @@ func New(t *testing.T, opts ...Option) *Broker {
 	inmem := pubsub.New(t, psOpts...)
 
 	return &Broker{
-		pmrReqCh:  pmrReqCh,
-		pmrRespCh: pmrRespCh,
-		inmem:     inmem,
-		socket:    socket,
+		pmrReqCh:        pmrReqCh,
+		pmrRespCh:       pmrRespCh,
+		inmem:           inmem,
+		socket:          socket,
+		published:       published,
+		recordPublishes: bo.recordPublishes,
 	}
 }
 
@@ -119,6 +149,27 @@ func (b *Broker) PublishHelloWorld(topic string) <-chan *compv1.PullMessagesRequ
 	}
 
 	return b.pmrReqCh
+}
+
+// NextPublish waits for daprd to publish a message to the broker and returns
+// the publish request the component received, including its metadata. A bulk
+// publish is received as one publish per entry. The broker must have been
+// created WithRecordPublishes.
+func (b *Broker) NextPublish(t *testing.T, ctx context.Context) *contribpubsub.PublishRequest {
+	t.Helper()
+
+	require.True(t, b.recordPublishes, "broker must be created WithRecordPublishes")
+
+	select {
+	case req := <-b.published:
+		return req
+	case <-ctx.Done():
+		require.FailNow(t, "context cancelled waiting for a publish")
+	case <-time.After(10 * time.Second):
+		require.FailNow(t, "timed out waiting for a publish")
+	}
+
+	return nil
 }
 
 // DropStream ends the in-flight PullMessages stream, cancelling the context
