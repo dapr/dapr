@@ -38,6 +38,7 @@ type Fake struct {
 	subscribeToTypeUpdatesFn func(context.Context) (<-chan []string, []string)
 	haltAllFn                func(context.Context) error
 	haltNonHostedFn          func(context.Context, func(*api.LookupActorRequest) bool) error
+	haltActorTypesFn         func(context.Context, ...string) error
 	lenFn                    func() map[string]int
 	suspendHostingFn         func(context.Context) error
 	resumeHostingFn          func()
@@ -61,6 +62,7 @@ func New() *Fake {
 		subscribeToTypeUpdatesFn: func(context.Context) (<-chan []string, []string) { return nil, nil },
 		haltAllFn:                func(context.Context) error { return nil },
 		haltNonHostedFn:          func(context.Context, func(*api.LookupActorRequest) bool) error { return nil },
+		haltActorTypesFn:         func(context.Context, ...string) error { return nil },
 		lenFn:                    func() map[string]int { return nil },
 		suspendHostingFn:         func(context.Context) error { return nil },
 		resumeHostingFn:          func() {},
@@ -121,6 +123,11 @@ func (f *Fake) WithSubscribeToTypeUpdates(fn func(context.Context) (<-chan []str
 	return f
 }
 func (f *Fake) WithHaltAll(fn func(context.Context) error) *Fake { f.haltAllFn = fn; return f }
+func (f *Fake) WithHaltActorTypes(fn func(context.Context, ...string) error) *Fake {
+	f.haltActorTypesFn = fn
+	return f
+}
+
 func (f *Fake) WithHaltNonHosted(fn func(context.Context, func(*api.LookupActorRequest) bool) error) *Fake {
 	f.haltNonHostedFn = fn
 	return f
@@ -162,6 +169,10 @@ func (f *Fake) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []s
 func (f *Fake) HaltAll(ctx context.Context) error { return f.haltAllFn(ctx) }
 func (f *Fake) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	return f.haltNonHostedFn(ctx, fn)
+}
+
+func (f *Fake) HaltActorTypes(ctx context.Context, actorTypes ...string) error {
+	return f.haltActorTypesFn(ctx, actorTypes...)
 }
 func (f *Fake) Len() map[string]int { return f.lenFn() }
 

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -28,7 +29,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
-	"github.com/dapr/dapr/pkg/actors/api"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/messages"
@@ -174,8 +175,8 @@ func TestConvergeBoundStores(t *testing.T) {
 		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
 	}
 
-	// newConverge returns an actors runtime whose table records, for each
-	// halt, the actor types it deactivates among the given ones.
+	// newConverge returns an actors runtime whose table records the actor
+	// types of each halt.
 	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *[][]string) {
 		t.Helper()
 
@@ -195,18 +196,13 @@ func TestConvergeBoundStores(t *testing.T) {
 					"BalanceActor":     "wallet-balance",
 				},
 			}),
-			table: tablefake.New().WithHaltNonHosted(func(_ context.Context, keep func(*api.LookupActorRequest) bool) error {
-				var halted []string
-				for _, actorType := range []string{"AuditActor", "BalanceActor", "PlainActor", "TransactionActor"} {
-					if !keep(&api.LookupActorRequest{ActorType: actorType, ActorID: "1"}) {
-						halted = append(halted, actorType)
-					}
-				}
-				halts = append(halts, halted)
+			placement: placementfake.New(),
+			table: tablefake.New().WithHaltActorTypes(func(_ context.Context, actorTypes ...string) error {
+				halts = append(halts, actorTypes)
 				return nil
 			}),
 		}
-		a.boundStoreRevs = a.currentBoundStoreRevs()
+		a.boundStores = a.currentBoundStores()
 		return a, cs, &halts
 	}
 
@@ -246,17 +242,28 @@ func TestConvergeBoundStores(t *testing.T) {
 		assert.Equal(t, [][]string{{"BalanceActor"}}, *halts)
 	})
 
-	t.Run("adding a missing bound store back deactivates its actor types", func(t *testing.T) {
+	// No state call of the bound types succeeded while their store was not
+	// loaded, so adding it has nothing stale to drop.
+	t.Run("adding a missing bound store back deactivates nothing", func(t *testing.T) {
 		t.Parallel()
 		a, cs, halts := newConverge(t)
 
 		cs.DeleteStateStore("wallet-balance")
 		a.convergeBoundStores(t.Context())
-		// Actors reactivated in between, for example by a reminder, ran
-		// without their store.
 		cs.AddStateStore("wallet-balance", store(t))
 		a.convergeBoundStores(t.Context())
-		assert.Equal(t, [][]string{{"BalanceActor"}, {"BalanceActor"}}, *halts)
+		assert.Equal(t, [][]string{{"BalanceActor"}}, *halts)
+	})
+
+	t.Run("a bound store missing at startup and added later deactivates nothing", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		a.boundStores = a.currentBoundStores()
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Empty(t, *halts)
 	})
 
 	t.Run("several bound stores changing are halted together", func(t *testing.T) {
@@ -420,7 +427,7 @@ func TestWarnUnusableStateStores(t *testing.T) {
 	})
 }
 
-func TestWarnUnhostedBindings(t *testing.T) {
+func TestLogUnhostedBindings(t *testing.T) {
 	bindings := map[string]string{
 		"transactionactor": "wallet-transactions",
 		"OrphanActor":      "wallet-orphans",
@@ -431,16 +438,20 @@ func TestWarnUnhostedBindings(t *testing.T) {
 	l := logger.NewLogger(t.Name())
 	l.SetOutput(&buf)
 
-	warnUnhostedBindings(l, bindings, []string{"TransactionActor", "BalanceActor"})
+	var logged sync.Map
+	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor", "BalanceActor"})
 
 	out := buf.String()
-	assert.Contains(t, out, "level=warning")
-	assert.Contains(t, out, "Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive")
-	assert.Contains(t, out, "Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it, so the binding has no effect")
+	assert.Contains(t, out, `level=warning msg="Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive"`)
+	assert.Contains(t, out, `level=info msg="Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it; actor state calls this app makes for that type use the bound store"`)
 	assert.NotContains(t, out, "BalanceActor is bound")
 	assert.Less(t, strings.Index(out, "OrphanActor"), strings.Index(out, "transactionactor"))
 
+	// Each actor type is logged once, however often the app registers.
 	buf.Reset()
-	warnUnhostedBindings(l, map[string]string{"BalanceActor": "wallet-balance"}, []string{"BalanceActor"})
-	assert.Empty(t, buf.String())
+	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor", "BalanceActor"})
+	logUnhostedBindings(l, &logged, bindings, nil)
+	assert.Contains(t, buf.String(), "Actor type BalanceActor is bound")
+	assert.NotContains(t, buf.String(), "OrphanActor")
+	assert.NotContains(t, buf.String(), "transactionactor")
 }

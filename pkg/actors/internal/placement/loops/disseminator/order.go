@@ -30,6 +30,23 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 	d.inflight.Acquire(req)
 }
 
+// handleHaltActorTypes halts the actors of the given types the way a
+// dissemination round halts the actors it moves: new calls of those types
+// queue, in-flight calls drain with the configured timeout, then the actors
+// are halted. Types a round already blocks stay blocked when it returns.
+func (d *disseminator) handleHaltActorTypes(ctx context.Context, e *loops.HaltActorTypes) {
+	lock := make([]string, 0, len(e.ActorTypes))
+	for _, actorType := range e.ActorTypes {
+		if !d.inflight.IsBlocked(actorType) {
+			lock = append(lock, actorType)
+		}
+	}
+	d.inflight.LockTypes(lock)
+	d.inflight.CancelClaimsForTypes(e.ActorTypes, errors.New("bound actor state store changed"))
+	e.Done <- e.Halt(ctx)
+	d.inflight.UnlockTypes(lock)
+}
+
 // completeRound runs at the end of every dissemination round on this
 // stream, once its tables are installed.
 func (d *disseminator) completeRound(ctx context.Context) {

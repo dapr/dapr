@@ -140,8 +140,10 @@ func (a *actorstatestorelate) Run(t *testing.T, ctx context.Context) {
 	t.Run("bound store loaded by hot reload", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(a.resDir, a.boundStore+".yaml"), []byte(a.txDB.GetComponent(t)), 0o600))
 
-		// Loading the store deactivates the actor activated without it, so
-		// each attempt activates it first.
+		// Hot reload loads the store asynchronously. Adding a store that was
+		// missing deactivates nothing, as no state call succeeded without it,
+		// so the actor stays active; invoking it first keeps each attempt
+		// independent of that.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			code, body := doHTTP(c, nethttp.MethodPost, "/method/foo", "")
 			if !assert.Equalf(c, nethttp.StatusOK, code, "body: %s", body) {

@@ -47,7 +47,7 @@ func (u *unhosted) Setup(t *testing.T) []framework.Option {
 
 	u.logline = logline.New(t, logline.WithStdoutLineContains(
 		"Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive",
-		"Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it, so the binding has no effect",
+		"Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it; actor state calls this app makes for that type use the bound store",
 	))
 
 	u.app = actors.New(t,

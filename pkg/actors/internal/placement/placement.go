@@ -61,6 +61,12 @@ type Interface interface {
 	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 	SetEntityDrainOngoingCallTimeouts(timeouts map[string]time.Duration)
 
+	// HaltActorTypes runs halt once the in-flight calls of actorTypes have
+	// drained with the configured drain timeout, as a dissemination round
+	// does for the actors it moves. New calls of those types wait until halt
+	// returns. It returns the error of halt, or ctx's if ctx is done first.
+	HaltActorTypes(ctx context.Context, actorTypes []string, halt func(context.Context) error) error
+
 	// WatchRemoteHosts returns a channel which receives whether a daprd
 	// other than this one hosts actorType in the placement tables: at the end
 	// of the next dissemination round, then whenever that changes. Every
@@ -328,6 +334,22 @@ func (p *placement) Lock(ctx context.Context, actorType string) (context.Context
 			return nil, nil, resp.Context.Err()
 		}
 		return resp.Context, resp.Cancel, nil
+	}
+}
+
+func (p *placement) HaltActorTypes(ctx context.Context, actorTypes []string, halt func(context.Context) error) error {
+	done := make(chan error, 1)
+	p.loop.Enqueue(&loops.HaltActorTypes{
+		ActorTypes: actorTypes,
+		Halt:       halt,
+		Done:       done,
+	})
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		return err
 	}
 }
 

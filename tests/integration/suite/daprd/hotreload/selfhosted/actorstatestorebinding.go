@@ -260,18 +260,16 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 	t.Run("bound store added back", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(a.compFile, []byte(a.compYAML), 0o600))
 
-		// The actor activated again while the store was missing is
-		// deactivated, so it does not keep what it read without the store.
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, int64(2), a.boundDeactivated.Load())
-		}, 20*time.Second, 10*time.Millisecond)
-		assert.Equal(t, int64(0), a.plainDeactivated.Load())
-
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			code, body := doHTTP(c, nethttp.MethodGet, a.boundType+"/a1/state/kh", "")
 			assert.Equal(c, nethttp.StatusOK, code)
 			assert.JSONEq(c, `"v1"`, body)
 		}, 20*time.Second, 10*time.Millisecond)
+
+		// No state call succeeded while the store was missing, so adding it
+		// back has nothing stale to drop and deactivates no actor.
+		assert.Equal(t, int64(1), a.boundDeactivated.Load())
+		assert.Equal(t, int64(0), a.plainDeactivated.Load())
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := getGRPC(a.boundType, "kg")
@@ -286,14 +284,14 @@ func (a *actorstatestorebinding) Run(t *testing.T, ctx context.Context) {
 	t.Run("bound store reloaded in place against another database", func(t *testing.T) {
 		// Activate the bound type's actor against the current database.
 		invoke(t, a.boundType)
-		require.Equal(t, int64(2), a.boundDeactivated.Load())
+		require.Equal(t, int64(1), a.boundDeactivated.Load())
 
 		require.NoError(t, os.WriteFile(a.compFile, []byte(a.otherDB.GetComponent(t)), 0o600))
 
 		// The actor is deactivated, so none keeps state read from the
 		// previous database.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, int64(3), a.boundDeactivated.Load())
+			assert.Equal(c, int64(2), a.boundDeactivated.Load())
 		}, 20*time.Second, 10*time.Millisecond)
 		assert.Equal(t, int64(0), a.plainDeactivated.Load())
 
