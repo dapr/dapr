@@ -593,6 +593,7 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 		CustomStatus:   rstate.GetCustomStatus(),
 		FailureDetails: failureDetuils,
 		Version:        state.WorkflowVersion(rstate.GetOldEvents()),
+		TerminationReason: runtimestate.TerminationReason(rstate),
 	}, nil
 }
 
