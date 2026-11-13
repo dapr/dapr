@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
+	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
@@ -80,6 +81,10 @@ type manager[T differ.Resource] interface {
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+	var compMeta *meta.Meta
+	if opts.Processor != nil {
+		compMeta = opts.Processor.Meta()
+	}
 	r := &Reconciler[compapi.Component]{
 		kind:     compapi.Kind,
 		htarget:  opts.Healthz.AddTarget("component-reconciler"),
@@ -90,6 +95,7 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 			store:  opts.CompStore,
 			proc:   opts.Processor,
 			auth:   opts.Authorizer,
+			meta:   compMeta,
 		},
 	}
 	r.loop = loopFactory.NewLoop(r)
