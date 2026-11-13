@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -280,4 +281,32 @@ func initMockStateStoreForRegistry(reg *registry.Registry, name, encryptKey stri
 	mockStateStore.On("Init", expectedMetadataUppercase).Return(e)
 
 	return mockStateStore
+}
+
+func TestIsActorStateStore(t *testing.T) {
+	tests := map[string]struct {
+		props map[string]string
+		want  bool
+	}{
+		"no property":           {props: map[string]string{"other": "true"}, want: false},
+		"true":                  {props: map[string]string{"actorStateStore": "true"}, want: true},
+		"case-insensitive name": {props: map[string]string{"ACTORSTATESTORE": "1"}, want: true},
+		"false":                 {props: map[string]string{"actorStateStore": "false"}, want: false},
+		"empty":                 {props: map[string]string{"actorStateStore": ""}, want: false},
+		"not a boolean":         {props: map[string]string{"actorStateStore": "maybe"}, want: false},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.want, state.IsActorStateStore(test.props))
+		})
+	}
+
+	// Map iteration order is random, so names differing only in case must not
+	// decide the result by whichever is visited first.
+	t.Run("case-variant names, one is truthy", func(t *testing.T) {
+		props := map[string]string{"actorStateStore": "false", "ACTORSTATESTORE": "true", "ActorStateStore": "0"}
+		for range 100 {
+			require.True(t, state.IsActorStateStore(props))
+		}
+	})
 }

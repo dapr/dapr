@@ -40,6 +40,9 @@ type StateManager interface {
 type SecretManager interface {
 	// TODO: update to return an error.
 	ProcessResource(context.Context, meta.Resource) (bool, string)
+	// ResolveResource is ProcessResource, and also returns the errors of the
+	// secret reads that failed.
+	ResolveResource(context.Context, meta.Resource) (bool, string, error)
 	manager
 }
 
@@ -84,6 +87,12 @@ func (p *Processor) State() StateManager {
 
 func (p *Processor) Secret() SecretManager {
 	return p.secret
+}
+
+// Meta returns the metadata helper the processor builds component metadata
+// with, so callers can expand metadata exactly as the processor does.
+func (p *Processor) Meta() *meta.Meta {
+	return p.meta
 }
 
 func (p *Processor) Binding() BindingManager {

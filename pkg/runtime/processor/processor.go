@@ -118,6 +118,7 @@ type Options struct {
 type Processor struct {
 	appID           string
 	compStore       *compstore.ComponentStore
+	meta            *meta.Meta
 	managers        map[components.Category]manager
 	state           StateManager
 	secret          SecretManager
@@ -232,6 +233,7 @@ func New(opts Options) *Processor {
 		subErrCh:                   make(chan error),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
+		meta:                       opts.Meta,
 		state:                      state,
 		binding:                    binding,
 		secret:                     secret,
