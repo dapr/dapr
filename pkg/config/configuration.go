@@ -1000,10 +1000,6 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		return nil, err
 	}
 
-	if err = conf.validateWorkflowSpec(); err != nil {
-		return nil, err
-	}
-
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
 	return conf, nil
@@ -1035,10 +1031,6 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 	}
 
 	if err = conf.validate(); err != nil {
-		return nil, nil, err
-	}
-
-	if err = conf.validateWorkflowSpec(); err != nil {
 		return nil, nil, err
 	}
 
@@ -1321,6 +1313,9 @@ func (c *Configuration) sortMetricsSpec() {
 // entry point shared by the standalone and Kubernetes loaders.
 func (c *Configuration) validate() error {
 	if err := c.sortAndValidateSecretsConfiguration(); err != nil {
+		return err
+	}
+	if err := c.validateWorkflowSpec(); err != nil {
 		return err
 	}
 	return c.Spec.ActorsSpec.Validate()

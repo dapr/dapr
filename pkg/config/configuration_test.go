@@ -1122,6 +1122,9 @@ func TestValidateWorkflowSpec(t *testing.T) {
 
 	err := conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validateWorkflowSpec()
 	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+	// validate, which every loader calls, includes the workflow spec check.
+	err = conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validate()
+	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
 
 	err = conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 1,
