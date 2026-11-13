@@ -323,6 +323,18 @@ func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
+// WaitUntilPullInflight waits until the scheduler has want activities
+// delivered by pull dispatch and not yet resolved. A delivery on the regular
+// path is never counted.
+func (s *Scheduler) WaitUntilPullInflight(t *testing.T, ctx context.Context, want float64, labels ...string) {
+	t.Helper()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, want, s.Metrics(c, ctx).SumWithLabels(
+			"dapr_scheduler_workflow_activity_inflight", labels...), 0)
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
 func (s *Scheduler) ID() string {
 	return s.id
 }

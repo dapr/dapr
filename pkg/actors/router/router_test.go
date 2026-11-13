@@ -16,6 +16,7 @@ package router_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -318,6 +319,27 @@ func TestCallReminderExecuteLocallySkipsPlacement(t *testing.T) {
 	require.NoError(t, r.CallReminder(t.Context(), rem))
 	assert.Equal(t, []string{"dapr.internal.default.app.activity/wf::1::0"}, created)
 	assert.Same(t, rem, invoked)
+}
+
+func TestCallReminderExecuteLocallyRefusesOnlyAnUnregisteredType(t *testing.T) {
+	call := func(cause error) error {
+		tbl := tablefake.New().WithGetOrCreate(func(context.Context, string, string) (targets.Interface, error) {
+			return nil, cause
+		})
+		r := router.New(router.Options{
+			Placement:  placementfake.New(),
+			Table:      tbl,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+		})
+		return r.CallReminder(t.Context(), &api.Reminder{ActorType: "a", ActorID: "1", Name: "n", ExecuteLocally: true})
+	}
+
+	err := call(fmt.Errorf("%w: actor type a %w", actorerrors.ErrCreatingActor, actorerrors.ErrNotRegistered))
+	require.ErrorIs(t, err, actorerrors.ErrNoCapacity)
+
+	err = call(fmt.Errorf("%w: actor hosting is suspended", actorerrors.ErrCreatingActor))
+	require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
+	require.NotErrorIs(t, err, actorerrors.ErrNoCapacity)
 }
 
 func TestCallReminderNonLocalRemoteReminderErrors(t *testing.T) {
