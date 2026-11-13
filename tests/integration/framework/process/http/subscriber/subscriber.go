@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,9 +51,10 @@ type PublishRequest struct {
 }
 
 type PublishBulkRequestEntry struct {
-	EntryID     string `json:"entryId"`
-	Event       string `json:"event"`
-	ContentType string `json:"contentType,omitempty"`
+	EntryID     string            `json:"entryId"`
+	Event       string            `json:"event"`
+	ContentType string            `json:"contentType,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type PublishBulkRequest struct {
@@ -60,6 +62,9 @@ type PublishBulkRequest struct {
 	PubSubName string
 	Topic      string
 	Entries    []PublishBulkRequestEntry
+	// Metadata is sent as request-level metadata (`metadata.<key>` query
+	// parameters) and applies to every entry.
+	Metadata map[string]string
 }
 
 type Subscriber struct {
@@ -248,6 +253,13 @@ func (s *Subscriber) publishBulk(t *testing.T, ctx context.Context, req PublishB
 	payload, err := json.Marshal(req.Entries)
 	require.NoError(t, err)
 	reqURL := fmt.Sprintf("http://%s/v1.0/publish/bulk/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
+	if len(req.Metadata) > 0 {
+		query := make(url.Values, len(req.Metadata))
+		for k, v := range req.Metadata {
+			query.Set("metadata."+k, v)
+		}
+		reqURL += "?" + query.Encode()
+	}
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
 	require.NoError(t, err)
 	hreq.Header.Add("Content-Type", "application/json")
