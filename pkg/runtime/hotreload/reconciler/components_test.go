@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -159,6 +160,15 @@ func (boolSecretStore) GetSecret(context.Context, secretstores.GetSecretRequest)
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{"true": "true", "false": "false"},
 	}, nil
+}
+
+// failingSecretStore fails every secret read.
+type failingSecretStore struct {
+	daprt.FakeSecretStore
+}
+
+func (failingSecretStore) GetSecret(context.Context, secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{}, errors.New("secret store unavailable")
 }
 
 // countingSecretStore is a boolSecretStore which counts its secret reads.
@@ -335,6 +345,8 @@ func Test_components_actorStateStore(t *testing.T) {
 			metadata []commonapi.NameValuePair
 			// secretStore loads the secret store the secretRef entries read.
 			secretStore bool
+			// failingSecretStore loads it as a store whose reads fail.
+			failingSecretStore bool
 			// appID overrides the app ID an {appID} placeholder expands to.
 			appID   string
 			skipped bool
@@ -425,6 +437,19 @@ func Test_components_actorStateStore(t *testing.T) {
 			"appID placeholder expanding to a falsy app ID": {
 				metadata: []commonapi.NameValuePair{literal("{appID}")},
 			},
+			// A failed read leaves the value empty, while the processor's
+			// own read may then succeed and mark the store.
+			"secretKeyRef whose secret read fails": {
+				metadata:           []commonapi.NameValuePair{secretRef("true")},
+				failingSecretStore: true,
+				skipped:            true,
+			},
+			// The processor fails the init of metadata it cannot build, which
+			// would exit daprd.
+			"podName placeholder with no pod name": {
+				metadata: []commonapi.NameValuePair{literal("{podName}")},
+				skipped:  true,
+			},
 			"appID placeholder expanding to a truthy app ID": {
 				metadata: []commonapi.NameValuePair{literal("{appID}")},
 				appID:    "true",
@@ -440,6 +465,9 @@ func Test_components_actorStateStore(t *testing.T) {
 
 				if test.secretStore {
 					cs.AddSecretStore("actorstore-secrets", boolSecretStore{})
+				}
+				if test.failingSecretStore {
+					cs.AddSecretStore("actorstore-secrets", failingSecretStore{})
 				}
 				if test.appID != "" {
 					m.meta = meta.New(meta.Options{ID: test.appID, Namespace: "test", Mode: modes.StandaloneMode})
@@ -509,6 +537,33 @@ func Test_components_actorStateStore(t *testing.T) {
 				assert.Equal(t, test.reads, reads.Load())
 			})
 		}
+	})
+
+	// A component scoped to another app is ignored, so the guard neither
+	// reads its secrets nor takes the skipped slot for it.
+	t.Run("a store scoped to another app is not resolved", func(t *testing.T) {
+		var kicks, reads atomic.Int64
+		m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+		ctx := runProc(t, proc)
+		cs.AddSecretStore("actorstore-secrets", countingSecretStore{reads: &reads})
+
+		require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+
+		comp := actorStoreComp("otherstore", false, 1)
+		comp.Scopes = []string{"otherapp"}
+		comp.SecretStore = "actorstore-secrets"
+		comp.Spec.Metadata = []commonapi.NameValuePair{{
+			Name:         "actorStateStore",
+			SecretKeyRef: commonapi.SecretKeyRef{Name: "actorstore-secret", Key: "true"},
+		}}
+		require.NoError(t, m.update(ctx, comp))
+
+		assert.Equal(t, int64(0), reads.Load())
+		_, exists := cs.GetComponent("otherstore")
+		assert.False(t, exists)
+		m.skippedActorStoreLock.Lock()
+		assert.Nil(t, m.skippedActorStore)
+		m.skippedActorStoreLock.Unlock()
 	})
 
 	t.Run("skipped store is replayed when the actor state store is deleted", func(t *testing.T) {

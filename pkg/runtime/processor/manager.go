@@ -39,6 +39,9 @@ type StateManager interface {
 type SecretManager interface {
 	// TODO: update to return an error.
 	ProcessResource(context.Context, meta.Resource) (bool, string)
+	// ResolveResource is ProcessResource, and also returns the errors of the
+	// secret reads that failed.
+	ResolveResource(context.Context, meta.Resource) (bool, string, error)
 }
 
 // SubscribeManager exposes the subscriber-facing operations. Each method

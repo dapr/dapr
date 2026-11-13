@@ -77,15 +77,16 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// processor's own pass on reload would then decode already-decoded values
 	// (on Kubernetes, failing per value and logging the secret's first byte).
 	var (
-		resolved *compapi.Component
-		unready  string
+		resolved   *compapi.Component
+		unready    string
+		resolveErr error
 	)
-	resolve := func() (*compapi.Component, string) {
+	resolve := func() (*compapi.Component, string, error) {
 		if resolved == nil {
 			resolved = comp.DeepCopy()
-			_, unready = c.proc.Secret().ProcessResource(ctx, resolved)
+			_, unready, resolveErr = c.proc.Secret().ResolveResource(ctx, resolved)
 		}
-		return resolved, unready
+		return resolved, unready, resolveErr
 	}
 
 	// Only a single actor state store may be configured. Skip a component
@@ -93,7 +94,11 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// init and exiting daprd. The skipped component is stashed and replayed
 	// if the current actor state store is removed, so a rename delivered as
 	// create-before-delete converges without waiting for the next reconcile.
-	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && c.isMarkedActorStateStore(comp, resolve) {
+	// A component which is not scoped to this app is never loaded, so the
+	// guard does not resolve it: that would read secrets for a component
+	// this app must ignore, and could take the skipped slot from one of its
+	// own.
+	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && c.auth.IsObjectAuthorized(comp) && c.isMarkedActorStateStore(comp, resolve) {
 		log.Errorf("Skipping hot reload of %s: %s is already the actor state store, only one actor state store is allowed. The component will be applied if %s is removed", comp.LogName(), name, name)
 		c.skippedActorStoreLock.Lock()
 		c.skippedActorStore = &comp
@@ -116,7 +121,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 		// Compare the resolved copy: the stored copy was resolved on load, so
 		// comparing it against the raw incoming spec would differ every tick
 		// for a secret-ref metadata item.
-		if resolved, _ := resolve(); differ.AreSame(oldComp, *resolved) {
+		if resolved, _, _ := resolve(); differ.AreSame(oldComp, *resolved) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
 			return nil
 		}
@@ -233,10 +238,11 @@ func (c *components) notifyActorStateStoreChanged() func() {
 // duplicate entries, placeholders and resolved values are decided the same
 // way. comp is resolved only when the deciding entry is an environment
 // variable or secret reference, so a literal value costs no secret reads.
-// A reference that cannot be resolved yet, because a secret store of comp is
-// not loaded, counts as marked: skipping the component is recoverable, while
-// a second actor state store fails its init and exits daprd.
-func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string)) bool {
+// A value that cannot be known counts as marked: a reference whose secret
+// store is not loaded yet, a secret read that failed, or metadata the
+// processor cannot build. Skipping the component is recoverable, while a
+// second actor state store, or a failed init, exits daprd.
+func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string, error)) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
 	}
@@ -259,7 +265,12 @@ func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve fun
 		if ref.SecretKeyRef.Name == "" && ref.EnvRef == "" {
 			continue
 		}
-		resolved, unready := resolve()
+		resolved, unready, err := resolve()
+		// A failed secret read leaves the value empty, as an empty secret
+		// does, while the processor's own read may succeed.
+		if err != nil {
+			return true
+		}
 		if unready != "" {
 			// Resolution stops at the first secret whose store is not
 			// loaded. A secret reference may still be unresolved even if it
@@ -275,11 +286,11 @@ func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve fun
 		break
 	}
 
-	// A metadata error fails the processor's init as well, so the component
-	// can never become a second actor state store.
+	// A metadata error fails the processor's init too, and that error exits
+	// daprd, while a skip does not.
 	base, err := c.meta.ToBaseMetadata(*target)
 	if err != nil {
-		return false
+		return true
 	}
 	return state.IsActorStateStore(base.Properties)
 }
