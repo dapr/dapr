@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/hostauthz"
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -83,7 +84,7 @@ func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMet
 
 	activityResult := createOnly &&
 		strings.HasPrefix(name, common.ReminderPrefixActivityResult) &&
-		strings.HasPrefix(actor.GetType(), "dapr.internal."+meta.GetNamespace()+".") &&
+		strings.HasPrefix(actor.GetType(), reserved.InternalActorTypePrefix+meta.GetNamespace()+".") &&
 		strings.HasSuffix(actor.GetType(), ".workflow")
 	if !activityResult {
 		log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actor.GetType(), meta.GetNamespace(), meta.GetAppId())
