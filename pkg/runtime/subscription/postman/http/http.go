@@ -51,6 +51,24 @@ var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.http")
 // pkg/runtime/subscription and the gRPC postman.
 const deadLetterPublishTimeout = 30 * time.Second
 
+// appResponse is the HTTP subscriber response body. Message is decoded here
+// rather than via components-contrib AppResponse so the runtime can consume
+// optional error details before that field is released in contrib.
+type appResponse struct {
+	Status  contribpubsub.AppResponseStatus `json:"status"`
+	Message string                          `json:"message,omitempty"`
+}
+
+type appBulkResponseEntry struct {
+	EntryId string                          `json:"entryId"` //nolint:stylecheck
+	Status  contribpubsub.AppResponseStatus `json:"status"`
+	Message string                          `json:"message,omitempty"`
+}
+
+type appBulkResponse struct {
+	AppResponses []appBulkResponseEntry `json:"statuses"`
+}
+
 type Options struct {
 	Tracing  *config.TracingSpec
 	Channels *channels.Channels
@@ -130,9 +148,9 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appResponse contribpubsub.AppResponse
+		var response appResponse
 
-		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&response)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				log.Debugf("skipping status check due to empty response body from pub/sub event %v", cloudEvent[contribpubsub.IDField])
@@ -145,7 +163,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 			return nil
 		}
 
-		switch appResponse.Status {
+		switch response.Status {
 		case "":
 			// Consider empty status field as success
 			fallthrough
@@ -154,21 +172,23 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 			return nil
 		case contribpubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-			// TODO: add retry error info
-			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
+			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField],
+				rterrors.NewRetriable(pubsub.NewMessageError(nil, response.Message)))
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msg.Topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
 
-			return pubsub.ErrMessageDropped
+			return pubsub.NewMessageDroppedError(response.Message)
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], appResponse.Status, rterrors.NewRetriable(nil))
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[contribpubsub.IDField], response.Status,
+			rterrors.NewRetriable(pubsub.NewMessageError(nil, response.Message)))
 	}
 
 	body, _ := resp.RawDataFull()
+	bodyDetails := string(body)
 	if statusCode == nethttp.StatusNotFound {
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
@@ -176,7 +196,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[contribpubsub.IDField], body, statusCode)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
 
-		return pubsub.ErrMessageDropped
+		return pubsub.NewMessageDroppedError(bodyDetails)
 	}
 
 	// Every error from now on is a retriable error.
@@ -186,7 +206,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	// return error status code for resiliency to decide on retry
 	// TODO: Update types to uint32
 	//nolint:gosec
-	return resiliency.NewCodeError(int32(statusCode), rterrors.NewRetriable(errors.New(errMsg)))
+	return resiliency.NewCodeError(int32(statusCode), rterrors.NewRetriable(pubsub.NewMessageError(errors.New(errMsg), bodyDetails)))
 }
 
 // DeliverBulk publishes bulk message to a subscriber using HTTP and takes care
@@ -298,9 +318,9 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
-		var appBulkResponse contribpubsub.AppBulkResponse
+		var bulkResponse appBulkResponse
 
-		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
+		err = json.NewDecoder(resp.RawData()).Decode(&bulkResponse)
 		if err != nil {
 			bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, int64(len(rawMsgEntries)))
 			bscData.BulkSubDiag.SetElapsed(elapsed)
@@ -312,7 +332,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 		var hasAnyError bool
 
-		for _, response := range appBulkResponse.AppResponses {
+		for _, response := range bulkResponse.AppResponses {
 			if msg, ok := attemptMsgs[response.EntryId]; ok {
 				delete(attemptMsgs, response.EntryId)
 
@@ -323,7 +343,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 				case contribpubsub.Retry:
 					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
-						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
+						pubsub.NewMessageError(fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId), response.Message))
 
 					hasAnyError = true
 				case contribpubsub.Success:
@@ -340,13 +360,13 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 							Topic:       bscData.Topic,
 							Metadata:    msg.Entry.Metadata,
 							ContentType: &msg.Entry.ContentType,
-						}, req.DeadLetterTopic)
+						}, req.DeadLetterTopic, response.Message, req.RawPayload, req.DeadLetterErrorDetails)
 					}
 				default:
 					// Consider unknown status field as error and retry
 					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
-						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
+						pubsub.NewMessageError(fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status), response.Message))
 
 					hasAnyError = true
 				}
@@ -439,7 +459,7 @@ func (h *http) sendBulkToDeadLetter(ctx context.Context,
 	return err
 }
 
-func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
+func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string, errorDetails string, rawPayload bool, cfg pubsub.DeadLetterErrorDetailsConfig) error {
 	req := &contribpubsub.PublishRequest{
 		Data:        msg.Data,
 		PubsubName:  name,
@@ -447,6 +467,7 @@ func (h *http) sendToDeadLetter(ctx context.Context, name string, msg *contribpu
 		Metadata:    msg.Metadata,
 		ContentType: msg.ContentType,
 	}
+	pubsub.EnrichDeadLetterRequest(req, errorDetails, rawPayload, cfg)
 
 	// Skip the DLQ publish if the parent was explicitly canceled (e.g.
 	// shutdown); detaching the deadline below would otherwise let this block
