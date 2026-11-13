@@ -107,7 +107,8 @@ func TestQueue_TryDispatchOneRotates(t *testing.T) {
 	}
 	assert.Equal(t, []*loops.TriggerRequest{a1, b1, c1, a2, a3}, order)
 	assert.Equal(t, 0, q.len())
-	assert.Empty(t, q.levels[levelOf(a1)].names)
+	assert.Len(t, q.levels[levelOf(a1)].names, 1, "the emptied name keeps its count for a round")
+	assert.Zero(t, q.levels[levelOf(a1)].names[""].n)
 
 	// A rejected head does not block another instance's head.
 	require.True(t, q.enqueue(a1, false))
@@ -343,6 +344,66 @@ func TestQueue_ReturningNameEarnsNothing(t *testing.T) {
 	assert.InDelta(t, 60, backlogServed, 3, "3 backlog turns per trickle turn")
 }
 
+func TestQueue_HeavyReturningNameKeepsItsShare(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	for i := range 400 {
+		require.True(t, q.enqueue(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), false))
+	}
+
+	// A weight 3 name that always has exactly one trigger waiting, sent as
+	// soon as the previous one was served, still gets 3 turns in 4.
+	counts := map[string]int{}
+	next := 0
+	enqueueHeavy := func() {
+		require.True(t, q.enqueue(prioritized(h.trigger("h::"+strconv.Itoa(next)+"::0", "heavy"), normal, 3), false))
+		next++
+	}
+	enqueueHeavy()
+	for range 400 {
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+			counts[nameOf(r)]++
+			return true
+		}))
+		if q.levels[2].names["heavy"].n == 0 {
+			enqueueHeavy()
+		}
+	}
+	assert.InDelta(t, 300, counts["heavy"], 2)
+	assert.InDelta(t, 100, counts["light"], 2)
+}
+
+func TestQueue_LongGoneNameStartsLikeNew(t *testing.T) {
+	t.Parallel()
+	q := newQueue(1000)
+	h := newHarness(t, 0, 0)
+	lv := &q.levels[2]
+	for i := range 20 {
+		require.True(t, q.enqueue(h.trigger("l::"+strconv.Itoa(i)+"::0", "light"), false))
+	}
+	require.True(t, q.enqueue(prioritized(h.trigger("h::0::0", "heavy"), normal, 3), false))
+
+	// Serve heavy once; its queue is now empty but its count is kept. One
+	// weight 1 dispatch is a full round, so one more light serve moves the
+	// clock past it and it is forgotten.
+	served := func() string {
+		var name string
+		require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool { name = nameOf(r); return true }))
+		return name
+	}
+	for served() != "heavy" {
+	}
+	assert.Contains(t, lv.names, "heavy", "within a round the count is kept")
+	assert.Zero(t, lv.names["heavy"].n)
+	assert.Less(t, lv.names["heavy"].dispatchesPerWeight, lv.startAt, "and it is behind, owed its next turns")
+	require.Equal(t, "light", served())
+	assert.NotContains(t, lv.names, "heavy", "a round later it is forgotten")
+
+	require.True(t, q.enqueue(prioritized(h.trigger("h::1::0", "heavy"), normal, 3), false))
+	assert.Equal(t, lv.startAt, lv.names["heavy"].dispatchesPerWeight, "and comes back like a new name")
+}
+
 func TestQueue_SkippedNameIsCharged(t *testing.T) {
 	t.Parallel()
 	q := newQueue(2000)
@@ -431,7 +492,7 @@ func TestQueue_Remove(t *testing.T) {
 	assert.Same(t, n1, q.remove(key("wf::1::0")))
 	assert.Equal(t, 2, q.len())
 	assert.Same(t, c, q.remove(key("wf::3::0")))
-	assert.Empty(t, q.levels[levelOf(c)].names, "an emptied name is forgotten")
+	assert.Zero(t, q.levels[levelOf(c)].names["act"].n, "the emptied name keeps its count")
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
 	}

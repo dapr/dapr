@@ -48,14 +48,16 @@ type queue struct {
 	levels [numLevels]level
 }
 
-// level is the names waiting at one priority level. startAt is where a name
-// that starts or resumes waiting begins.
+// level is the names at one priority level. startAt is the highest count
+// reached, where a new name begins. A name whose queue empties keeps its
+// count for one round, so it resumes where it left off; after that it is
+// forgotten and starts like a new name.
 type level struct {
 	names   map[string]*flow
 	startAt uint64
 }
 
-// flow is the waiting triggers of one name at one level, grouped by workflow
+// flow is the triggers of one name at one level, grouped by workflow
 // instance. The name with the lowest dispatches ÷ weight is furthest behind
 // its share and is served next.
 type flow struct {
@@ -165,9 +167,7 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 			for _, s := range skipped {
 				s.dispatchesPerWeight = max(s.dispatchesPerWeight, lv.startAt)
 			}
-			if f.n == 0 {
-				delete(lv.names, f.name)
-			}
+			lv.forget()
 			if lv.startAt >= rebaseAt {
 				lv.rebase()
 			}
@@ -176,6 +176,15 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 		}
 	}
 	return false
+}
+
+// forget drops the empty names that are a full round or more behind startAt.
+func (lv *level) forget() {
+	for name, f := range lv.names {
+		if f.n == 0 && f.dispatchesPerWeight+oneDispatch <= lv.startAt {
+			delete(lv.names, name)
+		}
+	}
 }
 
 // rebase subtracts the lowest count from every name and from startAt, which
@@ -191,11 +200,14 @@ func (lv *level) rebase() {
 	lv.startAt -= low
 }
 
-// furthestBehind returns the level's names in serving order.
+// furthestBehind returns the level's names with triggers waiting, in serving
+// order.
 func (lv *level) furthestBehind() []*flow {
 	fs := make([]*flow, 0, len(lv.names))
 	for _, f := range lv.names {
-		fs = append(fs, f)
+		if f.n > 0 {
+			fs = append(fs, f)
+		}
 	}
 	slices.SortFunc(fs, func(a, b *flow) int {
 		return cmp.Or(cmp.Compare(a.dispatchesPerWeight, b.dispatchesPerWeight), cmp.Compare(a.seq, b.seq))
@@ -238,13 +250,10 @@ func (f *flow) offer(fn func(*loops.TriggerRequest) bool) (*loops.TriggerRequest
 func (q *queue) remove(key string) *loops.TriggerRequest {
 	for i := range q.levels {
 		lv := &q.levels[i]
-		for name, f := range lv.names {
+		for _, f := range lv.names {
 			req := f.remove(key)
 			if req == nil {
 				continue
-			}
-			if f.n == 0 {
-				delete(lv.names, name)
 			}
 			q.n--
 			return req
