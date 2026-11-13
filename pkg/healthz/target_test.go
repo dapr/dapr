@@ -91,3 +91,31 @@ func Test_target(t *testing.T) {
 	assert.ElementsMatch(t, []string{"target1", "target2"}, h.GetUnhealthyTargets())
 	assert.False(t, h.IsReady())
 }
+
+func Test_target_notReadyReason(t *testing.T) {
+	h := New()
+	ta1 := h.AddTarget("target1")
+	ta2 := h.AddTarget("target2")
+
+	ta1.SetNotReadyReason("cannot connect")
+	assert.ElementsMatch(t, []string{"target1: cannot connect", "target2"}, h.GetUnhealthyTargets())
+	assert.False(t, h.IsReady())
+
+	ta1.SetNotReadyReason("still cannot connect")
+	assert.ElementsMatch(t, []string{"target1: still cannot connect", "target2"}, h.GetUnhealthyTargets())
+
+	// A reason does not change readiness, and Ready clears it.
+	ta1.Ready()
+	ta2.Ready()
+	assert.Empty(t, h.GetUnhealthyTargets())
+	assert.True(t, h.IsReady())
+
+	// A reason has no effect while the target is ready.
+	ta1.SetNotReadyReason("ignored")
+	assert.Empty(t, h.GetUnhealthyTargets())
+	assert.True(t, h.IsReady())
+
+	ta1.NotReady()
+	assert.ElementsMatch(t, []string{"target1"}, h.GetUnhealthyTargets())
+	assert.False(t, h.IsReady())
+}
