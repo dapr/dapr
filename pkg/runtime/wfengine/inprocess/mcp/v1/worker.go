@@ -30,6 +30,7 @@ import (
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	mcpauth "github.com/dapr/dapr/pkg/runtime/mcp/auth"
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	mcptypes "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/types"
 	"github.com/dapr/dapr/pkg/security"
@@ -67,7 +68,7 @@ const (
 	workflowVersion = "v1"
 
 	// defaultMCPTimeout is the per-call deadline when no endpoint.timeout is set.
-	defaultMCPTimeout = 30 * time.Second
+	defaultMCPTimeout = mcpauth.DefaultCallTimeout
 
 	mcpClientName    = "dapr"
 	mcpClientVersion = "v1alpha1"
@@ -314,16 +315,11 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 }
 
 // CallTimeout returns the per-call deadline for the given MCPServer.
-// Falls back to defaultMCPTimeout when no timeout is configured.
+// Falls back to defaultMCPTimeout when no timeout is configured. It is the same
+// bound the server's HTTP client waits for response headers (see
+// mcpauth.BuildHTTPClient), so the two cannot disagree.
 func CallTimeout(server *mcpserverapi.MCPServer) time.Duration {
-	switch {
-	case server.Spec.Endpoint.StreamableHTTP != nil && server.Spec.Endpoint.StreamableHTTP.Timeout != nil:
-		return server.Spec.Endpoint.StreamableHTTP.Timeout.Duration
-	case server.Spec.Endpoint.SSE != nil && server.Spec.Endpoint.SSE.Timeout != nil:
-		return server.Spec.Endpoint.SSE.Timeout.Duration
-	default:
-		return defaultMCPTimeout
-	}
+	return mcpauth.CallTimeout(server)
 }
 
 // withDeadline creates a context with the given timeout, or returns the
