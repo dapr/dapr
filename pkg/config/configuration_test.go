@@ -617,7 +617,7 @@ func TestSortMetrics(t *testing.T) {
 		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
 	})
 
-	t.Run("metrics enabled true does not re-enable metric enabled false", func(t *testing.T) {
+	t.Run("metrics overrides metric - enabled true", func(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
@@ -635,7 +635,7 @@ func TestSortMetrics(t *testing.T) {
 		}
 
 		config.sortMetricsSpec()
-		assert.False(t, config.Spec.MetricSpec.GetEnabled())
+		assert.True(t, config.Spec.MetricSpec.GetEnabled())
 		assert.Equal(t, "rule", config.Spec.MetricSpec.Rules[0].Name)
 	})
 

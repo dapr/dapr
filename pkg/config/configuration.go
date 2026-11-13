@@ -1185,9 +1185,7 @@ func (c *Configuration) sortMetricsSpec() {
 		return
 	}
 
-	// On Kubernetes the CRD defaults both fields to enabled, so a true in
-	// .metrics must not re-enable metrics disabled in .metric.
-	if c.Spec.MetricsSpec.Enabled != nil && !*c.Spec.MetricsSpec.Enabled {
+	if c.Spec.MetricsSpec.Enabled != nil {
 		c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
 	}
 
