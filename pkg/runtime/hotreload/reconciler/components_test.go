@@ -107,6 +107,7 @@ func newComponentsManager(t *testing.T, mode modes.DaprMode) (*components, *proc
 		store: cs,
 		proc:  proc,
 		auth:  authorizer.New(authorizer.Options{ID: "id"}),
+		meta:  proc.Meta(),
 	}
 	return m, proc, cs, mockPubSub
 }
@@ -160,6 +161,17 @@ func (boolSecretStore) GetSecret(context.Context, secretstores.GetSecretRequest)
 	}, nil
 }
 
+// countingSecretStore is a boolSecretStore which counts its secret reads.
+type countingSecretStore struct {
+	boolSecretStore
+	reads *atomic.Int64
+}
+
+func (s countingSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	s.reads.Add(1)
+	return s.boolSecretStore.GetSecret(ctx, req)
+}
+
 func newComponentsActorStoreManager(t *testing.T, kicks *atomic.Int64) (*components, *processor.Processor, *compstore.ComponentStore) {
 	t.Helper()
 
@@ -194,6 +206,7 @@ func newComponentsActorStoreManager(t *testing.T, kicks *atomic.Int64) (*compone
 		store: cs,
 		proc:  proc,
 		auth:  authorizer.New(authorizer.Options{ID: "id"}),
+		meta:  proc.Meta(),
 	}
 	return m, proc, cs
 }
@@ -322,7 +335,12 @@ func Test_components_actorStateStore(t *testing.T) {
 			metadata []commonapi.NameValuePair
 			// secretStore loads the secret store the secretRef entries read.
 			secretStore bool
-			skipped     bool
+			// appID overrides the app ID an {appID} placeholder expands to.
+			appID   string
+			skipped bool
+			// parked is a component the guard lets through which the
+			// processor parks behind a secret store that is not loaded.
+			parked bool
 		}{
 			"duplicate entries, the last one is truthy": {
 				metadata: []commonapi.NameValuePair{literal("false"), literal("true")},
@@ -388,19 +406,28 @@ func Test_components_actorStateStore(t *testing.T) {
 				metadata:    []commonapi.NameValuePair{secretRef("missing"), literal("false")},
 				secretStore: true,
 			},
-			"unresolved secretKeyRef after an earlier literal false": {
+			// A secret that resolves to nothing is an empty value for the
+			// processor too, which loads a plain store.
+			"secretKeyRef to a missing key after an earlier literal false": {
 				metadata:    []commonapi.NameValuePair{literal("false"), secretRef("missing")},
 				secretStore: true,
-				skipped:     true,
 			},
-			// Placeholders are expanded by the processor at init, and {appID}
-			// or {podName} may expand to a truthy value, so they count as marked.
-			"appID placeholder": {
+			// The envRef is resolved before resolution stops at the secret,
+			// so its value is known and the store waits for its secret store.
+			"envRef resolving to false before a secret whose store is not loaded": {
+				metadata: []commonapi.NameValuePair{
+					envRef("RECONCILER_TEST_ACTOR_STORE_FALSE"),
+					{Name: "password", SecretKeyRef: commonapi.SecretKeyRef{Name: "actorstore-secret", Key: "false"}},
+				},
+				parked: true,
+			},
+			// Placeholders are expanded as the processor expands them at init.
+			"appID placeholder expanding to a falsy app ID": {
 				metadata: []commonapi.NameValuePair{literal("{appID}")},
-				skipped:  true,
 			},
-			"podName placeholder": {
-				metadata: []commonapi.NameValuePair{literal("{podName}")},
+			"appID placeholder expanding to a truthy app ID": {
+				metadata: []commonapi.NameValuePair{literal("{appID}")},
+				appID:    "true",
 				skipped:  true,
 			},
 		}
@@ -414,6 +441,9 @@ func Test_components_actorStateStore(t *testing.T) {
 				if test.secretStore {
 					cs.AddSecretStore("actorstore-secrets", boolSecretStore{})
 				}
+				if test.appID != "" {
+					m.meta = meta.New(meta.Options{ID: test.appID, Namespace: "test", Mode: modes.StandaloneMode})
+				}
 
 				require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
 
@@ -423,7 +453,7 @@ func Test_components_actorStateStore(t *testing.T) {
 				require.NoError(t, m.update(ctx, comp))
 
 				_, exists := cs.GetComponent("otherstore")
-				assert.Equal(t, !test.skipped, exists)
+				assert.Equal(t, !test.skipped && !test.parked, exists)
 				// A component parked behind a secret store that is not loaded
 				// is not installed either, so check it was skipped by the guard.
 				m.skippedActorStoreLock.Lock()
@@ -432,6 +462,51 @@ func Test_components_actorStateStore(t *testing.T) {
 				_, name, ok := cs.GetStateStoreActor()
 				require.True(t, ok)
 				assert.Equal(t, "mystore", name)
+			})
+		}
+	})
+
+	// A literal actorStateStore value is decided without resolving the
+	// component, so the guard adds no secret reads to the processor's own.
+	t.Run("a literal actorStateStore value reads no secrets", func(t *testing.T) {
+		password := commonapi.NameValuePair{
+			Name:         "password",
+			SecretKeyRef: commonapi.SecretKeyRef{Name: "actorstore-secret", Key: "false"},
+		}
+		literal := func(v string) commonapi.NameValuePair {
+			return commonapi.NameValuePair{
+				Name:  "actorStateStore",
+				Value: commonapi.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(strconv.Quote(v))}},
+			}
+		}
+
+		tests := map[string]struct {
+			value string
+			// reads is the number of secret reads, all by the processor.
+			reads   int64
+			skipped bool
+		}{
+			"falsy store is loaded with a single read": {value: "false", reads: 1},
+			"truthy store is skipped with no read":     {value: "true", skipped: true},
+		}
+
+		for name, test := range tests {
+			t.Run(name, func(t *testing.T) {
+				var kicks, reads atomic.Int64
+				m, proc, cs := newComponentsActorStoreManager(t, &kicks)
+				ctx := runProc(t, proc)
+				cs.AddSecretStore("actorstore-secrets", countingSecretStore{reads: &reads})
+
+				require.NoError(t, m.update(ctx, actorStoreComp("mystore", true, 1)))
+
+				comp := actorStoreComp("otherstore", false, 1)
+				comp.SecretStore = "actorstore-secrets"
+				comp.Spec.Metadata = []commonapi.NameValuePair{literal(test.value), password}
+				require.NoError(t, m.update(ctx, comp))
+
+				_, exists := cs.GetComponent("otherstore")
+				assert.Equal(t, !test.skipped, exists)
+				assert.Equal(t, test.reads, reads.Load())
 			})
 		}
 	})

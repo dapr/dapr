@@ -16,18 +16,17 @@ package reconciler
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 
 	"k8s.io/utils/clock"
 
-	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
+	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 )
@@ -36,6 +35,7 @@ type components struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
 	auth  *authorizer.Authorizer
+	meta  *meta.Meta
 	loader.Loader[compapi.Component]
 
 	// skippedActorStore stashes the most recent component skipped because
@@ -47,6 +47,10 @@ type components struct {
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+	var compMeta *meta.Meta
+	if opts.Processor != nil {
+		compMeta = opts.Processor.Meta()
+	}
 	r := &Reconciler[compapi.Component]{
 		kind:     compapi.Kind,
 		htarget:  opts.Healthz.AddTarget("component-reconciler"),
@@ -57,6 +61,7 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 			store:  opts.CompStore,
 			proc:   opts.Processor,
 			auth:   opts.Authorizer,
+			meta:   compMeta,
 		},
 	}
 	r.loop = loopFactory.NewLoop(r)
@@ -88,7 +93,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) error {
 	// init and exiting daprd. The skipped component is stashed and replayed
 	// if the current actor state store is removed, so a rename delivered as
 	// create-before-delete converges without waiting for the next reconcile.
-	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && isMarkedActorStateStore(comp, resolve) {
+	if _, name, ok := c.store.GetStateStoreActor(); ok && name != comp.Name && c.isMarkedActorStateStore(comp, resolve) {
 		log.Errorf("Skipping hot reload of %s: %s is already the actor state store, only one actor state store is allowed. The component will be applied if %s is removed", comp.LogName(), name, name)
 		c.skippedActorStoreLock.Lock()
 		c.skippedActorStore = &comp
@@ -223,56 +228,58 @@ func (c *components) notifyActorStateStoreChanged() func() {
 }
 
 // isMarkedActorStateStore returns whether the state processor will mark comp
-// as the actor state store. It takes comp with its secret and environment
-// variable references resolved, as the processor resolves them before init,
-// and applies the processor's own check, so that duplicate entries and
-// resolved values are decided the same way. A value that cannot be known yet
-// counts as marked: skipping the component is recoverable, while a second
-// actor state store fails its init and exits daprd. That covers a reference
-// that cannot be resolved yet, for example because its secret store is not
-// loaded, and an {appID} or {podName} placeholder, which the processor only
-// expands at init.
-func isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string)) bool {
+// as the actor state store. It builds the metadata properties with the
+// processor's own meta helper and applies the processor's own check, so that
+// duplicate entries, placeholders and resolved values are decided the same
+// way. comp is resolved only when the deciding entry is an environment
+// variable or secret reference, so a literal value costs no secret reads.
+// A reference that cannot be resolved yet, because a secret store of comp is
+// not loaded, counts as marked: skipping the component is recoverable, while
+// a second actor state store fails its init and exits daprd.
+func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string)) bool {
 	if !strings.HasPrefix(comp.Spec.Type, "state.") {
 		return false
 	}
-	if !slices.ContainsFunc(comp.Spec.Metadata, isActorStateStoreItem) {
+
+	// The processor keeps the last entry of a name, so only those entries
+	// decide the value.
+	last := make(map[string]int, len(comp.Spec.Metadata))
+	for i, item := range comp.Spec.Metadata {
+		if state.IsActorStateStoreKey(item.Name) {
+			last[item.Name] = i
+		}
+	}
+	if len(last) == 0 {
 		return false
 	}
 
-	resolved, unready := resolve()
-
-	// Build the properties as the processor does: the last entry of a name
-	// wins, so only that entry decides whether the value is known.
-	last := make(map[string]int, len(resolved.Spec.Metadata))
-	for i, item := range resolved.Spec.Metadata {
-		last[item.Name] = i
-	}
-	props := make(map[string]string, len(resolved.Spec.Metadata))
-	for i, item := range resolved.Spec.Metadata {
-		value := item.Value.String()
-		props[item.Name] = value
-
-		if !isActorStateStoreItem(item) || last[item.Name] != i {
+	target := &comp
+	for _, i := range last {
+		ref := comp.Spec.Metadata[i]
+		if ref.SecretKeyRef.Name == "" && ref.EnvRef == "" {
 			continue
 		}
-		// Resolution stops at the first secret whose store is not loaded, so
-		// every reference may still be unresolved, even one that has a value.
-		ref := comp.Spec.Metadata[i]
-		if unready != "" && (ref.SecretKeyRef.Name != "" || ref.EnvRef != "") {
-			return true
+		resolved, unready := resolve()
+		if unready != "" {
+			// Resolution stops at the first secret whose store is not
+			// loaded. A secret reference may still be unresolved even if it
+			// has a value, while a resolved environment variable reference
+			// is cleared on the copy.
+			for _, j := range last {
+				if comp.Spec.Metadata[j].SecretKeyRef.Name != "" || resolved.Spec.Metadata[j].EnvRef != "" {
+					return true
+				}
+			}
 		}
-		if item.SecretKeyRef.Name != "" && !item.HasValue() {
-			return true
-		}
-		if strings.Contains(value, "{appID}") || strings.Contains(value, "{podName}") {
-			return true
-		}
+		target = resolved
+		break
 	}
 
-	return state.IsActorStateStore(props)
-}
-
-func isActorStateStoreItem(item commonapi.NameValuePair) bool {
-	return strings.EqualFold(item.Name, state.PropertyKeyActorStateStore)
+	// A metadata error fails the processor's init as well, so the component
+	// can never become a second actor state store.
+	base, err := c.meta.ToBaseMetadata(*target)
+	if err != nil {
+		return false
+	}
+	return state.IsActorStateStore(base.Properties)
 }

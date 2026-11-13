@@ -38,6 +38,12 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
+// IsActorStateStoreKey reports whether a metadata property name is the
+// "actorStateStore" property, which is matched case-insensitively.
+func IsActorStateStoreKey(name string) bool {
+	return strings.EqualFold(name, PropertyKeyActorStateStore)
+}
+
 // IsActorStateStore reports whether the metadata properties of a state store
 // mark it as the actor state store: its "actorStateStore" property, matched
 // case-insensitively, is truthy. Names differing only in case are separate
@@ -46,8 +52,7 @@ var log = logger.NewLogger("dapr.runtime.processor.state")
 // same check before processing a component, so both must agree.
 func IsActorStateStore(props map[string]string) bool {
 	for k, v := range props {
-		//nolint:gocritic
-		if strings.ToLower(k) == PropertyKeyActorStateStore && kitstrings.IsTruthy(v) {
+		if IsActorStateStoreKey(k) && kitstrings.IsTruthy(v) {
 			return true
 		}
 	}
