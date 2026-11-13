@@ -58,6 +58,13 @@ type Actors struct {
 
 	runOnce     sync.Once
 	cleanupOnce sync.Once
+
+	// The connections the state helpers share, closed on Cleanup.
+	clientOnce sync.Once
+	conn       *grpc.ClientConn
+	connErr    error
+	httpOnce   sync.Once
+	http       *http.Client
 }
 
 func New(t *testing.T, fopts ...Option) *Actors {
@@ -179,6 +186,12 @@ func (a *Actors) Run(t *testing.T, ctx context.Context) {
 
 func (a *Actors) Cleanup(t *testing.T) {
 	a.cleanupOnce.Do(func() {
+		if a.conn != nil {
+			require.NoError(t, a.conn.Close())
+		}
+		if a.http != nil {
+			a.http.CloseIdleConnections()
+		}
 		a.daprd.Cleanup(t)
 		if !a.sharedControlPlane {
 			a.sched.Cleanup(t)

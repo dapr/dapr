@@ -57,10 +57,10 @@ func (r *twotypes) Run(t *testing.T, ctx context.Context) {
 
 	for _, actorType := range []string{r.txType, r.balType} {
 		t.Run(actorType+"/http", func(t *testing.T) {
-			saveAndReadHTTP(t, ctx, r.app, actorType, "h1")
+			r.app.SaveAndReadActorStateHTTP(t, ctx, actorType, "h1")
 		})
 		t.Run(actorType+"/grpc", func(t *testing.T) {
-			saveAndReadGRPC(t, ctx, r.app, actorType, "g1")
+			r.app.SaveAndReadActorStateGRPC(t, ctx, actorType, "g1")
 		})
 	}
 

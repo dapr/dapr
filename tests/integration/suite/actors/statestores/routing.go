@@ -15,18 +15,12 @@ package statestores
 
 import (
 	"context"
-	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -113,13 +107,13 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("http", func(t *testing.T) {
 		for _, actorType := range actorTypes {
-			saveAndReadHTTP(t, ctx, r.app, actorType, "h1")
+			r.app.SaveAndReadActorStateHTTP(t, ctx, actorType, "h1")
 		}
 	})
 
 	t.Run("grpc", func(t *testing.T) {
 		for _, actorType := range actorTypes {
-			saveAndReadGRPC(t, ctx, r.app, actorType, "g1")
+			r.app.SaveAndReadActorStateGRPC(t, ctx, actorType, "g1")
 		}
 	})
 
@@ -136,70 +130,4 @@ func (r *routing) Run(t *testing.T, ctx context.Context) {
 		appID + "||" + r.plainType + "||g1||k1",
 		appID + "||" + r.plainType + "||h1||k1",
 	}, r.defaultDB.StateKeys(t, ctx))
-}
-
-// saveAndReadHTTP activates the actor, then writes and reads back key k1
-// through the HTTP API.
-func saveAndReadHTTP(t *testing.T, ctx context.Context, app *actors.Actors, actorType, actorID string) {
-	t.Helper()
-
-	httpClient := client.HTTP(t)
-	baseURL := "http://" + app.Daprd().HTTPAddress() + "/v1.0/actors/" + actorType + "/" + actorID
-
-	do := func(method, path, body string) (int, string) {
-		t.Helper()
-		req, err := nethttp.NewRequestWithContext(ctx, method, baseURL+path, strings.NewReader(body))
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		b, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode, string(b)
-	}
-
-	code, body := do(nethttp.MethodPost, "/method/foo", "")
-	require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
-
-	code, body = do(nethttp.MethodPost, "/state",
-		`[{"operation":"upsert","request":{"key":"k1","value":"v1"}}]`)
-	require.Equalf(t, nethttp.StatusNoContent, code, "body: %s", body)
-
-	code, body = do(nethttp.MethodGet, "/state/k1", "")
-	require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
-	assert.JSONEq(t, `"v1"`, body)
-}
-
-// saveAndReadGRPC activates the actor, then writes and reads back key k1
-// through the gRPC API.
-func saveAndReadGRPC(t *testing.T, ctx context.Context, app *actors.Actors, actorType, actorID string) {
-	t.Helper()
-
-	gclient := app.GRPCClient(t, ctx)
-
-	_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Method:    "foo",
-	})
-	require.NoError(t, err)
-
-	_, err = gclient.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Operations: []*rtv1.TransactionalActorStateOperation{{
-			OperationType: "upsert",
-			Key:           "k1",
-			Value:         &anypb.Any{Value: []byte("v1")},
-		}},
-	})
-	require.NoError(t, err)
-
-	res, err := gclient.GetActorState(ctx, &rtv1.GetActorStateRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Key:       "k1",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "v1", string(res.GetData()))
 }

@@ -15,11 +15,9 @@ package selfhosted
 
 import (
 	"context"
-	"io"
 	nethttp "net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,11 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -94,44 +89,15 @@ spec:
 func (a *actorstatestorelate) Run(t *testing.T, ctx context.Context) {
 	a.app.WaitUntilRunning(t, ctx)
 
-	httpClient := client.HTTP(t)
-	gclient := a.app.GRPCClient(t, ctx)
-	baseURL := "http://" + a.app.Daprd().HTTPAddress() + "/v1.0/actors/" + a.boundType + "/a1"
-
-	doHTTP := func(t require.TestingT, method, path, body string) (int, string) {
-		req, err := nethttp.NewRequestWithContext(ctx, method, baseURL+path, strings.NewReader(body))
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		b, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode, string(b)
-	}
-
-	saveGRPC := func(key string) error {
-		_, err := gclient.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-			ActorType: a.boundType,
-			ActorId:   "a1",
-			Operations: []*rtv1.TransactionalActorStateOperation{{
-				OperationType: "upsert",
-				Key:           key,
-				Value:         &anypb.Any{Value: []byte("v1")},
-			}},
-		})
-		return err
-	}
-
-	code, body := doHTTP(t, nethttp.MethodPost, "/method/foo", "")
+	code, body := a.app.ActorHTTP(t, ctx, nethttp.MethodPost, a.boundType, "a1", "/method/foo", "")
 	require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
 
 	t.Run("bound store missing", func(t *testing.T) {
-		code, body := doHTTP(t, nethttp.MethodPost, "/state",
-			`[{"operation":"upsert","request":{"key":"kh","value":"v1"}}]`)
+		code, body := a.app.SaveActorStateHTTP(t, ctx, a.boundType, "a1", "kh", "v1")
 		assert.Equal(t, nethttp.StatusInternalServerError, code)
 		assert.Contains(t, body, "ERR_ACTOR_STATE_STORE_NOT_FOUND")
 
-		err := saveGRPC("kg")
+		err := a.app.SaveActorStateGRPC(t, ctx, a.boundType, "a1", "kg", "v1")
 		require.Error(t, err)
 		assert.Equal(t, codes.Internal, status.Code(err))
 		assert.Contains(t, err.Error(), a.boundStore)
@@ -145,33 +111,25 @@ func (a *actorstatestorelate) Run(t *testing.T, ctx context.Context) {
 		// so the actor stays active; invoking it first keeps each attempt
 		// independent of that.
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			code, body := doHTTP(c, nethttp.MethodPost, "/method/foo", "")
+			code, body := a.app.ActorHTTP(c, ctx, nethttp.MethodPost, a.boundType, "a1", "/method/foo", "")
 			if !assert.Equalf(c, nethttp.StatusOK, code, "body: %s", body) {
 				return
 			}
-			code, body = doHTTP(c, nethttp.MethodPost, "/state",
-				`[{"operation":"upsert","request":{"key":"kh","value":"v1"}}]`)
+			code, body = a.app.SaveActorStateHTTP(c, ctx, a.boundType, "a1", "kh", "v1")
 			assert.Equalf(c, nethttp.StatusNoContent, code, "body: %s", body)
 		}, 20*time.Second, 10*time.Millisecond)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: a.boundType, ActorId: "a1", Method: "foo",
-			})
-			if !assert.NoError(c, err) {
-				return
-			}
-			assert.NoError(c, saveGRPC("kg"))
+			a.app.InvokeActor(c, ctx, a.boundType, "a1")
+			assert.NoError(c, a.app.SaveActorStateGRPC(c, ctx, a.boundType, "a1", "kg", "v1"))
 		}, 20*time.Second, 10*time.Millisecond)
 
-		code, body := doHTTP(t, nethttp.MethodGet, "/state/kh", "")
+		code, body := a.app.ActorHTTP(t, ctx, nethttp.MethodGet, a.boundType, "a1", "/state/kh", "")
 		require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
 		assert.JSONEq(t, `"v1"`, body)
-		res, err := gclient.GetActorState(ctx, &rtv1.GetActorStateRequest{
-			ActorType: a.boundType, ActorId: "a1", Key: "kg",
-		})
+		got, err := a.app.GetActorStateGRPC(t, ctx, a.boundType, "a1", "kg")
 		require.NoError(t, err)
-		assert.Equal(t, "v1", string(res.GetData()))
+		assert.Equal(t, "v1", got)
 
 		appID := a.app.AppID()
 		assert.Equal(t, []string{

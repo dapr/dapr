@@ -15,9 +15,7 @@ package statestores
 
 import (
 	"context"
-	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -25,11 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
@@ -106,61 +102,33 @@ func (m *missing) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("http", func(t *testing.T) {
-		httpClient := client.HTTP(t)
-		baseURL := "http://" + m.app.Daprd().HTTPAddress() + "/v1.0/actors/" + m.boundType + "/h1"
-
-		do := func(method, path, body string) (int, string) {
-			t.Helper()
-			req, err := nethttp.NewRequestWithContext(ctx, method, baseURL+path, strings.NewReader(body))
-			require.NoError(t, err)
-			resp, err := httpClient.Do(req)
-			require.NoError(t, err)
-			b, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			return resp.StatusCode, string(b)
-		}
-
-		code, body := do(nethttp.MethodPost, "/method/foo", "")
+		code, body := m.app.ActorHTTP(t, ctx, nethttp.MethodPost, m.boundType, "h1", "/method/foo", "")
 		require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
 
-		code, body = do(nethttp.MethodPost, "/state",
-			`[{"operation":"upsert","request":{"key":"k1","value":"v1"}}]`)
+		code, body = m.app.SaveActorStateHTTP(t, ctx, m.boundType, "h1", "k1", "v1")
 		assert.Equal(t, nethttp.StatusInternalServerError, code)
 		assert.Contains(t, body, `"errorCode":"ERR_ACTOR_STATE_STORE_NOT_FOUND"`)
 		assertMessage(t, body)
 
-		code, body = do(nethttp.MethodGet, "/state/k1", "")
+		code, body = m.app.ActorHTTP(t, ctx, nethttp.MethodGet, m.boundType, "h1", "/state/k1", "")
 		assert.Equal(t, nethttp.StatusInternalServerError, code)
 		assert.Contains(t, body, `"errorCode":"ERR_ACTOR_STATE_STORE_NOT_FOUND"`)
 		assertMessage(t, body)
 	})
 
 	t.Run("grpc", func(t *testing.T) {
-		gclient := m.app.GRPCClient(t, ctx)
-
-		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		_, err := m.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: m.boundType, ActorId: "g1", Method: "foo",
 		})
 		require.NoError(t, err)
 
-		_, err = gclient.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-			ActorType: m.boundType,
-			ActorId:   "g1",
-			Operations: []*rtv1.TransactionalActorStateOperation{{
-				OperationType: "upsert",
-				Key:           "k1",
-				Value:         &anypb.Any{Value: []byte("v1")},
-			}},
-		})
+		err = m.app.SaveActorStateGRPC(t, ctx, m.boundType, "g1", "k1", "v1")
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		assert.Equal(t, codes.Internal, s.Code())
 		assertMessage(t, s.Message())
 
-		_, err = gclient.GetActorState(ctx, &rtv1.GetActorStateRequest{
-			ActorType: m.boundType, ActorId: "g1", Key: "k1",
-		})
+		_, err = m.app.GetActorStateGRPC(t, ctx, m.boundType, "g1", "k1")
 		s, ok = status.FromError(err)
 		require.True(t, ok)
 		assert.Equal(t, codes.Internal, s.Code())

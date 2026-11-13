@@ -15,18 +15,12 @@ package statestores
 
 import (
 	"context"
-	"io"
 	nethttp "net/http"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -81,64 +75,14 @@ func (u *unbound) Run(t *testing.T, ctx context.Context) {
 	actorTypes := []string{"TransactionActor", "PlainActor"}
 
 	t.Run("http", func(t *testing.T) {
-		httpClient := client.HTTP(t)
-		baseURL := "http://" + u.app.Daprd().HTTPAddress() + "/v1.0/actors/"
-
-		do := func(method, path, body string) (int, string) {
-			t.Helper()
-			req, err := nethttp.NewRequestWithContext(ctx, method, baseURL+path, strings.NewReader(body))
-			require.NoError(t, err)
-			resp, err := httpClient.Do(req)
-			require.NoError(t, err)
-			b, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			return resp.StatusCode, string(b)
-		}
-
 		for _, actorType := range actorTypes {
-			code, body := do(nethttp.MethodPost, actorType+"/h1/method/foo", "")
-			require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
-
-			code, body = do(nethttp.MethodPost, actorType+"/h1/state",
-				`[{"operation":"upsert","request":{"key":"k1","value":"v1"}}]`)
-			require.Equalf(t, nethttp.StatusNoContent, code, "body: %s", body)
-
-			code, body = do(nethttp.MethodGet, actorType+"/h1/state/k1", "")
-			require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
-			assert.JSONEq(t, `"v1"`, body)
+			u.app.SaveAndReadActorStateHTTP(t, ctx, actorType, "h1")
 		}
 	})
 
 	t.Run("grpc", func(t *testing.T) {
-		gclient := u.app.GRPCClient(t, ctx)
-
 		for _, actorType := range actorTypes {
-			_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: actorType,
-				ActorId:   "g1",
-				Method:    "foo",
-			})
-			require.NoError(t, err)
-
-			_, err = gclient.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-				ActorType: actorType,
-				ActorId:   "g1",
-				Operations: []*rtv1.TransactionalActorStateOperation{{
-					OperationType: "upsert",
-					Key:           "k1",
-					Value:         &anypb.Any{Value: []byte("v1")},
-				}},
-			})
-			require.NoError(t, err)
-
-			res, err := gclient.GetActorState(ctx, &rtv1.GetActorStateRequest{
-				ActorType: actorType,
-				ActorId:   "g1",
-				Key:       "k1",
-			})
-			require.NoError(t, err)
-			assert.Equal(t, "v1", string(res.GetData()))
+			u.app.SaveAndReadActorStateGRPC(t, ctx, actorType, "g1")
 		}
 	})
 

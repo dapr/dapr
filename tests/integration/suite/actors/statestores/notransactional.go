@@ -15,21 +15,17 @@ package statestores
 
 import (
 	"context"
-	"io"
 	nethttp "net/http"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
@@ -124,57 +120,29 @@ func (n *notransactional) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("http", func(t *testing.T) {
-		httpClient := client.HTTP(t)
-		baseURL := "http://" + n.app.Daprd().HTTPAddress() + "/v1.0/actors/" + n.boundType + "/h1"
-
-		do := func(method, path, body string) (int, string) {
-			t.Helper()
-			req, err := nethttp.NewRequestWithContext(ctx, method, baseURL+path, strings.NewReader(body))
-			require.NoError(t, err)
-			resp, err := httpClient.Do(req)
-			require.NoError(t, err)
-			b, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			return resp.StatusCode, string(b)
-		}
-
-		code, body := do(nethttp.MethodPost, "/method/foo", "")
+		code, body := n.app.ActorHTTP(t, ctx, nethttp.MethodPost, n.boundType, "h1", "/method/foo", "")
 		require.Equalf(t, nethttp.StatusOK, code, "body: %s", body)
 
-		code, body = do(nethttp.MethodGet, "/state/k1", "")
+		code, body = n.app.ActorHTTP(t, ctx, nethttp.MethodGet, n.boundType, "h1", "/state/k1", "")
 		assert.Equal(t, nethttp.StatusInternalServerError, code)
 		assertMessage(t, body)
 
-		code, body = do(nethttp.MethodPost, "/state",
-			`[{"operation":"upsert","request":{"key":"k1","value":"v1"}}]`)
+		code, body = n.app.SaveActorStateHTTP(t, ctx, n.boundType, "h1", "k1", "v1")
 		assert.Equal(t, nethttp.StatusInternalServerError, code)
 		assertMessage(t, body)
 	})
 
 	t.Run("grpc", func(t *testing.T) {
-		gclient := n.app.GRPCClient(t, ctx)
-
-		_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		_, err := n.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: n.boundType, ActorId: "g1", Method: "foo",
 		})
 		require.NoError(t, err)
 
-		_, err = gclient.GetActorState(ctx, &rtv1.GetActorStateRequest{
-			ActorType: n.boundType, ActorId: "g1", Key: "k1",
-		})
+		_, err = n.app.GetActorStateGRPC(t, ctx, n.boundType, "g1", "k1")
 		require.Error(t, err)
 		assertMessage(t, status.Convert(err).Message())
 
-		_, err = gclient.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
-			ActorType: n.boundType,
-			ActorId:   "g1",
-			Operations: []*rtv1.TransactionalActorStateOperation{{
-				OperationType: "upsert",
-				Key:           "k1",
-				Value:         &anypb.Any{Value: []byte("v1")},
-			}},
-		})
+		err = n.app.SaveActorStateGRPC(t, ctx, n.boundType, "g1", "k1", "v1")
 		require.Error(t, err)
 		assertMessage(t, status.Convert(err).Message())
 	})

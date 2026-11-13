@@ -111,7 +111,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Dapr!"`, meta.GetOutput().GetValue())
 
 	// The bound type still uses its bound store.
-	saveAndReadGRPC(t, ctx, w.app, w.boundType, "g1")
+	w.app.SaveAndReadActorStateGRPC(t, ctx, w.boundType, "g1")
 
 	// The workflow state is in the default actor state store, under the
 	// internal workflow actor types only.

@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -62,16 +61,6 @@ type kubernetesmode struct {
 	boundStore string
 	boundType  string
 	plainType  string
-}
-
-// k8sComponent turns the component manifest of a sqlite process into a
-// Component resource in the default namespace, for the operator to serve.
-func k8sComponent(t *testing.T, db *sqlite.SQLite) compapi.Component {
-	t.Helper()
-	var comp compapi.Component
-	require.NoError(t, yaml.Unmarshal([]byte(db.GetComponent(t)), &comp))
-	comp.Namespace = "default"
-	return comp
 }
 
 func (k *kubernetesmode) Setup(t *testing.T) []framework.Option {
@@ -125,8 +114,8 @@ func (k *kubernetesmode) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ComponentList"},
 			Items: []compapi.Component{
-				k8sComponent(t, k.defaultDB),
-				k8sComponent(t, k.txDB),
+				k.defaultDB.GetComponentResource(t, "default"),
+				k.txDB.GetComponentResource(t, "default"),
 			},
 		}),
 	)

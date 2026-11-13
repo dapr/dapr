@@ -137,13 +137,22 @@ func (s *SQLite) GetTableName(t *testing.T) string {
 
 // GetComponent returns the Component resource.
 func (s *SQLite) GetComponent(t *testing.T) string {
+	enc, err := json.Marshal(s.GetComponentResource(t, ""))
+	require.NoError(t, err)
+	return string(enc)
+}
+
+// GetComponentResource returns the state store component in namespace, for
+// example to serve it from the Kubernetes API mock.
+func (s *SQLite) GetComponentResource(t *testing.T, namespace string) componentsv1alpha1.Component {
 	c := componentsv1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Component",
 			APIVersion: "dapr.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: s.name,
+			Name:      s.name,
+			Namespace: namespace,
 		},
 		Spec: componentsv1alpha1.ComponentSpec{
 			Type:    "state.sqlite",
@@ -163,9 +172,7 @@ func (s *SQLite) GetComponent(t *testing.T) string {
 		})
 	}
 
-	enc, err := json.Marshal(c)
-	require.NoError(t, err)
-	return string(enc)
+	return c
 }
 
 func (s *SQLite) TableName() string {
