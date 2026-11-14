@@ -147,6 +147,12 @@ func TestRelease(t *testing.T) {
 	assert.True(t, live, "a finished run settles in its turn")
 	assert.Empty(t, *done)
 
+	settled := finished(true, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	settled.Ordering.Done = ptr.Of(true)
+	live, err = o.Release(t.Context(), release, settled)
+	require.NoError(t, err)
+	assert.False(t, live, "a run the key already let go of is a stale entry")
+
 	queuedOther := queued(keyK)
 	queuedOther.Ordering.CreateExecutionId = "e2"
 	for _, s := range []*wfenginestate.State{queuedOther, nil} {
@@ -158,7 +164,7 @@ func TestRelease(t *testing.T) {
 	for _, d := range *done {
 		outcomes = append(outcomes, d.Outcome)
 	}
-	assert.Equal(t, []keyactor.Outcome{keyactor.OutcomeSkipped, keyactor.OutcomePurged}, outcomes, "another run is skipped, no state is purged")
+	assert.Equal(t, []keyactor.Outcome{keyactor.OutcomeSkipped, keyactor.OutcomeSkipped, keyactor.OutcomePurged}, outcomes, "a settled run and another run are skipped, no state is purged")
 }
 
 func TestRecreate(t *testing.T) {

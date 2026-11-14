@@ -108,13 +108,14 @@ func (o *Ordering) TerminateQueued(ctx context.Context, state *wfenginestate.Sta
 }
 
 // Release reports whether a release or cancel reminder is for the run the
-// actor holds, which then takes its turn: a queued one is released or
-// cancelled by the gate, a finished one settles. A reminder for another run
-// tells the key to drop that run if it still lists it, as after a late
-// enqueue: the run is skipped, or purged when the actor holds no state at all.
+// actor holds and that still owes the key its turn: a queued one is released
+// or cancelled by the gate, a finished one settles. A reminder for another
+// run, or for this run after the key acknowledged that it is done, tells the
+// key to drop that entry if it still lists it, as after a late enqueue: the
+// run is skipped, or purged when the actor holds no state at all.
 func (o *Ordering) Release(ctx context.Context, reminder *actorapi.Reminder, state *wfenginestate.State) (bool, error) {
 	exec, _, _ := keyactor.ParseReminderName(reminder.Name)
-	if state != nil && state.Ordering.GetCreateExecutionId() == exec {
+	if state != nil && state.Ordering.GetCreateExecutionId() == exec && !state.Ordering.GetDone() {
 		return true, nil
 	}
 	key := reminderData(reminder).Key

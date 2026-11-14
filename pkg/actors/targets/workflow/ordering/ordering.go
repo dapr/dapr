@@ -17,10 +17,12 @@ limitations under the License.
 // the next instance is released once the head reports that it completed. The
 // actor never calls a workflow actor, so one can call it holding its own lock.
 //
-// The row's ETag guards every save but the first: two hosts that both serve
-// a new key during a placement move can each write the first row, and the
-// losing enqueue is dropped. The instance stays pending, and a status read of
-// it re-enqueues it, as for any stranded pending start.
+// The row's ETag guards every save but the first: the actor state API has no
+// insert-if-absent, so two hosts that both serve an idle key during a
+// placement move can each write the first row and release their own head,
+// and the order between those two starts is not kept. The row records the
+// last writer's queue, every later save is guarded, and the other head's Done
+// finds nothing to change.
 package ordering
 
 import (
