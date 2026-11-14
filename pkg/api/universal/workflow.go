@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -35,6 +36,7 @@ import (
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 )
 
 // Status values are defined at: https://github.com/dapr/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
@@ -291,6 +293,54 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 		a.logger.Debug(err)
 		return res, err
 	}
+	res.Staged = backendactors.ServedByFallback(ctx)
+	return res, nil
+}
+
+// RaiseErrorWorkflow is the API handler for failing an external-event wait
+// in a workflow. EventData carries proto-JSON TaskFailureDetails.
+func (a *Universal) RaiseErrorWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
+	if _, err := a.ActorRouter(ctx); err != nil {
+		return nil, err
+	}
+	res := &runtimev1pb.RaiseEventWorkflowResponse{}
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
+		a.logger.Debug(err)
+		return res, err
+	}
+	if in.GetEventName() == "" {
+		err := messages.ErrMissingWorkflowEventName
+		a.logger.Debug(err)
+		return res, err
+	}
+
+	targetAppID, err := a.targetAppID(in.GetAppId())
+	if err != nil {
+		a.logger.Debug(err)
+		return res, err
+	}
+
+	failureDetails := new(protos.TaskFailureDetails)
+	if err := protojson.Unmarshal(in.GetEventData(), failureDetails); err != nil {
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
+			fmt.Errorf("invalid workflow error details: %w", err))
+		a.logger.Debug(err)
+		return res, err
+	}
+
+	opts := []api.RaiseErrorOptions{api.WithFailureDetails(failureDetails)}
+	if targetAppID != "" {
+		opts = append(opts, api.WithRaiseErrorAppID(targetAppID))
+	}
+
+	ctx = backendactors.WithFallbackMarker(ctx)
+	if err := a.workflowEngine.Client().RaiseError(ctx, api.InstanceID(in.GetInstanceId()), in.GetEventName(), opts...); err != nil {
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
+			fmt.Errorf("failed to raise error for event %s on workflow %s: %w", in.GetEventName(), in.GetInstanceId(), err))
+		a.logger.Debug(err)
+		return res, err
+	}
+
 	res.Staged = backendactors.ServedByFallback(ctx)
 	return res, nil
 }
