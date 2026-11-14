@@ -42,23 +42,31 @@ func parseWorkflowVersionFromFile(path string) (string, error) {
 	return ghWorkflow.Jobs.Lint.Env.GOLANGCILINTVER, err
 }
 
-func getCurrentVersion() (string, error) {
-	out, err := exec.Command("golangci-lint", "--version").Output()
-	if err != nil {
-		return "", err
-	}
+var linterVersionRegex = regexp.MustCompile(`golangci-lint\shas\sversion\sv?([\d+.]+[\d])`)
 
-	regex, err := regexp.Compile(`golangci-lint\shas\sversion\sv?([\d+.]+[\d])`)
-	if err != nil {
-		return "", err
-	}
+// linterVersionOutput returns the raw output of "golangci-lint --version".
+// It is a variable so tests can substitute a controlled command result instead
+// of depending on the binary installed on the host.
+var linterVersionOutput = func() ([]byte, error) {
+	return exec.Command("golangci-lint", "--version").Output()
+}
 
-	matches := regex.FindStringSubmatch(string(out))
-
+// parseLinterVersion extracts the version from the output of
+// "golangci-lint --version".
+func parseLinterVersion(out []byte) (string, error) {
+	matches := linterVersionRegex.FindStringSubmatch(string(out))
 	if matches == nil {
 		return "", fmt.Errorf("no version found: %v", string(out))
 	}
-	return fmt.Sprintf("v%s", matches[1]), err
+	return fmt.Sprintf("v%s", matches[1]), nil
+}
+
+func getCurrentVersion() (string, error) {
+	out, err := linterVersionOutput()
+	if err != nil {
+		return "", err
+	}
+	return parseLinterVersion(out)
 }
 
 func isVersionValid(workflowVersion, currentVersion string) bool {
