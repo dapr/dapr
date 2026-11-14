@@ -23,6 +23,10 @@ import (
 const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
+	// PullProperty marks an activity work item delivered by pull dispatch. The
+	// backend refuses it, instead of queueing it, when the sidecar has no free
+	// activity slot.
+	PullProperty = "dapr.pull"
 
 	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
 	AddWorkflowEventMethod            = "AddWorkflowEvent"
@@ -32,6 +36,12 @@ const (
 	ForkWorkflowHistory               = "ForkWorkflowHistory"
 	RerunWorkflowInstance             = "RerunWorkflowInstance"
 	ExecuteActivityMethod             = "Execute"
+	// EvictWorkflowMethod deactivates the workflow actor wherever placement
+	// hosts it, dropping its cached state. A force purge runs on the daprd
+	// that received it and sends this to the owner when that is another
+	// daprd. Daprds that predate it answer "no such method"; the purge goes
+	// ahead regardless.
+	EvictWorkflowMethod = "EvictWorkflow"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	// MetadataActivityLocalDrive certifies to the activity host that the

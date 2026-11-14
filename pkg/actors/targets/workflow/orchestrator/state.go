@@ -66,12 +66,16 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	if err != nil {
 		var verifyErr *wferrors.VerificationError
 		if errors.As(err, &verifyErr) {
+			if state != nil {
+				o.releaseReplacedInstance(state)
+			}
 			if !state.IsCompleted() {
 				return o.tombstoneTamperedState(ctx, opts, state, err)
 			}
 		}
 		return nil, nil, err
 	}
+	o.releaseReplacedInstance(state)
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
@@ -126,9 +130,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		state.ClearCreationInput()
 	}
 
-	// Update cached state
-	o.state = state
-	o.primeCachedState(state, o.getExecutionStartedEvent(state))
+	o.cacheDurable(state)
 
 	return state, o.ometa, nil
 }
@@ -142,8 +144,7 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 		return nil, nil, err
 	}
 
-	o.state = failed
-	o.primeCachedState(failed, o.getExecutionStartedEvent(failed))
+	o.cacheDurable(failed)
 
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
@@ -206,6 +207,41 @@ func (o *orchestrator) invalidateCachedState() {
 	o.ometa = nil
 }
 
+// cacheDurable makes state the cached instance, as the store holds it after
+// a load or a save, and records which instance that is. A state a turn has
+// changed but not yet saved is never cached through here: a save that fails
+// drops the cache, and the load that follows must compare the store with the
+// instance it last held, not with the change that never landed.
+func (o *orchestrator) cacheDurable(state *wfenginestate.State) {
+	o.state = state
+	id := executionIDOf(o.getExecutionStartedEvent(state))
+	o.cachedExecutionID = &id
+	o.primeCachedState(state, o.getExecutionStartedEvent(state))
+}
+
+// releaseReplacedInstance runs on every load from the store. When the store
+// no longer holds the instance the cache last held, because a force purge on
+// another daprd deleted it, or deleted it and another instance was created
+// under the ID, nothing the actor holds for that instance applies to what the
+// store holds, and it is released. The same instance, moved on by another
+// host, keeps it: a result can still be owed to it. loaded is nil when the
+// store holds no instance.
+func (o *orchestrator) releaseReplacedInstance(loaded *wfenginestate.State) {
+	if o.cachedExecutionID == nil {
+		return
+	}
+	if loaded == nil || executionIDOf(o.getExecutionStartedEvent(loaded)) != *o.cachedExecutionID {
+		o.resetForPurgedInstance()
+		o.cachedExecutionID = nil
+	}
+	// The same instance: the record stays until cacheDurable replaces it, so
+	// a load that fails after this point still leaves it in place.
+}
+
+func executionIDOf(es *protos.ExecutionStartedEvent) string {
+	return es.GetWorkflowInstance().GetExecutionId().GetValue()
+}
+
 // primeCachedState rebuilds the cached runtime-state and metadata views from
 // state. startEvent supplies the ExecutionStartedEvent the metadata falls back
 // to when the runtime state carries none of its own. The inverse is
@@ -222,23 +258,106 @@ func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *
 // etag; a mismatch drops the cache and fails recoverably so the sender
 // retries against a fresh load.
 func (o *orchestrator) confirmCachedState(ctx context.Context, state *wfenginestate.State) error {
+	row, err := o.probeMetadataRow(ctx, state)
+	if err != nil {
+		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	switch row {
+	case metadataRowMissing:
+		o.invalidateCachedState()
+		return api.ErrInstanceNotFound
+	case metadataRowStale:
+		o.invalidateCachedState()
+		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+	default:
+		return nil
+	}
+}
+
+// rowVerdict is what the store's metadata row says about a cached state.
+type rowVerdict int
+
+const (
+	// metadataRowMatches: the row still describes the cached state.
+	metadataRowMatches rowVerdict = iota
+	// metadataRowMissing: the store holds no row for the instance.
+	metadataRowMissing
+	// metadataRowStale: the row describes a state other than the cached one.
+	metadataRowStale
+)
+
+// probeMetadataRow reads the metadata row, one Get, and compares it with
+// state. What each outcome means is left to the caller.
+func (o *orchestrator) probeMetadataRow(ctx context.Context, state *wfenginestate.State) (rowVerdict, error) {
 	res, err := o.actorState.Get(ctx, &actorsapi.GetStateRequest{
 		ActorType: o.actorType,
 		ActorID:   o.actorID,
 		Key:       wfenginestate.MetadataKey,
 	}, false)
 	if err != nil {
-		return wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+		return 0, err
 	}
 	if res == nil || len(res.Data) == 0 {
-		o.invalidateCachedState()
-		return api.ErrInstanceNotFound
+		return metadataRowMissing, nil
 	}
 	if _, ok := rowMatches(res, state.MetadataETag(), state.Generation, uint64(len(state.History))); !ok {
-		o.invalidateCachedState()
-		return wfengerrors.NewRecoverable(errors.New("cached state is stale; reloading"))
+		return metadataRowStale, nil
 	}
-	return nil
+	return metadataRowMatches, nil
+}
+
+// loadStateForCreate loads the state a create is judged on. A cached state is
+// first checked against the store's metadata row: a force purge run on another
+// daprd deletes the rows and evicts the actor resident here, but when that
+// eviction does not land (an owner that predates it, or a turn that held the
+// lock past the purge's budget) the actor keeps its cache. Several of the
+// create's verdicts (AlreadyExists, a parent still owed its completion, a
+// retry already committed) return without a save, so the save's ETag guard
+// would never catch the stale cache. A row that no longer describes the cache
+// drops it and reloads from the store; a row that is gone means the instance
+// was purged, so the create starts a new one. A missing row is only trusted
+// once the store has served this instance an ETag: before that it may be a
+// store that does not yet read its own write, and the cache is kept.
+func (o *orchestrator) loadStateForCreate(ctx context.Context) (*wfenginestate.State, error) {
+	cached := o.state != nil
+	state, _, err := o.loadInternalState(ctx)
+	// A fallback host probed the row at the start of this call, in
+	// dropFallbackCache: a cache that survived it was confirmed.
+	if err != nil || !cached || o.isFallback() {
+		return state, err
+	}
+
+	row, err := o.probeMetadataRow(ctx, state)
+	if err != nil {
+		return nil, wfengerrors.NewRecoverable(fmt.Errorf("failed to confirm the cached state: %w", err))
+	}
+	if row == metadataRowMatches || (row == metadataRowMissing && !state.MetadataETagSeen()) {
+		return state, nil
+	}
+
+	log.Debugf("Workflow actor '%s': cached state no longer matches the store; reloading before create", o.actorID)
+	o.invalidateCachedState()
+	state, _, err = o.loadInternalState(ctx)
+	return state, err
+}
+
+// resetForPurgedInstance releases what the actor holds for an instance a
+// force purge on another daprd deleted while the actor stayed resident. The
+// instance is gone, so no result is owed to it: the same release a purge on
+// this host makes once the rows are deleted. A purge on this host also
+// retires the actor, so the next instance starts with the residency state
+// initOrchestrator gives a fresh one; here the actor stays, so reset it: the
+// janitor the purge deleted must be asserted again for the new instance.
+// Called from releaseReplacedInstance only. The caller holds the turn lock.
+func (o *orchestrator) resetForPurgedInstance() {
+	o.activityResultAwaited.Store(false)
+	o.janitorAsserted.Store(false)
+	o.janitorRedispatched = nil
+	o.janitorEscalated = nil
+	// Completions held for the purged instance would be taken by the new
+	// instance's first turn: a new instance starts at generation 1, the
+	// purged one's generation unless it had continued as new.
+	o.foldFlush()
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
@@ -279,6 +398,13 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	// The save is durable: the store now holds this state, whatever the
+	// refresh below does with the cache. A ContinueAsNew changed the
+	// execution ID, and a load that follows a dropped cache must compare the
+	// store with it, not with the generation before.
+	id := executionIDOf(o.getExecutionStartedEvent(state))
+	o.cachedExecutionID = &id
 
 	// Refresh the metadata ETag for the next save. Multi does not return new
 	// ETags, so we read just the metadata row back. A read error here is
@@ -335,9 +461,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		state.SetMetadataETag(metaRes.ETag)
 	}
 
-	// Update cached state
-	o.state = state
-	o.primeCachedState(state, o.getExecutionStartedEvent(state))
+	o.cacheDurable(state)
 	if o.eventSink != nil {
 		o.eventSink(o.ometa)
 	}

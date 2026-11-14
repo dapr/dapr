@@ -50,6 +50,29 @@ func (o *orchestrator) pinFallback() (fallback bool, unpin func()) {
 	return fallback, func() { o.pinnedFallback.Store(nil) }
 }
 
+// dropFallbackCache checks the cached state against the store's metadata
+// row at the start of a call on a fallback host, and drops it when the row no
+// longer describes it, so the call reads the instance from the store. A force
+// purge served by another daprd deletes the rows and evicts this daprd's
+// actor, but when that eviction does not land (an owner that predates it, or
+// a turn that held the lock past the purge's budget) the actor would go on
+// serving the purged instance, refusing a start of its ID as already
+// existing. The check is one Get; the call's own load then tells whether the
+// store still holds the cached instance and releases what the actor holds for
+// it if not (releaseDroppedInstance). A cache the store has never served an
+// ETag for cannot be checked, and is dropped. The caller holds the turn lock.
+func (o *orchestrator) dropFallbackCache(ctx context.Context) {
+	if !o.isFallback() || o.state == nil {
+		return
+	}
+	if o.state.MetadataETagSeen() {
+		if row, err := o.probeMetadataRow(ctx, o.state); err == nil && row == metadataRowMatches {
+			return
+		}
+	}
+	o.invalidateCachedState()
+}
+
 // localFastPath reports whether an operation served outside a turn may take
 // the WorkflowsFastPath local drives and elisions. A fallback host takes the
 // durable reminder path instead: a local drive runs a turn here, which fails,
