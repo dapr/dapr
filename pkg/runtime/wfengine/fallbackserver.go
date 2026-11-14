@@ -104,22 +104,24 @@ func (s fallbackAwareServer) ResumeInstance(ctx context.Context, req *protos.Res
 	return res, err
 }
 
-// RaiseEvent does not wait for the instance on any host, so the marker only
-// tells the caller whether the event was staged.
+// RaiseEvent and RaiseError enqueue external event notifications without
+// waiting for the workflow instance to run, so the marker only tells the
+// caller whether the notification was staged.
 func (s fallbackAwareServer) RaiseEvent(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
-	ctx = backendactors.WithFallbackMarker(ctx)
-	res, err := s.TaskHubSidecarServiceServer.RaiseEvent(ctx, req)
-	if res != nil {
-		res.Staged = backendactors.ServedByFallback(ctx)
-	}
-	return res, err
+	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseEvent)
 }
 
-// RaiseError does not wait for the instance on any host, so the marker only
-// tells the caller whether the error notification was staged.
 func (s fallbackAwareServer) RaiseError(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
+	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseError)
+}
+
+func (s fallbackAwareServer) raiseExternalEvent(
+	ctx context.Context,
+	req *protos.RaiseEventRequest,
+	raise func(context.Context, *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error),
+) (*protos.RaiseEventResponse, error) {
 	ctx = backendactors.WithFallbackMarker(ctx)
-	res, err := s.TaskHubSidecarServiceServer.RaiseError(ctx, req)
+	res, err := raise(ctx, req)
 	if res != nil {
 		res.Staged = backendactors.ServedByFallback(ctx)
 	}
