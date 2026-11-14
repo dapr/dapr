@@ -47,8 +47,6 @@ type GetWorkflowRequest struct {
 	// Defaults to the local app. Must be in the same namespace; the target
 	// app's WorkflowAccessPolicy governs whether the call is permitted.
 	AppId *string `protobuf:"bytes,3,opt,name=app_id,json=appID,proto3,oneof" json:"app_id,omitempty"`
-	// Optional reason describing why the workflow is being terminated.
-	Reason *string `protobuf:"bytes,4,opt,name=reason,proto3,oneof" json:"reason,omitempty"`
 }
 
 func (x *GetWorkflowRequest) Reset() {
@@ -368,6 +366,8 @@ type TerminateWorkflowRequest struct {
 	// Defaults to the local app. Must be in the same namespace; the target
 	// app's WorkflowAccessPolicy governs whether the call is permitted.
 	AppId *string `protobuf:"bytes,3,opt,name=app_id,json=appID,proto3,oneof" json:"app_id,omitempty"`
+	// Optional reason describing why the workflow is being terminated.
+	Reason *string `protobuf:"bytes,4,opt,name=reason,proto3,oneof" json:"reason,omitempty"`
 }
 
 func (x *TerminateWorkflowRequest) Reset() {
