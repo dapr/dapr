@@ -31,6 +31,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/ordering"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -178,6 +179,19 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
 		reminder.Name == reminderCascadeTerminate,
 		reminder.Name == reminderNameParentNotify:
+		return o.runWorkflowFromReminder(ctx, reminder)
+
+	case ordering.IsRelease(reminder.Name):
+		// Judged on the stored state: the cache may trail the life the
+		// release is for.
+		o.invalidateCachedState()
+		state, _, err := o.loadInternalState(ctx)
+		if err != nil {
+			return err
+		}
+		if live, rerr := o.ordering.Release(ctx, reminder, state); !live || rerr != nil {
+			return rerr
+		}
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):

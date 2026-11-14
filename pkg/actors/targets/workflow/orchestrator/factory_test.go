@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -39,6 +40,7 @@ func Test_GetOrCreate(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("ns"),
 		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
@@ -83,6 +85,7 @@ func Test_HaltAll(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("ns"),
 		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
@@ -121,6 +124,7 @@ func Test_HaltNonHosted(t *testing.T) {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("ns"),
 		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil
 		},
@@ -222,6 +226,7 @@ func newTestFactory(t *testing.T) *factory {
 		AppID:             "appID",
 		ActivityActorType: "activity",
 		WorkflowActorType: "workflow",
+		ActorTypeBuilder:  common.NewActorTypeBuilder("ns"),
 		Resiliency:        resiliency.New(logger.NewLogger("test")),
 		Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 			return nil

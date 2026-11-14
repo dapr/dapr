@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/ordering"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -119,6 +120,25 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	state, startDone, startCompleted, startErr := o.classifyStartability(ctx, state, esHistoryEvent)
 	if startDone {
 		return startCompleted, startErr
+	}
+	run, term := ordering.Gate(reminder, state)
+	if term != nil {
+		if err = o.ordering.TerminateQueued(ctx, state, term); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+		diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, esHistoryEvent.GetExecutionStarted().GetName(), executionStatusForRuntimeStatus(api.RUNTIME_STATUS_TERMINATED))
+		// Settled from what was just saved: the cache may be dropped by a
+		// failed read-back after the save.
+		if err = o.settleTerminal(ctx, state, runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History), true); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+		if o.fastPath || o.janitorAsserted.Load() {
+			o.deleteJanitor(ctx)
+		}
+		return todo.RunCompletedTrue, nil
+	}
+	if !run {
+		return todo.RunCompletedTrue, nil
 	}
 
 	// Take any held completions into this turn (WorkflowsFastPath):
@@ -651,7 +671,7 @@ func (o *orchestrator) handleEmptyInbox(ctx context.Context, reminder *actorapi.
 		rst := o.rstate
 		completed := runtimestate.IsCompleted(rst)
 		if completed {
-			owed := state.ParentNotifyPending
+			owed := state.ParentNotifyPending || state.OrderingDoneOwed()
 			// A failure nacks the driving reminder; any driver other than the
 			// dedicated retry reminder also arms it.
 			if serr := o.settleTerminal(ctx, state, rst, reminder.Name != reminderNameParentNotify); serr != nil {
@@ -859,8 +879,9 @@ const retentionReminderName = "retention"
 // settleTerminal runs what a completed instance owes after its terminal
 // commit, idempotently, so every driver (the terminal turn, an empty-inbox
 // fire, the janitor) leaves the same state behind: the pending parent
-// notification, the retention reminder and the recursive terminate. rst is
-// read before the re-send, whose save may drop the cached runtime state.
+// notification, the ordering key's release, the retention reminder and the
+// recursive terminate. rst is read before the re-send, whose save may drop
+// the cached runtime state.
 func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.State, rst *protos.WorkflowRuntimeState, arm bool) error {
 	status := runtimestate.RuntimeStatus(rst)
 	completedAt, err := runtimestate.CompletedTime(rst)
@@ -876,6 +897,10 @@ func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.
 	}
 	if err = o.terminateChildren(ctx, state); err != nil {
 		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)deliver the recursive terminate to children: %w", err))
+	}
+	// Before the parent: an unreachable parent must not hold the key.
+	if err = o.ordering.Deliver(ctx, state, arm); err != nil {
+		return err
 	}
 	if state.ParentNotifyPending {
 		return o.resendParentNotification(ctx, state, arm)

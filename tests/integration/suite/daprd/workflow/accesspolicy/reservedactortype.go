@@ -97,6 +97,7 @@ func (r *reservedactortype) Run(t *testing.T, ctx context.Context) {
 		"dapr.internal.default.reserved-app.workflow",
 		"dapr.internal.default.reserved-app.activity",
 		"dapr.internal.default.reserved-app.executor",
+		"dapr.internal.default.reserved-app.ordering",
 	} {
 		t.Run(actorType, func(t *testing.T) {
 			t.Run("gRPC InvokeActor is denied", func(t *testing.T) {

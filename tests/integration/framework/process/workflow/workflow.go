@@ -553,15 +553,15 @@ func (w *Workflow) Signing() bool {
 }
 
 // ActorTypesCount returns the number of actor types a daprd in this workflow
-// registers when a worker is connected: workflow, activity and retentioner,
-// plus the executor rendezvous type in clustered deployment or staged
-// operations mode. It reads the harness-wide modes: a daprd overridden with
-// WithStagedOperationsN may differ.
+// registers when a worker is connected: workflow, activity, retentioner and
+// ordering, plus the executor rendezvous type in clustered deployment or
+// staged operations mode. It reads the harness-wide modes: a daprd overridden
+// with WithStagedOperationsN may differ.
 func (w *Workflow) ActorTypesCount() int {
 	if w.clustered || w.stagedOperations {
-		return 4
+		return 5
 	}
-	return 3
+	return 4
 }
 
 func (w *Workflow) Dapr() *daprd.Daprd {

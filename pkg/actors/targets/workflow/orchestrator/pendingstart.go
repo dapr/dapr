@@ -38,6 +38,11 @@ type stillNeeded func(*wfenginestate.State) bool
 
 // startStillPending: the same pending start (by reminder name) is still in
 // the inbox with an empty history.
+// gatedRedriveFactor stretches the redrive grace of a queued instance: it
+// waits for its key by design, so its status reads re-enqueue it rarely, for
+// an enqueue lost in a placement move.
+const gatedRedriveFactor = 12
+
 func startStillPending(reminderName string) stillNeeded {
 	return func(state *wfenginestate.State) bool {
 		pending := pendingstart.Event(state)
@@ -162,11 +167,19 @@ func (o *orchestrator) redriveOverduePendingStart(state *wfenginestate.State) {
 		return
 	}
 
+	grace := pendingstart.RedriveGrace()
+	if state.OrderingGated() {
+		grace *= gatedRedriveFactor
+	}
 	last := o.lastStartRedrive.Load()
-	if last != 0 && now.Sub(time.Unix(0, last)) < pendingstart.RedriveGrace() {
+	if last != 0 && now.Sub(time.Unix(0, last)) < grace {
 		return
 	}
 	if !o.lastStartRedrive.CompareAndSwap(last, now.UnixNano()) {
+		return
+	}
+	if state.OrderingGated() {
+		o.ordering.EnqueueDetached(state)
 		return
 	}
 
@@ -194,4 +207,21 @@ func (o *orchestrator) redriveWhenOverdue(pending *backend.HistoryEvent, sf *str
 		})
 	})
 	return func() { timer.Stop() }
+}
+
+// redrivePendingStart re-drives a saved pending start that lost its driver,
+// and reports whether it had: a keyed instance missing from its key's queue,
+// or any other missing its start reminder. A queued or armed one is a
+// concurrent duplicate create.
+func (o *orchestrator) redrivePendingStart(ctx context.Context, state *wfenginestate.State, pending *backend.HistoryEvent) (bool, error) {
+	switch {
+	case pending == nil:
+		return false, nil
+	case state.OrderingGated():
+		existing, err := o.ordering.Enqueue(ctx, state)
+		return !existing, err
+	case o.startReminderNeedsReassert(ctx, pending):
+		return true, o.assertStartReminder(ctx, pending)
+	}
+	return false, nil
 }

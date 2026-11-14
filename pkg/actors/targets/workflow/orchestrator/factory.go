@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/ordering"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -298,6 +299,15 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 		ActorTypeBuilder:      f.actorTypeBuilder,
 		Signer:                f.signer,
 		FailChildWorkflowTask: or.failChildWorkflowTask,
+	}
+
+	or.ordering = &ordering.Ordering{
+		ActorID:      actorID,
+		ActorType:    f.actorTypeBuilder.Ordering(f.appID),
+		Router:       f.router,
+		Detached:     f.detached,
+		Save:         or.signAndSaveState,
+		ArmDoneRetry: or.assertParentNotifyReminder,
 	}
 
 	// Reset the cache state to force a reload from the state store
