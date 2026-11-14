@@ -926,6 +926,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealthChanged(ctx, apphealth.NewStatus(true, nil))
 	}
 
+	if fatal := a.processor.FatalError(); fatal != nil {
+		return fatal
+	}
+
 	return nil
 }
 

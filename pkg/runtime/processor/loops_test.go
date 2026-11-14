@@ -14,7 +14,9 @@ limitations under the License.
 package processor
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -105,4 +107,130 @@ func TestProcessorSecretStoreDependentReenqueue(t *testing.T) {
 
 	_, ok = proc.compStore.GetComponent("needs-secret")
 	assert.True(t, ok, "dependent must be processed once its secret store initialises")
+}
+
+func startProcExpectingErr(t *testing.T, proc *Processor) func() error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- proc.Process(ctx)
+	}()
+	return func() error {
+		cancel()
+		select {
+		case err := <-errCh:
+			return err
+		case <-time.After(5 * time.Second):
+			t.Fatal("processor.Process did not return in time")
+			return nil
+		}
+	}
+}
+
+// TestProcessorSecretStoreDependentNeverLoadedFailsFlush asserts that if a component
+// references a secret store that is never loaded, Flush fails and returns an error
+// stating that the component references an unready secret store.
+func TestProcessorSecretStoreDependentNeverLoadedFailsFlush(t *testing.T) {
+	proc, reg := newTestProc()
+	stop := startProcExpectingErr(t, proc)
+	defer func() {
+		_ = stop()
+	}()
+
+	mockPubSub := new(daprt.MockPubSub)
+	reg.PubSubs().RegisterComponent(
+		func(logger.Logger) pubsub.PubSub { return mockPubSub },
+		"mockPubSub",
+	)
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+
+	dependent := inlinePubsubComp("needs-missing-secret")
+	dependent.SecretStore = "never-loaded-store"
+	dependent.Spec.Metadata = append(dependent.Spec.Metadata, commonapi.NameValuePair{
+		Name:         "password",
+		SecretKeyRef: commonapi.SecretKeyRef{Name: "mysecret", Key: "key1"},
+	})
+
+	ch := proc.AddPendingComponent(t.Context(), dependent)
+	require.NotNil(t, ch)
+	require.NoError(t, <-ch)
+
+	err := proc.Flush(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "references unready secret store never-loaded-store")
+	assert.Error(t, proc.FatalError())
+}
+
+// TestProcessorSecretStoreDependentIgnoreErrorsPassesFlush asserts that if a component
+// references an unready secret store that is never loaded, but specifies IgnoreErrors=true,
+// Flush ignores the error and returns nil.
+func TestProcessorSecretStoreDependentIgnoreErrorsPassesFlush(t *testing.T) {
+	proc, reg := newTestProc()
+	startProc(t, proc)
+
+	mockPubSub := new(daprt.MockPubSub)
+	reg.PubSubs().RegisterComponent(
+		func(logger.Logger) pubsub.PubSub { return mockPubSub },
+		"mockPubSub",
+	)
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+
+	dependent := inlinePubsubComp("ignored-needs-missing-secret")
+	dependent.SecretStore = "never-loaded-store"
+	dependent.Spec.IgnoreErrors = true
+	dependent.Spec.Metadata = append(dependent.Spec.Metadata, commonapi.NameValuePair{
+		Name:         "password",
+		SecretKeyRef: commonapi.SecretKeyRef{Name: "mysecret", Key: "key1"},
+	})
+
+	ch := proc.AddPendingComponent(t.Context(), dependent)
+	require.NotNil(t, ch)
+	require.NoError(t, <-ch)
+
+	require.NoError(t, proc.Flush(t.Context()))
+	assert.NoError(t, proc.FatalError())
+}
+
+// TestProcessorSecretStoreDependentInitFailureFailsFlush asserts that if a component
+// is deferred behind a secret store, and that secret store is loaded, but the dependent
+// component's init fails, Flush surfaces the fatal init error.
+func TestProcessorSecretStoreDependentInitFailureFailsFlush(t *testing.T) {
+	proc, reg := newTestProc()
+	stop := startProcExpectingErr(t, proc)
+	defer func() {
+		_ = stop()
+	}()
+
+	mockPubSub := new(daprt.MockPubSub)
+	reg.PubSubs().RegisterComponent(
+		func(logger.Logger) pubsub.PubSub { return mockPubSub },
+		"mockPubSub",
+	)
+	mockPubSub.On("Init", mock.Anything).Return(assert.AnError)
+	reg.SecretStores().RegisterComponent(
+		func(logger.Logger) secretstores.SecretStore { return rtmock.NewMockKubernetesStore() },
+		"mockSecret",
+	)
+
+	dependent := inlinePubsubComp("failing-dependent")
+	dependent.SecretStore = "mystore"
+	dependent.Spec.Metadata = append(dependent.Spec.Metadata, commonapi.NameValuePair{
+		Name:         "password",
+		SecretKeyRef: commonapi.SecretKeyRef{Name: "mysecret", Key: "key1"},
+	})
+
+	ch := proc.AddPendingComponent(t.Context(), dependent)
+	require.NotNil(t, ch)
+	require.NoError(t, <-ch)
+
+	require.NoError(t, proc.Init(t.Context(), componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+		Spec:       componentsapi.ComponentSpec{Type: "secretstores.mockSecret", Version: "v1"},
+	}))
+
+	err := proc.Flush(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), assert.AnError.Error())
+	assert.Error(t, proc.FatalError())
 }

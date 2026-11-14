@@ -176,6 +176,24 @@ func (r *Root) handleInstanceInitDone(ev *loops.InstanceInitDone) {
 	r.decInFlight()
 }
 
+func (r *Root) checkPendingDependents() {
+	if len(r.pendingDependents) == 0 {
+		return
+	}
+	for storeName, comps := range r.pendingDependents {
+		for _, comp := range comps {
+			if comp.Spec.IgnoreErrors {
+				log.Errorf("Ignoring error processing component: component %s references unready secret store %s", comp.Name, storeName)
+				continue
+			}
+			err := fmt.Errorf("process component %s error: references unready secret store %s", comp.Name, storeName)
+			log.Errorf("Failed to init component %s: references unready secret store %s", comp.LogName(), storeName)
+			r.recordFatalInitError(err)
+		}
+	}
+	clear(r.pendingDependents)
+}
+
 // decInFlight decrements the in-flight counter and releases pending barriers
 // once it reaches zero.
 func (r *Root) decInFlight() {
@@ -183,9 +201,12 @@ func (r *Root) decInFlight() {
 		r.inFlight--
 	}
 	if r.inFlight == 0 {
-		for _, done := range r.pendingBarriers {
-			close(done)
+		if len(r.pendingBarriers) > 0 {
+			r.checkPendingDependents()
+			for _, done := range r.pendingBarriers {
+				close(done)
+			}
+			r.pendingBarriers = nil
 		}
-		r.pendingBarriers = nil
 	}
 }
