@@ -185,3 +185,39 @@ func TestCircuitBreaker_ConsecutiveFailures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 42, res)
 }
+
+func TestCircuitBreaker_NilSafetyAndString(t *testing.T) {
+	// A nil *CircuitBreaker should not panic on State, String, or Execute.
+	var cb *breaker.CircuitBreaker
+	assert.NotPanics(t, func() {
+		assert.Equal(t, breaker.StateUnknown, cb.State())
+	})
+	assert.NotPanics(t, func() {
+		assert.Equal(t, "", cb.String())
+	})
+	assert.NotPanics(t, func() {
+		val, err := cb.Execute(func() (any, error) {
+			return "ok", nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "ok", val)
+	})
+
+	// An uninitialized (non-nil) CircuitBreaker should report StateUnknown,
+	// have a correct String(), and pass Execute through to the operation.
+	uninit := &breaker.CircuitBreaker{
+		Name:        "test-uninit",
+		MaxRequests: 2,
+	}
+	assert.Equal(t, breaker.StateUnknown, uninit.State())
+	// String() must use "maxRequests", not the typo "namRequests".
+	assert.Contains(t, uninit.String(), "maxRequests='2'")
+	assert.NotContains(t, uninit.String(), "namRequests")
+	assert.NotPanics(t, func() {
+		val, err := uninit.Execute(func() (any, error) {
+			return "fallback", nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "fallback", val)
+	})
+}
