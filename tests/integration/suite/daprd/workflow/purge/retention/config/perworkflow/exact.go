@@ -70,5 +70,6 @@ func (e *exact) Run(t *testing.T, ctx context.Context) {
 	waitPurged(t, rows, string(upper), "the exact-match entry did not purge")
 
 	assert.Positive(t, rows(t, string(lower)), "a case-different name must not match the entry")
-	assert.Empty(t, retentionJobs(t, ctx, e.workflow), "no reminder may be queued for a name without a TTL")
+	// No reminder may be queued for a name without a TTL.
+	e.workflow.Scheduler().WaitJobKeyCount(t, ctx, "||retention", func(n int) bool { return n == 0 })
 }

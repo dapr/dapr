@@ -16,7 +16,6 @@ package perworkflow
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -60,16 +59,4 @@ func waitPurged(t *testing.T, rows counter, id, msg string) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, 0, rows(c, id))
 	}, time.Second*20, time.Millisecond*10, msg)
-}
-
-// retentionJobs lists the scheduler keys of queued retention reminders.
-func retentionJobs(t *testing.T, ctx context.Context, w *workflow.Workflow) []string {
-	t.Helper()
-	var jobs []string
-	for _, key := range w.Scheduler().ListAllKeys(t, ctx, "dapr/jobs") {
-		if strings.HasSuffix(key, "||retention") {
-			jobs = append(jobs, key)
-		}
-	}
-	return jobs
 }

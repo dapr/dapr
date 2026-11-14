@@ -2035,11 +2035,15 @@ func Test_handleRetention_perWorkflowPrecedence(t *testing.T) {
 			t.Parallel()
 
 			var creates []*actorapi.CreateReminderRequest
+			var deletes []*actorapi.DeleteReminderRequest
 			o := &orchestrator{
 				factory: &factory{
 					retentionActorType: "dapr.internal.default.testapp.retentioner",
 					reminders: remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
 						creates = append(creates, req)
+						return nil
+					}).WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+						deletes = append(deletes, req)
 						return nil
 					}),
 					retentionPolicy: tc.policy,
@@ -2056,10 +2060,14 @@ func Test_handleRetention_perWorkflowPrecedence(t *testing.T) {
 
 			if tc.want == nil {
 				assert.Empty(t, creates)
+				// A previous run of the ID may have left its reminder behind.
+				require.Len(t, deletes, 1)
+				assert.Equal(t, "retention", deletes[0].Name)
 				return
 			}
 			require.Len(t, creates, 1)
 			assert.Equal(t, "retention", creates[0].Name)
+			assert.Empty(t, deletes)
 			assert.Equal(t, completedAt.Add(*tc.want).Format(time.RFC3339Nano), creates[0].DueTime)
 		})
 	}

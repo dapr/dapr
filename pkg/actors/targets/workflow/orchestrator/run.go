@@ -895,6 +895,13 @@ func (o *orchestrator) handleRetention(ctx context.Context, state *wfenginestate
 		dueTime = retentionTTL(o.retentionPolicy, status)
 	}
 	if dueTime == nil {
+		// A previous run of this instance ID may have left its reminder, which
+		// would purge this run at that run's deadline.
+		o.deleteReminderTolerant(ctx, &actorapi.DeleteReminderRequest{
+			Name:      retentionReminderName,
+			ActorType: o.retentionActorType,
+			ActorID:   o.actorID,
+		}, "retention reminder of a previous run of this instance ID")
 		return nil
 	}
 

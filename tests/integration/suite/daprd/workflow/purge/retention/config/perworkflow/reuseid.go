@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -69,14 +68,14 @@ func (r *reuseid) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, cl.RaiseEvent(ctx, id, "release"))
 	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, retentionJobs(t, ctx, r.workflow), 1, "run 1 should have queued its 1h reminder")
-	}, time.Second*10, time.Millisecond*10)
+	// Run 1 queues its 1h reminder.
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "||retention", func(n int) bool { return n == 1 })
 
 	_, err = cl.ScheduleNewWorkflow(ctx, "fast", api.WithInstanceID(id))
 	require.NoError(t, err)
 	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	waitPurged(t, rows, string(id), "run 2's name did not govern the reused ID")
-	assert.Empty(t, retentionJobs(t, ctx, r.workflow), "run 1's 1h reminder must have been replaced, not left behind")
+	// Run 1 reminder is replaced by run 2, not left behind.
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "||retention", func(n int) bool { return n == 0 })
 }
