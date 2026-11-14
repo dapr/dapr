@@ -97,7 +97,7 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 		createReminderAlias: (*createReminderAlias)(req),
 	}
 
-	err := json.Unmarshal(data, &m)
+	err := json.Unmarshal(data, m)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (req *CreateTimerRequest) UnmarshalJSON(data []byte) error {
 		createTimerAlias: (*createTimerAlias)(req),
 	}
 
-	err := json.Unmarshal(data, &m)
+	err := json.Unmarshal(data, m)
 	if err != nil {
 		return err
 	}

@@ -419,3 +419,21 @@ func TestSetReminderTimesSubSecond(t *testing.T) {
 			"timer fire time must be exactly 2s after registration, even when registration time has sub-second nanos")
 	})
 }
+
+func TestCreateReminderAndTimerRequestsUnmarshalNullBody(t *testing.T) {
+	t.Parallel()
+
+	// Regression test for #11056: a JSON null body must not panic.
+	reminderReq := CreateReminderRequest{}
+	require.NoError(t, json.Unmarshal([]byte("null"), &reminderReq))
+	assert.Equal(t, CreateReminderRequest{}, reminderReq)
+
+	timerReq := CreateTimerRequest{}
+	require.NoError(t, json.Unmarshal([]byte("null"), &timerReq))
+	assert.Equal(t, CreateTimerRequest{}, timerReq)
+
+	// A normal body still decodes.
+	require.NoError(t, json.Unmarshal([]byte(`{"dueTime":"1s","data":{"key":"value"}}`), &reminderReq))
+	assert.Equal(t, "1s", reminderReq.DueTime)
+	assert.NotNil(t, reminderReq.Data)
+}
