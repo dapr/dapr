@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -56,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
@@ -111,6 +113,15 @@ type Options struct {
 	// It bounds how long an activity result publish in flight at shutdown
 	// keeps its context.
 	GracefulShutdownDuration time.Duration
+	// ActivityDispatchPull resolves whether an activity name is
+	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
+	// per-name overrides). Nil means never.
+	ActivityDispatchPull func(activityName string) bool
+
+	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
+	// same value the engine's activity worker is limited to. 0 means no cap.
+	// It bounds the free slots reported for pull dispatch.
+	MaxConcurrentActivityInvocations int32
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 	Signer          *signer.Signer
@@ -148,7 +159,14 @@ type Actors struct {
 	workflowsFastPath               bool
 	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
+	activityDispatchPull            func(activityName string) bool
 	pendingCompletions              *pending.Pending
+
+	// activityCommitted counts activity work items handed to the engine and
+	// not yet completed or abandoned, against activityCap. See credits.go.
+	activityCap       int64
+	activityCommitted atomic.Int64
+	activityFree      notifier
 
 	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -191,6 +209,9 @@ type Actors struct {
 	// Guarded by the engine's actor registration lock.
 	hostedCancel   context.CancelFunc
 	executorCancel context.CancelFunc
+	// hostedWakes cancels the local wakes of the workflow factory registered
+	// last; see SetLocalExecutor. Guarded by the same lock.
+	hostedWakes interface{ CancelWakes() }
 }
 
 var _ backend.Backend = (*Actors)(nil)
@@ -286,7 +307,9 @@ func New(opts Options) (*Actors, error) {
 		workflowsFastPath:               opts.WorkflowsFastPath,
 		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
+		activityDispatchPull:            opts.ActivityDispatchPull,
 		pendingCompletions:              pendingCompletions,
+		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
 }
 
@@ -375,12 +398,22 @@ func (abe *Actors) factoryOptions() workflow.Options {
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
 
+			pull, _ := wi.Properties[todo.PullProperty].(bool)
 			if err := abe.requireLocalExecutor(); err != nil {
+				if pull {
+					// Nothing here can run it: the scheduler picks another
+					// sidecar instead of failing the trigger.
+					return activity.ErrNoCapacity
+				}
 				return err
+			}
+			if !abe.reserveActivity(pull) {
+				return activity.ErrNoCapacity
 			}
 
 			select {
 			case <-ctx.Done(): // engine is shutting down
+				abe.releaseActivity()
 				return ctx.Err()
 			case abe.activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
 				return nil
@@ -394,6 +427,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		FastPath:                        abe.workflowsFastPath,
 		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
+		DispatchPull:                    abe.activityDispatchPull,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
@@ -480,7 +514,7 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 		return nil
 	}
 	actorType, terr := abe.targetWorkflowActorType(targetAppID)
-	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType)) {
+	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType) && !isReminderNotHostedError(err)) {
 		return err
 	}
 	if serr := abe.requireActorStateStore(); serr != nil {
@@ -499,6 +533,13 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 // another app (such as a child purge) is not attributed to the target.
 func isActorNotRegisteredError(err error, actorType string) bool {
 	return err != nil && strings.Contains(err.Error(), "actor type "+actorType+" not registered")
+}
+
+// isReminderNotHostedError reports whether a workflow actor that was still
+// active failed to create a reminder because its host unregistered the
+// workflow actor types mid call.
+func isReminderNotHostedError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), reminders.ErrReminderOpActorNotHosted.Error())
 }
 
 // isActorNoAddressError reports whether placement has no host for actorType.
@@ -546,6 +587,11 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 
 	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
 		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
+	}
+	for _, id := range []string{req.GetSourceInstanceID(), req.GetNewInstanceID()} {
+		if err := schedule.CheckCreate(ctx, "", id); err != nil {
+			return "", err
+		}
 	}
 
 	// A router targeting another app means the source instance (and therefore
@@ -600,6 +646,9 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
 	} else {
 		workflowInstanceID = oi.GetInstanceId()
+		if err := schedule.CheckCreate(ctx, es.GetName(), workflowInstanceID); err != nil {
+			return err
+		}
 	}
 
 	// Stamp the local app as the source before marshalling, mirroring the
@@ -785,7 +834,9 @@ func (abe *Actors) getWorkflowMetadataRemote(ctx context.Context, id api.Instanc
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	defer abe.releaseActivity()
+
 	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
@@ -891,7 +942,9 @@ func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	defer abe.releaseActivity()
+
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -1375,6 +1428,7 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 		AppID:             abe.appID,
 		PageSize:          req.PageSize,
 		ContinuationToken: req.ContinuationToken,
+		IDPrefix:          req.GetInstanceIdPrefix(),
 	})
 	if err != nil {
 		return nil, err
@@ -1438,8 +1492,7 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 
 	// Evict the resident actors first: deactivation takes the turn lock, so
 	// the purge is ordered after any in-flight turn commits and the load
-	// below covers what that turn wrote. Nothing is left serving or writing
-	// from a cache of the purged state.
+	// below covers what that turn wrote.
 	abe.haltPurgedActors(ctx, id)
 
 	astate, err := abe.actors.State(ctx)
@@ -1519,19 +1572,42 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	return concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
+	if err = concurrency.Join(ctx, append(deleteReminders, func(ctx context.Context) error {
 		return astate.TransactionalStateOperation(ctx, true, req, false)
-	})...)
+	})...); err != nil {
+		return err
+	}
+
+	// Evict again now the rows are gone: a call that reached the actor
+	// between the first eviction and the delete loaded the instance back into
+	// a cache. An actor activated from here on finds no state.
+	abe.haltPurgedActors(ctx, id)
+
+	return nil
 }
 
-// haltPurgedActors evicts this instance's workflow actor from this host,
-// through the actor itself so no table-wide lock is held while it waits
-// for an in-flight turn. Best effort: force purge is the escape hatch for
-// wedged instances, so a halt that cannot take the turn lock in time is
-// logged and the purge proceeds. Activity actors are left alone: their
-// result lands on a cold workflow actor that finds no state, and halting
-// them spawns claim guards that would write after the purge.
+// haltPurgedActors evicts this instance's workflow actor from this host and,
+// when placement hosts it on another daprd, from that daprd too: a force
+// purge runs wherever it was received, and an owner left resident keeps
+// serving the purged instance from its cache. Best effort: force purge is
+// the escape hatch for wedged instances, so a halt that cannot take the turn
+// lock in time is logged and the purge proceeds. Activity actors are left
+// alone: their result lands on a cold workflow actor that finds no state, and
+// halting them spawns claim guards that would write after the purge.
+// The two target different daprds, so they run side by side and share one
+// halt budget rather than adding up.
 func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
+	var wg sync.WaitGroup
+	wg.Go(func() { abe.haltLocalActor(ctx, id) })
+	wg.Go(func() { abe.evictRemoteActor(ctx, id) })
+	wg.Wait()
+}
+
+// haltLocalActor deactivates the workflow actor if it is resident on this
+// host, through the actor itself so no table-wide lock is held while it waits
+// for an in-flight turn. It runs whatever placement says: during a placement
+// change the actor can still be resident here while another daprd owns it.
+func (abe *Actors) haltLocalActor(ctx context.Context, id api.InstanceID) {
 	atable, err := abe.actors.Table(ctx)
 	if err != nil || atable == nil {
 		return
@@ -1548,5 +1624,58 @@ func (abe *Actors) haltPurgedActors(ctx context.Context, id api.InstanceID) {
 	defer cancel()
 	if err := target.Deactivate(hctx); err != nil {
 		log.Warnf("Force purge of '%s': failed to halt the resident actor, stale in-memory state remains until the next write or idle reap: %v", id, err)
+	}
+}
+
+// evictRemoteActor asks the daprd placement names as the workflow actor's
+// owner to deactivate it, when that is another daprd. An owner that predates
+// the eviction method refuses it, and its cache stays until the next write or
+// idle reap, as before.
+func (abe *Actors) evictRemoteActor(ctx context.Context, id api.InstanceID) {
+	placement, err := abe.actors.Placement(ctx)
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot look up the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+	if placement == nil {
+		// No placement: no other daprd can host the actor.
+		return
+	}
+
+	hctx, cancel := context.WithTimeout(ctx, forcePurgeHaltTimeout)
+	defer cancel()
+
+	lar, _, lcancel, err := placement.LookupActor(hctx, &actorsapi.LookupActorRequest{
+		ActorType: abe.workflowActorType,
+		ActorID:   id.String(),
+	})
+	if lcancel != nil {
+		lcancel(nil)
+	}
+	if errors.Is(err, messages.ErrActorNoAddress) {
+		// No daprd hosts the workflow actor type, as with no worker connected
+		// and staged operations off: there is no cache to evict.
+		log.Debugf("Force purge of '%s': no daprd hosts the workflow actor, nothing to evict: %v", id, err)
+		return
+	}
+	if err != nil {
+		log.Warnf("Force purge of '%s': cannot look up the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+	if lar.Local {
+		return
+	}
+
+	router, err := abe.actors.Router(hctx)
+	if err != nil || router == nil {
+		log.Warnf("Force purge of '%s': cannot reach the workflow actor's owner to evict it: %v", id, err)
+		return
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.EvictWorkflowMethod).
+		WithActor(abe.workflowActorType, id.String())
+	if _, err := router.Call(hctx, req); err != nil {
+		log.Warnf("Force purge of '%s': failed to evict the workflow actor on the daprd that owns it, stale in-memory state remains there until the next write or idle reap: %v", id, err)
 	}
 }

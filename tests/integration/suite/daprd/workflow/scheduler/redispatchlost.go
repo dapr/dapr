@@ -120,7 +120,11 @@ func (r *redispatchlost) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"ok"`, metadata.GetOutput().GetValue())
 
-	assert.GreaterOrEqual(t, r.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatch_escalated"), float64(3))
+	// The janitor counts an escalation after the reminder it made can have
+	// already completed the workflow.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, r.daprd.Metrics(c, ctx).SumWithLabels("dapr_runtime_workflow_local_activity_count", "status:janitor_redispatch_escalated"), float64(3))
+	}, 10*time.Second, 10*time.Millisecond)
 	assert.Equal(t, int64(3), executions.Load())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
