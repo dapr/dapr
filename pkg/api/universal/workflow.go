@@ -104,6 +104,10 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 		res.Properties["dapr.workflow.custom_status"] = metadata.GetCustomStatus().GetValue()
 	}
 
+	if metadata.GetTerminationReason() != nil {
+		res.Properties["dapr.workflow.termination_reason"] = metadata.GetTerminationReason().GetValue()
+	}
+
 	if metadata.Input != nil {
 		res.Properties["dapr.workflow.input"] = metadata.GetInput().GetValue()
 	}
@@ -237,6 +241,9 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 	}
 
 	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
+	if in.Reason != nil {
+		opts = append(opts, api.WithReason(in.GetReason()))
+	}
 	if targetAppID != "" {
 		opts = append(opts, api.WithTerminateAppID(targetAppID))
 	}
