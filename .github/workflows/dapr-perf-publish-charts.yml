@@ -25,9 +25,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-  actions: read
+permissions: {}
 
 env:
   # Branch in this repo that serves the rendered charts and manifest. The docs
@@ -39,6 +37,9 @@ jobs:
   publish:
     name: Generate and publish perf charts
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     env:
       GH_TOKEN: ${{ github.token }}
       RUN_ID: ${{ inputs.run_id }}
