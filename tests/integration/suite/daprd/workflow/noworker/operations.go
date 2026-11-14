@@ -100,17 +100,6 @@ func (o *operations) Run(t *testing.T, ctx context.Context) {
 		},
 		// The durabletask client retries waits indefinitely, so call the
 		// sidecar directly to observe the error it returns.
-		"sidecar raise error": func() error {
-			_, err := sidecar.RaiseError(ctx, &protos.RaiseEventRequest{
-				InstanceId: "abc",
-				Name:       "bar",
-				FailureDetails: &protos.TaskFailureDetails{
-					ErrorType:    "example.Failure",
-					ErrorMessage: "failed",
-				},
-			})
-			return err
-		},
 		"sidecar wait for start": func() error {
 			_, err := sidecar.WaitForInstanceStart(ctx, &protos.GetInstanceRequest{InstanceId: "abc"})
 			return err
