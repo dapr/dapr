@@ -85,6 +85,9 @@ func (o *orchestrator) recursivePurgeWorkflowState(ctx context.Context, meta map
 		}
 	}
 
+	if err = o.ordering.Purged(ctx, state); err != nil {
+		return nil, err
+	}
 	if err = o.cleanupWorkflowStateInternal(ctx, state, true); err != nil {
 		return nil, err
 	}

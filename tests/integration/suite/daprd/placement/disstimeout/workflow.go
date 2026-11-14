@@ -89,6 +89,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.ElementsMatch(c, []string{
 			"dapr.internal.default." + appID + ".activity",
+			"dapr.internal.default." + appID + ".ordering",
 			"dapr.internal.default." + appID + ".retentioner",
 			"dapr.internal.default." + appID + ".workflow",
 			"myactor",

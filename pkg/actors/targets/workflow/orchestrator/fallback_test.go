@@ -45,6 +45,7 @@ func TestFallback(t *testing.T) {
 			AppID:             "appID",
 			ActivityActorType: "activity",
 			WorkflowActorType: "workflow",
+			ActorTypeBuilder:  common.NewActorTypeBuilder("ns"),
 			Scheduler: func(context.Context, *backend.WorkflowWorkItem) error {
 				return nil
 			},

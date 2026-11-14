@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/ordering"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 )
 
@@ -26,6 +27,7 @@ type Options struct {
 	Orchestrator orchestrator.Options
 	Activity     activity.Options
 	Retentioner  retentioner.Options
+	Ordering     ordering.Options
 
 	WorkflowActorType  string
 	ActivityActorType  string
@@ -48,6 +50,11 @@ func Factories(ctx context.Context, opts Options) ([]table.ActorTypeFactory, err
 		return nil, err
 	}
 
+	orderingFactory, err := ordering.New(ctx, opts.Ordering)
+	if err != nil {
+		return nil, err
+	}
+
 	return []table.ActorTypeFactory{
 		{
 			Factory: orchFactory,
@@ -60,6 +67,10 @@ func Factories(ctx context.Context, opts Options) ([]table.ActorTypeFactory, err
 		{
 			Factory: retentionerFactory,
 			Type:    opts.RetentionActorType,
+		},
+		{
+			Factory: orderingFactory,
+			Type:    opts.Ordering.ActorType,
 		},
 	}, nil
 }

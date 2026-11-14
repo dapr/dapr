@@ -86,6 +86,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	expHosts[0].Entities = []string{
 		"abc",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".activity",
+		"dapr.internal.default." + a.actors.Daprd().AppID() + ".ordering",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + a.actors.Daprd().AppID() + ".workflow",
 		"def",

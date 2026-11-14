@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
@@ -98,18 +99,14 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 			// If the child saved its state but its start reminder was never
 			// armed (the save-first create failed), this retry is the only
 			// driver: re-assert idempotently from the SAVED event.
-			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
-				return o.assertStartReminder(ctx, pending)
-			}
-			return nil
+			_, err := o.redrivePendingStart(ctx, state, pending)
+			return err
 		}
 
 		if o.isSameExecutionRetry(state, startEvent.GetExecutionStarted()) {
 			log.Debugf("Workflow actor '%s': ignoring create retry with matching execution ID", o.actorID)
-			if pending != nil && o.startReminderNeedsReassert(ctx, pending) {
-				return o.assertStartReminder(ctx, pending)
-			}
-			return nil
+			_, err := o.redrivePendingStart(ctx, state, pending)
+			return err
 		}
 
 		// A saved-but-never-run instance whose start reminder was never armed
@@ -124,10 +121,11 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		// workflow, which keeps failing with AlreadyExists while the check
 		// can reach the scheduler: actor invocations serialize, so a healthy
 		// duplicate always observes the first create's reminder.
-		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) &&
-			o.startReminderNeedsReassert(ctx, pending) {
-			log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
-			return o.assertStartReminder(ctx, pending)
+		if pending != nil && isSameLogicalStart(pending.GetExecutionStarted(), startEvent.GetExecutionStarted()) {
+			if stranded, err := o.redrivePendingStart(ctx, state, pending); stranded || err != nil {
+				log.Infof("Workflow actor '%s': re-driving pending start for saved-but-never-run workflow", o.actorID)
+				return err
+			}
 		}
 
 		if parentExecMismatch {
@@ -204,6 +202,12 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Workfl
 		return status.Errorf(code, "cannot recreate workflow with ID '%s': %s", o.actorID, err.Error())
 	}
 
+	// The previous run must settle its ordering key first: the reset below
+	// forgets it.
+	if err := o.ordering.Recreate(ctx, state, startEvent.GetExecutionStarted()); err != nil {
+		return status.Errorf(codes.Unavailable, "cannot recreate workflow with ID '%s' until its previous run has settled its ordering key: %v", o.actorID, err)
+	}
+
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 
 	state.Reset()
@@ -236,11 +240,20 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// running it on this thread, so the client is not blocked while the
 	// workflow logic runs.
 	state.KeepCreationInput(startEvent.GetExecutionStarted())
+	state.StartOrdering(startEvent.GetExecutionStarted())
 	state.AddToInbox(startEvent)
 	if err := o.signAndSaveState(ctx, state); err != nil {
 		return err
 	}
 
+	// A keyed instance is released by its ordering key instead.
+	if state.OrderingGated() {
+		if _, err := o.ordering.Enqueue(ctx, state); err != nil {
+			o.ordering.EnqueueDetached(state)
+			return err
+		}
+		return nil
+	}
 	return o.assertStartReminder(ctx, startEvent)
 }
 
@@ -296,6 +309,10 @@ func isSameLogicalStart(saved, incoming *protos.ExecutionStartedEvent) bool {
 	}
 
 	if saved.GetInput().GetValue() != incoming.GetInput().GetValue() {
+		return false
+	}
+
+	if !proto.Equal(saved.GetOrdering(), incoming.GetOrdering()) {
 		return false
 	}
 

@@ -1,0 +1,73 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package orderingkey
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
+	"github.com/dapr/dapr/tests/integration/framework/workflow/runs"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+)
+
+func init() {
+	suite.Register(new(terminal))
+}
+
+// terminal checks that, by default, a failed or terminated instance releases
+// its key, and that a terminated queued instance never runs.
+type terminal struct {
+	workflow *workflow.Workflow
+}
+
+func (x *terminal) Setup(t *testing.T) []framework.Option {
+	x.workflow = workflow.New(t)
+	return []framework.Option{
+		framework.WithProcesses(x.workflow),
+	}
+}
+
+func (x *terminal) Run(t *testing.T, ctx context.Context) {
+	x.workflow.WaitUntilRunning(t, ctx)
+	var r runs.Recorder
+	x.workflow.Registry().AddWorkflowN("wait", r.Waiter)
+	cl := x.workflow.BackendClient(t, ctx)
+
+	key := api.WithOrdering(api.Ordering{Key: "terminal"})
+	for _, id := range []string{"a", "b", "c", "d"} {
+		runs.Start(t, ctx, cl, id, key)
+	}
+
+	r.AssertStarted(t, "a")
+	r.Fail(t, ctx, cl, "a")
+	r.AssertStarted(t, "b")
+	r.AssertQueued(t, "c", "d")
+
+	require.NoError(t, cl.TerminateWorkflow(ctx, "c"))
+	wf.WaitForRuntimeStatus(t, ctx, cl, "c", protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED)
+	require.NoError(t, cl.TerminateWorkflow(ctx, "b"))
+	wf.WaitForRuntimeStatus(t, ctx, cl, "b", protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED)
+	r.AssertStarted(t, "d")
+	r.Finish(t, ctx, cl, "d")
+
+	assert.Equal(t, []string{"a", "b", "d"}, r.Started(), "a terminated queued instance never runs")
+}

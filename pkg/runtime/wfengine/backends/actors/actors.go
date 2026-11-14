@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/ordering"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -80,6 +81,7 @@ const (
 	ActivityNameLabelKey    = "activity"
 	ExecutorNameLabelKey    = "executor"
 	RetentionerNameLabelKey = "retentioner"
+	OrderingNameLabelKey    = "ordering"
 )
 
 type Options struct {
@@ -142,6 +144,7 @@ type Actors struct {
 	activityActorType    string
 	retentionerActorType string
 	executorActorType    string
+	orderingActorType    string
 
 	pendingTasksBackend    *pendingtracker.Tracker
 	activityExecs          *activityExecutions
@@ -289,6 +292,7 @@ func New(opts Options) (*Actors, error) {
 		activityActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		executorActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
+		orderingActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + OrderingNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       trackedPendingTasksBackend,
@@ -440,6 +444,11 @@ func (abe *Actors) factoryOptions() workflow.Options {
 			WorkflowActorType: abe.workflowActorType,
 			ActorType:         abe.retentionerActorType,
 		},
+		Ordering: ordering.Options{
+			Actors:            abe.actors,
+			WorkflowActorType: abe.workflowActorType,
+			ActorType:         abe.orderingActorType,
+		},
 		WorkflowActorType:  abe.workflowActorType,
 		ActivityActorType:  abe.activityActorType,
 		RetentionActorType: abe.retentionerActorType,
@@ -462,6 +471,7 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		abe.workflowActorType,
 		abe.activityActorType,
 		abe.retentionerActorType,
+		abe.orderingActorType,
 	}
 	// Under WorkflowsStagedOperations the executor actor type is registered
 	// apart from the others; the table ignores it if it is not registered.
@@ -648,6 +658,14 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		workflowInstanceID = oi.GetInstanceId()
 		if err := schedule.CheckCreate(ctx, es.GetName(), workflowInstanceID); err != nil {
 			return err
+		}
+		if o := es.GetOrdering(); o != nil {
+			if err := ordering.ValidateKey(o.GetKey()); err != nil {
+				return err
+			}
+			if err := ordering.ValidatePolicy(o.GetOnPredecessorFailure()); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1520,6 +1538,20 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 			return err
 		}
 		log.Warnf("Force purging workflow '%s' whose state failed signature verification or signing configuration checks: %v", id.String(), err)
+	}
+	// A force purged instance gives its ordering key back, in whatever
+	// status: a purged instance can never report that it completed.
+	if opts := s.OrderingOptions(); opts != nil {
+		router, rerr := abe.actors.Router(ctx)
+		if rerr != nil {
+			return rerr
+		}
+		if _, rerr = ordering.Call(ctx, router, abe.orderingActorType, ordering.DoneMethod, opts.GetKey(), ordering.DoneRequest{
+			Entry:   ordering.Entry{InstanceID: id.String(), CreateExecutionID: s.Ordering.GetCreateExecutionId()},
+			Outcome: ordering.OutcomePurged,
+		}); rerr != nil {
+			return rerr
+		}
 	}
 
 	reminders, err := abe.actors.Reminders(ctx)

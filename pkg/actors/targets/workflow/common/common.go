@@ -45,6 +45,11 @@ func (a *ActorTypeBuilder) Workflow(appID string) string {
 	return "dapr.internal." + a.ns + "." + appID + ".workflow"
 }
 
+// Ordering is the actor type of the ordering keys of appID's workflows.
+func (a *ActorTypeBuilder) Ordering(appID string) string {
+	return "dapr.internal." + a.ns + "." + appID + ".ordering"
+}
+
 func (a *ActorTypeBuilder) Activity(appID string) string {
 	return "dapr.internal." + a.ns + "." + appID + ".activity"
 }

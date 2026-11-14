@@ -95,6 +95,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			Namespace: "default",
 			Entities: []string{
 				"dapr.internal.default." + w.daprd1.AppID() + ".activity",
+				"dapr.internal.default." + w.daprd1.AppID() + ".ordering",
 				"dapr.internal.default." + w.daprd1.AppID() + ".retentioner",
 				"dapr.internal.default." + w.daprd1.AppID() + ".workflow",
 			},
@@ -124,6 +125,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			Namespace: "default",
 			Entities: []string{
 				"dapr.internal.default." + w.daprd2.AppID() + ".activity",
+				"dapr.internal.default." + w.daprd2.AppID() + ".ordering",
 				"dapr.internal.default." + w.daprd2.AppID() + ".retentioner",
 				"dapr.internal.default." + w.daprd2.AppID() + ".workflow",
 			},
@@ -158,6 +160,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				Namespace: "default",
 				Entities: []string{
 					"dapr.internal.default." + w.daprd2.AppID() + ".activity",
+					"dapr.internal.default." + w.daprd2.AppID() + ".ordering",
 					"dapr.internal.default." + w.daprd2.AppID() + ".retentioner",
 					"dapr.internal.default." + w.daprd2.AppID() + ".workflow",
 				},

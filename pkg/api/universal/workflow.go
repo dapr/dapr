@@ -182,6 +182,15 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		}
 		opts = append(opts, api.WithStartTime(startTime))
 	}
+	ordering, err := workflowOrdering(in.GetOptions())
+	if err != nil {
+		err = messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
+		a.logger.Debug(err)
+		return &runtimev1pb.StartWorkflowResponse{}, err
+	}
+	if ordering != nil {
+		opts = append(opts, api.WithOrdering(*ordering))
+	}
 
 	// The marker records whether a fallback host served the start, which the
 	// response reports as staged. Every retry shares it, and the last attempt

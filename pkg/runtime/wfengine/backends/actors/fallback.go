@@ -286,6 +286,7 @@ func (abe *Actors) DrainActors(ctx context.Context) error {
 		abe.activityActorType,
 		abe.retentionerActorType,
 		abe.executorActorType,
+		abe.orderingActorType,
 	)
 	return nil
 }
