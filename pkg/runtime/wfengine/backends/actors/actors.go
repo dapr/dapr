@@ -818,7 +818,7 @@ func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e
 
 	// External event notifications (RaiseEvent and RaiseError) are stamped with a wall-clock timestamp by
 	// the caller and deduped downstream by (event name, timestamp). Two
-	// RaiseEvent calls racing on the same wall-clock nanosecond would then be
+	// RaiseEvent or RaiseError calls racing on the same wall-clock nanosecond would then be
 	// indistinguishable and one would be wrongly dropped as a redelivery. Give
 	// each external event a strictly monotonic, process-unique ingestion
 	// timestamp here, at the single point where it enters the actor backend, so
