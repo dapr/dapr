@@ -114,3 +114,14 @@ func (s fallbackAwareServer) RaiseEvent(ctx context.Context, req *protos.RaiseEv
 	}
 	return res, err
 }
+
+// RaiseError does not wait for the instance on any host, so the marker only
+// tells the caller whether the error notification was staged.
+func (s fallbackAwareServer) RaiseError(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
+	ctx = backendactors.WithFallbackMarker(ctx)
+	res, err := s.TaskHubSidecarServiceServer.RaiseError(ctx, req)
+	if res != nil {
+		res.Staged = backendactors.ServedByFallback(ctx)
+	}
+	return res, err
+}
