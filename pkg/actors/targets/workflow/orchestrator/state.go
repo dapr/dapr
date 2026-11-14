@@ -584,6 +584,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		Output:           output,
 		CustomStatus:     rstate.GetCustomStatus(),
 		FailureDetails:   failureDetails,
+		TerminationReason: runtimestate.TerminationReason(rstate),
 		ParentInstanceId: parentInstanceID,
 		ParentAppId:      parentAppID,
 		Version:          wfenginestate.WorkflowVersion(rstate.GetOldEvents()),
