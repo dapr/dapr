@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
