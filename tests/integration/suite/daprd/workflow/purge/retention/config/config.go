@@ -16,4 +16,5 @@ package config
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/retention/config/match"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/retention/config/optionalkeys"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/retention/config/perworkflow"
 )

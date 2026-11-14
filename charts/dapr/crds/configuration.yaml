@@ -687,6 +687,49 @@ spec:
                           Terminated is the TTL for purging workflow instances that reach the
                           Terminated terminal state.
                         type: string
+                      workflows:
+                        description: |-
+                          Workflows overrides the TTLs for specific workflow names. A matching
+                          entry is consulted first (its specific terminal state, then its
+                          anyTerminal); any TTL it leaves unset falls back to the app-wide values
+                          above.
+                        items:
+                          description: |-
+                            NamedWorkflowStateRetentionPolicy defines the retention policy of workflow
+                            state for instances of a single workflow name.
+                          properties:
+                            anyTerminal:
+                              description: |-
+                                AnyTerminal is the TTL for purging instances that reach any terminal
+                                state.
+                              type: string
+                            completed:
+                              description: |-
+                                Completed is the TTL for purging instances that reach the Completed
+                                terminal state.
+                              type: string
+                            failed:
+                              description: |-
+                                Failed is the TTL for purging instances that reach the Failed terminal
+                                state.
+                              type: string
+                            name:
+                              description: Name is the workflow name the entry applies
+                                to.
+                              minLength: 1
+                              type: string
+                            terminated:
+                              description: |-
+                                Terminated is the TTL for purging instances that reach the Terminated
+                                terminal state.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
                     type: object
                   workflowConcurrencyLimits:
                     description: |-

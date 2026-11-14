@@ -270,6 +270,40 @@ type WorkflowStateRetentionPolicy struct {
 	// Terminated is the TTL for purging workflow instances that reach the
 	// Terminated terminal state.
 	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
+
+	// Workflows overrides the TTLs for specific workflow names. A matching
+	// entry is consulted first (its specific terminal state, then its
+	// anyTerminal); any TTL it leaves unset falls back to the app-wide values.
+	Workflows []NamedWorkflowStateRetentionPolicy `json:"workflows,omitempty" yaml:"workflows,omitempty"`
+}
+
+// NamedWorkflowStateRetentionPolicy defines the retention TTLs for instances
+// of a single workflow name.
+type NamedWorkflowStateRetentionPolicy struct {
+	Name        string         `json:"name"                  yaml:"name"`
+	AnyTerminal *time.Duration `json:"anyTerminal,omitempty" yaml:"anyTerminal,omitempty"`
+	Completed   *time.Duration `json:"completed,omitempty"   yaml:"completed,omitempty"`
+	Failed      *time.Duration `json:"failed,omitempty"      yaml:"failed,omitempty"`
+	Terminated  *time.Duration `json:"terminated,omitempty"  yaml:"terminated,omitempty"`
+}
+
+// Workflow returns the TTLs configured for a workflow name as a policy, or nil
+// when the name has no entry.
+func (p *WorkflowStateRetentionPolicy) Workflow(name string) *WorkflowStateRetentionPolicy {
+	if p == nil {
+		return nil
+	}
+	for _, w := range p.Workflows {
+		if w.Name == name {
+			return &WorkflowStateRetentionPolicy{
+				AnyTerminal: w.AnyTerminal,
+				Completed:   w.Completed,
+				Failed:      w.Failed,
+				Terminated:  w.Terminated,
+			}
+		}
+	}
+	return nil
 }
 
 // UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
@@ -282,24 +316,29 @@ func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	if crd.AnyTerminal != nil {
-		d := crd.AnyTerminal.Duration
-		p.AnyTerminal = &d
-	}
-	if crd.Completed != nil {
-		d := crd.Completed.Duration
-		p.Completed = &d
-	}
-	if crd.Failed != nil {
-		d := crd.Failed.Duration
-		p.Failed = &d
-	}
-	if crd.Terminated != nil {
-		d := crd.Terminated.Duration
-		p.Terminated = &d
+	p.AnyTerminal = durationPtr(crd.AnyTerminal)
+	p.Completed = durationPtr(crd.Completed)
+	p.Failed = durationPtr(crd.Failed)
+	p.Terminated = durationPtr(crd.Terminated)
+	p.Workflows = nil
+	for _, w := range crd.Workflows {
+		p.Workflows = append(p.Workflows, NamedWorkflowStateRetentionPolicy{
+			Name:        w.Name,
+			AnyTerminal: durationPtr(w.AnyTerminal),
+			Completed:   durationPtr(w.Completed),
+			Failed:      durationPtr(w.Failed),
+			Terminated:  durationPtr(w.Terminated),
+		})
 	}
 
 	return nil
+}
+
+func durationPtr(d *metav1.Duration) *time.Duration {
+	if d == nil {
+		return nil
+	}
+	return &d.Duration
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
@@ -430,6 +469,22 @@ func (c *Configuration) validateWorkflowSpec() error {
 	// count; without one the scheduler would deliver everything on arrival.
 	if w.HasPullActivityDispatch() && w.GetMaxConcurrentActivityInvocations() == nil {
 		return errors.New("workflow activity dispatchMode pull requires maxConcurrentActivityInvocations to be set to a positive value: it is the number of activity slots each sidecar offers to the scheduler")
+	}
+
+	if w.StateRetentionPolicy != nil {
+		names := make(map[string]bool, len(w.StateRetentionPolicy.Workflows))
+		for _, r := range w.StateRetentionPolicy.Workflows {
+			if r.Name == "" {
+				return errors.New("workflow stateRetentionPolicy.workflows entries require a name")
+			}
+			if names[r.Name] {
+				return fmt.Errorf("duplicate workflow name %q in workflow stateRetentionPolicy.workflows", r.Name)
+			}
+			if r.AnyTerminal == nil && r.Completed == nil && r.Failed == nil && r.Terminated == nil {
+				return fmt.Errorf("workflow name %q in workflow stateRetentionPolicy.workflows sets no retention duration", r.Name)
+			}
+			names[r.Name] = true
+		}
 	}
 
 	return nil

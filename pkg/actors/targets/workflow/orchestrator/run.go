@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/events"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -871,7 +872,7 @@ func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.
 	}
 	// Retention and the cascade first: an unreachable parent must not hold
 	// them back, and both are idempotent re-asserts.
-	if err = o.handleRetention(ctx, status, completedAt); err != nil {
+	if err = o.handleRetention(ctx, state, status, completedAt); err != nil {
 		return wferrors.NewRecoverable(fmt.Errorf("failed to (re)create the retention reminder: %w", err))
 	}
 	if err = o.terminateChildren(ctx, state); err != nil {
@@ -883,33 +884,47 @@ func (o *orchestrator) settleTerminal(ctx context.Context, state *wfenginestate.
 	return nil
 }
 
-func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus, completedAt time.Time) error {
+func (o *orchestrator) handleRetention(ctx context.Context, state *wfenginestate.State, status protos.OrchestrationStatus, completedAt time.Time) error {
 	if o.retentionPolicy == nil {
 		return nil
 	}
 
-	var dueTime *time.Duration
-	switch {
-	case o.retentionPolicy.Completed != nil &&
-		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
-		dueTime = o.retentionPolicy.Completed
-	case o.retentionPolicy.Terminated != nil &&
-		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
-		dueTime = o.retentionPolicy.Terminated
-	case o.retentionPolicy.Failed != nil &&
-		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED:
-		dueTime = o.retentionPolicy.Failed
-	case o.retentionPolicy.AnyTerminal != nil:
-		dueTime = o.retentionPolicy.AnyTerminal
-	}
-
+	name := o.getExecutionStartedEvent(state).GetName()
+	dueTime := retentionTTL(o.retentionPolicy.Workflow(name), status)
 	if dueTime == nil {
+		dueTime = retentionTTL(o.retentionPolicy, status)
+	}
+	if dueTime == nil {
+		// A previous run of this instance ID may have left its reminder, which
+		// would purge this run at that run's deadline.
+		o.deleteReminderTolerant(ctx, &actorapi.DeleteReminderRequest{
+			Name:      retentionReminderName,
+			ActorType: o.retentionActorType,
+			ActorID:   o.actorID,
+		}, "retention reminder of a previous run of this instance ID")
 		return nil
 	}
 
-	log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+	log.Debugf("Workflow actor '%s': setting retention reminder for workflow '%s' with status '%s' and due time '%v'", o.actorID, name, status.String(), *dueTime)
 	_, err := o.createRetentionReminder(ctx, retentionReminderName, completedAt.Add(*dueTime))
 	return err
+}
+
+// retentionTTL returns the policy's TTL for a terminal status: the
+// status-specific value if set, otherwise anyTerminal. Nil if neither is set.
+func retentionTTL(p *config.WorkflowStateRetentionPolicy, status protos.OrchestrationStatus) *time.Duration {
+	if p == nil {
+		return nil
+	}
+	switch {
+	case p.Completed != nil && status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
+		return p.Completed
+	case p.Terminated != nil && status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
+		return p.Terminated
+	case p.Failed != nil && status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED:
+		return p.Failed
+	}
+	return p.AnyTerminal
 }
 
 // staleTurnDuplicate reports whether rs.NewEvents re-creates an operation
@@ -1284,7 +1299,7 @@ func (o *orchestrator) failUnstartableWorkflow(ctx context.Context, state *wfeng
 		return todo.RunCompletedFalse, err
 	}
 	diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusUnstartableFailed)
-	if err := o.handleRetention(ctx, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, time.Now()); err != nil {
+	if err := o.handleRetention(ctx, state, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED, time.Now()); err != nil {
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 	}
 	return todo.RunCompletedTrue, nil

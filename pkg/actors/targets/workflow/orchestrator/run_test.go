@@ -1987,3 +1987,88 @@ func Test_settledUnchanged_needsTheWholeRowAndNoOwedNotification(t *testing.T) {
 		})
 	}
 }
+
+func Test_handleRetention_perWorkflowPrecedence(t *testing.T) {
+	t.Parallel()
+
+	const (
+		order = "order"
+		audit = "audit"
+		other = "other"
+	)
+	d := func(v time.Duration) *time.Duration { return &v }
+	appWide := &config.WorkflowStateRetentionPolicy{
+		Completed:   d(time.Minute),
+		Failed:      d(2 * time.Minute),
+		AnyTerminal: d(time.Hour),
+		Workflows: []config.NamedWorkflowStateRetentionPolicy{
+			{Name: order, Completed: d(0), AnyTerminal: d(10 * time.Minute)},
+			{Name: audit, Failed: d(5 * time.Minute)},
+		},
+	}
+	namesOnly := &config.WorkflowStateRetentionPolicy{
+		Workflows: []config.NamedWorkflowStateRetentionPolicy{{Name: order, Completed: d(time.Second)}},
+	}
+
+	const (
+		completed  = protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED
+		failed     = protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED
+		terminated = protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED
+	)
+
+	tests := map[string]struct {
+		policy *config.WorkflowStateRetentionPolicy
+		name   string
+		status protos.OrchestrationStatus
+		want   *time.Duration
+	}{
+		"per-name specific wins":                       {appWide, order, completed, d(0)},
+		"per-name anyTerminal beats app-wide specific": {appWide, order, failed, d(10 * time.Minute)},
+		"unset per-name falls to app-wide specific":    {appWide, audit, completed, d(time.Minute)},
+		"unset per-name falls to app-wide anyTerminal": {appWide, audit, terminated, d(time.Hour)},
+		"unknown name uses app-wide":                   {appWide, other, completed, d(time.Minute)},
+		"nothing configured for the status":            {namesOnly, order, failed, nil},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var creates []*actorapi.CreateReminderRequest
+			var deletes []*actorapi.DeleteReminderRequest
+			o := &orchestrator{
+				factory: &factory{
+					retentionActorType: "dapr.internal.default.testapp.retentioner",
+					reminders: remindersfake.New().WithCreate(func(_ context.Context, req *actorapi.CreateReminderRequest) error {
+						creates = append(creates, req)
+						return nil
+					}).WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+						deletes = append(deletes, req)
+						return nil
+					}),
+					retentionPolicy: tc.policy,
+				},
+				actorID: "wf-1",
+			}
+
+			completedAt := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+			state := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "workflow", ActivityActorType: "activity"})
+			state.AddToHistory(&backend.HistoryEvent{EventType: &protos.HistoryEvent_ExecutionStarted{
+				ExecutionStarted: &protos.ExecutionStartedEvent{Name: tc.name},
+			}})
+			require.NoError(t, o.handleRetention(t.Context(), state, tc.status, completedAt))
+
+			if tc.want == nil {
+				assert.Empty(t, creates)
+				// A previous run of the ID may have left its reminder behind.
+				require.Len(t, deletes, 1)
+				assert.Equal(t, "retention", deletes[0].Name)
+				return
+			}
+			require.Len(t, creates, 1)
+			assert.Equal(t, "retention", creates[0].Name)
+			assert.Empty(t, deletes)
+			assert.Equal(t, completedAt.Add(*tc.want).Format(time.RFC3339Nano), creates[0].DueTime)
+		})
+	}
+}
