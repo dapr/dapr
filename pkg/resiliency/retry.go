@@ -158,6 +158,7 @@ func parsePatterns(patterns string, validRange codeRange) ([]codeRange, error) {
 	parsedPatterns := make([]codeRange, 0, len(patterns))
 	splitted := strings.SplitSeq(patterns, ",")
 	for p := range splitted {
+		p = strings.TrimSpace(p)
 		// make sure empty patterns are ignored
 		if len(p) == 0 {
 			continue
@@ -177,9 +178,10 @@ func compilePattern(pattern string, validRange codeRange) (codeRange, error) {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, more than one '-' exists", pattern)
 	}
 	// empty string is not allowed by strconv.Atoi, so we do not need to check empty string here
-	startint, err := strconv.Atoi(patterns[0])
+	startStr := strings.TrimSpace(patterns[0])
+	startint, err := strconv.Atoi(startStr)
 	if err != nil {
-		return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
+		return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", startStr, pattern, err)
 	}
 	//nolint:gosec
 	start := int32(startint)
@@ -189,9 +191,10 @@ func compilePattern(pattern string, validRange codeRange) (codeRange, error) {
 
 	endint := startint
 	if len(patterns) == 2 {
-		endint, err = strconv.Atoi(patterns[1])
+		endStr := strings.TrimSpace(patterns[1])
+		endint, err = strconv.Atoi(endStr)
 		if err != nil {
-			return codeRange{}, fmt.Errorf("failed to parse end code %s from pattern %s to int, %w", patterns[1], pattern, err)
+			return codeRange{}, fmt.Errorf("failed to parse end code %s from pattern %s to int, %w", endStr, pattern, err)
 		}
 	}
 	//nolint:gosec
