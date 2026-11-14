@@ -159,6 +159,9 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	success := atomic.Bool{}
+	// Set when copying the response body to the caller fails after the
+	// response headers have been sent.
+	copyFailed := atomic.Bool{}
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
@@ -263,6 +266,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			}
 			_, rErr = io.Copy(dst, reader)
 			if rErr != nil {
+				copyFailed.Store(true)
 				// Do not return rResp here, we already have a deferred `Close` call on it
 				return nil, backoff.Permanent(rErr)
 			}
@@ -301,6 +305,15 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// If success is true, it means that headers have already been sent, so we can't send the error to the user, because:
 	// headers cannot be re-sent, and adding to response body may cause corrupted data to be sent
 	if success.Load() {
+		if copyFailed.Load() {
+			// The response body failed partway through the copy, after
+			// the headers were sent. Returning normally would end the
+			// response cleanly and present the truncated body as
+			// complete, so abort the connection instead, the same way
+			// httputil.ReverseProxy handles a failed copy.
+			panic(http.ErrAbortHandler)
+		}
+
 		// For streaming requests with non-2xx responses, a CodeError is
 		// returned solely for circuit breaker accounting after the
 		// response was already successfully forwarded. Use debug level
