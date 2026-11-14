@@ -102,3 +102,51 @@ func TestResiliencyFunctions(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRetryConditionMatchWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		matching resiliencyv1alpha.RetryMatching
+		expected RetryConditionMatch
+	}{
+		{
+			name:     "HTTP list",
+			matching: resiliencyv1alpha.RetryMatching{HTTPStatusCodes: "500, 502, 503, 504"},
+			expected: RetryConditionMatch{httpStatusCodes: []codeRange{{500, 500}, {502, 502}, {503, 503}, {504, 504}}},
+		},
+		{
+			name:     "HTTP range",
+			matching: resiliencyv1alpha.RetryMatching{HTTPStatusCodes: "500 - 504"},
+			expected: RetryConditionMatch{httpStatusCodes: []codeRange{{500, 504}}},
+		},
+		{
+			name:     "gRPC list",
+			matching: resiliencyv1alpha.RetryMatching{GRPCStatusCodes: "2, 8, 13"},
+			expected: RetryConditionMatch{gRPCStatusCodes: []codeRange{{2, 2}, {8, 8}, {13, 13}}},
+		},
+		{
+			name:     "gRPC range",
+			matching: resiliencyv1alpha.RetryMatching{GRPCStatusCodes: "8 - 10"},
+			expected: RetryConditionMatch{gRPCStatusCodes: []codeRange{{8, 10}}},
+		},
+		{
+			name: "mixed whitespace and empty entries",
+			matching: resiliencyv1alpha.RetryMatching{
+				HTTPStatusCodes: " \t500 \t, ,\n 502 \t-\n 504 , ",
+				GRPCStatusCodes: " \t2 \t, ,\n 8 \t-\n 10 , ",
+			},
+			expected: RetryConditionMatch{
+				httpStatusCodes: []codeRange{{500, 500}, {502, 504}},
+				gRPCStatusCodes: []codeRange{{2, 2}, {8, 10}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := ParseRetryConditionMatch(&tt.matching)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, match)
+		})
+	}
+}
