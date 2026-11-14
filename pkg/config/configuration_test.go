@@ -949,6 +949,47 @@ func TestWorkflowStateRetentionPolicyUnmarshalJSON(t *testing.T) {
 		var p WorkflowStateRetentionPolicy
 		assert.Error(t, json.Unmarshal([]byte(data), &p))
 	})
+
+	t.Run("per-workflow entries", func(t *testing.T) {
+		data := `{"anyTerminal":"1h","workflows":[{"name":"order","completed":"0s","failed":"720h"},{"name":"audit","anyTerminal":"2160h"}]}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, time.Hour, *p.AnyTerminal)
+		require.Len(t, p.Workflows, 2)
+
+		assert.Equal(t, "order", p.Workflows[0].Name)
+		require.NotNil(t, p.Workflows[0].Completed)
+		assert.Equal(t, time.Duration(0), *p.Workflows[0].Completed)
+		require.NotNil(t, p.Workflows[0].Failed)
+		assert.Equal(t, 720*time.Hour, *p.Workflows[0].Failed)
+		assert.Nil(t, p.Workflows[0].AnyTerminal)
+		assert.Nil(t, p.Workflows[0].Terminated)
+
+		assert.Equal(t, "audit", p.Workflows[1].Name)
+		require.NotNil(t, p.Workflows[1].AnyTerminal)
+		assert.Equal(t, 2160*time.Hour, *p.Workflows[1].AnyTerminal)
+	})
+}
+
+func TestWorkflowStateRetentionPolicyWorkflow(t *testing.T) {
+	var nilPolicy *WorkflowStateRetentionPolicy
+	assert.Nil(t, nilPolicy.Workflow("order"))
+
+	completed, anyTerminal := time.Second, time.Hour
+	p := &WorkflowStateRetentionPolicy{
+		AnyTerminal: &anyTerminal,
+		Workflows: []NamedWorkflowStateRetentionPolicy{
+			{Name: "order", Completed: &completed},
+		},
+	}
+	assert.Nil(t, p.Workflow("other"))
+
+	got := p.Workflow("order")
+	require.NotNil(t, got)
+	assert.Equal(t, &WorkflowStateRetentionPolicy{Completed: &completed}, got,
+		"the entry must not inherit app-wide values; fallback is the caller's job")
 }
 
 func TestHasSchedulerConcurrencyLimits(t *testing.T) {
@@ -1093,6 +1134,51 @@ func TestValidateWorkflowSpec(t *testing.T) {
 		ActivityDispatchMode:             new(ActivityDispatchModePull),
 	}).validateWorkflowSpec()
 	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations", "zero means unset")
+
+	ttl := time.Hour
+	retention := func(names ...string) *WorkflowSpec {
+		w := &WorkflowSpec{StateRetentionPolicy: &WorkflowStateRetentionPolicy{}}
+		for _, n := range names {
+			w.StateRetentionPolicy.Workflows = append(w.StateRetentionPolicy.Workflows, NamedWorkflowStateRetentionPolicy{Name: n, Completed: &ttl})
+		}
+		return w
+	}
+	require.NoError(t, conf(retention()).validateWorkflowSpec())
+	require.NoError(t, conf(retention("order", "audit")).validateWorkflowSpec())
+	require.ErrorContains(t, conf(retention("order", "")).validateWorkflowSpec(),
+		"workflow stateRetentionPolicy.workflows entries require a name")
+	require.ErrorContains(t, conf(retention("order", "audit", "order")).validateWorkflowSpec(),
+		`duplicate workflow name "order" in workflow stateRetentionPolicy.workflows`)
+	require.ErrorContains(t, conf(&WorkflowSpec{StateRetentionPolicy: &WorkflowStateRetentionPolicy{
+		Workflows: []NamedWorkflowStateRetentionPolicy{{Name: "order"}},
+	}}).validateWorkflowSpec(), `workflow name "order" in workflow stateRetentionPolicy.workflows sets no retention duration`)
+}
+
+func TestLoadStandaloneConfigurationWorkflowRetention(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: retention
+spec:
+  workflow:
+    stateRetentionPolicy:
+      anyTerminal: 1h
+      workflows:
+        - name: order
+          completed: 0s
+          failed: 720h
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	p := c.Spec.WorkflowSpec.StateRetentionPolicy
+	require.NotNil(t, p)
+	require.Equal(t, time.Hour, *p.AnyTerminal)
+	order := p.Workflow("order")
+	require.NotNil(t, order)
+	require.Equal(t, time.Duration(0), *order.Completed)
+	require.Equal(t, 720*time.Hour, *order.Failed)
+	require.Nil(t, order.AnyTerminal)
 }
 
 func TestLoadStandaloneConfigurationRejectsPullWithoutSlots(t *testing.T) {
