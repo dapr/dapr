@@ -122,6 +122,7 @@ func cascadeTerminateEvent(term *protos.ExecutionTerminatedEvent) *backend.Histo
 			ExecutionTerminated: &protos.ExecutionTerminatedEvent{
 				Input:   term.GetInput(),
 				Recurse: true,
+				Reason:  term.GetReason(),
 			},
 		},
 	}
