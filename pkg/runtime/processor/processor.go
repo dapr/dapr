@@ -116,6 +116,7 @@ type Options struct {
 type Processor struct {
 	appID     string
 	compStore *compstore.ComponentStore
+	meta      *meta.Meta
 	security  security.Handler
 	reporter  registry.Reporter
 
@@ -283,6 +284,7 @@ func New(opts Options) *Processor {
 		appID:          opts.ID,
 		kubernetesMode: opts.Mode == modes.KubernetesMode,
 		compStore:      opts.ComponentStore,
+		meta:           opts.Meta,
 		security:       opts.Security,
 		reporter:       reporter,
 		actors:         opts.Actors,
