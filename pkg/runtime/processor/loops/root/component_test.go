@@ -15,9 +15,9 @@ package root
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,157 +28,158 @@ import (
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 )
 
-// failCategoryLoop is a test category loop that immediately fails all init
-// requests with a configurable error, simulating a component whose Init
-// returns an error (e.g. a secret store that cannot connect).
-type failCategoryLoop struct {
+// failCategoryHandler stands in for a category loop whose components always
+// fail to init (e.g. a secret store that cannot reach its backend). The error
+// names the component so tests can tell which init produced it.
+type failCategoryHandler struct {
 	err error
 }
 
-func (f *failCategoryLoop) Run(ctx context.Context) error {
-	<-ctx.Done()
-	return ctx.Err()
+func (f *failCategoryHandler) Handle(_ context.Context, ev loops.EventCategory) error {
+	if init, ok := ev.(*loops.Init); ok {
+		sendResult(init.Result, fmt.Errorf("%s: %w", init.Component.Name, f.err))
+	}
+	return nil
 }
 
-func (f *failCategoryLoop) Enqueue(ev loops.EventCategory) {
-	if init, ok := ev.(*loops.Init); ok {
-		sendResult(init.Result, f.err)
+// nopSecretResolver stands in for the secret processor. Nothing is left
+// unresolved, so every resource falls through to its category loop.
+type nopSecretResolver struct{}
+
+func (nopSecretResolver) ProcessResource(context.Context, meta.Resource) (bool, string) {
+	return false, ""
+}
+
+func secretStoreComponent(name string, ignoreErrors bool) compapi.Component {
+	return compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: compapi.ComponentSpec{
+			Type:         "secretstores.kubernetes",
+			Version:      "v1",
+			IgnoreErrors: ignoreErrors,
+		},
 	}
 }
 
-func (f *failCategoryLoop) Close() error { return nil }
+// runInitFailure starts a root loop plus one failing secret-store category loop,
+// submits a component Init, and returns once the init result has been delivered.
+// The caller must drain the root loop with closeRoot before asserting on
+// fatalErr, because Run publishes it only after the init finalizers complete.
+func runInitFailure(t *testing.T, comp compapi.Component, initErr error) (*Root, <-chan error) {
+	t.Helper()
 
-// TestHandleInit_FatalErrorOnCancellation verifies that when a component init
-// fails and the processor shuts down (context cancelled), the fatal init error
-// is still recorded with both the component name and type in the error message.
-//
-// This is the regression test for the copilot review comment:
-// "The new type-bearing error is only exercised when the component init result
-// races processor shutdown, but the added integration assertions cover the
-// normal initComponentBlocking path and do not verify this fallback."
-func TestHandleInit_FatalErrorOnCancellation(t *testing.T) {
-	// Create a category loop that immediately fails init
-	catLoop := &failCategoryLoop{err: fmt.Errorf("connection refused")}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
-	// Create a Root with the mock category loop registered for the
-	// "secretstores" category (the prefix matching is used by handleInit).
+	catLoop := loops.CategoryFactory.NewLoop(&failCategoryHandler{err: initErr})
+	go func() { _ = catLoop.Run(ctx) }()
+
 	r := New(Options{
 		Categories: map[components.Category]loop.Interface[loops.EventCategory]{
 			components.CategorySecretStore: catLoop,
 		},
+		Secret: nopSecretResolver{},
 	})
 
-	// Create a cancellable context for the root loop
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	runErr := make(chan error, 1)
+	go func() { runErr <- r.Run(ctx) }()
 
-	// Start the root loop in a goroutine
-	var runErr error
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		runErr = r.Run(ctx)
-	}()
-
-	// Enqueue an Init event for a component that will fail to init.
-	// Use a secret store component because that is the category most
-	// likely to fail in practice (external dependency).
 	resultCh := make(chan error, 1)
 	r.loop.Enqueue(&loops.Init{
-		Component: compapi.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mysecretstore",
-			},
-			Spec: compapi.ComponentSpec{
-				Type: "secretstores.kubernetes",
-			},
-		},
-		Result: resultCh,
+		Component: comp,
+		Result:    resultCh,
+		Timeout:   DefaultComponentInitTimeout,
 	})
 
-	// Wait for the init to be processed and the error to be recorded.
-	// The handleInit finalizer goroutine calls recordFatalInitError when
-	// the category loop returns an error.
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case err := <-resultCh:
+		require.Error(t, err, "component init should have failed")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the component init result")
+	}
 
-	// Cancel the context to simulate processor shutdown while the
-	// finalizer is still in flight. This is the race condition the
-	// copilot review flagged.
-	cancel()
-
-	// Wait for the loop to exit
-	wg.Wait()
-
-	// Verify that the fatal error was recorded.
-	// The fatal error should contain both the component name and type.
-	fatal := r.fatalErr.Load()
-	require.NotNil(t, fatal, "expected fatal error to be recorded")
-
-	fatalErr := *fatal
-	errStr := fatalErr.Error()
-
-	// Assert the error contains the component name.
-	assert.True(t, strings.Contains(errStr, "mysecretstore"),
-		"fatal error should contain component name, got: %s", errStr)
-
-	// Assert the error contains the component type.
-	assert.True(t, strings.Contains(errStr, "secretstores.kubernetes"),
-		"fatal error should contain component type, got: %s", errStr)
-
-	// Assert the error contains the wrapped init error.
-	assert.True(t, strings.Contains(errStr, "connection refused"),
-		"fatal error should contain the underlying init error, got: %s", errStr)
-
-	// Assert the error matches the expected format.
-	assert.Contains(t, errStr, "process component mysecretstore (type: secretstores.kubernetes) error:")
+	return r, runErr
 }
 
-// TestHandleInit_IgnoreErrors verifies that when a component has IgnoreErrors
-// set to true, the fatal error is NOT recorded even if init fails.
-func TestHandleInit_IgnoreErrors(t *testing.T) {
-	catLoop := &failCategoryLoop{err: fmt.Errorf("connection refused")}
+// closeRoot drains the root loop and waits for Run to return. Run waits for the
+// init finalizers before reading fatalErr, so once this returns the recorded
+// fatal error is stable.
+//
+// Close must be awaited as well as Run: Run returns the root loop to the
+// shared factory pool, so a Close still in flight would race the next test's
+// reuse of the same pooled loop.
+func closeRoot(t *testing.T, r *Root, runErr <-chan error) error {
+	t.Helper()
 
-	r := New(Options{
-		Categories: map[components.Category]loop.Interface[loops.EventCategory]{
-			components.CategorySecretStore: catLoop,
-		},
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
+	closeDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
-		r.Run(ctx)
+		r.loop.Close(new(loops.Shutdown))
+		close(closeDone)
 	}()
 
-	resultCh := make(chan error, 1)
+	select {
+	case err := <-runErr:
+		<-closeDone
+		return err
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the root loop to shut down")
+		return nil
+	}
+}
+
+// TestHandleInit_FatalErrorRecorded verifies that a component init failure on
+// the fatal path is recorded with both the component name and its type, so the
+// runtime can surface it even when it races with shutdown.
+func TestHandleInit_FatalErrorRecorded(t *testing.T) {
+	const compName = "mysecretstore"
+
+	r, runErr := runInitFailure(t, secretStoreComponent(compName, false), errors.New("connection refused"))
+	require.Error(t, closeRoot(t, r, runErr), "Run should surface the fatal init error")
+
+	fatal := r.fatalErr.Load()
+	require.NotNil(t, fatal, "expected a fatal init error to be recorded")
+
+	errStr := (*fatal).Error()
+	assert.Contains(t, errStr, compName, "fatal error should contain the component name")
+	assert.Contains(t, errStr, "secretstores.kubernetes", "fatal error should contain the component type")
+	assert.Contains(t, errStr, "connection refused", "fatal error should contain the underlying init error")
+	assert.Contains(t, errStr,
+		"process component mysecretstore (type: secretstores.kubernetes) error:",
+		"fatal error should carry the type-qualified wrapper",
+	)
+}
+
+// TestHandleInit_IgnoreErrorsNotFatal verifies that a component with
+// IgnoreErrors set does not record a fatal init error.
+func TestHandleInit_IgnoreErrorsNotFatal(t *testing.T) {
+	r, runErr := runInitFailure(t, secretStoreComponent("mysecretstore", true), errors.New("connection refused"))
+	require.NoError(t, closeRoot(t, r, runErr), "an ignored init failure must not be fatal")
+
+	assert.Nil(t, r.fatalErr.Load(), "no fatal error should be recorded when IgnoreErrors is set")
+}
+
+// TestHandleInit_FatalErrorFirstWins verifies that only the first non-ignored
+// init failure is retained, matching recordFatalInitError's CompareAndSwap.
+func TestHandleInit_FatalErrorFirstWins(t *testing.T) {
+	r, runErr := runInitFailure(t, secretStoreComponent("store-a", false), errors.New("first failure"))
+
+	// A second failing init must not displace the first recorded error.
 	r.loop.Enqueue(&loops.Init{
-		Component: compapi.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mysecretstore",
-			},
-			Spec: compapi.ComponentSpec{
-				Type:    "secretstores.kubernetes",
-				Version: "v1",
-				// IgnoreErrors is set — the fatal error should NOT be recorded.
-				// Note: IgnoreErrors is a field on ComponentSpec in the real API.
-			},
-		},
-		Result: resultCh,
+		Component: secretStoreComponent("store-b", false),
+		Result:    make(chan error, 1),
+		Timeout:   DefaultComponentInitTimeout,
 	})
 
-	time.Sleep(200 * time.Millisecond)
-	cancel()
-	wg.Wait()
+	require.Error(t, closeRoot(t, r, runErr))
 
-	// With IgnoreErrors, no fatal error should be recorded.
 	fatal := r.fatalErr.Load()
-	assert.Nil(t, fatal, "expected no fatal error when IgnoreErrors is set")
+	require.NotNil(t, fatal)
+	assert.True(t, strings.Contains((*fatal).Error(), "store-a"),
+		"the first fatal error should be retained, got: %s", (*fatal).Error())
+	assert.False(t, strings.Contains((*fatal).Error(), "store-b"),
+		"a later failure must not displace the first, got: %s", (*fatal).Error())
 }
