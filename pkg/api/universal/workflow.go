@@ -242,7 +242,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
 	if in.Reason != nil {
-		opts = append(opts, api.WithReason(in.GetReason()))
+		opts = append(opts, api.WithTerminateReason(in.GetReason()))
 	}
 	if targetAppID != "" {
 		opts = append(opts, api.WithTerminateAppID(targetAppID))
