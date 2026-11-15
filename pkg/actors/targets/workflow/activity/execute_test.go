@@ -273,3 +273,85 @@ func Test_claimStaleEviction(t *testing.T) {
 		assert.Same(t, call, follower)
 	})
 }
+
+// Test_executeActivity_pullNoCapacity pins that a pull delivery the engine
+// refuses for lack of a slot surfaces ErrNoCapacity unwrapped, so the
+// scheduler stream can queue it again, and leaves nothing cached: the next
+// delivery executes.
+func Test_executeActivity_followerOfRefusedPullOwnerRuns(t *testing.T) {
+	t.Parallel()
+	f, scheduled := newExecHarness(t)
+	entered, refuse := make(chan struct{}), make(chan struct{})
+	f.scheduler = func(_ context.Context, wi *backend.ActivityWorkItem) error {
+		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
+			close(entered)
+			<-refuse
+			return ErrNoCapacity
+		}
+		scheduled <- wi
+		return nil
+	}
+
+	a := f.GetOrCreate("wf::3::0").(*activity)
+	pullReminder := testReminder()
+	pullReminder.ExecuteLocally = true
+	ownerErr := make(chan error, 1)
+	go func() {
+		ownerErr <- a.executeActivity(t.Context(), pullReminder, testInvocation())
+	}()
+	<-entered
+
+	// A regular delivery of the same activity parks behind the pull owner,
+	// which is then refused a slot.
+	followerErr := make(chan error, 1)
+	go func() {
+		followerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+	}()
+	time.Sleep(100 * time.Millisecond)
+	close(refuse)
+	require.ErrorIs(t, <-ownerErr, ErrNoCapacity)
+
+	// The follower runs the activity itself instead of reporting the
+	// owner's refusal.
+	completeWorkItem(t, recvWorkItem(t, scheduled))
+	select {
+	case err := <-followerErr:
+		require.NoError(t, err)
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the follower")
+	}
+}
+
+func Test_executeActivity_pullNoCapacity(t *testing.T) {
+	t.Parallel()
+	f, scheduled := newExecHarness(t)
+	f.scheduler = func(_ context.Context, wi *backend.ActivityWorkItem) error {
+		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
+			return ErrNoCapacity
+		}
+		scheduled <- wi
+		return nil
+	}
+
+	a := f.GetOrCreate("wf::3::0").(*activity)
+	pullReminder := testReminder()
+	pullReminder.ExecuteLocally = true
+
+	err := a.executeActivity(t.Context(), pullReminder, testInvocation())
+	require.ErrorIs(t, err, ErrNoCapacity)
+	assert.Equal(t, ErrNoCapacity, err, "returned unwrapped, not as a recoverable error")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+	}()
+	wi := recvWorkItem(t, scheduled)
+	assert.Equal(t, false, wi.Properties[todo.PullProperty])
+	completeWorkItem(t, wi)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the execution")
+	}
+}

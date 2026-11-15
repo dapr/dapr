@@ -209,6 +209,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Host: &schedulerv1pb.Host{
 			Address:                   broadcastAddr,
 			SchedulerPlacementEnabled: opts.PlacementEnabled,
+			SupportsPullSlots:         true,
 		},
 		Etcd:          etcdServer,
 		Backend:       opts.Backend,

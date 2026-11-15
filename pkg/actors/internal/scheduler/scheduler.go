@@ -88,6 +88,11 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		overwrite = *reminder.Overwrite
 	}
 
+	var pull *bool
+	if reminder.Pull {
+		pull = new(true)
+	}
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name:      reminder.Name,
 		Overwrite: overwrite,
@@ -103,6 +108,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			AppId:          s.appID,
 			Namespace:      s.namespace,
 			ConcurrencyKey: reminder.ConcurrencyKey,
+			Pull:           pull,
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{

@@ -56,7 +56,7 @@ func (s *start) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		workflow.WithFallbackSettleN(t, 0),
 		workflow.WithFallbackSettleN(t, 1),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),

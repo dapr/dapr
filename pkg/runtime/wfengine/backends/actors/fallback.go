@@ -124,6 +124,12 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 		hostedCancel()
 		return err
 	}
+	var wakes interface{ CancelWakes() }
+	for _, f := range factories {
+		if w, ok := f.Factory.(interface{ CancelWakes() }); ok {
+			wakes = w
+		}
+	}
 	retireTogether(factories, hostedCancel)
 
 	var execCancel context.CancelFunc
@@ -146,6 +152,7 @@ func (abe *Actors) RegisterHostedActors(ctx, factoryCtx context.Context, executo
 	// call, and halted and retired by RegisterActorTypes if they were still
 	// registered.
 	replaceCancel(&abe.hostedCancel, hostedCancel)
+	abe.hostedWakes = wakes
 	if executor {
 		replaceCancel(&abe.executorCancel, execCancel)
 	}
@@ -246,7 +253,11 @@ func (abe *Actors) SetLocalExecutor(ctx, factoryCtx context.Context, executor bo
 	}
 
 	// Stop the reminders first: nothing on this daprd can run them any more.
+	// The local wakes go for the same reason, as a halt would end them.
 	atable.SetReminderDelivery(false, types...)
+	if abe.hostedWakes != nil {
+		abe.hostedWakes.CancelWakes()
+	}
 	// A halt error comes after the executor actor type left the table: the
 	// switch is made all the same, so it is not reported as a failed one,
 	// which would make the engine give up the types it must keep hosting.

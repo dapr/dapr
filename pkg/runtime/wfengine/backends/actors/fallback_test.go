@@ -27,7 +27,9 @@ import (
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -59,6 +61,10 @@ func TestFallbackSchedulerFailsFast(t *testing.T) {
 		opts := abe.factoryOptions()
 		require.ErrorIs(t, opts.Orchestrator.Scheduler(t.Context(), wi), errNoLocalExecutor)
 		require.ErrorIs(t, opts.Activity.Scheduler(t.Context(), ai), errNoLocalExecutor)
+
+		// A pull delivery is refused, so the scheduler picks another sidecar.
+		pai := &backend.ActivityWorkItem{InstanceID: "wf1", NewEvent: &protos.HistoryEvent{}, Properties: map[string]any{todo.PullProperty: true}}
+		require.ErrorIs(t, opts.Activity.Scheduler(t.Context(), pai), activity.ErrNoCapacity)
 	})
 
 	t.Run("with a local executor a turn is queued", func(t *testing.T) {
