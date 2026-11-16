@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -110,7 +111,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	err := a.scheduler(ctx, ex.wi)
 	elapsed := diag.ElapsedSince(start)
 
-	if errors.Is(err, ErrNoCapacity) {
+	if errors.Is(err, actorerrors.ErrNoCapacity) {
 		// Not executed: the scheduler queues the trigger again. Released, not
 		// cached, so followers unpark into their own retries.
 		ex.unregister()
