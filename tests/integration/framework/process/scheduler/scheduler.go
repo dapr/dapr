@@ -619,6 +619,13 @@ func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID strin
 	}
 }
 
+// JobNowPull is an actor reminder due now, flagged for pull dispatch.
+func (s *Scheduler) JobNowPull(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
+	req := s.JobNowActor(name, namespace, appID, actorType, actorID)
+	req.Metadata.Pull = new(true)
+	return req
+}
+
 func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
 	t.Helper()
 	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
@@ -677,6 +684,27 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 	require.NoError(t, err)
 
 	return resp
+}
+
+// JobKeysLookup returns a lookup of the stored job keys containing substr,
+// for polls. It dials etcd once, here on the test goroutine, and a poll
+// reports a failed lookup to its collector, which retries it.
+func (s *Scheduler) JobKeysLookup(t *testing.T, ctx context.Context) func(c *assert.CollectT, substr string) []string {
+	t.Helper()
+	etcd := s.ETCDClient(t, ctx)
+	return func(c *assert.CollectT, substr string) []string {
+		resp, err := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix(), clientv3.WithKeysOnly())
+		if !assert.NoError(c, err) {
+			return nil
+		}
+		var keys []string
+		for _, kv := range resp.Kvs {
+			if strings.Contains(string(kv.Key), substr) {
+				keys = append(keys, string(kv.Key))
+			}
+		}
+		return keys
+	}
 }
 
 // WaitJobKeyCount polls the number of job keys containing substr until cond

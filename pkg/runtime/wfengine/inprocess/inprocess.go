@@ -23,6 +23,7 @@ import (
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
@@ -40,11 +41,12 @@ type Executor struct {
 	onMCPTeardown func(name string)
 }
 
-// NewExecutor creates an in-process executor with an empty registry.
-// Workflows are registered per-resource via subsystem-specific methods
-// (e.g. RegisterMCPServer).
+// NewExecutor creates an in-process executor holding the workflow schedule
+// workflow. Other workflows are registered per-resource via
+// subsystem-specific methods (e.g. RegisterMCPServer).
 func NewExecutor() *Executor {
 	registry := task.NewTaskRegistry()
+	schedule.Register(registry)
 	return &Executor{
 		registry: registry,
 		executor: task.NewTaskExecutor(registry),

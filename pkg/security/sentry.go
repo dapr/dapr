@@ -28,6 +28,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -74,25 +76,9 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 	kubernetesMode := opts.Mode == modes.KubernetesMode
 
 	fn := func(ctx context.Context, csrDER []byte) (*spiffe.SVIDResponse, error) {
-		unaryClientInterceptor := retry.UnaryClientInterceptor(
-			retry.WithMax(sentryMaxRetries),
-			retry.WithPerRetryTimeout(sentrySignTimeout),
-		)
-		if diagnostics.DefaultGRPCMonitoring.IsEnabled() {
-			unaryClientInterceptor = middleware.ChainUnaryClient(
-				unaryClientInterceptor,
-				diagnostics.DefaultGRPCMonitoring.UnaryClientInterceptor(),
-			)
-		}
-
-		conn, err := grpc.DialContext(ctx, //nolint:staticcheck
-			sentryAddress,
-			grpc.WithTransportCredentials(
-				grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
-			),
-			grpc.WithUnaryInterceptor(unaryClientInterceptor),
-			grpc.WithReturnConnectionError(), //nolint:staticcheck
-		)
+		conn, err := dialSentry(ctx, sentryAddress, grpc.WithTransportCredentials(
+			grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
+		))
 		if err != nil {
 			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 			return nil, fmt.Errorf("error establishing connection to sentry: %w", err)
@@ -198,6 +184,57 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 	}
 
 	return fn, nil
+}
+
+// newJWTRequestFn returns a function which mints a JWT SVID on demand from
+// Sentry, authenticating with the workload's current X.509 SVID.
+func newJWTRequestFn(opts Options, sec *security, cptd spiffeid.TrustDomain) (spiffe.RequestJWTSVIDFn, error) {
+	sentryID, err := SentryID(cptd, opts.ControlPlaneNamespace)
+	if err != nil {
+		return nil, err
+	}
+
+	// ponytail: dial per call like newRequestFn; keep a persistent connection if
+	// the on-demand mint rate ever matters.
+	return func(ctx context.Context, audiences []string) (string, error) {
+		conn, err := dialSentry(ctx, opts.SentryAddress, sec.GRPCDialOptionMTLS(sentryID))
+		if err != nil {
+			return "", fmt.Errorf("error establishing connection to sentry: %w", err)
+		}
+		defer conn.Close()
+
+		resp, err := sentryv1pb.NewCAClient(conn).FetchJWTSVID(ctx, &sentryv1pb.FetchJWTSVIDRequest{
+			Audiences: audiences,
+		})
+		if status.Code(err) == codes.Unimplemented {
+			return "", fmt.Errorf("sentry does not support minting JWT SVIDs on demand, upgrade the Dapr control plane: %w", err)
+		}
+		if err != nil {
+			return "", fmt.Errorf("error from sentry FetchJWTSVID: %w", err)
+		}
+
+		return resp.GetJwt(), nil
+	}, nil
+}
+
+func dialSentry(ctx context.Context, address string, creds grpc.DialOption) (*grpc.ClientConn, error) {
+	unaryClientInterceptor := retry.UnaryClientInterceptor(
+		retry.WithMax(sentryMaxRetries),
+		retry.WithPerRetryTimeout(sentrySignTimeout),
+	)
+	if diagnostics.DefaultGRPCMonitoring.IsEnabled() {
+		unaryClientInterceptor = middleware.ChainUnaryClient(
+			unaryClientInterceptor,
+			diagnostics.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+		)
+	}
+
+	return grpc.DialContext(ctx, //nolint:staticcheck
+		address,
+		creds,
+		grpc.WithUnaryInterceptor(unaryClientInterceptor),
+		grpc.WithReturnConnectionError(), //nolint:staticcheck
+	)
 }
 
 // isControlPlaneService returns true if the app ID corresponds to a Dapr

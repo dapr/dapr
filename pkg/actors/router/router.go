@@ -196,6 +196,10 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
+	if req.ExecuteLocally {
+		return r.callLocalReminder(ctx, req)
+	}
+
 	wctx, removed, wcancel := req.UntilRemoved(ctx)
 	defer wcancel()
 
@@ -241,6 +245,11 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
+	return r.callLocalReminder(ctx, req)
+}
+
+// callLocalReminder invokes the reminder on this host's actor table.
+func (r *router) callLocalReminder(ctx context.Context, req *api.Reminder) error {
 	target, err := r.table.GetOrCreate(ctx, req.ActorType, req.ActorID)
 	if err != nil {
 		if ctx.Err() != nil {

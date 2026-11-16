@@ -36,7 +36,9 @@ type noclient struct {
 }
 
 func (n *noclient) Setup(t *testing.T) []framework.Option {
-	n.workflow = workflow.New(t)
+	// Asserts the workflow actor types are unregistered once the worker
+	// leaves, which the staged operations preview does not do.
+	n.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 
 	return []framework.Option{
 		framework.WithProcesses(n.workflow),

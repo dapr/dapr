@@ -123,6 +123,7 @@ type SidecarConfig struct {
 	InjectPluggableComponents           bool    `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string  `annotation:"dapr.io/app-channel-address"`
 	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
+	WorkloadKeyAlgorithm                string  `annotation:"dapr.io/workload-key-algorithm"`
 	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
 	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
 	EnableNativeSidecar                 bool    `annotation:"dapr.io/enable-native-sidecar"`

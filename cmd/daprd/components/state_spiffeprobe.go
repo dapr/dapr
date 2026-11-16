@@ -18,6 +18,9 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
@@ -39,11 +42,29 @@ type spiffeProbeStore struct {
 	contribstate.Store
 }
 
+// SpiffeProbeX509KeyTypeKey is the key whose Get returns the Go type of the
+// X.509 SVID private key. daprd prefixes keys with the app ID, so it is
+// matched as a suffix.
+const SpiffeProbeX509KeyTypeKey = "x509-key-type"
+
 // Get reports which SVID sources are present in ctx, ignoring any stored value.
-func (s *spiffeProbeStore) Get(ctx context.Context, _ *contribstate.GetRequest) (*contribstate.GetResponse, error) {
+func (s *spiffeProbeStore) Get(ctx context.Context, req *contribstate.GetRequest) (*contribstate.GetResponse, error) {
+	if strings.HasSuffix(req.Key, SpiffeProbeX509KeyTypeKey) {
+		source, ok := spiffecontext.X509From(ctx)
+		if !ok {
+			return nil, errors.New("no X.509 SVID source in the context")
+		}
+		svid, err := source.GetX509SVID()
+		if err != nil {
+			return nil, err
+		}
+		return &contribstate.GetResponse{Data: fmt.Appendf(nil, "%T", svid.PrivateKey)}, nil
+	}
+
 	_, hasX509 := spiffecontext.X509From(ctx)
 	_, hasJWT := spiffecontext.JWTFrom(ctx)
-	data, err := json.Marshal(map[string]bool{"x509": hasX509, "jwt": hasJWT})
+	_, hasJWTMinter := spiffecontext.JWTMinterFrom(ctx)
+	data, err := json.Marshal(map[string]bool{"x509": hasX509, "jwt": hasJWT, "jwtMinter": hasJWTMinter})
 	if err != nil {
 		return nil, err
 	}

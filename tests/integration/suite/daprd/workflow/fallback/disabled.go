@@ -38,7 +38,9 @@ type disabled struct {
 }
 
 func (d *disabled) Setup(t *testing.T) []framework.Option {
-	d.workflow = workflow.New(t)
+	// Pinned off: this checks the behaviour without the feature, whatever
+	// the suite's mode.
+	d.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 
 	return []framework.Option{
 		framework.WithProcesses(d.workflow),
