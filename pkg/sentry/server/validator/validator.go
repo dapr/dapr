@@ -15,6 +15,7 @@ package validator
 
 import (
 	"context"
+	"crypto/x509/pkix"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -37,6 +38,11 @@ type ValidateResult struct {
 	// the configured workload certificate TTL. JWTs issued with the certificate
 	// live no longer than it.
 	CertTTL *time.Duration
+
+	// Extensions are added to the signed certificate. Signing fails if one is
+	// critical, is in the X.509 certificate extension arc (2.5.29), or uses
+	// the container images OID.
+	Extensions []pkix.Extension
 }
 
 // Validator is used to validate the identity of a certificate requester by
