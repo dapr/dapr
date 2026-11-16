@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
+	"github.com/dapr/dapr/tests/integration/framework/process/pubsub/broker"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -44,12 +45,14 @@ func init() {
 // queue does. The delivery must still be traced, under a new root span, and the
 // app must be handed a usable traceparent rather than none.
 //
-// A raw payload subscription stands in for the outside publisher: the cloud
-// event is built on the subscriber side by FromRawPayload, which carries no
-// trace fields, and a raw publish puts none in the message metadata either.
+// The test broker stands in for the outside publisher: it hands daprd the
+// message with no trace metadata, and the raw payload subscription has
+// FromRawPayload build the cloud event on the subscriber side with no trace
+// fields.
 type rootspan struct {
 	daprd     *daprd.Daprd
 	collector *otel.Collector
+	broker    *broker.Broker
 
 	rawHeaderCh chan nethttp.Header
 	ceHeaderCh  chan nethttp.Header
@@ -59,6 +62,7 @@ func (r *rootspan) Setup(t *testing.T) []framework.Option {
 	r.rawHeaderCh = make(chan nethttp.Header, 1)
 	r.ceHeaderCh = make(chan nethttp.Header, 1)
 	r.collector = otel.New(t)
+	r.broker = broker.New(t)
 
 	respondOK := func(w nethttp.ResponseWriter) {
 		w.WriteHeader(nethttp.StatusOK)
@@ -77,7 +81,7 @@ func (r *rootspan) Setup(t *testing.T) []framework.Option {
 		app.WithHandlerFunc("/dapr/subscribe", func(w nethttp.ResponseWriter, req *nethttp.Request) {
 			json.NewEncoder(w).Encode([]map[string]any{
 				{
-					"pubsubname": "mypub",
+					"pubsubname": "rawpub",
 					"topic":      "raw-topic",
 					"route":      "/raw-topic",
 					"metadata":   map[string]string{"rawPayload": "true"},
@@ -91,7 +95,7 @@ func (r *rootspan) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	r.daprd = daprd.New(t,
+	r.daprd = daprd.New(t, r.broker.DaprdOptions(t, "rawpub",
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		r.collector.GRPCDaprdConfiguration(t),
@@ -103,10 +107,10 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
-`))
+`))...)
 
 	return []framework.Option{
-		framework.WithProcesses(r.collector, app, r.daprd),
+		framework.WithProcesses(r.collector, r.broker, app, r.daprd),
 	}
 }
 
@@ -147,7 +151,7 @@ func (r *rootspan) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("a message with no trace context is delivered under a new root span", func(t *testing.T) {
-		publish(t, fmt.Sprintf("http://localhost:%d/v1.0/publish/mypub/raw-topic?metadata.rawPayload=true", r.daprd.HTTPPort()), nil)
+		r.broker.PublishCloudEvents(t, ctx, "raw-topic", "1")
 
 		traceparent := awaitHeaders(t, r.rawHeaderCh).Get("traceparent")
 		require.NotEmpty(t, traceparent, "the app must be given a traceparent, not an empty header")
