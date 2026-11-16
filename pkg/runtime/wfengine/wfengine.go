@@ -67,6 +67,9 @@ type Interface interface {
 	InProcessExecutor() *inprocess.Executor
 	ActivityActorType() string
 	WorkflowActorType() string
+	// ActivityFreeSlots returns how many more activities this sidecar can take
+	// before its activity cap, and a channel closed on the next change.
+	ActivityFreeSlots() (free uint32, changed <-chan struct{})
 }
 
 type Options struct {
@@ -607,6 +610,10 @@ func (wfe *engine) ActivityActorType() string {
 
 func (wfe *engine) WorkflowActorType() string {
 	return wfe.backend.WorkflowActorType()
+}
+
+func (wfe *engine) ActivityFreeSlots() (uint32, <-chan struct{}) {
+	return wfe.backend.ActivityFreeSlots()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
