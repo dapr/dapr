@@ -170,8 +170,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
-	// Setting diagnoseStatus to failed by default to record metrics for non-recoverable errors.
-	diagnoseStatus := diag.StatusFailed
+	// A turn that returns before its save commits is retried, so it is recorded
+	// as recoverable. The terminal status is set only once the save commits.
+	diagnoseStatus := diag.StatusRecoverable
 	if rs != nil && runtimestate.IsCompleted(rs) {
 		// If workflow is already completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
@@ -213,7 +214,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// wi.State pointer before the context was cancelled. Drop the cache
 		// so the retry reloads from the store.
 		o.invalidateCachedState()
-		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
 		if !completed {
@@ -317,7 +317,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// rstate. Drop the cache so the retry reloads from the store.
 				o.invalidateCachedState()
 			}
-			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
 	}
@@ -351,7 +350,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			log.Warnf("Workflow actor '%s': rejecting turn whose response re-creates committed %s operation '%d' (stale completion delivery adopted across turns); retrying the turn", o.actorID, kind, id)
 			diag.DefaultWorkflowMonitoring.WorkflowLocalWake(ctx, diag.StatusStaleTurnRejected)
 			o.invalidateCachedState()
-			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("turn response re-creates committed %s operation %d; stale completion delivery rejected", kind, id))
 		}
 	}
@@ -377,12 +375,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// Delete timer reminders for WaitForSingleEvent timers where the event has
 		// been received before the timer fired.
 		if err = o.deleteCancelledEventTimers(ctx, rs); err != nil {
-			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 
 		if err = o.createTimers(ctx, rs.GetPendingTimers(), state.Generation); err != nil {
-			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 	}
@@ -421,11 +417,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
 			cacheSettled = true
-			diagnoseStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, activityResult, createResult, dispatchErr)
 		}
 
-		diagnoseStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
