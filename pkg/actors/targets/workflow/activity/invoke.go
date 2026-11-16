@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -171,7 +172,7 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 	// Every failure is returned as-is so the reminder is retried in the next
 	// period interval; the classification only picks the log line.
 	switch {
-	case errors.Is(err, ErrNoCapacity):
+	case errors.Is(err, actorerrors.ErrNoCapacity):
 		log.Debugf("%s: no free activity slot for pull delivery of '%s'; the scheduler queues it again", a.actorID, reminder.Name)
 	case errors.Is(err, context.Canceled):
 		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
