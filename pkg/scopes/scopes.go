@@ -45,13 +45,18 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 				continue
 			}
 
-			app := appTopics[0]
+			app := strings.TrimSpace(appTopics[0])
 			if app != appID {
 				continue
 			}
 
 			tempTopics := strings.SplitSeq(appTopics[1], topicSeparator)
 			for tempTopic := range tempTopics {
+				tempTopic = strings.TrimSpace(tempTopic)
+				if tempTopic == "" {
+					continue
+				}
+
 				if _, ok = existM[tempTopic]; !ok {
 					existM[tempTopic] = struct{}{}
 					topics = append(topics, tempTopic)
@@ -72,6 +77,11 @@ func getParamTopics(param string, metadata map[string]string) []string {
 		val = strings.ReplaceAll(val, " ", "")
 		tempTopics := strings.SplitSeq(val, topicSeparator)
 		for tempTopic := range tempTopics {
+			tempTopic = strings.TrimSpace(tempTopic)
+			if tempTopic == "" {
+				continue
+			}
+
 			if _, ok = existM[tempTopic]; !ok {
 				existM[tempTopic] = struct{}{}
 				topics = append(topics, tempTopic)
