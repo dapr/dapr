@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -118,7 +120,17 @@ func (s *secret) Close(comp compapi.Component) error {
 // Resolving a secretKeyRef invokes GetSecret on the referenced secret store, so
 // the workload's SPIFFE identity is attached here.
 func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (updated bool, secretStoreName string) {
+	updated, secretStoreName, _ = s.ResolveResource(ctx, resource)
+	return updated, secretStoreName
+}
+
+// ResolveResource is ProcessResource, and also returns the errors of the
+// secret reads and decodes that failed. ProcessResource logs them and leaves
+// the value as it was, which its caller cannot tell from an empty secret.
+func (s *secret) ResolveResource(ctx context.Context, resource meta.Resource) (updated bool, secretStoreName string, err error) {
 	ctx = s.withSVIDContext(ctx)
+
+	var errs []error
 
 	cache := map[string]secretstores.GetSecretResponse{}
 
@@ -149,15 +161,16 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		if s.operatorClient != nil && secretStoreName == compsecret.BuiltinKubernetesSecretStore {
 			var jsonVal string
 
-			err := json.Unmarshal(m.Value.Raw, &jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
+			if derr := json.Unmarshal(m.Value.Raw, &jsonVal); derr != nil {
+				log.Errorf("Error decoding secret: %v", derr)
+				errs = append(errs, fmt.Errorf("error decoding secret of %s: %w", m.Name, derr))
 				continue
 			}
 
-			dec, err := base64.StdEncoding.DecodeString(jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
+			dec, derr := base64.StdEncoding.DecodeString(jsonVal)
+			if derr != nil {
+				log.Errorf("Error decoding secret: %v", derr)
+				errs = append(errs, fmt.Errorf("error decoding secret of %s: %w", m.Name, derr))
 				continue
 			}
 
@@ -171,19 +184,20 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		secretStore, ok := s.compStore.GetSecretStore(secretStoreName)
 		if !ok {
 			log.Warnf("%s %s references a secret store that isn't loaded: %s", resource.Kind(), resource.GetName(), secretStoreName)
-			return updated, secretStoreName
+			return updated, secretStoreName, errors.Join(errs...)
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(ctx, secretstores.GetSecretRequest{
+			r, gerr := secretStore.GetSecret(ctx, secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": resource.GetNamespace(),
 				},
 			})
-			if err != nil {
-				log.Errorf("Error getting secret: %v", err)
+			if gerr != nil {
+				log.Errorf("Error getting secret: %v", gerr)
+				errs = append(errs, fmt.Errorf("error getting secret %s: %w", m.SecretKeyRef.Name, gerr))
 				continue
 			}
 
@@ -206,7 +220,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		cache[m.SecretKeyRef.Name] = resp
 	}
 
-	return updated, ""
+	return updated, "", errors.Join(errs...)
 }
 
 // withSVIDContext attaches the workload's SPIFFE identity (X.509 and JWT SVID
