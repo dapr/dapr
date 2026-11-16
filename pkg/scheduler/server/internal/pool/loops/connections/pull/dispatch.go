@@ -62,9 +62,15 @@ func (d *Dispatcher) park(req *loops.TriggerRequest, throttledKey string, admitt
 		q = newQueue(d.opts.MaxParked)
 		d.pending[actor.GetType()] = q
 	}
-	if !q.enqueue(req, admitted) {
+	evicted, ok := q.enqueue(req, admitted)
+	if !ok {
 		req.ResultFn(api.TriggerResponseResult_FAILED)
 		return
+	}
+	if evicted != nil {
+		log.Debugf("Evicted parked pull trigger %s for a higher priority one: %d waiting", evicted.Job.GetName(), q.len())
+		d.backlog.add(evicted, -1)
+		evicted.ResultFn(api.TriggerResponseResult_FAILED)
 	}
 	log.Debugf("Parked pull trigger %s for actor %s: no free slot on %d eligible sidecars (%d waiting)", req.Job.GetName(), actor.GetId(), len(d.pools[actor.GetType()]), q.len())
 	// Waiting for a sidecar slot is the backlog gauge's job; only a shared

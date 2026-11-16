@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -217,11 +218,48 @@ type WorkflowSpec struct {
 	// plus optional per-name dispatch mode overrides.
 	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
 
+	// Priority orders this application's activities while they wait for a free sidecar slot under pull dispatch.
+	Priority *WorkflowPriority `json:"priority,omitempty" yaml:"priority,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
 }
+
+// WorkflowPriority is the priority block of spec.workflow.
+type WorkflowPriority struct {
+	Default    *PriorityValues       `json:"default,omitempty"    yaml:"default,omitempty"`
+	Workflows  []NamedPriorityValues `json:"workflows,omitempty"  yaml:"workflows,omitempty"`
+	Activities []NamedPriorityValues `json:"activities,omitempty" yaml:"activities,omitempty"`
+}
+
+// PriorityValues is a priority level and a fairness weight, either optional.
+type PriorityValues struct {
+	PriorityLevel  *string `json:"priorityLevel,omitempty"  yaml:"priorityLevel,omitempty"`
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty" yaml:"fairnessWeight,omitempty"`
+}
+
+// NamedPriorityValues is the PriorityValues of one workflow or activity name.
+type NamedPriorityValues struct {
+	Name           *string `json:"name"                     yaml:"name"`
+	PriorityLevel  *string `json:"priorityLevel,omitempty"  yaml:"priorityLevel,omitempty"`
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty" yaml:"fairnessWeight,omitempty"`
+}
+
+const (
+	PriorityLevelCritical   = "critical"
+	PriorityLevelHigh       = "high"
+	PriorityLevelNormal     = "normal"
+	PriorityLevelLow        = "low"
+	PriorityLevelBackground = "background"
+
+	MinFairnessWeight = 1
+	MaxFairnessWeight = 1000
+)
+
+// PriorityLevels is every accepted level name, highest first.
+var PriorityLevels = []string{PriorityLevelCritical, PriorityLevelHigh, PriorityLevelNormal, PriorityLevelLow, PriorityLevelBackground}
 
 // NamedConcurrencyLimit defines a per-name concurrency limit.
 type NamedConcurrencyLimit struct {
@@ -432,6 +470,79 @@ func (c *Configuration) validateWorkflowSpec() error {
 		return errors.New("workflow activity dispatchMode pull requires maxConcurrentActivityInvocations to be set to a positive value: it is the number of activity slots each sidecar offers to the scheduler")
 	}
 
+	return w.Priority.validate()
+}
+
+func (p *WorkflowPriority) validate() error {
+	if p == nil {
+		return nil
+	}
+	if p.Default != nil {
+		if err := validatePriorityValues("workflow priority default", p.Default.PriorityLevel, p.Default.FairnessWeight); err != nil {
+			return err
+		}
+	}
+	for list, entries := range map[string][]NamedPriorityValues{"workflows": p.Workflows, "activities": p.Activities} {
+		seen := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			if e.Name == nil || *e.Name == "" {
+				return fmt.Errorf("workflow priority %s entry requires a name", list)
+			}
+			if seen[*e.Name] {
+				return fmt.Errorf("duplicate name %q in workflow priority %s", *e.Name, list)
+			}
+			seen[*e.Name] = true
+			if err := validatePriorityValues(fmt.Sprintf("workflow priority %s entry %q", list, *e.Name), e.PriorityLevel, e.FairnessWeight); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validatePriorityValues(where string, level *string, weight *uint32) error {
+	if level != nil && !slices.Contains(PriorityLevels, *level) {
+		return fmt.Errorf("invalid priorityLevel %q in %s: must be one of %s", *level, where, strings.Join(PriorityLevels, ", "))
+	}
+	if weight != nil && (*weight < MinFairnessWeight || *weight > MaxFairnessWeight) {
+		return fmt.Errorf("invalid fairnessWeight %d in %s: must be between %d and %d", *weight, where, MinFairnessWeight, MaxFairnessWeight)
+	}
+	return nil
+}
+
+// ActivityPriority resolves an activity's level and weight: its own entry, else
+// the calling workflow's, else the default. Empty and zero mean unset.
+func (w *WorkflowSpec) ActivityPriority(workflowName, activityName string) (level string, weight uint32) {
+	if w == nil || w.Priority == nil {
+		return "", 0
+	}
+	p := w.Priority
+	take := func(l *string, wt *uint32) {
+		if level == "" && l != nil {
+			level = *l
+		}
+		if weight == 0 && wt != nil {
+			weight = *wt
+		}
+	}
+	if e := findPriority(p.Activities, activityName); e != nil {
+		take(e.PriorityLevel, e.FairnessWeight)
+	}
+	if e := findPriority(p.Workflows, workflowName); e != nil {
+		take(e.PriorityLevel, e.FairnessWeight)
+	}
+	if p.Default != nil {
+		take(p.Default.PriorityLevel, p.Default.FairnessWeight)
+	}
+	return level, weight
+}
+
+func findPriority(entries []NamedPriorityValues, name string) *NamedPriorityValues {
+	for i := range entries {
+		if entries[i].Name != nil && *entries[i].Name == name {
+			return &entries[i]
+		}
+	}
 	return nil
 }
 

@@ -182,6 +182,11 @@ type WorkflowSpec struct {
 	// +optional
 	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
 
+	// Priority orders this application's activities while they wait for a free
+	// sidecar slot under pull dispatch.
+	// +optional
+	Priority *WorkflowPriority `json:"priority,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
@@ -217,6 +222,53 @@ type ActivityConcurrencyLimit struct {
 	// +kubebuilder:validation:Enum=hashed;pull
 	// +optional
 	DispatchMode *string `json:"dispatchMode,omitempty"`
+}
+
+// WorkflowPriority is the level and weight of the application's workflows and activities.
+type WorkflowPriority struct {
+	// Default applies to every workflow and activity without an entry of its
+	// own or of its calling workflow.
+	// +optional
+	Default *PriorityValues `json:"default,omitempty"`
+	// Workflows lists per-workflow-name values, inherited by the activities
+	// the workflow calls.
+	// +optional
+	Workflows []NamedPriorityValues `json:"workflows,omitempty"`
+	// Activities lists per-activity-name values.
+	// +optional
+	Activities []NamedPriorityValues `json:"activities,omitempty"`
+}
+
+// PriorityValues is a priority level and a fairness weight, either optional.
+type PriorityValues struct {
+	// PriorityLevel is the strict order between waiting activities: critical,
+	// high, normal, low or background. Unset means normal.
+	// +kubebuilder:validation:Enum=critical;high;normal;low;background
+	// +optional
+	PriorityLevel *string `json:"priorityLevel,omitempty"`
+	// FairnessWeight shares slots between activity names at the same level in
+	// proportion to their weights, 1 to 1000. Unset means 1.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +optional
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty"`
+}
+
+// NamedPriorityValues is the PriorityValues of one workflow or activity name.
+type NamedPriorityValues struct {
+	// Name is the workflow or activity name the entry applies to.
+	Name *string `json:"name"`
+	// PriorityLevel is the strict order between waiting activities: critical,
+	// high, normal, low or background.
+	// +kubebuilder:validation:Enum=critical;high;normal;low;background
+	// +optional
+	PriorityLevel *string `json:"priorityLevel,omitempty"`
+	// FairnessWeight shares slots between activity names at the same level in
+	// proportion to their weights, 1 to 1000.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +optional
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state

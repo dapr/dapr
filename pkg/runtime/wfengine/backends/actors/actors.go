@@ -117,6 +117,8 @@ type Options struct {
 	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
 	// per-name overrides). Nil means never.
 	ActivityDispatchPull func(activityName string) bool
+	// ActivityPriority returns an activity's level name and weight. Nil means none.
+	ActivityPriority func(workflowName, activityName string) (string, uint32)
 
 	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
 	// same value the engine's activity worker is limited to. 0 means no cap.
@@ -160,6 +162,7 @@ type Actors struct {
 	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	activityDispatchPull            func(activityName string) bool
+	activityPriority                func(workflowName, activityName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
 	// activityCommitted counts activity work items handed to the engine and
@@ -308,6 +311,7 @@ func New(opts Options) (*Actors, error) {
 		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		activityDispatchPull:            opts.ActivityDispatchPull,
+		activityPriority:                opts.ActivityPriority,
 		pendingCompletions:              pendingCompletions,
 		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
@@ -367,6 +371,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		FastPath:               abe.workflowsFastPath,
 		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
+		ActivityPriority:       abe.activityPriority,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
