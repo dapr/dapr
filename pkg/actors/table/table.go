@@ -316,7 +316,7 @@ func (t *table) ActorExists(actorType, actorID string) bool {
 func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (targets.Interface, error) {
 	l, ok := t.typeLocks.Load(actorType)
 	if !ok {
-		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
+		return nil, fmt.Errorf("%w: actor type %s %w", actorerrors.ErrCreatingActor, actorType, actorerrors.ErrNotRegistered)
 	}
 	tl := l.(*typeLocks)
 	tl.create.RLock()
@@ -332,7 +332,7 @@ func (t *table) GetOrCreate(ctx context.Context, actorType, actorID string) (tar
 
 	factory, ok := t.factories.Load(actorType)
 	if !ok {
-		return nil, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
+		return nil, fmt.Errorf("%w: actor type %s %w", actorerrors.ErrCreatingActor, actorType, actorerrors.ErrNotRegistered)
 	}
 
 	return tl.getOrCreate(factory.(targets.Factory), actorID), nil

@@ -54,8 +54,9 @@ type WatchHosts struct {
 	clients    *clients.Clients
 	leadership *leadership.Leadership
 
-	// lastAddrs dedups reloads
-	lastAddrs []string
+	// lastAddrs and lastSupportsPull dedup reloads
+	lastAddrs        []string
+	lastSupportsPull bool
 
 	loop loop.Interface[loops.EventHost]
 }
@@ -169,7 +170,14 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 	gotAddrs := make([]string, 0, len(resp.GetHosts()))
 	leader := ""
 	capable := false
+	// Pull dispatch needs every scheduler to understand it: an older one
+	// closes the stream on the messages it adds.
+	supportsPull := len(resp.GetHosts()) > 0
 	for _, host := range resp.GetHosts() {
+		if !host.GetSupportsPullSlots() {
+			supportsPull = false
+			log.Debugf("Scheduler host %s does not support pull dispatch", host.GetAddress())
+		}
 		gotAddrs = append(gotAddrs, host.GetAddress())
 		if host.GetLeader() {
 			leader = host.GetAddress()
@@ -186,15 +194,19 @@ func (w *WatchHosts) handleHosts(ctx context.Context, resp *schedulerv1pb.WatchH
 	// stable across membership changes, so compare sorted.
 	sorted := slices.Clone(gotAddrs)
 	slices.Sort(sorted)
-	if !slices.Equal(sorted, w.lastAddrs) {
-		if err := w.clients.Reload(ctx, gotAddrs); err != nil {
-			return err
+	if addrsChanged := !slices.Equal(sorted, w.lastAddrs); addrsChanged || supportsPull != w.lastSupportsPull {
+		if addrsChanged {
+			if err := w.clients.Reload(ctx, gotAddrs); err != nil {
+				return err
+			}
 		}
 
 		w.loop.Enqueue(&loops.ReloadClients{
-			Addresses: gotAddrs,
+			Addresses:         gotAddrs,
+			SupportsPullSlots: supportsPull,
 		})
 		w.lastAddrs = sorted
+		w.lastSupportsPull = supportsPull
 	}
 
 	if w.leadership != nil {
