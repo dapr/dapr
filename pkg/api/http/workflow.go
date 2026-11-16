@@ -309,7 +309,7 @@ func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 		})
 }
 
-// Route: POST "workflows/{workflowComponent}/{instanceID}/terminate"
+// Route: POST "workflows/{workflowComponent}/{instanceID}/terminate?reason={reason}"
 // The terminate, raise event, pause and resume responses are {"staged":true}
 // when a fallback host staged the operation, and {} as before otherwise:
 // protojson leaves out a false staged.
@@ -317,7 +317,21 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.TerminateWorkflow,
 		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *runtimev1pb.TerminateWorkflowResponse]{
-			InModifier:        workflowInModifier[*runtimev1pb.TerminateWorkflowRequest],
+			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+				in, err := workflowInModifier(r, in)
+				if err != nil {
+					return nil, err
+				}
+
+				// Preserve the distinction between an omitted reason and an explicitly
+				// empty reason. Query().Get cannot distinguish these cases.
+				if reasons, ok := r.URL.Query()["reason"]; ok && len(reasons) > 0 {
+					reason := reasons[0]
+					in.Reason = &reason
+				}
+
+				return in, nil
+			},
 			SuccessStatusCode: http.StatusAccepted,
 		})
 }
