@@ -120,6 +120,8 @@ func cascadeTerminateEvent(term *protos.ExecutionTerminatedEvent) *backend.Histo
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_ExecutionTerminated{
 			ExecutionTerminated: &protos.ExecutionTerminatedEvent{
+				// Keep termination output/input separate from the dedicated reason.
+				// Both values must survive same-app and cross-app cascade delivery.
 				Input:   term.GetInput(),
 				Recurse: true,
 				Reason:  term.GetReason(),
