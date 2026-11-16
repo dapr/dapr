@@ -40,6 +40,34 @@ func TestGetAllowedTopics(t *testing.T) {
 		},
 		{
 			Metadata: map[string]string{
+				"allowedTopics": "   ",
+			},
+			Target: []string{},
+			Msg:    "pass, whitespace only returns empty list",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1, topic2, ",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, trailing comma does not add empty topic",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1, , topic2",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, consecutive commas do not add empty topic",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1,\n\ttopic2",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, newlines and tabs trimmed",
+		},
+		{
+			Metadata: map[string]string{
 				"allowedTopics": "topic1, topic1, topic1", //nolint:dupword
 			},
 			Target: []string{"topic1"},
@@ -80,6 +108,27 @@ func TestGetProtectedTopics(t *testing.T) {
 			},
 			Target: []string{},
 			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "   ",
+			},
+			Target: []string{},
+			Msg:    "pass, whitespace only returns empty list",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1, topic2, ",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, trailing comma does not add empty topic",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1,\n\ttopic2",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, newlines and tabs trimmed",
 		},
 		{
 			Metadata: map[string]string{
@@ -219,6 +268,33 @@ func TestGetScopedTopics(t *testing.T) {
 			},
 			Target: []string{"topic1"},
 			Msg:    "pass, case-insensitive match",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid2",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1;\n  appid2=topic2",
+			},
+			Target: []string{"topic2"},
+			Msg:    "pass, multiline scopes with newlines and indentation",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1, topic2, ; appid2=topic3",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, trailing comma does not add empty topic",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=   ; appid2=topic2",
+			},
+			Target: []string{},
+			Msg:    "pass, empty topic list returns empty slice",
 		},
 	}
 	for _, item := range scopedTests {
