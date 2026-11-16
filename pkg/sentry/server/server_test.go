@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -651,4 +652,48 @@ func TestFetchJWTSVID(t *testing.T) {
 			assert.Equal(c, codes.Unauthenticated, status.Code(err), "%v", err)
 		}, 5*time.Second, 10*time.Millisecond)
 	})
+}
+
+func TestSignCertificateExtensions(t *testing.T) {
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, pk)
+	require.NoError(t, err)
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})
+
+	exts := []pkix.Extension{{Id: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Value: []byte{0x05, 0x00}}}
+
+	var gotExts []pkix.Extension
+	s := &Server{
+		vals: map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator{
+			sentryv1pb.SignCertificateRequest_INSECURE: validatorfake.New().WithValidateFn(func(context.Context, *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("example.org"),
+					Extensions:  exts,
+				}, nil
+			}),
+		},
+		ca: cafake.New().WithSignIdentity(func(_ context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
+			gotExts = req.Extensions
+			tmpl := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now(),
+				NotAfter:     time.Now().Add(time.Hour),
+			}
+			der, cerr := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pk.Public(), pk)
+			require.NoError(t, cerr)
+			crt, cerr := x509.ParseCertificate(der)
+			require.NoError(t, cerr)
+			return []*x509.Certificate{crt}, nil
+		}),
+	}
+
+	_, err = s.signCertificate(t.Context(), &sentryv1pb.SignCertificateRequest{
+		Id:                        "my-app",
+		Namespace:                 "my-ns",
+		CertificateSigningRequest: csrPEM,
+		TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, exts, gotExts)
 }
