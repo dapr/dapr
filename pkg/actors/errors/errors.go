@@ -36,6 +36,15 @@ var ErrTimerFireStale = errors.New("timer fire dropped: timer was removed")
 // ErrCreatingActor is returned when the table cannot create an actor because its not registered.
 var ErrCreatingActor = errors.New("failed to create actor")
 
+// ErrNotRegistered is wrapped by ErrCreatingActor errors whose cause is that
+// the actor type is not registered on this host.
+var ErrNotRegistered = errors.New("not registered")
+
+// ErrNoCapacity is returned for a pull-dispatched reminder this host cannot
+// take now: it has no free slot, or no longer hosts the actor type. Nothing
+// ran, and the scheduler queues the trigger again for another sidecar.
+var ErrNoCapacity = errors.New("no capacity for a pull-dispatched reminder")
+
 // ActorError is an error returned by an Actor via a header + body in the method's response.
 type ActorError struct {
 	body        []byte
