@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -93,7 +94,7 @@ func (s *signinggap) Run(t *testing.T, ctx context.Context) {
 
 	appID := s.daprd1.AppID()
 
-	client1 := dworkflow.NewClient(s.daprd1.GRPCConn(t, ctx))
+	client1 := dworkflow.NewClientWithLogger(s.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorker(ctx, reg))
 
 	id, err := client1.ScheduleWorkflow(ctx, "sign-gap")
@@ -133,7 +134,7 @@ spec:
 	t.Cleanup(func() { daprd2.Cleanup(t) })
 	daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := dworkflow.NewClient(daprd2.GRPCConn(t, ctx))
+	client2 := dworkflow.NewClientWithLogger(daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorker(ctx, reg))
 
 	// Raising an event on a signed workflow from a non-signing host should fail.

@@ -138,8 +138,8 @@ func (b *binding) startInputBinding(ctx context.Context, comp componentsV1alpha1
 
 func (b *binding) StopReadingFromBindings(forever bool) {
 	b.lock.Lock()
-	defer b.lock.Unlock()
 	defer b.wg.Wait()
+	defer b.lock.Unlock()
 
 	if forever {
 		b.stopForever = true

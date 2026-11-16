@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -40,7 +42,14 @@ type recoverclient struct {
 }
 
 func (r *recoverclient) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	// Under WorkflowsFastPath the post-recovery re-drive falls to the janitor
+	// backstop; shorten its period so recovery lands inside the assertion
+	// windows. Unused in default mode.
+	r.workflow = workflow.New(t,
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",
+		))),
+	)
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
 	}

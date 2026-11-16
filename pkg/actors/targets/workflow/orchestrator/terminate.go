@@ -60,7 +60,7 @@ func (o *orchestrator) terminateChildren(ctx context.Context, state *wfenginesta
 	var errs []error
 	for _, child := range collectChildren(state.History) {
 		var err error
-		if child.targetAppID != "" && child.targetAppID != o.appID {
+		if o.isRemoteApp(child.targetAppID) {
 			err = o.terminateRemoteChild(ctx, child, term)
 		} else {
 			err = o.createCascadeTerminateReminder(ctx, child, term)

@@ -33,7 +33,9 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -68,6 +70,7 @@ type Options struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	ActorsDisseminationTimeout    time.Duration
+	ActorsPlacementStartupTimeout time.Duration
 	HotReloadReconcileInterval    time.Duration
 	RemindersService              string
 	SchedulerAddress              []string
@@ -85,6 +88,7 @@ type Options struct {
 	AppHealthCheckPath            string
 	AppChannelAddress             string
 	SentryRequestJwtAudiences     []string
+	WorkloadKeyAlgorithm          *spiffe.KeyAlgorithm
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
 	DisableInitEndpoints          []string
@@ -99,10 +103,11 @@ func New(origArgs []string) (*Options, error) {
 		ReadBufferSize:            runtime.DefaultReadBufferSize,
 	}
 	var (
-		maxRequestSizeMB int
-		maxBodySize      string
-		readBufferSizeKB int
-		readBufferSize   string
+		maxRequestSizeMB     int
+		maxBodySize          string
+		readBufferSizeKB     int
+		readBufferSize       string
+		workloadKeyAlgorithm string
 	)
 
 	// We are using pflag to parse the CLI flags
@@ -145,6 +150,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
 	fs.StringSliceVar(&opts.SentryRequestJwtAudiences, "sentry-request-jwt-audiences", nil, "JWT audience list for certificate signing requests. If not specified, the trust domain will be used")
+	fs.MarkDeprecated("sentry-request-jwt-audiences", "components now mint JWT SVIDs for any audience on demand")
+	fs.StringVar(&workloadKeyAlgorithm, "workload-key-algorithm", "ed25519", "Algorithm of the private key of the workload's X.509 SVID: 'ed25519' or 'ecdsa'. Set 'ecdsa' for components that authenticate with AWS IAM Roles Anywhere")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
@@ -180,6 +187,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
 	fs.DurationVar(&opts.ActorsDisseminationTimeout, "actors-disseminate-timeout", runtime.DefaultActorsDisseminationTimeout, "Timeout for the daprd-side actor placement dissemination round; if exceeded, daprd resets its placement stream and halts hosted actors. Should be greater than the placement service --disseminate-timeout (default 8s).")
+	fs.DurationVar(&opts.ActorsPlacementStartupTimeout, "actors-placement-startup-timeout", runtime.DefaultActorsPlacementStartupTimeout, "Timeout for a scheduler placement advertisement at startup before falling back to the configured placement service. Should exceed the app health probe budget, as the scheduler only advertises once this sidecar's jobs stream registers. Only meaningful while a placement service is configured, and retires with the placement service.")
 	fs.DurationVar(&opts.HotReloadReconcileInterval, "hot-reload-reconcile-interval", 0, "Period of the hot-reload backup reconcile that lists resources and reconciles any the event watch missed, e.g. '30s'. Zero uses the default (60s)")
 	fs.DurationVar(&opts.AppBindingOptionsTimeout, "app-binding-options-timeout", config.DefaultAppBindingOptionsTimeout, "Timeout for input binding subscription discovery requests to the app (HTTP OPTIONS or gRPC ListInputBindings). Increase for apps with slow startup (e.g. JVM/JIT workloads). Non-positive values use the default.")
 
@@ -278,8 +286,27 @@ func New(origArgs []string) (*Options, error) {
 		}
 	}
 
+	if !fs.Changed("workload-key-algorithm") {
+		alg, ok := os.LookupEnv(consts.WorkloadKeyAlgorithmEnvVar)
+		if ok {
+			workloadKeyAlgorithm = alg
+		}
+	}
+
+	switch strings.ToLower(workloadKeyAlgorithm) {
+	case "ed25519":
+	case "ecdsa":
+		opts.WorkloadKeyAlgorithm = ptr.Of(spiffe.KeyAlgorithmECDSA)
+	default:
+		return nil, fmt.Errorf("invalid value for 'workload-key-algorithm' option: must be 'ed25519' or 'ecdsa', got %q", workloadKeyAlgorithm)
+	}
+
 	if opts.ActorsDisseminationTimeout <= 0 {
 		return nil, fmt.Errorf("invalid value for 'actors-disseminate-timeout' option: must be positive, got %s", opts.ActorsDisseminationTimeout)
+	}
+
+	if opts.ActorsPlacementStartupTimeout <= 0 {
+		return nil, fmt.Errorf("invalid value for 'actors-placement-startup-timeout' option: must be positive, got %s", opts.ActorsPlacementStartupTimeout)
 	}
 
 	return &opts, nil

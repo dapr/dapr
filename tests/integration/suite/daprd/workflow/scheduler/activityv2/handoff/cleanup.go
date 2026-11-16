@@ -29,14 +29,16 @@ import (
 	wf "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
 	suite.Register(new(cleanup))
 }
+
+// janitorPeriod is the fast-path janitor period; a claim heartbeat that
+// stalls for two of them is reclaimed.
+const janitorPeriod = time.Second
 
 type cleanup struct {
 	workflow *workflow.Workflow
@@ -50,7 +52,7 @@ type cleanup struct {
 func (a *cleanup) Setup(t *testing.T) []framework.Option {
 	fp := []daprd.Option{
 		daprd.WithFeatureEnabled(t, "WorkflowsFastPath"),
-		daprd.WithWorkflowJanitorPeriod(t, time.Second),
+		daprd.WithWorkflowJanitorPeriod(t, janitorPeriod),
 		// Compress the Completed-record retention so the delete leg fits
 		// the test window.
 		daprd.WithWorkflowClaimRetention(t, time.Second*2),
@@ -60,12 +62,15 @@ func (a *cleanup) Setup(t *testing.T) []framework.Option {
 	// The joiners trigger the mid-run placement rebalance: deliberately not
 	// in WithProcesses, Run starts them at the churn moment.
 	newDaprd := func() *daprd.Daprd {
-		return daprd.New(t, append([]daprd.Option{
+		dopts := []daprd.Option{
 			daprd.WithAppID(a.workflow.Dapr().AppID()),
 			daprd.WithResourceFiles(a.workflow.DB().GetComponent(t)),
-			daprd.WithPlacementAddresses(a.workflow.Placement().Address()),
 			daprd.WithSchedulerAddresses(a.workflow.Scheduler().Address()),
-		}, fp...)...)
+		}
+		if a.workflow.HasPlacement() {
+			dopts = append(dopts, daprd.WithPlacementAddresses(a.workflow.Placement().Address()))
+		}
+		return daprd.New(t, append(dopts, append(fp, a.workflow.JoinOptions(t)...)...)...)
 	}
 	for i := range a.joiners {
 		a.joiners[i] = newDaprd()
@@ -139,27 +144,12 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 	require.Zero(t, wf.CountClaimRecords(t, ctx, a.workflow.DB()),
 		"no records may exist before any placement churn")
 
-	version := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"].Version
 	join := func(d *daprd.Daprd) {
 		t.Helper()
-		d.Run(t, ctx)
-		t.Cleanup(func() { d.Cleanup(t) })
-		d.WaitUntilRunning(t, ctx)
-
 		registry := task.NewTaskRegistry()
 		require.NoError(t, registry.AddWorkflowN("HandoffCleanup", wfFn))
 		require.NoError(t, registry.AddActivityN("Slow", actFn))
-		joinerClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), backend.DefaultLogger())
-		require.NoError(t, joinerClient.StartWorkItemListener(ctx, registry))
-
-		version++
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := a.workflow.Placement().PlacementTables(t, ctx).Tables["default"]
-			if !assert.NotNil(c, table) {
-				return
-			}
-			assert.GreaterOrEqual(c, table.Version, version)
-		}, time.Second*15, time.Millisecond*10)
+		a.workflow.Join(t, ctx, d, registry)
 	}
 
 	for _, joiner := range a.joiners {
@@ -186,11 +176,21 @@ func (a *cleanup) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", metadata.GetRuntimeStatus().String())
 	}
-	assert.Equal(t, int64(len(ids)), executions.Load())
 
 	// Retention (2s) then delete: no record may leak past completion.
 	assert.Eventually(t, func() bool {
 		return wf.CountClaimRecords(t, ctx, a.workflow.DB()) == 0
 	}, time.Second*30, time.Millisecond*100,
 		"every execution-claim record must self-delete after the retention window")
+
+	// Activities are at-least-once across a handoff: a claim whose heartbeat
+	// stalls past the grace is reclaimed and its body re-runs, the duplicate
+	// completion deduped. Only a body starting after its workflow completed
+	// and its record was deleted would be a leak past the cleanup.
+	executed := executions.Load()
+	assert.GreaterOrEqual(t, executed, int64(len(ids)),
+		"every activity body must run at least once")
+	time.Sleep(janitorPeriod * 2)
+	assert.Equal(t, executed, executions.Load(),
+		"no activity body may start after its workflow completed and its claim record was deleted")
 }

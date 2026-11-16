@@ -174,7 +174,7 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 		actorTimerDroppedTotal: stats.Int64(
 			"runtime/actor/timers_dropped_total",
-			"The number of actor timer fires dropped because the actor is no longer hosted on this instance.",
+			"The number of actor timer fires dropped because the timer was removed or its actor is no longer hosted on this instance.",
 			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
@@ -425,7 +425,8 @@ func (s *serviceMetrics) ActorReminderFired(actorType string, success bool) {
 }
 
 // ActorTimerDropped records metric when an actor timer fire is dropped
-// because the actor is no longer hosted on this instance.
+// because the timer was removed or its actor is no longer hosted on this
+// instance.
 func (s *serviceMetrics) ActorTimerDropped(actorType string) {
 	if s.enabled {
 		stats.RecordWithOptions(

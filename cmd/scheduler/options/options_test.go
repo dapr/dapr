@@ -54,4 +54,25 @@ func TestNew(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
+
+	t.Run("placement is disabled by default", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		require.False(t, opts.PlacementEnabled)
+	})
+
+	t.Run("etcd keeps 10000 revisions by default", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		require.Equal(t, "revision", opts.EtcdCompactionMode)
+		require.Equal(t, "10000", opts.EtcdCompactionRetention)
+	})
+
+	t.Run("placement-enabled sets PlacementEnabled", func(t *testing.T) {
+		opts, err := New([]string{
+			"--placement-enabled=true",
+		})
+		require.NoError(t, err)
+		require.True(t, opts.PlacementEnabled)
+	})
 }

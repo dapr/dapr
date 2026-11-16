@@ -70,6 +70,16 @@ linters:
     - noinlineerr
     - wsl_v5
   settings:
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(|f|ln)$
+        - pattern: ^print(|ln)$
+        # durabletask's default logger captures os.Stderr when its package is
+        # initialised, so it cannot be redirected afterwards. In the integration
+        # tests that means its output bypasses the framework and lands on the
+        # terminal, attributed to no test.
+        - pattern: ^backend\.DefaultLogger$
+          msg: pass a per test logger instead, e.g. logger.New(t) from tests/integration/framework/iowriter/logger
     depguard:
       rules:
         master:

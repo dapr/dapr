@@ -26,6 +26,16 @@ type Option func(*options)
 type options struct {
 	registry  *task.TaskRegistry
 	clustered *bool
+	fastPath  *bool
+}
+
+// WithFastPath explicitly enables or disables the WorkflowsFastPath feature
+// flag on the underlying daprd, overriding the
+// DAPR_INTEGRATION_WORKFLOW_FASTPATH environment variable.
+func WithFastPath(enabled bool) Option {
+	return func(o *options) {
+		o.fastPath = &enabled
+	}
 }
 
 // WithClusteredDeployment explicitly enables or disables the

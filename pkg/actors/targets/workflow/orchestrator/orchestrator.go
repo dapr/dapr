@@ -48,15 +48,29 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// cachedExecutionID is the execution ID of the instance the cache last
+	// held as the store held it, nil when it held none, so a load after the
+	// cache was dropped can tell whether the store still holds that instance.
+	// See cacheDurable and releaseReplacedInstance.
+	cachedExecutionID *string
+	// pinnedFallback holds the fallback state read once at the start of an
+	// invoked method, nil outside one (see pinFallback).
+	pinnedFallback atomic.Pointer[bool]
+	// settled lets a wake-up of a completed instance ack after one read of
+	// its metadata, parent-notify and first history rows (see
+	// settledTerminal). Any save rewrites the metadata row and fails that
+	// check, including the paths that bypass executeMethod (fold submits,
+	// activity-result reminders). Only touched under the turn lock.
+	settled *settledTerminal
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
 	// Drive-loop state (see wake.go localDrive/driveLoop): driveNotify is a
 	// buffered-1 coalescing notification channel, driveRunning guards the
-	// single loop, driveInfo carries the latest wake identity for the loop
-	// and its escalation.
+	// single loop, driveName carries the reminder name of the latest wake.
 	driveNotify  chan struct{}
 	driveRunning atomic.Bool
+	driveName    atomic.Pointer[string]
 
 	// lastActive is the UnixNano of the most recent turn-lock acquisition,
 	// stamped for the factory idle reaper. Also stamped at creation so a fresh
@@ -67,18 +81,8 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
-	// lastProgress is the UnixNano of the most recent durable state commit
-	// (stamped in signAndSaveState). Zero on a fresh activation, so an actor
-	// recreated after a crash reads as stalled and the durable backstops
-	// recover it. INVARIANT: never stamped by the janitor fire or by lock
-	// traffic; it distinguishes "alive and progressing" from "being polled".
-	lastProgress atomic.Int64
-	driveInfo    atomic.Pointer[driveInfo]
-	// wakeEpoch counts durable turn commits; escalate suppresses wakes armed
-	// before the latest commit (their durable reminder would be a stray).
-	// Bumped only at the turn-commit sites in runWorkflow; never reset
-	// (monotonic avoids ABA with a pre-halt escalation).
-	wakeEpoch atomic.Uint64
+	// lockWaiters counts invocations blocked on the turn lock.
+	lockWaiters atomic.Int32
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,
@@ -101,9 +105,24 @@ type orchestrator struct {
 	// re-arming the unverifiable local drive (see redispatchActivities).
 	// INVARIANT: only touched by janitor fires, which hold the turn lock.
 	janitorRedispatched map[int32]struct{}
-	lock                *lock.Stallable
-	closed              atomic.Bool
-	wg                  sync.WaitGroup
+
+	// janitorEscalated records, per task ID, the TaskScheduled event whose
+	// re-dispatch escalated to the durable run-activity reminder this
+	// residency, so the turn that commits the task's resolution can reap the
+	// reminder (the resolving execution never knew it existed; see
+	// reapEscalatedCompletions). Same guard and generation scope as
+	// janitorRedispatched.
+	janitorEscalated map[int32]*backend.HistoryEvent
+	// lastStartRedrive is the UnixNano of the most recent overdue pending
+	// start re-drive.
+	lastStartRedrive atomic.Int64
+	lock             *lock.Stallable
+	closed           atomic.Bool
+	// wg tracks in-flight invocations. Add only through enter, so every Add
+	// is ordered before Deactivate's Wait.
+	wg         sync.WaitGroup
+	retireLock sync.Mutex
+	retired    bool
 
 	streamFns map[int64]*streamFn
 	streamIDx int64
@@ -120,12 +139,20 @@ type streamFn struct {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	o.wg.Add(1)
+	// An eviction deactivates this actor, which waits for every registered
+	// invocation to finish, so it must not register itself as one.
+	if req.GetMessage().GetMethod() == todo.EvictWorkflowMethod {
+		return o.evict(ctx, req)
+	}
+
+	if err := o.enter("method"); err != nil {
+		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	// The completions fold manages its own lock lifecycle (early release
 	// before waiting on the folding turn's commit; see fold.go).
-	if o.fastPath && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
+	if o.localFastPath() && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
 		return o.invokeAddEventFold(ctx, req)
 	}
 
@@ -140,7 +167,9 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	o.wg.Add(1)
+	if err := o.enter("reminder"); err != nil {
+		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	unlock, err := o.contextLockMeasured(ctx, "reminder")
@@ -149,13 +178,20 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 	}
 	defer unlock()
 
+	o.dropFallbackCache(ctx)
 	return o.handleReminder(ctx, reminder)
 }
 
 // contextLockMeasured acquires the per-actor turn lock and records the wait
 // as the lock_wait histogram (sampled 1-in-16), splitting observed
-// invocation latency into queueing vs turn body.
+// invocation latency into queueing vs turn body. While it waits it counts in
+// the pending actor calls gauge, as the app actor lock does.
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
+	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
+	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+	o.lockWaiters.Add(1)
+	defer o.lockWaiters.Add(-1)
+
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)
 		if err != nil {
@@ -192,7 +228,9 @@ func (o *orchestrator) InvokeTimer(ctx context.Context, reminder *actorapi.Remin
 }
 
 func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
-	o.wg.Add(1)
+	if err := o.enter("stream"); err != nil {
+		return fmt.Errorf("failed to invoke stream for workflow '%s': %w", o.actorID, err)
+	}
 	defer o.wg.Done()
 
 	unlock, err := o.contextLockMeasured(ctx, "stream")
@@ -200,12 +238,33 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
 
+	o.dropFallbackCache(ctx)
+
 	var ok bool
 	ok, err = o.handleStream(ctx, req, stream, unlock)
 	if !ok {
 		unlock()
 	}
 	return err
+}
+
+// enter registers an invocation, or fails closed once Deactivate has run. On
+// nil the caller must call o.wg.Done.
+func (o *orchestrator) enter(kind string) error {
+	o.retireLock.Lock()
+	defer o.retireLock.Unlock()
+	if o.retired {
+		return targeterrors.NewClosed(kind)
+	}
+	o.wg.Add(1)
+	return nil
+}
+
+// isRetired reports whether Deactivate has run.
+func (o *orchestrator) isRetired() bool {
+	o.retireLock.Lock()
+	defer o.retireLock.Unlock()
+	return o.retired
 }
 
 // DeactivateActor implements actors.InternalActor
@@ -217,13 +276,29 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		o.lock.ReleaseStall()
 		unlock, err = o.lock.ContextLock(ctx)
 	}
+	// A retired object's lock is closed but free, so a second caller either
+	// takes it or is refused as closed, at random. Either way the teardown
+	// ran already, and the table may hold a fresh actor under this ID by
+	// now: deactivating again is a no-op.
 	if err != nil {
+		if o.isRetired() {
+			return nil
+		}
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
 
+	if o.isRetired() {
+		return nil
+	}
+
 	o.table.Delete(o.actorID)
 	o.invalidateCachedState()
+	// Mark retired before closing the lock: a concurrent Deactivate refused
+	// as closed must see the actor as retired, not report a failure.
+	o.retireLock.Lock()
+	o.retired = true
+	o.retireLock.Unlock()
 	o.lock.Close()
 	o.foldFlush()
 	for _, stream := range o.streamFns {

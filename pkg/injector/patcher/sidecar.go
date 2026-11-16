@@ -114,6 +114,7 @@ type SidecarConfig struct {
 	AppBindingOptionsTimeout            *string `annotation:"dapr.io/app-binding-options-timeout"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
 	ActorsDisseminateTimeout            *string `annotation:"dapr.io/actors-disseminate-timeout"`
+	ActorsPlacementStartupTimeout       *string `annotation:"dapr.io/actors-placement-startup-timeout"`
 	SchedulerAddress                    *string `annotation:"dapr.io/scheduler-host-address"`
 	SchedulerEnabled                    bool
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
@@ -122,6 +123,7 @@ type SidecarConfig struct {
 	InjectPluggableComponents           bool    `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string  `annotation:"dapr.io/app-channel-address"`
 	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
+	WorkloadKeyAlgorithm                string  `annotation:"dapr.io/workload-key-algorithm"`
 	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
 	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
 	EnableNativeSidecar                 bool    `annotation:"dapr.io/enable-native-sidecar"`

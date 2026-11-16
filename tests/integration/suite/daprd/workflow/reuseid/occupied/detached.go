@@ -81,7 +81,7 @@ func (d *detached) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	reg.AddWorkflowN("spawner", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("child",
+		_, err := ctx.ScheduleNewDetachedWorkflow("child",
 			task.WithDetachedWorkflowInstanceID(occupantID),
 		)
 		return nil, err

@@ -50,6 +50,8 @@ type WorkItemObserver struct {
 	deltas                  map[string]int
 	fullSends               map[string]int
 	getInstanceHistoryCalls int
+	healthPings             int
+	workItemStreams         int
 }
 
 func newWorkItemObserver() *WorkItemObserver {
@@ -60,12 +62,16 @@ func newWorkItemObserver() *WorkItemObserver {
 }
 
 func (o *WorkItemObserver) observe(wi *protos.WorkItem) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if wi.GetHealthPing() != nil {
+		o.healthPings++
+		return
+	}
 	wr := wi.GetWorkflowRequest()
 	if wr == nil {
 		return
 	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	if wr.GetCachedHistory() != nil {
 		o.deltas[wr.GetInstanceId()]++
 	} else {
@@ -120,6 +126,21 @@ func (o *WorkItemObserver) GetInstanceHistoryCalls() int {
 	return o.getInstanceHistoryCalls
 }
 
+// HealthPings returns the number of HealthPing work items received.
+func (o *WorkItemObserver) HealthPings() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.healthPings
+}
+
+// WorkItemStreams returns how many GetWorkItems streams the worker opened, so
+// one more than the number of times it reconnected.
+func (o *WorkItemObserver) WorkItemStreams() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.workItemStreams
+}
+
 func (o *WorkItemObserver) observeUnary(method string) {
 	if method != getInstanceHistoryMethod {
 		return
@@ -147,6 +168,9 @@ func (o *WorkItemObserver) streamInterceptor() grpc.StreamClientInterceptor {
 		if err != nil || method != getWorkItemsMethod {
 			return cs, err
 		}
+		o.mu.Lock()
+		o.workItemStreams++
+		o.mu.Unlock()
 		return &observingClientStream{ClientStream: cs, observe: o.observe}, nil
 	}
 }

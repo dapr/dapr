@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -77,7 +78,7 @@ func (i *idempotent) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := dworkflow.NewClient(i.workflow.Dapr().GRPCConn(t, ctx))
+	client := dworkflow.NewClientWithLogger(i.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")

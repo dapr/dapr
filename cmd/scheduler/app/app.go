@@ -15,6 +15,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring/scaling"
 	"github.com/dapr/dapr/pkg/scheduler/server"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -53,6 +56,7 @@ func Run() {
 
 	healthz := healthz.New()
 
+	scalingMetrics := scaling.New()
 	metricsExporter := metrics.New(metrics.Options{
 		Log:           log,
 		Enabled:       opts.Metrics.Enabled(),
@@ -60,6 +64,9 @@ func Run() {
 		Port:          opts.Metrics.Port(),
 		Healthz:       healthz,
 		ListenAddress: opts.ListenAddress,
+		Handlers: map[string]http.Handler{
+			scaling.Path: scalingMetrics.Handler(),
+		},
 	})
 
 	if merr := monitoring.InitMetrics(); merr != nil {
@@ -92,6 +99,7 @@ func Run() {
 		ctrl, cerr = server.NewController(server.ControllerOptions{
 			KubeConfig: opts.KubeConfig,
 			Healthz:    healthz,
+			Namespace:  security.CurrentNamespace(),
 		})
 		if cerr != nil {
 			log.Fatalf("Fatal error creating scheduler controller: %v", cerr)
@@ -123,6 +131,7 @@ func Run() {
 					Security:   secHandler,
 					Healthz:    healthz,
 					Controller: ctrl,
+					Scaling:    scalingMetrics,
 
 					KubeConfig:                     opts.KubeConfig,
 					EtcdEmbed:                      opts.EtcdEmbed,
@@ -149,6 +158,10 @@ func Run() {
 					EtcdClientPassword:  opts.EtcdClientPassword,
 
 					Workers: opts.Workers,
+
+					PlacementEnabled:                   opts.PlacementEnabled,
+					PlacementDisseminateTimeout:        opts.PlacementDisseminateTimeout,
+					PlacementDisseminateCoalesceWindow: opts.PlacementDisseminateCoalesceWindow,
 				})
 				if serr != nil {
 					return nil, serr
@@ -193,7 +206,10 @@ const (
 // HA fleet, whose members would otherwise all crash-restart together.
 // Healthz reports not-ready between incarnations, so orchestration still
 // observes the outage. Errors from getServer are configuration failures and
-// remain fatal.
+// remain fatal, as is a port the server cannot bind: the holder can outlive
+// every incarnation (one of this process's own long-lived connections, for
+// one), and retrying in-process then keeps the replica unready until its
+// liveness probe restarts it.
 func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) error {
 	retryBackoff := backoff.NewJitter(serverRetryBackoffBase, serverRetryBackoffCap)
 	for {
@@ -203,14 +219,17 @@ func runServerLoop(ctx context.Context, getServer func() (serverRunner, error)) 
 			return ctx.Err()
 		}
 
-		server, err := getServer()
+		srv, err := getServer()
 		if err != nil {
 			return err
 		}
 
-		err = server.Run(ctx)
+		err = srv.Run(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if errors.Is(err, server.ErrListen) {
+			return err
 		}
 		if err == nil {
 			// A nil return with a live context is a server-requested restart:

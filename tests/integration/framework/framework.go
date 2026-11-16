@@ -17,6 +17,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 var inGHAction = false
@@ -39,7 +41,7 @@ func Run(t *testing.T, ctx context.Context, opts ...Option) {
 		t.Skip("skipping io-intensive test in GH Action environment")
 	}
 
-	t.Logf("starting %d processes", len(o.procs))
+	iowriter.Eventf(t, "starting %d processes", len(o.procs))
 
 	for i, proc := range o.procs {
 		proc.Run(t, ctx)

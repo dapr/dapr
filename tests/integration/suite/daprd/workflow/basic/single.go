@@ -28,13 +28,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -91,7 +91,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	s.grpcClient = runtimev1pb.NewDaprClient(conn)
 
-	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(conn, logger.New(t))
 
 	t.Run("basic", func(t *testing.T) {
 		r := task.NewTaskRegistry()

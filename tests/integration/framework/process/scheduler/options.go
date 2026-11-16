@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -51,11 +52,40 @@ type options struct {
 	workers     *uint32
 
 	overrideBroadcastHostPort *string
+
+	placementEnabled                   *bool
+	placementDisseminateTimeout        *time.Duration
+	placementDisseminateCoalesceWindow *time.Duration
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+// WithPlacementEnabled serves actor placement from this scheduler
+// (--placement-enabled).
+func WithPlacementEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.placementEnabled = &enabled
+	}
+}
+
+// WithPlacementDisseminateTimeout sets the timeout for a placement
+// dissemination round (--placement-disseminate-timeout).
+func WithPlacementDisseminateTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.placementDisseminateTimeout = &timeout
+	}
+}
+
+// WithPlacementDisseminateCoalesceWindow sets the window in which placement
+// membership changes coalesce into one dissemination round
+// (--placement-disseminate-coalesce-window).
+func WithPlacementDisseminateCoalesceWindow(window time.Duration) Option {
+	return func(o *options) {
+		o.placementDisseminateCoalesceWindow = &window
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -30,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -117,7 +117,7 @@ func (r *reuseidstray) Run(t *testing.T, ctx context.Context) {
 		).Await(nil)
 	}))
 
-	cl := client.NewTaskHubGrpcClient(r.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	cl := client.NewTaskHubGrpcClient(r.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, registry))
 
 	_, err := cl.ScheduleNewWorkflow(ctx, "occupant", api.WithInstanceID(pinnedID))

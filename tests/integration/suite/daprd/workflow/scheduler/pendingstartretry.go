@@ -23,13 +23,13 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -74,12 +74,14 @@ func (p *pendingstartretry) Run(t *testing.T, ctx context.Context) {
 		return "Hello, " + input + "!", nil
 	}))
 
-	backendClient := client.NewTaskHubGrpcClient(p.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(p.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
 
 	const instanceID = "pending-start-retry"
 
-	p.scheduler.Kill(t)
+	// Stopped cleanly so it revokes its leadership lease. After a kill, the
+	// restarted scheduler serves no jobs until that lease expires (20s).
+	p.scheduler.Cleanup(t)
 
 	gclient := p.daprd.GRPCClient(t, ctx)
 

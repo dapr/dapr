@@ -24,20 +24,22 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
 	jwx_jwt "github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -112,9 +114,6 @@ func (s *spiffeAuth) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("standalone"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
 		daprd.WithSentryAddress(s.sent.Address()),
-		// Pre-register the audience the MCPServer YAML asks for.
-		// dapr's SPIFFE JWT source only fetches SVIDs for audiences known at startup.
-		daprd.WithSentryRequestJwtAudiences("mcp://test-server"),
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
 		daprd.WithEnableMTLS(true),
@@ -150,7 +149,7 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	s.httpClient = fclient.HTTP(t)
-	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), logger.New(t))
 
 	t.Run("SPIFFE JWT is injected with correct SPIFFE ID and signed by Sentry", func(t *testing.T) {
 		input := map[string]any{
@@ -219,7 +218,15 @@ func (s *spiffeAuth) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok, "JWT should have an aud claim")
 		audList, ok := aud.([]string)
 		require.True(t, ok)
-		assert.Contains(t, audList, "mcp://test-server", "aud should contain the configured audience")
+		assert.Equal(t, []string{"mcp://test-server"}, audList, "aud should be the configured audience")
+
+		// The audience is not pre-registered with Sentry, so the token was minted
+		// on demand with the on-demand lifetime.
+		assert.Equal(t, 5*time.Minute, tkn.Expiration().Sub(tkn.IssuedAt()))
+		msg, err := jws.Parse([]byte(tokenRaw))
+		require.NoError(t, err)
+		require.Len(t, msg.Signatures(), 1)
+		assert.NotEmpty(t, msg.Signatures()[0].ProtectedHeaders().KeyID(), "JWT should carry a kid header")
 
 		// Verify issuer matches Sentry's OIDC issuer.
 		issuer, _ := tkn.Get("iss")

@@ -17,16 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-)
-
-const (
-	operationLock   = "lock"
-	operationUpdate = "update"
-	operationUnlock = "unlock"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 func (d *disseminator) handleLookupRequest(req *loops.LookupRequest) {
@@ -37,27 +30,68 @@ func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
 	d.inflight.Acquire(req)
 }
 
+// completeRound runs at the end of every dissemination round on this
+// stream, once its tables are installed.
+func (d *disseminator) completeRound(ctx context.Context) {
+	d.roundCompleted = true
+	// A type in a round still in progress keeps draining: its installed
+	// table is not final until that round completes.
+	pendingAll, pending := d.pendingTypes()
+	d.actorTable.CompleteDrains(ctx, func(actorType string) bool {
+		_, ok := pending[actorType]
+		return pendingAll || ok || d.inflight.HasLocalHost(actorType)
+	})
+	d.placementLoop.Enqueue(&loops.RoundCompleted{
+		Remote:     d.inflight.RemoteHostTypes(),
+		Pending:    pending,
+		PendingAll: pendingAll,
+	})
+	d.reloadReminderTypes()
+}
+
+// reloadReminderTypes advertises the actor types this host takes reminders
+// for to the scheduler.
+func (d *disseminator) reloadReminderTypes() {
+	d.scheduler.ReloadActorTypes(d.actorTable.ReminderTypes())
+}
+
+// pendingTypes returns the actor types whose tables a dissemination round
+// still in progress may change, or all if such a round is the startup
+// snapshot: a v2 round with an empty scope covers every type.
+func (d *disseminator) pendingTypes() (bool, map[string]struct{}) {
+	pending := make(map[string]struct{}, len(d.roundChangedTypes))
+	for actorType := range d.roundChangedTypes {
+		pending[actorType] = struct{}{}
+	}
+	for _, r := range d.v2Rounds {
+		if len(r.scope) == 0 {
+			return true, nil
+		}
+		for _, actorType := range r.scope {
+			pending[actorType] = struct{}{}
+		}
+		for actorType := range r.changed {
+			pending[actorType] = struct{}{}
+		}
+	}
+	return false, pending
+}
+
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
-	report.Host.Version = nil
-	report.Host.Operation = v1pb.HostOperation_REPORT
 	d.streamLoop.Enqueue(&loops.StreamSend{
-		Host: report.Host,
+		Report: report.Report,
 	})
 }
 
 func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder) error {
-	var version uint64
-	if v := order.Order.GetVersion(); v > 0 {
-		version = v
-	} else {
-		//nolint:staticcheck
-		version, _ = strconv.ParseUint(order.Order.GetTables().GetVersion(), 10, 64)
-	}
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(order.Order.Op.String())
 
-	log.Debugf("Handling placement order=%s version=%d", order.Order.GetOperation(), version)
+	version := order.Order.Version
 
-	switch order.Order.GetOperation() {
-	case operationLock:
+	log.Debugf("Handling placement order=%s version=%d", order.Order.Op, version)
+
+	switch order.Order.Op {
+	case loops.OrderLock:
 		// LOCK signals that the placement server is about to push a new
 		// table. The new tables haven't arrived yet, so we don't know
 		// which actor types will change. Lookups continue to resolve
@@ -67,19 +101,17 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.timeoutVersion++
 		d.timeoutQ.Enqueue(d.timeoutVersion)
 
-		d.currentOperation = v1pb.HostOperation_LOCK
+		d.currentOperation = loops.OrderLock
 		d.currentVersion = version
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
-			Host: &v1pb.Host{
-				Operation: v1pb.HostOperation_LOCK,
-				Version:   new(d.currentVersion),
-				Namespace: d.namespace,
-				Id:        d.id,
+			Ack: &loops.Ack{
+				Op:      loops.OrderLock,
+				Version: d.currentVersion,
 			},
 		})
 
-	case operationUpdate:
+	case loops.OrderUpdate:
 		if d.currentVersion > version {
 			d.streamLoop.Close(&loops.Shutdown{
 				Error: fmt.Errorf("version mismatch: expected %d, got %d",
@@ -98,14 +130,14 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		// for unchanged types. Accumulate into roundChangedTypes so a
 		// later UNLOCK releases every type touched across compressed
 		// rounds (the placement server may elide intermediate UNLOCKs).
-		changed := d.inflight.Set(order.Order.GetTables(), version)
+		changed := d.inflight.Set(order.Order.V1Tables, version)
 		for _, t := range changed {
 			d.roundChangedTypes[t] = struct{}{}
 		}
 		d.inflight.LockTypes(changed)
 		d.inflight.Open(ctx)
 
-		d.currentOperation = v1pb.HostOperation_UPDATE
+		d.currentOperation = loops.OrderUpdate
 
 		// Drain in-flight claims for actor types whose hash ring changed
 		// in this UPDATE so the request layer can retry against the new
@@ -119,16 +151,14 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		}
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
-			Host: &v1pb.Host{
-				Operation: v1pb.HostOperation_UPDATE,
-				Version:   new(d.currentVersion),
-				Namespace: d.namespace,
-				Id:        d.id,
+			Ack: &loops.Ack{
+				Op:      loops.OrderUpdate,
+				Version: d.currentVersion,
 			},
 		})
 
-	case operationUnlock:
-		if d.currentOperation != v1pb.HostOperation_UPDATE {
+	case loops.OrderUnlock:
+		if d.currentOperation != loops.OrderUpdate {
 			log.Warnf("Invalid operation sequence: expected UPDATE before UNLOCK, ignoring unlock")
 			return nil
 		}
@@ -155,18 +185,16 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			version, toUnlock, d.namespace, d.id,
 		)
 
-		d.currentOperation = v1pb.HostOperation_UNLOCK
-		d.scheduler.ReloadActorTypes(d.actorTable.Types())
+		d.currentOperation = loops.OrderUnlock
+		clear(d.roundChangedTypes)
+		d.completeRound(ctx)
 
 		d.inflight.UnlockTypes(toUnlock)
-		clear(d.roundChangedTypes)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
-			Host: &v1pb.Host{
-				Operation: v1pb.HostOperation_UNLOCK,
-				Version:   new(d.currentVersion),
-				Namespace: d.namespace,
-				Id:        d.id,
+			Ack: &loops.Ack{
+				Op:      loops.OrderUnlock,
+				Version: d.currentVersion,
 			},
 		})
 
@@ -175,7 +203,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	default:
 		d.streamLoop.Close(&loops.Shutdown{
-			Error: fmt.Errorf("unknown operation: %s", order.Order.GetOperation()),
+			Error: fmt.Errorf("unknown operation: %s", order.Order.Op),
 		})
 		return nil
 	}

@@ -16,6 +16,7 @@ package inmemory
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -69,6 +70,16 @@ type actorState struct {
 	timers  int // timers currently registered for this actor
 }
 
+type removal struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+func newRemoval() removal {
+	ctx, cancel := context.WithCancel(context.Background())
+	return removal{ctx: ctx, cancel: cancel}
+}
+
 type inmemory struct {
 	clock clock.WithTicker
 
@@ -83,6 +94,9 @@ type inmemory struct {
 	// interleave. Lock order: queueLock before actorStatesLock, never the
 	// reverse.
 	queueLock sync.Mutex
+
+	// Guarded by queueLock.
+	removals map[string]removal
 
 	// actorStates holds the per-actor loop and refcounts, keyed by actor key.
 	// nil after Close.
@@ -103,6 +117,7 @@ func New(opts Options) timers.Storage {
 		clock:             clock.RealClock{},
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
+		removals:          make(map[string]removal),
 		actorStates:       make(map[string]*actorState),
 		ctx:               ctx,
 		cancel:            cancel,
@@ -260,19 +275,25 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	// only if this reminder is still the registered one for its key.
 	i.queueLock.Lock()
 	cur, ok := i.activeTimers.Load(reminder.Key())
+	rm := i.removals[reminder.Key()]
 	i.queueLock.Unlock()
 	if !ok || cur != reminder {
+		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
 		return
 	}
 
-	err := i.router.CallReminder(ctx, reminder)
-	if errors.Is(err, actorerrors.ErrTimerFireNotLocal) {
-		// The actor is no longer hosted here: the ownership-loss sweep is
-		// deleting this timer, so remove it rather than count a fire or tick
-		// forward.
+	fire := *reminder
+	fire.Removed = rm.ctx
+	err := i.router.CallReminder(ctx, &fire)
+	switch {
+	case errors.Is(err, actorerrors.ErrTimerFireStale):
+		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
+		return
+	case errors.Is(err, actorerrors.ErrTimerFireNotLocal):
 		diag.DefaultMonitoring.ActorTimerDropped(reminder.ActorType)
 		i.queueLock.Lock()
 		if i.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			i.cancelRemovalLocked(reminder.Key())
 			i.updateActiveTimersCount(reminder.ActorType, -1)
 			i.updateActorTimers(reminder.ActorKey(), -1)
 		}
@@ -300,6 +321,7 @@ func (i *inmemory) executeAndReschedule(ctx context.Context, reminder *api.Remin
 	case done || !active:
 		// No repetitions left, or expired: drop it.
 		if i.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			i.cancelRemovalLocked(reminder.Key())
 			i.updateActiveTimersCount(reminder.ActorType, -1)
 			i.updateActorTimers(reminder.ActorKey(), -1)
 		}
@@ -343,6 +365,7 @@ func (i *inmemory) Create(ctx context.Context, reminder *api.Reminder) error {
 	replaced := false
 	if prev, loaded := i.activeTimers.LoadAndDelete(timerKey); loaded && prev != nil {
 		i.processor.Dequeue(prev.(*api.Reminder).Key())
+		i.cancelRemovalLocked(timerKey)
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		replaced = true
 	}
@@ -356,6 +379,7 @@ func (i *inmemory) Create(ctx context.Context, reminder *api.Reminder) error {
 		return nil
 	}
 
+	i.removals[timerKey] = newRemoval()
 	i.activeTimers.Store(timerKey, reminder)
 	i.processor.Enqueue(reminder)
 	i.updateActiveTimersCount(reminder.ActorType, 1)
@@ -375,9 +399,44 @@ func (i *inmemory) Delete(_ context.Context, timerKey string) {
 	if exists {
 		reminder := reminderAny.(*api.Reminder)
 		i.processor.Dequeue(reminder.Key())
+		i.cancelRemovalLocked(timerKey)
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		i.updateActorTimers(reminder.ActorKey(), -1)
 	}
+}
+
+func (i *inmemory) Get(_ context.Context, timerKey string) *api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	reminderAny, ok := i.activeTimers.Load(timerKey)
+	if !ok {
+		return nil
+	}
+	// Hand out a copy so callers can never alias the store.
+	c := *reminderAny.(*api.Reminder)
+	return &c
+}
+
+func (i *inmemory) List(_ context.Context, actorType, actorID string) []*api.Reminder {
+	i.queueLock.Lock()
+	defer i.queueLock.Unlock()
+
+	var out []*api.Reminder
+	i.activeTimers.Range(func(_, reminderAny any) bool {
+		reminder := reminderAny.(*api.Reminder)
+		if reminder.ActorType != actorType || reminder.ActorID != actorID {
+			return true
+		}
+		// Stored reminders are replaced rather than mutated in place, but hand
+		// out a copy so callers can never alias the store.
+		c := *reminder
+		out = append(out, &c)
+		return true
+	})
+
+	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
+	return out
 }
 
 func (i *inmemory) DeleteFunc(_ context.Context, fn func(actorType, actorID string) bool) {
@@ -392,10 +451,18 @@ func (i *inmemory) DeleteFunc(_ context.Context, fn func(actorType, actorID stri
 		log.Debugf("Deleting timer for no longer hosted actor: %s", reminder.Key())
 		i.activeTimers.Delete(key)
 		i.processor.Dequeue(reminder.Key())
+		i.cancelRemovalLocked(reminder.Key())
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		i.updateActorTimers(reminder.ActorKey(), -1)
 		return true
 	})
+}
+
+func (i *inmemory) cancelRemovalLocked(timerKey string) {
+	if rm, ok := i.removals[timerKey]; ok {
+		rm.cancel()
+		delete(i.removals, timerKey)
+	}
 }
 
 func (i *inmemory) updateActiveTimersCount(actorType string, inc int64) {

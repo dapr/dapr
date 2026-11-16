@@ -56,7 +56,7 @@ func (r *replay) Run(t *testing.T, ctx context.Context) {
 	const spawnedInstanceID = "spawned-replay"
 
 	r.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("Spawned",
+		_, err := ctx.ScheduleNewDetachedWorkflow("Spawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID))
 		if err != nil {
 			return nil, err

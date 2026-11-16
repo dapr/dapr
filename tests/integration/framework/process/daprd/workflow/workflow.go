@@ -32,6 +32,7 @@ type Workflow struct {
 	registry  *task.TaskRegistry
 	actors    *actors.Actors
 	clustered bool
+	fastPath  bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -49,12 +50,20 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		clustered = *opts.clustered
 	}
 
+	fastPath := procworkflow.FastPathFromEnv()
+	if opts.fastPath != nil {
+		fastPath = *opts.fastPath
+	}
+
 	// A single manifest carries all harness-driven features: the last config
 	// file specifying spec.features replaces earlier feature lists, so
 	// separate manifests would not compose.
-	features := make([]string, 0, 1)
+	features := make([]string, 0, 2)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
+	}
+	if fastPath {
+		features = append(features, "WorkflowsFastPath")
 	}
 	var aopts []actors.Option
 	if len(features) > 0 {
@@ -67,6 +76,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		registry:  opts.registry,
 		actors:    actors.New(t, aopts...),
 		clustered: clustered,
+		fastPath:  fastPath,
 	}
 }
 
@@ -74,6 +84,12 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 // WorkflowsClusteredDeployment feature flag enabled.
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
+}
+
+// FastPath reports whether the underlying daprd runs with the
+// WorkflowsFastPath feature flag enabled.
+func (w *Workflow) FastPath() bool {
+	return w.fastPath
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {

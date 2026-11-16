@@ -26,6 +26,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/handoff"
 )
 
 type fakeEtcd struct {
@@ -40,6 +41,8 @@ func (f *fakeEtcd) Run(ctx context.Context) error {
 func (f *fakeEtcd) Client(context.Context) (*clientv3.Client, error) {
 	return f.client, nil
 }
+
+func (f *fakeEtcd) TransferLeadership() {}
 
 // Test_quorum_convergence_after_scaleup tests that the dapr cron wrapper
 // survives rapid quorum changes. The fix uses an events/loop to decouple the
@@ -58,6 +61,7 @@ func Test_quorum_convergence_after_scaleup(t *testing.T) {
 			Host:    &schedulerv1pb.Host{Address: "127.0.0.1:" + strconv.Itoa(50000+i)},
 			Etcd:    etcdImpl,
 			Workers: 1,
+			Handoff: handoff.New(handoff.Options{}),
 		})
 	}
 

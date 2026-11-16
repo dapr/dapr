@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -134,10 +134,10 @@ func (m *multiremote) Run(t *testing.T, ctx context.Context) {
 	m.daprd1.WaitUntilRunning(t, ctx)
 	m.daprd2.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(m.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(m.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, m.registry1))
 
-	client2 := client.NewTaskHubGrpcClient(m.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(m.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, m.registry2))
 
 	id, err := client1.ScheduleNewWorkflow(ctx, "ParentWorkflow", api.WithInput("hello"))
@@ -151,7 +151,7 @@ func (m *multiremote) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { m.daprd3.Cleanup(t) })
 	m.daprd3.WaitUntilRunning(t, ctx)
 
-	client3 := client.NewTaskHubGrpcClient(m.daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
+	client3 := client.NewTaskHubGrpcClient(m.daprd3.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client3.StartWorkItemListener(ctx, m.registry3))
 
 	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))

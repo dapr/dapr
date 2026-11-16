@@ -29,6 +29,10 @@ var ErrReminderCanceled = errors.New("reminder has been canceled")
 // actor is no longer hosted on this instance.
 var ErrTimerFireNotLocal = errors.New("timer fire dropped: actor is no longer hosted on this instance")
 
+// ErrTimerFireStale is returned when a timer fire is dropped because the
+// timer was deleted or replaced while the fire waited to run.
+var ErrTimerFireStale = errors.New("timer fire dropped: timer was removed")
+
 // ErrCreatingActor is returned when the table cannot create an actor because its not registered.
 var ErrCreatingActor = errors.New("failed to create actor")
 

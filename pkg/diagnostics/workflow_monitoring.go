@@ -36,18 +36,14 @@ var (
 const (
 	StatusSuccess = "success"
 	StatusFailed  = "failed"
-	// Local-wake fast path outcomes beyond success/failed: a failed drive
-	// escalated to a durable reminder (or that escalation itself failed,
-	// leaving the janitor as the net), and a janitor fire that found and
-	// drove a pending inbox (the recovery event; ~0 in healthy steady state).
-	StatusEscalated       = "escalated"
-	StatusEscalateFailed  = "escalate_failed"
-	StatusEscalateSkipped = "escalate_skipped_shutdown"
-	// A failed drive against an instance that shows recent life was NOT
-	// escalated to a durable reminder: the janitor covers it within one
-	// period instead of the scheduler re-driving a merely-slow actor.
-	StatusEscalateSuppressed = "escalate_suppressed"
-	StatusJanitorRecovered   = "janitor_recovered"
+	// The activity actor's escalation of a lost local drive to its durable
+	// run-activity reminder. purged_dropped: a run-activity reminder fired for
+	// a purged workflow, and was acked without running the activity.
+	StatusEscalated        = "escalated"
+	StatusEscalateFailed   = "escalate_failed"
+	StatusEscalateSkipped  = "escalate_skipped_shutdown"
+	StatusPurgedDropped    = "purged_dropped"
+	StatusJanitorRecovered = "janitor_recovered"
 	// A janitor fire found completions held for folding with no live driver
 	// (their arming drive was lost and their senders stopped re-delivering,
 	// e.g. died with their pod at a placement handoff) and drove a turn to
@@ -72,6 +68,12 @@ const (
 	// recent progress (fresh durable commit or a running drive loop); the
 	// next period re-checks.
 	StatusJanitorRedispatchSuppressed = "janitor_redispatch_suppressed"
+	// An escalated run-activity reminder was deleted because its task
+	// resolved: the resolving execution predates the escalation and cannot
+	// delete a reminder it never knew existed, so the escalating and
+	// committing turns reap it (see reapEscalatedReminder). Without the
+	// reap, the fire re-runs the body on a cold host.
+	StatusJanitorEscalationReaped = "janitor_escalation_reaped"
 	// An activity arrival found the in-flight claim held by a dead execution
 	// (no engine-held work item after the stale grace) and evicted it so the
 	// arrival re-executes; the rescue event of the janitor-livelock class
@@ -83,6 +85,19 @@ const (
 	// rejected for retry instead of committing a wedged state (the
 	// janitor-livelock stranding source; ~0 in healthy steady state).
 	StatusStaleTurnRejected = "stale_turn_rejected"
+	// An instance whose durable state can never progress (its committed
+	// start was lost) was terminally FAILED instead of silently dropping
+	// its work; ~0 in healthy steady state.
+	StatusUnstartableFailed = "unstartable_failed"
+	// A wake-up reminder create failed after its inbox row was committed and
+	// was handed to a detached retry, or that retry gave up; ~0 in healthy
+	// steady state.
+	StatusArmDetached        = "reminder_arm_detached"
+	StatusArmDetachedFailed  = "reminder_arm_detached_failed"
+	StatusArmDetachedSkipped = "reminder_arm_detached_skipped_shutdown"
+	// A status read re-asserted the start reminder of an overdue pending
+	// start; ~0 in healthy steady state.
+	StatusPendingStartRedriven = "pending_start_redriven"
 	// Completions-fold outcomes: a sender-retried completion committed
 	// inside its folding turn (folded), or was nacked back into the
 	// sender's retry chain (turn failure, timeout, deactivation).
@@ -94,6 +109,14 @@ const (
 	GetWorkflow       = "get_workflow"
 	AddEvent          = "add_event"
 	PurgeWorkflow     = "purge_workflow"
+	// Further operations on a workflow instance, which the fallback
+	// operation count tells apart (the operation count tags them all
+	// add_event).
+	RaiseEvent        = "raise_event"
+	TerminateWorkflow = "terminate_workflow"
+	SuspendWorkflow   = "suspend_workflow"
+	ResumeWorkflow    = "resume_workflow"
+	RerunWorkflow     = "rerun_workflow"
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
@@ -215,6 +238,12 @@ type workflowMetrics struct {
 	// invocation kind (method/reminder/stream). Splits observed invocation
 	// latency into lock queueing vs turn body.
 	lockWaitLatency *stats.Float64Measure
+	// stagedOperationCount records workflow operations staged under the
+	// WorkflowsStagedOperations preview feature, tagged by operation: those a
+	// fallback host served while no daprd of the app had a workflow worker. A
+	// staged start, event or rerun waits for a worker, so a rising count
+	// while no worker is connected is work piling up.
+	stagedOperationCount *stats.Int64Measure
 
 	// Cached recorders for hot-path records (built in Init): direct
 	// meter.Record through prebuilt tag maps instead of the
@@ -229,6 +258,7 @@ type workflowMetrics struct {
 	activityExecutionLatencyC *diagUtils.CachedFloat64Recorder
 	activityOperationCountC   *diagUtils.CachedInt64Counter
 	activityOperationLatencyC *diagUtils.CachedFloat64Recorder
+	stagedOperationCountC     *diagUtils.CachedInt64Counter
 
 	appID     string
 	enabled   bool
@@ -330,6 +360,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/lock_wait",
 			"The time a workflow orchestrator invocation spends queued on the per-actor turn lock, by invocation kind.",
 			stats.UnitMilliseconds),
+		stagedOperationCount: stats.Int64(
+			"runtime/workflow/staged/operation/count",
+			"The number of workflow operations staged under the WorkflowsStagedOperations preview feature while no workflow worker was connected, by operation.",
+			stats.UnitDimensionless),
 	}
 }
 
@@ -354,6 +388,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.activityExecutionLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityExecutionLatency, base...)
 	w.activityOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.activityOperationCount, base...)
 	w.activityOperationLatencyC = diagUtils.NewCachedFloat64Recorder(meter, w.activityOperationLatency, base...)
+	w.stagedOperationCountC = diagUtils.NewCachedInt64Counter(meter, w.stagedOperationCount, base...)
 
 	err := meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
@@ -370,8 +405,8 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.attestationVerifiedCount, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, view.Count()),
 		diagUtils.NewMeasureView(w.attestationVerifyLatency, []tag.Key{appIDKey, namespaceKey, attestationKindKey, attestationResultKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.attestationCertCacheCount, []tag.Key{appIDKey, namespaceKey, certCacheOutcomeKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution),
-		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution),
+		diagUtils.NewMeasureView(w.workflowPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, payloadRatioDistribution()),
+		diagUtils.NewMeasureView(w.activityPayloadSizeRatio, []tag.Key{appIDKey, namespaceKey, workflowNameKey, activityNameKey}, payloadRatioDistribution()),
 		diagUtils.NewMeasureView(w.completionRouteCount, []tag.Key{appIDKey, namespaceKey, taskTypeKey, completionRouteKey}, view.Count()),
 		// Sum of per-event 1s, not Count: identical exposition (cumulative
 		// int64 exports as a Prometheus counter either way), but Sum lets
@@ -382,6 +417,7 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.localActivityDriveLatency, []tag.Key{appIDKey, namespaceKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.lockWaitLatency, []tag.Key{appIDKey, namespaceKey, operationKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.completionsFoldCount, []tag.Key{appIDKey, namespaceKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.stagedOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 		diagUtils.NewMeasureView(w.completionsFoldWait, []tag.Key{appIDKey, namespaceKey}, latencyDistribution))
 	if err != nil {
 		return err
@@ -392,13 +428,13 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	// lazy registration an absent series is indistinguishable from a rescue
 	// path that never fired. Their views aggregate by Sum, so the zero
 	// record registers the series without changing its value.
-	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected} {
+	for _, s := range []string{StatusJanitorRecovered, StatusJanitorFoldRecovered, StatusStaleTurnRejected, StatusUnstartableFailed, StatusArmDetached, StatusArmDetachedFailed, StatusPendingStartRedriven} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localWakeCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
 			stats.WithMeasurements(w.localWakeCount.M(0)))
 	}
-	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusClaimEvicted} {
+	for _, s := range []string{StatusJanitorRedispatched, StatusJanitorRedispatchEscalated, StatusJanitorEscalationReaped, StatusClaimEvicted} {
 		stats.RecordWithOptions(context.Background(),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(diagUtils.WithTags(w.localActivityCount.Name(), appIDKey, appID, namespaceKey, namespace, statusKey, s)...),
@@ -639,4 +675,13 @@ func (w *workflowMetrics) WorkflowCompletionRoute(ctx context.Context, taskType,
 		stats.WithRecorder(w.meter),
 		stats.WithTags(diagUtils.WithTags(w.completionRouteCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, taskTypeKey, taskType, completionRouteKey, route)...),
 		stats.WithMeasurements(w.completionRouteCount.M(1)))
+}
+
+// WorkflowStagedOperation records a workflow operation staged by a fallback
+// host under the WorkflowsStagedOperations preview feature, by operation.
+func (w *workflowMetrics) WorkflowStagedOperation(_ context.Context, operation string) {
+	if !w.IsEnabled() {
+		return
+	}
+	w.stagedOperationCountC.Record1(operationKey, operation)
 }

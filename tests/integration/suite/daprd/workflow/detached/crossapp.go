@@ -54,7 +54,7 @@ func (c *crossapp) Run(t *testing.T, ctx context.Context) {
 
 	// Caller registered on app0 only.
 	c.workflow.Registry().AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		id, err := ctx.ScheduleNewWorkflow("RemoteSpawned",
+		id, err := ctx.ScheduleNewDetachedWorkflow("RemoteSpawned",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			task.WithDetachedWorkflowAppID(c.workflow.DaprN(1).AppID()),
 			task.WithDetachedWorkflowInput("hello"),

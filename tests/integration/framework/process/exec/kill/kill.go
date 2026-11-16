@@ -15,9 +15,12 @@ package kill
 
 import (
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 func Interrupt(t *testing.T, cmd *exec.Cmd) {
@@ -27,7 +30,7 @@ func Interrupt(t *testing.T, cmd *exec.Cmd) {
 		return
 	}
 
-	t.Logf("interrupting %s process", cmd.Path)
+	iowriter.Eventf(t, "interrupting %s", filepath.Base(cmd.Path))
 
 	interrupt(t, cmd)
 }
@@ -39,7 +42,7 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 		return
 	}
 
-	t.Logf("killing %s process", cmd.Path)
+	iowriter.Eventf(t, "killing %s", filepath.Base(cmd.Path))
 
 	kill(t, cmd)
 }
@@ -50,7 +53,7 @@ func SignalHUP(t *testing.T, cmd *exec.Cmd) {
 	require.NotNil(t, cmd, "cmd must not be nil when sending SIGHUP")
 	require.Nil(t, cmd.ProcessState, "process must still be running when sending SIGHUP")
 
-	t.Logf("signaling HUP to %s process", cmd.Path)
+	iowriter.Eventf(t, "signaling HUP to %s", filepath.Base(cmd.Path))
 
 	signalHUP(t, cmd)
 }

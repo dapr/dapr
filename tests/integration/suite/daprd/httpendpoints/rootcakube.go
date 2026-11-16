@@ -136,7 +136,7 @@ func (r *rootcakube) Run(t *testing.T, ctx context.Context) {
 	r.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, r.daprd.GetMetaHTTPEndpoints(t, ctx), 1)
+		assert.Len(c, r.daprd.GetMetaHTTPEndpoints(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	client := client.HTTP(t)

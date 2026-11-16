@@ -15,6 +15,7 @@ package selfhosted
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,12 +44,13 @@ type fileload struct {
 
 func (s *fileload) Setup(t *testing.T) []framework.Option {
 	resDir := t.TempDir()
+	globalURL := prochttp.NotFoundURL(t)
 
 	// ignoreErrors=true on every resource: this test runs without placement,
 	// so EnsureActorsRegistered would otherwise fail and shut down daprd, and
 	// the invalid-mcp validation failure would do the same. Both are expected
 	// here — we're verifying file-load behaviour, not workflow invocation.
-	require.NoError(t, os.WriteFile(filepath.Join(resDir, "global.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "global.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -56,10 +59,10 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/mcp
-`), 0o600))
+      url: %s/mcp
+`, globalURL), 0o600))
 
-	require.NoError(t, os.WriteFile(filepath.Join(resDir, "scoped.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "scoped.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -68,13 +71,13 @@ spec:
   ignoreErrors: true
   endpoint:
     sse:
-      url: http://scoped.example.com/sse
+      url: %s/sse
 scopes:
 - test-app
-`), 0o600))
+`, globalURL), 0o600))
 
 	// Scoped to a different app — should NOT be loaded.
-	require.NoError(t, os.WriteFile(filepath.Join(resDir, "other.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "other.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -83,14 +86,14 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://other.example.com/mcp
+      url: %s/mcp
 scopes:
 - different-app
-`), 0o600))
+`, globalURL), 0o600))
 
 	// Invalid: two transports — should be rejected by validation but not
 	// terminate daprd because ignoreErrors=true on the spec.
-	require.NoError(t, os.WriteFile(filepath.Join(resDir, "invalid.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "invalid.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -99,10 +102,10 @@ spec:
   ignoreErrors: true
   endpoint:
     streamableHTTP:
-      url: http://example.com/mcp
+      url: %[1]s/mcp
     sse:
-      url: http://example.com/sse
-`), 0o600))
+      url: %[1]s/sse
+`, globalURL), 0o600))
 
 	s.logline = logline.New(t,
 		logline.WithStdoutLineContains(

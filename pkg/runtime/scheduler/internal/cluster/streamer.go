@@ -56,11 +56,16 @@ func (s *streamer) run(ctx context.Context) error {
 // receive is a long running blocking process which listens for incoming
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
+// It must not call CloseSend; outgoing owns the send side.
 func (s *streamer) receive(ctx context.Context) error {
-	defer func() {
-		s.wg.Wait()
-		s.stream.CloseSend()
-	}()
+	// Jobs also stop when the stream ends. A job can wait on something only a
+	// reconnected stream provides, such as actor placement when the scheduler
+	// hosts it, and waiting for that job here would stop the reconnect.
+	jobCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(s.stream.Context(), cancel)
+	defer stop()
+	defer s.wg.Wait()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -81,7 +86,7 @@ func (s *streamer) receive(ctx context.Context) error {
 				s.inflight.Add(-1)
 			}()
 
-			result := s.handleJob(ctx, resp)
+			result := s.handleJob(jobCtx, resp)
 			select {
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
@@ -91,8 +96,7 @@ func (s *streamer) receive(ctx context.Context) error {
 					},
 				},
 			}:
-			case <-s.stream.Context().Done():
-			case <-ctx.Done():
+			case <-jobCtx.Done():
 			}
 		}()
 	}
@@ -102,6 +106,7 @@ func (s *streamer) receive(ctx context.Context) error {
 // results back to the Scheduler. Ack messages are collected via a channel to
 // ensure they are sent unary over the stream- gRPC does not support parallel
 // message sends.
+// It is the only caller of Send and CloseSend.
 func (s *streamer) outgoing(ctx context.Context) error {
 	defer s.stream.CloseSend()
 
@@ -249,6 +254,9 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		ActorID:   actor.GetId(),
 		Data:      job.GetData(),
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
+		// Verified by the scheduler against the creator's SPIFFE ID at
+		// schedule time and echoed back on trigger.
+		SourceAppID: job.GetMetadata().GetAppId(),
 	})
 	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
 

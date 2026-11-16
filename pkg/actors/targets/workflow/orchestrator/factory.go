@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
@@ -76,6 +77,20 @@ type Options struct {
 	// activity-reminder elision with janitor re-dispatch (redispatch.go),
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
+
+	// Fallback, if set, reports whether this daprd hosts the workflow actor
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
+	Fallback func() bool
+
+	// Detached runs work that must outlive an invocation or claim context, on
+	// the runtime lifetime rather than this registration's. Nil creates one
+	// bounded by ctx.
+	Detached *detached.Runner
 }
 
 type factory struct {
@@ -110,16 +125,15 @@ type factory struct {
 	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
 	// the Wait.
 	fastPath   bool
+	fallback   func() bool
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc
 	wakeWG     sync.WaitGroup
 
-	// Escalation hysteresis schedule. Set once in New, before any drive loop can
-	// read them; fields only so unit tests can compress the schedule per
-	// factory. A nil driveRetryBackoffs selects the default jittered schedule .
+	// In-place drive retry schedule; nil selects the default jittered
+	// schedule. A field only so unit tests can compress it per factory.
 	driveRetryBackoffs []time.Duration
-	driveAliveWindow   time.Duration
 
 	bgWG sync.WaitGroup
 
@@ -133,9 +147,8 @@ type factory struct {
 
 	foldWaitTimeout time.Duration
 
-	rootCtx context.Context
-	escLock sync.Mutex
-	escWG   sync.WaitGroup
+	rootCtx  context.Context
+	detached *detached.Runner
 
 	table sync.Map
 	lock  sync.Mutex
@@ -170,6 +183,11 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 
 	wakeCtx, wakeCancel := context.WithCancel(context.Background())
 
+	det := opts.Detached
+	if det == nil {
+		det = detached.New(ctx)
+	}
+
 	reaperScanInterval := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_SCAN_INTERVAL", 5*time.Second)
 	reaperIdleTTL := common.EnvDurationOr("DAPR_WORKFLOW_REAPER_IDLE_TTL", max(2*common.JanitorPeriod(), time.Minute))
 	foldWaitTimeout := common.EnvDurationOr("DAPR_WORKFLOW_FOLD_WAIT_TIMEOUT", 2*time.Minute)
@@ -195,18 +213,20 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
+		fallback:               opts.Fallback,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,
 		wakeCtx:                wakeCtx,
 		wakeCancel:             wakeCancel,
-		driveAliveWindow:       defaultDriveAliveWindow,
 		rootCtx:                ctx,
+		detached:               det,
 	}
 
-	// The worker pool and reaper are factory-lifetime: they exit when the
-	// engine's context dies and are joined by the final HaltAll, so engine
-	// close leaks no goroutines.
+	// The worker pool and reaper are factory-lifetime: they exit when ctx, the
+	// registration's context, ends. The actors backend cancels it once the
+	// types are unregistered and when it stops, so neither leaks goroutines.
+	// HaltAll joins them when ctx has already ended.
 	for range 8 {
 		f.bgWG.Go(func() {
 			for {
@@ -245,10 +265,6 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or.closed.Store(false)
 	or.lastActive.Store(time.Now().UnixNano())
 
-	// Deliberately zero, not now: progress must only ever mean a durable commit
-	// by THIS residency, so a just-activated actor (e.g. the new owner after a
-	// crash) reads as stalled and the janitor recovers it.
-	or.lastProgress.Store(0)
 	or.janitorAsserted.Store(false)
 	or.janitorRedispatched = nil
 	or.driveRunning.Store(false)
@@ -285,9 +301,7 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	}
 
 	// Reset the cache state to force a reload from the state store
-	or.state = nil
-	or.rstate = nil
-	or.ometa = nil
+	or.invalidateCachedState()
 
 	return or
 }
@@ -328,6 +342,22 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	}
 
 	return errors.Join(errs.Slice()...)
+}
+
+// CancelWakes cancels the detached local wakes as HaltAll does, without
+// deactivating the actors, for a daprd turning into a fallback host in place.
+// It has no local executor left to drive them, and a wake parked in a stall
+// hold would keep its actor's turn until the wake times out, failing every
+// janitor delivery meanwhile. The janitor drives what they leave once a
+// daprd has an executor.
+func (f *factory) CancelWakes() {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.wakeLock.Lock()
+	defer f.wakeLock.Unlock()
+	f.wakeCancel()
+	f.wakeCtx, f.wakeCancel = context.WithCancel(context.Background())
 }
 
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {

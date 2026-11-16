@@ -16,8 +16,11 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/logger"
@@ -86,4 +89,16 @@ func (a *activity) Type() string {
 // ID returns the ID of the actor.
 func (a *activity) ID() string {
 	return a.actorID
+}
+
+// workflowID returns the parent instance ID encoded in the actor ID
+// "<instanceID>::<taskID>::<generation>". The instance ID may itself contain
+// the separator, so the last two components are cut.
+func (a *activity) workflowID() (string, error) {
+	if i := strings.LastIndex(a.actorID, common.ActivityIDSeparator); i >= 0 {
+		if j := strings.LastIndex(a.actorID[:i], common.ActivityIDSeparator); j >= 0 {
+			return a.actorID[:j], nil
+		}
+	}
+	return "", fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
 }

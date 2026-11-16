@@ -109,7 +109,7 @@ func TestInvokeReminder_SerializesJSONBody(t *testing.T) {
 		ActorID:   "a",
 		Name:      "daily",
 		DueTime:   "1h",
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "actors/myactortype/a/method/remind/daily", seenPath)
 	assert.Equal(t, "1h", seenBody["dueTime"])
@@ -128,7 +128,7 @@ func TestInvokeTimer_SerializesCallback(t *testing.T) {
 		ActorID:   "a",
 		Name:      "tick",
 		Callback:  "cb",
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "cb", seenBody["callback"])
 }

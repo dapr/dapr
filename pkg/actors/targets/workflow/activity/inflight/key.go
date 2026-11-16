@@ -19,6 +19,13 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+// KeyPrefix returns the prefix shared by every inflight key of actorID. The
+// length prefix stops the keys of an actor ID matching the prefix of another
+// actor ID it extends, such as "wf::5" and "wf::5::2".
+func KeyPrefix(actorID string) string {
+	return strconv.Itoa(len(actorID)) + "|" + actorID + "::"
+}
+
 // Key returns the inflight Map key for an activity invocation. It pairs the
 // activity actor ID with the TaskExecutionId from the TaskScheduled event so
 // retries of the same scheduled task share a cache entry while a new workflow
@@ -34,13 +41,14 @@ import (
 // faster than the inflight cache TTL would join its previous generation's
 // completed call as a follower and never execute (the monitor pattern).
 func Key(actorID string, taskEvent *backend.HistoryEvent) string {
+	prefix := KeyPrefix(actorID)
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
 		if id := ts.GetTaskExecutionId(); id != "" {
-			return actorID + "::" + id
+			return prefix + id
 		}
 	}
 	if ts := taskEvent.GetTimestamp(); ts != nil {
-		return actorID + "::" + strconv.FormatInt(ts.GetSeconds(), 10) + "." + strconv.FormatInt(int64(ts.GetNanos()), 10)
+		return prefix + strconv.FormatInt(ts.GetSeconds(), 10) + "." + strconv.FormatInt(int64(ts.GetNanos()), 10)
 	}
-	return actorID
+	return prefix
 }

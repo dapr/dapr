@@ -109,7 +109,7 @@ func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvoke
 // InvokeReminder delivers a reminder fire. Data is sent as
 // google.protobuf.Any so the app receives the typed payload originally
 // registered on the reminder.
-func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
+func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error {
 	policyDef := t.resiliency.ActorPostLockPolicy(t.actorType, reminder.ActorID)
 	policyRunner := resiliency.NewRunner[*runtimev1pb.SubscribeActorEventsRequestReminderResponseAlpha1](ctx, policyDef)
 
@@ -125,6 +125,7 @@ func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) 
 						DueTime:   reminder.DueTime,
 						Period:    reminder.Period.String(),
 						Data:      reminder.Data,
+						Metadata:  flattenFirstValue(md),
 					},
 				},
 			}
@@ -142,7 +143,7 @@ func (t *Transport) InvokeReminder(ctx context.Context, reminder *api.Reminder) 
 
 // InvokeTimer delivers a timer fire. Shape mirrors InvokeReminder with the
 // extra callback method name carried through.
-func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
+func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder, md map[string]*internalv1pb.ListStringValue) error {
 	policyDef := t.resiliency.ActorPostLockPolicy(t.actorType, reminder.ActorID)
 	policyRunner := resiliency.NewRunner[*runtimev1pb.SubscribeActorEventsRequestReminderResponseAlpha1](ctx, policyDef)
 
@@ -159,6 +160,7 @@ func (t *Transport) InvokeTimer(ctx context.Context, reminder *api.Reminder) err
 						Period:    reminder.Period.String(),
 						Callback:  reminder.Callback,
 						Data:      reminder.Data,
+						Metadata:  flattenFirstValue(md),
 					},
 				},
 			}

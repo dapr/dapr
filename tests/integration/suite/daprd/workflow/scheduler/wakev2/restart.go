@@ -24,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -31,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -76,11 +76,16 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 		)
 	}
 
+	// gate holds the completion turn hostage on daprd1 so the kill always
+	// wins the race against the fast-path drive; it is closed only once
+	// daprd1 is dead, making the lost wake (and janitor recovery) deterministic.
+	gate := make(chan struct{})
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("WaitForGo", func(c *task.WorkflowContext) (any, error) {
 		if err := c.WaitForSingleEvent("go", time.Minute*3).Await(new([]byte)); err != nil {
 			return nil, err
 		}
+		<-gate
 		return "done", nil
 	}))
 
@@ -102,7 +107,7 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	daprd1.Run(t, ctx)
 	daprd1.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, registry1))
 
 	resp, err := daprd1.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
@@ -125,13 +130,14 @@ func (w *restart) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	daprd1.Kill(t)
+	close(gate)
 
 	daprd2 := newDaprd()
 	daprd2.Run(t, ctx)
 	t.Cleanup(func() { daprd2.Cleanup(t) })
 	daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, registry))
 
 	wctx, cancel := context.WithTimeout(ctx, time.Minute)

@@ -150,3 +150,28 @@ func mapLen(ff *factory) int {
 	})
 	return i
 }
+
+// Test_New_sharesInflightPerActorType: the engine rebuilds the factory on
+// every worker reconnect; the cached outcomes must survive that.
+func Test_New_sharesInflightPerActorType(t *testing.T) {
+	newFactory := func(actorType string) *factory {
+		fact, err := New(t.Context(), Options{
+			AppID:             "appID",
+			ActivityActorType: actorType,
+			WorkflowActorType: "workflow",
+			Scheduler: func(context.Context, *backend.ActivityWorkItem) error {
+				return nil
+			},
+			Actors: fake.New(),
+		})
+		require.NoError(t, err)
+		return fact.(*factory)
+	}
+
+	first := newFactory("shared-inflight-a")
+	second := newFactory("shared-inflight-a")
+	other := newFactory("shared-inflight-b")
+	require.NotNil(t, first.inflight)
+	assert.Same(t, first.inflight, second.inflight, "a re-registration must see the previous registration's cached outcomes")
+	assert.NotSame(t, first.inflight, other.inflight)
+}

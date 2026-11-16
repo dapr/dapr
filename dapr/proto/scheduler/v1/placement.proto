@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package dapr.proto.scheduler.v1;
+
+option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
+
+// Operation is the placement order operation of the three phase
+// lock/update/unlock dissemination protocol.
+enum Operation {
+  OPERATION_UNKNOWN = 0;
+  OPERATION_LOCK = 1;
+  OPERATION_UPDATE = 2;
+  OPERATION_UNLOCK = 3;
+}
+
+// HashAlgorithm is the hashing algorithm used to compute actor placement from
+// a placement table. The scheduler placement leader dictates the algorithm so
+// that all sidecars and scheduler replicas resolve actor ownership
+// identically.
+enum HashAlgorithm {
+  HASH_ALGORITHM_UNKNOWN = 0;
+
+  // HASH_ALGORITHM_RENDEZVOUS is rendezvous (highest random weight) hashing
+  // using 64 bit xxhash over "<host address>||<actor id>". The host with the
+  // highest hash owns the actor id.
+  HASH_ALGORITHM_RENDEZVOUS = 1;
+}
+
+// ReportActorTypesRequest is the client side message of the ReportActorTypes
+// stream. The first message must be a report. Further reports on the same
+// stream update the hosted actor types. Acks answer placement orders.
+message ReportActorTypesRequest {
+  oneof msg {
+    ActorHost report = 1;
+    PlacementOrderAck ack = 2;
+  }
+}
+
+// ActorHost is the presence and hosted actor types report of a daprd sidecar.
+message ActorHost {
+  // address is the daprd internal gRPC host:port on which other daprds reach
+  // this host for actor invocation. The same string is sent as
+  // WatchJobsRequestInitial.actor_address.
+  string address = 1;
+
+  // app_id is the App ID of the sidecar.
+  string app_id = 2;
+
+  // namespace is the namespace of the sidecar, validated against its SPIFFE
+  // identity.
+  string namespace = 3;
+
+  // actor_types are the actor types hosted by the sidecar. May be empty for a
+  // sidecar which performs actor lookups without hosting any types.
+  repeated string actor_types = 4;
+}
+
+// PlacementOrderAck acknowledges a placement order phase for the round
+// identified by seq.
+message PlacementOrderAck {
+  Operation operation = 1;
+
+  // seq echoes PlacementOrder.seq of the round being acked.
+  uint64 seq = 2;
+}
+
+// PlacementOrder is a single phase of a placement dissemination round sent by
+// the scheduler placement leader to a sidecar.
+message PlacementOrder {
+  Operation operation = 1;
+
+  // namespace is the namespace this order applies to.
+  string namespace = 2;
+
+  // seq identifies the dissemination round; acks echo it. Rounds over
+  // disjoint actor type sets may be in flight concurrently on one stream.
+  uint64 seq = 3;
+
+  // actor_types is the scope of a LOCK or UNLOCK. Empty means all actor
+  // types, used for the full snapshot sent to a newly connected stream.
+  repeated string actor_types = 4;
+
+  // versions are the per actor type table versions, set on UPDATE only.
+  // Versions are monotonic within a single stream session and reset when a
+  // new placement leader is elected.
+  map<string, uint64> versions = 5;
+
+  // tables are the placement tables, set on UPDATE only. Partial: contains
+  // only the actor types whose table changed in this round, or all types for
+  // the full snapshot. An entry with no hosts removes the actor type.
+  PlacementTables tables = 6;
+}
+
+// PlacementTables holds per actor type placement tables.
+message PlacementTables {
+  // entries maps actor type to its placement table.
+  map<string, PlacementTable> entries = 1;
+
+  // hash_algorithm is the algorithm with which actor ownership is computed
+  // from the tables. Receivers must reject tables with an algorithm they do
+  // not implement.
+  HashAlgorithm hash_algorithm = 2;
+}
+
+// PlacementTable is the placement table of a single actor type.
+message PlacementTable {
+  // hosts maps host address to host, for every host which reports hosting
+  // this actor type.
+  map<string, PlacementHost> hosts = 1;
+}
+
+// PlacementHost is a single actor host entry in a placement table.
+message PlacementHost {
+  // address is the daprd internal gRPC host:port.
+  string address = 1;
+
+  // app_id is the App ID of the host.
+  string app_id = 2;
+}

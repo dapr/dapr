@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -71,29 +70,10 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 	return nil
 }
 
-// GetHTTPEndpoint returns a specified http endpoint object.
-func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
-		return nil, err
-	}
-
-	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
-	var endpointConfig httpendpointsapi.HTTPEndpoint
-	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
-		return nil, fmt.Errorf("error getting http endpoint: %w", err)
-	}
-	b, err := json.Marshal(&endpointConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling http endpoint: %w", err)
-	}
-	return &operatorv1pb.GetHTTPEndpointResponse{
-		HttpEndpoint: b,
-	}, nil
-}
-
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -108,7 +88,12 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
 
+	appID := id.AppID()
 	for i, item := range endpoints.Items {
+		if !item.IsAppScoped(appID) {
+			continue
+		}
+
 		e := endpoints.Items[i]
 		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
 		if err != nil {

@@ -22,9 +22,9 @@ import (
 
 // IsInternalActorType reports whether actorType is a Dapr-reserved internal
 // actor type (workflow, activity, executor, retentioner, ...). User-facing
-// actor APIs (state, reminder, timer) must reject these because the workflow
-// runtime owns their lifecycle. Direct access from a user would corrupt state
-// or bypass per-operation policy enforcement.
+// actor APIs (invoke, state, reminder, timer) must reject these because the
+// workflow runtime owns their lifecycle. Direct access from a user would
+// corrupt state or bypass per-operation policy enforcement.
 func IsInternalActorType(actorType string) bool {
 	return strings.HasPrefix(actorType, actorTypePrefix)
 }
@@ -36,13 +36,15 @@ func IsInternalActorType(actorType string) bool {
 // by setting the caller-app-id / caller-namespace headers in their request.
 // Trusted code paths (the CallActor gRPC handler stamping SPIFFE identity,
 // the router stamping the local sidecar's identity) re-set these headers
-// after stripping.
+// after stripping. The match is case-insensitive because HTTP-origin metadata
+// retains the request's original header casing.
 func StripUntrustedCallerIdentity(md map[string]*internalv1pb.ListStringValue) {
-	if md == nil {
-		return
+	for k := range md {
+		switch strings.ToLower(k) {
+		case invokev1.CallerIDHeader, invokev1.CallerNamespaceHeader:
+			delete(md, k)
+		}
 	}
-	delete(md, invokev1.CallerIDHeader)
-	delete(md, invokev1.CallerNamespaceHeader)
 }
 
 // Callers MUST authenticate the identity before stamping (mTLS/SPIFFE for

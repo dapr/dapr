@@ -51,7 +51,7 @@ func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enabl
 	if allowHTTP2 {
 		// Create a server capable of supporting HTTP2 Cleartext connections
 		// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-		h2s := &http2.Server{}
+		h2s := &http2.Server{} //nolint:staticcheck
 		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,

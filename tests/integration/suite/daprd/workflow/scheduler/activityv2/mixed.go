@@ -24,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -31,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -108,7 +108,7 @@ func (a *mixed) Run(t *testing.T, ctx context.Context) {
 	daprd1.Run(t, ctx)
 	daprd1.WaitUntilRunning(t, ctx)
 
-	client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client1.StartWorkItemListener(ctx, registry1))
 
 	resp, err := daprd1.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
@@ -143,7 +143,7 @@ func (a *mixed) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { daprd2.Cleanup(t) })
 	daprd2.WaitUntilRunning(t, ctx)
 
-	client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client2.StartWorkItemListener(ctx, registry2))
 
 	wctx, cancel := context.WithTimeout(ctx, time.Minute)

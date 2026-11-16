@@ -19,6 +19,7 @@ import (
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 )
 
@@ -48,14 +49,14 @@ func (s *Signing) Tombstone(ctx context.Context, actorState state.Interface, opt
 func (s *Signing) failSignatureVerification(ctx context.Context) {
 	log.Warnf("Workflow actor '%s': signature verification failed, deleting reminders to stop retries", s.ActorID)
 
-	if err := s.Reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+	if err := common.DeleteRemindersWithRetry(ctx, s.Reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 		ActorType: s.ActorType,
 		ActorID:   s.ActorID,
 	}); err != nil {
 		log.Errorf("Workflow actor '%s': failed to delete workflow reminders: %s", s.ActorID, err)
 	}
 
-	if err := s.Reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+	if err := common.DeleteRemindersWithRetry(ctx, s.Reminders, &actorsapi.DeleteRemindersByActorIDRequest{
 		ActorType:       s.ActivityActorType,
 		ActorID:         s.ActorID + "::",
 		MatchIDAsPrefix: true,

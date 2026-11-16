@@ -16,12 +16,17 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 )
 
 // CountClaimRecords counts execution-claim rows in the actor state store
@@ -30,10 +35,15 @@ import (
 func CountClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite) int {
 	t.Helper()
 	var count int
-	require.NoError(t, db.GetConnection(t).QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM "+db.TableName()+" WHERE key LIKE ?",
-		"%||execution-claim",
-	).Scan(&count))
+	// The query shares the store with running daprds; a write transaction
+	// can hold the file lock past the connection's busy timeout under load,
+	// so transient SQLITE_BUSY reads retry rather than fail the test.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, db.GetConnection(t).QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM "+db.TableName()+" WHERE key LIKE ?",
+			"%||execution-claim",
+		).Scan(&count))
+	}, time.Second*20, time.Millisecond*100)
 	return count
 }
 
@@ -45,10 +55,17 @@ func CountClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite) int
 // bound the retries; running out of them fails the test.
 func EnsureClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite, extends []func()) {
 	t.Helper()
+	EnsureClaimRecordsBy(t, ctx, func() int { return CountClaimRecords(t, ctx, db) }, extends)
+}
+
+// EnsureClaimRecordsBy is EnsureClaimRecords for any store, given a count of
+// its execution-claim records.
+func EnsureClaimRecordsBy(t *testing.T, ctx context.Context, count func() int, extends []func()) {
+	t.Helper()
 	for {
 		deadline := time.Now().Add(time.Second * 10)
 		for time.Now().Before(deadline) {
-			if CountClaimRecords(t, ctx, db) >= 1 {
+			if count() >= 1 {
 				return
 			}
 			select {
@@ -61,6 +78,33 @@ func EnsureClaimRecords(t *testing.T, ctx context.Context, db *sqlite.SQLite, ex
 			"no execution-claim record appeared after every churn round: placement churn over in-flight activities must write records")
 		extends[0]()
 		extends = extends[1:]
+	}
+}
+
+// TrackClaimRecords counts the execution-claim records written through a
+// fault store, the way CountClaimRecords does for sqlite. It takes over the
+// store's Multi observer.
+func TrackClaimRecords(store *fault.Store) func() int {
+	var lock sync.Mutex
+	live := make(map[string]struct{})
+	store.SetMultiObserver(func(req *state.TransactionalStateRequest) {
+		lock.Lock()
+		defer lock.Unlock()
+		for _, op := range req.Operations {
+			switch v := op.(type) {
+			case state.SetRequest:
+				if strings.HasSuffix(v.Key, "||execution-claim") {
+					live[v.Key] = struct{}{}
+				}
+			case state.DeleteRequest:
+				delete(live, v.Key)
+			}
+		}
+	})
+	return func() int {
+		lock.Lock()
+		defer lock.Unlock()
+		return len(live)
 	}
 }
 

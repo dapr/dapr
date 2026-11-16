@@ -42,7 +42,7 @@ const (
 	timerName                             = "myTimer"                            // Timer name.
 	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
-	secondsToCheckGetMetadata             = 40                                   // How much time to wait to check metadata.
+	singleFireQuietWindow                 = 5 * time.Second                      // Quiet hold after a single-fire reminder so an erroneous second fire is caught.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.
@@ -54,7 +54,6 @@ const (
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
 	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
 	shutdownURLFormat                     = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
-	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
 )
 
 // represents a response for the APIs in this app.
@@ -307,7 +306,15 @@ func TestActorFeatures(t *testing.T) {
 		}
 		require.NoError(t, err, "failed to set reminder")
 
-		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
+		// The assertion is a lower bound, so poll the logs until the reminder
+		// has fired enough times instead of waiting a fixed window
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			logs, errl := httpGet(logsURL)
+			if !assert.NoError(c, errl, "failed to get logs") {
+				return
+			}
+			assert.GreaterOrEqual(c, countActorAction(logs, actorID, reminderName), minimumCallsForTimerAndReminderResult)
+		}, (secondsToCheckTimerAndReminderResult+10)*time.Second, time.Second, "reminder did not fire enough times")
 
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
@@ -315,15 +322,6 @@ func TestActorFeatures(t *testing.T) {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
-
-		res, err = httpGet(logsURL)
-		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
-		}
-		require.NoError(t, err, "failed to get logs")
-		count := countActorAction(res, actorID, reminderName)
-		require.True(t, count >= 1, "condition failed: %d not >= 1. Response='%s'", count, string(res))
-		require.True(t, count >= minimumCallsForTimerAndReminderResult, "condition failed: %d not >= %d. Response='%s'", count, minimumCallsForTimerAndReminderResult, string(res))
 	})
 
 	t.Run("Actor single fire reminder.", func(t *testing.T) {
@@ -349,7 +347,16 @@ func TestActorFeatures(t *testing.T) {
 		}
 		require.NoError(t, err, "failed to set reminder")
 
-		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
+		// Wait for the single fire, then hold a short window so an erroneous
+		// second fire would be caught by the exact-count assertion below
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			logs, errl := httpGet(logsURL)
+			if !assert.NoError(c, errl, "failed to get logs") {
+				return
+			}
+			assert.GreaterOrEqual(c, countActorAction(logs, actorID, reminderName), 1)
+		}, secondsToCheckTimerAndReminderResult*time.Second, time.Second, "reminder did not fire")
+		time.Sleep(singleFireQuietWindow)
 
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
@@ -524,21 +531,15 @@ func TestActorFeatures(t *testing.T) {
 
 		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
-		err = backoff.Retry(func() error {
-			time.Sleep(30 * time.Second)
+		// The app's log is reset by the restart, so this converges once the
+		// reminder has resumed and fired enough times on the new pod
+		require.Eventually(t, func() bool {
 			resp, errb := httpGet(logsURL)
 			if errb != nil {
-				return errb
+				return false
 			}
-
-			count := countActorAction(resp, actorID, reminderName)
-			if count < minimumCallsForTimerAndReminderResult {
-				return fmt.Errorf("Not enough reminder calls: %d vs %d", count, minimumCallsForTimerAndReminderResult)
-			}
-
-			return nil
-		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
-		require.NoError(t, err)
+			return countActorAction(resp, actorID, reminderName) >= minimumCallsForTimerAndReminderResult
+		}, 300*time.Second, 2*time.Second, "not enough reminder calls after app restart")
 
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
@@ -574,15 +575,17 @@ func TestActorFeatures(t *testing.T) {
 		}
 		require.NoError(t, err, "failed to set reminder")
 
-		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
-
-		// get reminder
-		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
-		if err != nil {
-			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
-		}
-		require.NoError(t, err, "failed to get reminder")
-		require.Empty(t, res, "Reminder %s exist", reminderName)
+		// The app deletes its own reminder when it first fires; poll until the
+		// reminder is gone, then hold briefly so an erroneous extra fire would
+		// be caught by the count assertion below
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			reminder, errg := httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+			if !assert.NoError(c, errg, "failed to get reminder") {
+				return
+			}
+			assert.Empty(c, reminder, "Reminder %s exist", reminderName)
+		}, secondsToCheckTimerAndReminderResult*time.Second, time.Second, "reminder was not deleted by the actor")
+		time.Sleep(2 * time.Second)
 
 		res, err = httpGet(logsURL)
 		if err != nil {
@@ -623,19 +626,19 @@ func TestActorFeatures(t *testing.T) {
 		}
 		require.NoError(t, err, "failed to set timer")
 
-		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
+		// The assertion is a lower bound, so poll the logs until the timer has
+		// fired enough times instead of waiting a fixed window
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			logs, errl := httpGet(logsURL)
+			if !assert.NoError(c, errl, "failed to get logs") {
+				return
+			}
+			assert.GreaterOrEqual(c, countActorAction(logs, actorID, timerName), minimumCallsForTimerAndReminderResult)
+		}, (secondsToCheckTimerAndReminderResult+10)*time.Second, time.Second, "timer did not fire enough times")
 
 		// Reset timer
 		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
 		require.NoError(t, err)
-
-		res, err = httpGet(logsURL)
-		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
-		}
-		require.NoError(t, err, "failed to get logs")
-		require.True(t, countActorAction(res, actorID, timerName) >= 1)
-		require.True(t, countActorAction(res, actorID, timerName) >= minimumCallsForTimerAndReminderResult)
 	})
 
 	t.Run("Actor reset timer.", func(t *testing.T) {
@@ -801,20 +804,14 @@ func TestActorFeatures(t *testing.T) {
 
 		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
+		// Poll until the actors are redistributed and the actor activates on
+		// the replacement pod
 		newHostname := []byte{}
-		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {
-			// wait until actors are redistributed.
-			time.Sleep(30 * time.Second)
-
-			newHostname, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
-			if i == actorInvokeRetriesAfterRestart {
-				require.NoError(t, err, "error getting hostname")
-			}
-
-			if err == nil {
-				break
-			}
-		}
+		require.Eventually(t, func() bool {
+			var errh error
+			newHostname, errh = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+			return errh == nil
+		}, 330*time.Second, 2*time.Second, "error getting hostname after restart")
 
 		require.NotEqual(t, string(firstHostname), string(newHostname))
 		close(quit)
@@ -836,25 +833,31 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
 
-		// wait until actors are redistributed.
-		time.Sleep(30 * time.Second)
-
-		anyActorMoved := false
-		for index := 0; index < actorsToCheckRebalance; index++ {
-			hostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
-			require.NoError(t, err, "error getting hostname for actor %d", index)
-
-			if hostnameForActor[index] != string(hostname) {
-				anyActorMoved = true
+		// Poll until the actors are redistributed and at least one reports a
+		// different hostname
+		require.Eventually(t, func() bool {
+			for index := 0; index < actorsToCheckRebalance; index++ {
+				hostname, errh := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+				if errh != nil {
+					return false
+				}
+				if hostnameForActor[index] != string(hostname) {
+					return true
+				}
 			}
-		}
-
-		require.True(t, anyActorMoved, "no actor moved")
+			return false
+		}, 120*time.Second, 2*time.Second, "no actor moved")
 	})
 
 	t.Run("Get actor metadata", func(t *testing.T) {
 		tr.Platform.Scale(appName, appScaleToCheckMetadata)
-		time.Sleep(secondsToCheckGetMetadata * time.Second)
+		// Wait for the scale-down to complete, then a short settle for the
+		// placement table dissemination
+		require.Eventually(t, func() bool {
+			endpoints, errp := tr.Platform.GetAppPodEndpoints(appName)
+			return errp == nil && len(endpoints) == appScaleToCheckMetadata
+		}, 90*time.Second, 2*time.Second, "app did not scale down")
+		time.Sleep(10 * time.Second)
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))

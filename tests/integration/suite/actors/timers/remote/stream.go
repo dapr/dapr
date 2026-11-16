@@ -15,6 +15,7 @@ package remote
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -115,32 +116,75 @@ func (s *stream) Run(t *testing.T, ctx context.Context) {
 		return err
 	}
 
-	// Both hosts have registered with placement, but wait until the table has
-	// settled so ownership answers are stable.
+	// HostReady does not wait for the app to register its actor types, so wait
+	// until placement lists both hosts for abc: probing ownership under a
+	// one-host table picks IDs that move when the second host joins.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := s.place.PlacementTables(t, ctx).Tables["default"]
+		if !assert.NotNil(c, table) {
+			return
+		}
+		var hosts int
+		for _, host := range table.Hosts {
+			if slices.Contains(host.Entities, "abc") {
+				hosts++
+			}
+		}
+		assert.Equal(c, 2, hosts)
+	}, time.Second*10, time.Millisecond*100)
+
+	// Placement lists both hosts before the daprds apply the new table; wait
+	// until exactly one host answers for an ID.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		err1 := register(client1, "probe")
 		err2 := register(client2, "probe")
 		assert.NotEqual(c, err1 == nil, err2 == nil)
 	}, time.Second*10, time.Millisecond*10)
 
-	owner1, owner2 := "", ""
-	for i := 0; owner1 == "" || owner2 == ""; i++ {
-		require.Less(t, i, 100, "actor IDs never hashed to both hosts")
-		id := strconv.Itoa(i)
-		err1 := register(client1, id)
-		err2 := register(client2, id)
-		require.False(t, err1 == nil && err2 == nil, "both hosts accepted the same timer registration")
-		require.False(t, err1 != nil && err2 != nil, "both hosts rejected the timer registration")
-		if err1 == nil {
-			require.Equal(t, grpccodes.PermissionDenied, status.Code(err2))
-			if owner1 == "" {
-				owner1 = id
+	// ownerOf reports whether the first host owns the actor ID. Exactly one
+	// host may accept the registration and the other must answer
+	// PermissionDenied. A dissemination landing between the two calls aborts
+	// the ownership lookup rather than answering it, which the API reports as
+	// Internal, so retry until both hosts answer definitively.
+	ownerOf := func(id string) bool {
+		t.Helper()
+		var err1, err2 error
+		for range 100 {
+			err1, err2 = register(client1, id), register(client2, id)
+			require.False(t, err1 == nil && err2 == nil, "both hosts accepted the same timer registration")
+			if err1 == nil && status.Code(err2) == grpccodes.PermissionDenied {
+				return true
 			}
-		} else {
-			require.Equal(t, grpccodes.PermissionDenied, status.Code(err1))
-			if owner2 == "" {
+			if err2 == nil && status.Code(err1) == grpccodes.PermissionDenied {
+				return false
+			}
+			time.Sleep(time.Millisecond * 10)
+		}
+		require.Failf(t, "hosts never gave a definitive ownership answer",
+			"host1=%v host2=%v", err1, err2)
+		return false
+	}
+
+	// Finding an ID the second host owns shows both hosts route with the
+	// two-host table, but an ID found before it may have been decided under
+	// the one-host table. Search again until both answers still hold.
+	var owner1, owner2 string
+	for attempt := 0; ; attempt++ {
+		require.Less(t, attempt, 5, "actor ownership never settled")
+		owner1, owner2 = "", ""
+		for i := 0; owner1 == "" || owner2 == ""; i++ {
+			require.Less(t, i, 100, "actor IDs never hashed to both hosts")
+			id := strconv.Itoa(i)
+			if ownerOf(id) {
+				if owner1 == "" {
+					owner1 = id
+				}
+			} else if owner2 == "" {
 				owner2 = id
 			}
+		}
+		if ownerOf(owner1) && !ownerOf(owner2) {
+			break
 		}
 	}
 

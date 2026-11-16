@@ -19,6 +19,7 @@ import (
 	"k8s.io/utils/clock"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -28,6 +29,7 @@ import (
 type subscriptions struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
+	auth  *authorizer.Authorizer
 	loader.Loader[subapi.Subscription]
 }
 
@@ -41,6 +43,7 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
+			auth:   opts.Authorizer,
 		},
 	}
 	r.loop = loopFactory.NewLoop(r)
@@ -73,6 +76,11 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) err
 			log.Errorf("Failed to close existing Subscription: %s", err)
 			return nil
 		}
+	}
+
+	if !s.auth.IsObjectAuthorized(sub) {
+		log.Debugf("Subscription not scoped to this app, ignored: %s", sub.Name)
+		return nil
 	}
 
 	log.Infof("Adding Subscription for processing: %s", sub.Name)

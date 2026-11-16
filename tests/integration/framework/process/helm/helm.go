@@ -67,14 +67,21 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	stdout := tee.Buffer(t, stdoutPipeR)
 	stderr := tee.Buffer(t, stderrPipeR)
 
+	exitCode := 0
+	if opts.expectFailure {
+		exitCode = 1
+	}
 	execOpts := []exec.Option{
 		// Since helmtemplate self exists, expect it to always run without error,
 		// even on windows.
 		exec.WithRunError(func(t *testing.T, err error) {
 			t.Helper()
+			if opts.expectFailure {
+				return
+			}
 			require.NoError(t, err, "expected helmtemplate to run without error")
 		}),
-		exec.WithExitCode(0),
+		exec.WithExitCode(exitCode),
 		exec.WithStdout(stdoutPipeW),
 		exec.WithStderr(stderrPipeW),
 	}

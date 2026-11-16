@@ -25,11 +25,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -99,9 +99,9 @@ func (o *orphan) Run(t *testing.T, ctx context.Context) {
 		return "done", nil
 	}))
 
-	clientA := client.NewTaskHubGrpcClient(daprdA.GRPCConn(t, ctx), backend.DefaultLogger())
+	clientA := client.NewTaskHubGrpcClient(daprdA.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, clientA.StartWorkItemListener(ctx, regA))
-	clientB := client.NewTaskHubGrpcClient(daprdB.GRPCConn(t, ctx), backend.DefaultLogger())
+	clientB := client.NewTaskHubGrpcClient(daprdB.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, clientB.StartWorkItemListener(ctx, regB))
 
 	_, err := daprdA.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
@@ -140,7 +140,7 @@ func (o *orphan) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { daprdA2.Cleanup(t) })
 	daprdA2.WaitUntilRunning(t, ctx)
 
-	clientA2 := client.NewTaskHubGrpcClient(daprdA2.GRPCConn(t, ctx), backend.DefaultLogger())
+	clientA2 := client.NewTaskHubGrpcClient(daprdA2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, clientA2.StartWorkItemListener(ctx, regA))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

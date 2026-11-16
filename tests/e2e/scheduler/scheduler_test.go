@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"sync"
@@ -40,14 +41,18 @@ const (
 	appPortGRPC               = 3001
 	appNameGRPC               = "schedulerapp-grpc"
 	appName                   = "schedulerapp"
-	numHealthChecks           = 10                                     // Number of get calls before starting tests.
-	numIterations             = 4                                      // Number of times each test should run.
-	jobName                   = "testjob"                              // Job name.
-	scheduleJobURLFormat      = "%s/scheduleJob/" + jobName + "-%s-%s" // App Schedule Job URL.
-	getJobURLFormat           = "%s/getJob/" + jobName + "-%s-%s"      // App Schedule Job URL.
-	deleteJobURLFormat        = "%s/deleteJob/" + jobName + "-%s-%s"   // App Schedule Job URL.
-	getTriggeredJobsURLFormat = "%s/getTriggeredJobs"                  // App Get the Triggered Jobs URL.
-	numJobsPerGoRoutine       = 10                                     // Number of get calls before starting tests.
+	numHealthChecks           = 10                        // Number of get calls before starting tests.
+	numIterations             = 4                         // Number of times each test should run.
+	jobName                   = "testjob"                 // Job name.
+	scheduleJobURLFormat      = "%s/scheduleJob/%s-%s-%s" // App Schedule Job URL.
+	getJobURLFormat           = "%s/getJob/%s-%s-%s"      // App Get Job URL.
+	deleteJobURLFormat        = "%s/deleteJob/%s-%s-%s"   // App Delete Job URL.
+	getTriggeredJobsURLFormat = "%s/getTriggeredJobs"     // App Get the Triggered Jobs URL.
+	numJobsPerGoRoutine       = 10                        // Number of get calls before starting tests.
+
+	// The Scheduler deletes a one-shot job a moment after it triggers, so
+	// the get/delete jobs use names the triggered jobs never had.
+	getJobName = "getjob"
 )
 
 type triggeredJob struct {
@@ -152,8 +157,9 @@ func TestJobs(t *testing.T) {
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
 					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
+					_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf(scheduleJobURLFormat, externalURL, jobName, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
+					assert.Equal(t, http.StatusNoContent, code)
 				}
 			}(iteration)
 		}
@@ -206,9 +212,10 @@ func TestJobs(t *testing.T) {
 
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
-					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
+					log.Printf("Scheduling job: getjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
+					_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf(scheduleJobURLFormat, externalURL, getJobName, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
+					assert.Equal(t, http.StatusNoContent, code)
 				}
 			}(iteration)
 		}
@@ -224,16 +231,19 @@ func TestJobs(t *testing.T) {
 
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to get job, send request to app which makes the dapr call
-					log.Printf("Getting job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					resp, err := utils.HTTPGet(fmt.Sprintf(getJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)))
+					log.Printf("Getting job: getjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
+					resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf(getJobURLFormat, externalURL, getJobName, strconv.Itoa(iteration), strconv.Itoa(i)))
 					require.NoError(t, err)
+					if !assert.Equal(t, http.StatusOK, code) {
+						continue
+					}
 					assert.NotNil(t, resp)
 
 					var rJob receivedJob
 					err = json.Unmarshal(resp, &rJob)
 					require.NoError(t, err)
 
-					assert.Equal(t, jobName+"-"+strconv.Itoa(iteration)+"-"+strconv.Itoa(i), rJob.Name)
+					assert.Equal(t, getJobName+"-"+strconv.Itoa(iteration)+"-"+strconv.Itoa(i), rJob.Name)
 					assert.Equal(t, scheduledJob.Schedule, rJob.Schedule)
 					assert.Equal(t, scheduledJob.Repeats, rJob.Repeats)
 					assert.Equal(t, scheduledJob.DueTime, rJob.DueTime)
@@ -252,9 +262,10 @@ func TestJobs(t *testing.T) {
 				// Call app to delete job, send request to app which makes the dapr call
 				t.Logf("(Delete job) Running iteration %d out of %d ...", iteration, numIterations)
 				for i := 0; i < numJobsPerGoRoutine; i++ {
-					log.Printf("Deleting job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err := utils.HTTPDelete(fmt.Sprintf(deleteJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)))
+					log.Printf("Deleting job: getjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
+					_, code, err := utils.HTTPDeleteWithStatus(fmt.Sprintf(deleteJobURLFormat, externalURL, getJobName, strconv.Itoa(iteration), strconv.Itoa(i)))
 					require.NoError(t, err)
+					assert.Equal(t, http.StatusNoContent, code)
 				}
 			}(iteration)
 		}

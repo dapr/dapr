@@ -79,15 +79,22 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	}
 
+	method := msg.GetMessage().GetMethod()
+
 	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, -1)
 
 	select {
 	case l.lock <- struct{}{}:
 	case <-l.closeCh:
-		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
+		return nil, nil, errors.NewClosed(method)
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
+	}
+
+	if l.isClosed() {
+		<-l.lock
+		return nil, nil, errors.NewClosed(method)
 	}
 
 	flight, err := l.handleLock(ctx, msg)
@@ -103,10 +110,19 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		defer func() { <-l.lock }()
 
 		flight.depth--
-		if flight.depth == 0 {
-			if v := l.inflights.RemoveFront(); v != nil {
-				close(v.startCh)
-			}
+		if flight.depth > 0 || l.inflights.Front() != flight {
+			// Only the running (front) flight may pop the ring. A flight cancelled
+			// while queued stays in place with depth 0 until the running flight
+			// releases and skips it below.
+			return
+		}
+
+		v := l.inflights.RemoveFront()
+		for v != nil && v.depth == 0 {
+			v = l.inflights.RemoveFront()
+		}
+		if v != nil {
+			close(v.startCh)
 		}
 	}
 
@@ -116,19 +132,35 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	case <-l.closeCh:
 		release()
-		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
+		return nil, nil, errors.NewClosed(method)
 	case <-flight.startCh:
-		cctx, cancel := context.WithCancelCause(ctx)
+		l.lock <- struct{}{}
+		if l.isClosed() {
+			<-l.lock
+			release()
+			return nil, nil, errors.NewClosed(method)
+		}
 
+		cctx, cancel := context.WithCancelCause(ctx)
 		l.wg.Go(func() {
 			select {
 			case <-doneCh:
 			case <-l.closeCh:
 			}
-			cancel(errors.NewClosed(msg.GetMessage().GetMethod()))
+			cancel(errors.NewClosed(method))
 		})
+		<-l.lock
 
 		return cctx, release, nil
+	}
+}
+
+func (l *Lock) isClosed() bool {
+	select {
+	case <-l.closeCh:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -172,10 +204,11 @@ func (l *Lock) handleLock(ctx context.Context, msg *internalv1pb.InternalInvokeR
 		}
 
 		flight = v
-		v.depth++
-		if v.depth > l.maxStackDepth {
+		if v.depth+1 > l.maxStackDepth {
 			err = messages.ErrActorMaxStackDepthExceeded
+			return false
 		}
+		v.depth++
 
 		return false
 	})

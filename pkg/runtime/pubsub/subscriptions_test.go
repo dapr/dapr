@@ -8,13 +8,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -420,4 +425,37 @@ func TestGetRuleMatchString(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, v.Match, rule.Match.String())
 	}
+}
+
+func TestGRPCEnvelopeFromSubscriptionMessageRestoresTraceStateAndBaggage(t *testing.T) {
+	traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("0011223344556677")
+	require.NoError(t, err)
+	traceState, err := trace.ParseTraceState("vendor=value")
+	require.NoError(t, err)
+
+	cloudEvent := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", "topic",
+		"pubsub", "", []byte("message"), "00-00112233445566778899aabbccddeeff-0011223344556677-01", traceState.String())
+	cloudEvent[diagConsts.BaggageHeader] = "key=value"
+
+	msg := &SubscribedMessage{
+		CloudEvent: cloudEvent,
+		Topic:      "topic",
+		Path:       "topic",
+	}
+
+	ctx, _, span, err := GRPCEnvelopeFromSubscriptionMessage(t.Context(), msg, log, &config.TracingSpec{SamplingRate: "1"})
+	require.NoError(t, err)
+	require.NotNil(t, span)
+
+	spanContext := span.SpanContext()
+	assert.Equal(t, traceID, spanContext.TraceID())
+	assert.Equal(t, spanID, spanContext.SpanID())
+	assert.Equal(t, traceState.String(), spanContext.TraceState().String())
+
+	md, ok := grpcMetadata.FromOutgoingContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, []string{traceState.String()}, md.Get(diagConsts.TracestateHeader))
+	assert.Equal(t, []string{"key=value"}, md.Get(diagConsts.BaggageHeader))
 }

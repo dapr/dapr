@@ -561,6 +561,23 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 	}
 
+	t.Run("metrics disabled is passed to daprd", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyAppID:         "app_id",
+					annotations.KeyEnableMetrics: "false",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
+		require.NoError(t, err)
+		assert.Contains(t, container.Args, "--enable-metrics=false")
+		assert.NotContains(t, container.Args, "--metrics-port")
+	})
+
 	t.Run("get sidecar container", func(t *testing.T) {
 		c := NewSidecarConfig(&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -606,7 +623,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
-			"--enable-metrics",
+			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--config", "config",
 			"--placement-host-address", "placement:50000",
@@ -669,7 +686,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
-			"--enable-metrics",
+			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--config", "config",
 			"--placement-host-address", "placement:50000",
@@ -741,7 +758,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
-			"--enable-metrics",
+			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--config", "config",
 			"--placement-host-address", "placement:50000",
@@ -897,6 +914,27 @@ func TestGetSidecarContainer(t *testing.T) {
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
 				assert.Contains(t, args, "--actors-disseminate-timeout 45s")
+			},
+		},
+	}))
+
+	t.Run("actors placement startup timeout", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--actors-placement-startup-timeout")
+			},
+		},
+		{
+			name: "add an actors placement startup timeout",
+			annotations: map[string]string{
+				annotations.KeyActorsPlacementStartupTimeout: "45s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--actors-placement-startup-timeout 45s")
 			},
 		},
 	}))
@@ -1671,6 +1709,28 @@ func TestGetSidecarContainer(t *testing.T) {
 				require.NotNil(t, container.RestartPolicy)
 				args := strings.Join(container.Args, " ")
 				assert.Contains(t, args, "--dapr-block-shutdown-duration 5s")
+			},
+		},
+	}))
+
+	t.Run("workload key algorithm", testSuiteGenerator([]testCase{
+		{
+			name:        "omitted when not set",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				for _, env := range container.Env {
+					assert.NotEqual(t, "DAPR_WORKLOAD_KEY_ALGORITHM", env.Name)
+				}
+			},
+		},
+		{
+			name: "set as an env var, not a flag",
+			annotations: map[string]string{
+				annotations.KeyWorkloadKeyAlgorithm: "ecdsa",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Env, corev1.EnvVar{Name: "DAPR_WORKLOAD_KEY_ALGORITHM", Value: "ecdsa"})
+				assert.NotContains(t, strings.Join(container.Args, " "), "workload-key-algorithm")
 			},
 		},
 	}))

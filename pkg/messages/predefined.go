@@ -107,6 +107,10 @@ var (
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", errorcodes.ActorTimerCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", errorcodes.ActorTimerDelete, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerOpActorNotOwned     = APIError{"operations on actor timers are only possible on the host that owns the actor", errorcodes.ActorTimerNotOwned, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTimerList                = APIError{"error listing actor timers: %s", errorcodes.ActorTimerList, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerOpActorNotHosted    = APIError{"operations on actor timers are only possible on hosted actor types", errorcodes.ActorTimerNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorTimerGet                 = APIError{"error getting actor timer: %s", errorcodes.ActorTimerGet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerNotFound            = APIError{"actor timer not found: %s", errorcodes.ActorTimerNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
@@ -145,4 +149,15 @@ var (
 	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params: %s", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+
+	// Binary Store
+	ErrBinaryStoreNotFound     = APIError{"failed finding binary store component %s", errorcodes.BinaryStoreNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBinaryStoreNameMissing  = APIError{"file name is required", errorcodes.BinaryStoreNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBinaryStoreSet          = APIError{"failed storing binary file %q in component %s: %s", errorcodes.BinaryStoreSet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreGet          = APIError{"failed retrieving binary file %q from component %s: %s", errorcodes.BinaryStoreGet, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreDelete       = APIError{"failed deleting binary file %q from component %s: %s", errorcodes.BinaryStoreDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrBinaryStoreFileNotFound = APIError{"binary file %q not found in component %s", errorcodes.BinaryStoreFileNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrBinaryStoreFileExists   = APIError{"binary file %q already exists in component %s", errorcodes.BinaryStoreFileExists, http.StatusConflict, grpcCodes.AlreadyExists}
+	ErrBinaryStoreTooLarge     = APIError{"binary file %q exceeds the maximum size allowed by component %s", errorcodes.BinaryStoreFileTooLarge, http.StatusRequestEntityTooLarge, grpcCodes.ResourceExhausted}
+	ErrBinaryStoreFull         = APIError{"component %s cannot store binary file %q: store is full", errorcodes.BinaryStoreFull, http.StatusInsufficientStorage, grpcCodes.ResourceExhausted}
 )

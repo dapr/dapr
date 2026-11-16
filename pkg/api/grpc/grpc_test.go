@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -785,6 +786,55 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		assert.Equal(t, "invoke/service", errInfo.GetResourceName())
 		assert.Equal(t, "Dapr", errInfo.GetOwner())
 	})
+}
+
+func TestInvokeServiceContextErrorClassification(t *testing.T) {
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	fakeAPI := &api{
+		logger: logger.NewLogger("test"),
+		Universal: universal.New(universal.Options{
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.New(nil),
+		}),
+		directMessaging: mockDirectMessaging,
+	}
+	lis := startDaprAPIServer(t, fakeAPI, "")
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	req := &runtimev1pb.InvokeServiceRequest{
+		Id:      "fakeAppID",
+		Message: &commonv1pb.InvokeRequest{Method: "fakeMethod"},
+	}
+
+	// A request context that dies mid-invoke (e.g. queued on the app
+	// channel's concurrency limiter) must keep its gRPC classification,
+	// not be wrapped as Internal.
+	tests := []struct {
+		name string
+		err  error
+		code codes.Code
+	}{
+		{"deadline exceeded", fmt.Errorf("limiter acquire: %w", context.DeadlineExceeded), codes.DeadlineExceeded},
+		{"canceled", fmt.Errorf("limiter acquire: %w", context.Canceled), codes.Canceled},
+		{"remote deadline status", status.Error(codes.DeadlineExceeded, "remote hop deadline"), codes.DeadlineExceeded},
+		{"remote canceled status", status.Error(codes.Canceled, "remote hop canceled"), codes.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDirectMessaging.Calls = nil
+			mockDirectMessaging.On("Invoke",
+				mock.MatchedBy(matchContextInterface),
+				"fakeAppID",
+				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, tc.err).Once()
+
+			_, err := client.InvokeService(t.Context(), req)
+			require.Error(t, err)
+			assert.Equal(t, tc.code, status.Code(err))
+		})
+	}
 }
 
 func TestSecretStoreNotConfigured(t *testing.T) {
@@ -2546,7 +2596,31 @@ func TestPublishTopic(t *testing.T) {
 	})
 }
 
+func TestBaggageFromContext(t *testing.T) {
+	t.Run("incoming metadata", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "key1=value1,key2=value2"))
+		assert.Equal(t, "key1=value1,key2=value2", baggageFromContext(ctx))
+	})
+
+	t.Run("context takes precedence", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "metadata=value"))
+		member, err := baggage.NewMember("context", "value")
+		require.NoError(t, err)
+		bag, err := baggage.New(member)
+		require.NoError(t, err)
+		ctx = baggage.ContextWithBaggage(ctx, bag)
+		assert.Equal(t, "context=value", baggageFromContext(ctx))
+	})
+
+	t.Run("invalid metadata", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("baggage", "invalid value"))
+		assert.Empty(t, baggageFromContext(ctx))
+	})
+}
+
 func TestBulkPublish(t *testing.T) {
+	var capturedEntries []pubsub.BulkMessageEntry
+
 	fakeAPI := &api{
 		logger: logger.NewLogger("test"),
 		Universal: universal.New(universal.Options{
@@ -2576,6 +2650,8 @@ func TestBulkPublish(t *testing.T) {
 							entries = append(entries, entry)
 						}
 					}
+				case "metadata-topic":
+					capturedEntries = req.Entries
 				}
 				// Mock simulates only partial failures or total success, so error is always nil.
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
@@ -2624,6 +2700,30 @@ func TestBulkPublish(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, res.GetFailedEntries())
+	})
+
+	t.Run("request metadata reaches entry without its own metadata", func(t *testing.T) {
+		entriesWithAndWithoutMetadata := []*runtimev1pb.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte("data1")},
+			{EntryId: "2", Event: []byte("data2"), Metadata: map[string]string{"partitionKey": "a"}},
+		}
+		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+			PubsubName: "pubsub",
+			Topic:      "metadata-topic",
+			Entries:    entriesWithAndWithoutMetadata,
+			Metadata:   map[string]string{"ttlInSeconds": "300"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, res.GetFailedEntries())
+		require.Len(t, capturedEntries, 2)
+
+		// Entry "1" has no metadata of its own: request-level metadata must still reach it.
+		assert.Equal(t, "300", capturedEntries[0].Metadata["ttlInSeconds"])
+
+		// Entry "2" has its own metadata: request-level metadata is merged in without
+		// overriding the entry-level keys.
+		assert.Equal(t, "300", capturedEntries[1].Metadata["ttlInSeconds"])
+		assert.Equal(t, "a", capturedEntries[1].Metadata["partitionKey"])
 	})
 
 	t.Run("all failures from component", func(t *testing.T) {

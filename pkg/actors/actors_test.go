@@ -15,6 +15,8 @@ package actors
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,7 @@ import (
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/logger"
@@ -172,4 +175,55 @@ func TestOnActorStateStoreChanged(t *testing.T) {
 		t.Fatal("expected kicks to coalesce")
 	default:
 	}
+}
+
+func TestWaitForReady(t *testing.T) {
+	t.Parallel()
+
+	newActors := func() *actors {
+		return &actors{
+			disabled: new(atomic.Pointer[error]),
+			readyCh:  make(chan struct{}),
+			closedCh: make(chan struct{}),
+		}
+	}
+	doneCtx := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+
+	t.Run("a ready runtime wins over a done ctx", func(t *testing.T) {
+		t.Parallel()
+		a := newActors()
+		close(a.readyCh)
+		for range 1000 {
+			require.NoError(t, a.waitForReady(doneCtx()))
+		}
+	})
+
+	t.Run("a closed runtime wins over a ready runtime and a done ctx", func(t *testing.T) {
+		t.Parallel()
+		a := newActors()
+		close(a.readyCh)
+		close(a.closedCh)
+		for range 1000 {
+			require.ErrorIs(t, a.waitForReady(doneCtx()), messages.ErrActorRuntimeClosed)
+		}
+	})
+
+	t.Run("a runtime that is not ready returns on a done ctx", func(t *testing.T) {
+		t.Parallel()
+		a := newActors()
+		require.ErrorIs(t, a.waitForReady(doneCtx()), messages.ErrActorRuntimeNotFound)
+	})
+
+	t.Run("a disabled ready runtime returns its error", func(t *testing.T) {
+		t.Parallel()
+		a := newActors()
+		errDisabled := errors.New("disabled")
+		a.disabled.Store(&errDisabled)
+		close(a.readyCh)
+		require.ErrorIs(t, a.waitForReady(context.Background()), errDisabled)
+	})
 }

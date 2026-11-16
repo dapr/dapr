@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,6 +73,17 @@ func (a *subworkflow1activity1) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 16, count)
+	// Poll to the steady state: the last rows land shortly after completion.
+	expected := 16
+	if a.workflow.Signing() {
+		// Signing adds 9 rows: parent gets 1 sigcert, 2 signatures and
+		// 1 ext-sigcert; child gets 1 sigcert, 2 signatures, 1 ext-sigcert
+		// (activity completion attestation) and 1 creation-input.
+		expected = 25
+	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		if assert.NoError(c, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count)) {
+			assert.Equal(c, expected, count)
+		}
+	}, time.Second*10, time.Millisecond*10)
 }

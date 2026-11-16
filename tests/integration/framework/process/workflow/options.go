@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -42,12 +43,15 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds          int
-	skipDB          bool
-	mtls            bool
-	signing         bool
-	signingDisabled []int
-	clustered       *bool
+	daprds           int
+	skipDB           bool
+	mtls             bool
+	signingDisabled  []int
+	clustered        *bool
+	fastPath         *bool
+	stagedOperations *bool
+	stagedN          map[int]bool
+	signing          *bool
 
 	orchestrators     []orchestratorConfig
 	activities        []activityConfig
@@ -56,6 +60,9 @@ type options struct {
 	placementOptions  []placement.Option
 	schedulerInstance *scheduler.Scheduler
 	schedulerAddress  *string
+	sentryInstance    *sentry.Sentry
+
+	schedulerPlacement *bool
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
@@ -131,7 +138,8 @@ func WithMTLS(t *testing.T) Option {
 func WithHistorySigning(t *testing.T) Option {
 	t.Helper()
 	return func(o *options) {
-		o.signing = true
+		enabled := true
+		o.signing = &enabled
 		o.mtls = true
 	}
 }
@@ -148,15 +156,88 @@ func WithSigningDisabledN(index int) Option {
 // WithClusteredDeployment explicitly enables or disables the
 // WorkflowsClusteredDeployment feature flag on every daprd in the workflow,
 // overriding the DAPR_INTEGRATION_WORKFLOW_CLUSTERED environment variable.
+// WithSchedulerPlacement serves actor placement from the scheduler: no
+// placement process runs.
+func WithSchedulerPlacement() Option {
+	return func(o *options) {
+		enabled := true
+		o.schedulerPlacement = &enabled
+	}
+}
+
+// WithPlacementService pins actor placement to the placement service,
+// overriding DAPR_INTEGRATION_SCHEDULER_PLACEMENT.
+func WithPlacementService() Option {
+	return func(o *options) {
+		disabled := false
+		o.schedulerPlacement = &disabled
+	}
+}
+
 func WithClusteredDeployment(enabled bool) Option {
 	return func(o *options) {
 		o.clustered = &enabled
 	}
 }
 
+// WithFastPath explicitly enables or disables the WorkflowsFastPath feature
+// flag on every daprd in the workflow, overriding the
+// DAPR_INTEGRATION_WORKFLOW_FASTPATH environment variable.
+func WithFastPath(enabled bool) Option {
+	return func(o *options) {
+		o.fastPath = &enabled
+	}
+}
+
+// WithStagedOperations explicitly enables or disables the
+// WorkflowsStagedOperations feature flag on every daprd in the workflow,
+// overriding the DAPR_INTEGRATION_WORKFLOW_STAGED environment variable.
+func WithStagedOperations(enabled bool) Option {
+	return func(o *options) {
+		o.stagedOperations = &enabled
+	}
+}
+
+// WithStagedOperationsN explicitly enables or disables the
+// WorkflowsStagedOperations feature flag on the daprd at index only,
+// overriding WithStagedOperations and the environment variable for that
+// daprd, so one cluster can run daprds with the feature on next to daprds
+// with it off.
+func WithStagedOperationsN(index int, enabled bool) Option {
+	return func(o *options) {
+		if o.stagedN == nil {
+			o.stagedN = map[int]bool{}
+		}
+		o.stagedN[index] = enabled
+	}
+}
+
+// WithSigning explicitly enables or disables workflow history signing mode
+// (mTLS with a Sentry plus the WorkflowHistorySigning feature flag),
+// overriding the DAPR_INTEGRATION_WORKFLOW_SIGNING environment variable.
+// WithSigning(false) disables the feature flag only: mTLS requested via
+// WithMTLS or WithSentryInstance stays on.
+func WithSigning(enabled bool) Option {
+	return func(o *options) {
+		o.signing = &enabled
+	}
+}
+
 func WithSchedulerOptions(opts ...scheduler.Option) Option {
 	return func(o *options) {
 		o.schedulerOptions = append(o.schedulerOptions, opts...)
+	}
+}
+
+// WithSentryInstance lets a test supply a pre-constructed Sentry, implying
+// mTLS. The framework uses it for placement, scheduler and daprd identity
+// instead of creating its own, and skips adding it to its process list (the
+// caller is responsible for that). Required when combining
+// WithSchedulerInstance with mTLS/signing so the caller-built scheduler and
+// proxy share the same trust chain.
+func WithSentryInstance(sen *sentry.Sentry) Option {
+	return func(o *options) {
+		o.sentryInstance = sen
 	}
 }
 

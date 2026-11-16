@@ -25,11 +25,22 @@ import (
 type options struct {
 	listTopicSubFn func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
 	initialHealth  bool
+	bulkStatusFn   func(context.Context, []string) map[string]rtv1.TopicEventResponse_TopicEventResponseStatus
 }
 
 func WithListTopicSubscriptions(fn func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.listTopicSubFn = fn
+	}
+}
+
+// WithBulkStatusFn sets the status the app answers each entry of a bulk
+// delivery with, given the delivery's entry IDs in order. Entries without a
+// status are answered SUCCESS. fn is called with the delivery's RPC context,
+// which it may block on to hold the delivery until daprd cancels it.
+func WithBulkStatusFn(fn func(ctx context.Context, entryIDs []string) map[string]rtv1.TopicEventResponse_TopicEventResponseStatus) func(*options) {
+	return func(opts *options) {
+		opts.bulkStatusFn = fn
 	}
 }
 

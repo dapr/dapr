@@ -21,7 +21,7 @@ import (
 )
 
 // Spawn writes the record synchronously and starts one heartbeat goroutine
-// per task key (deduped; rootCtx-bounded, waitgroup-accounted). The
+// per task key (deduped, and bounded by rootCtx). The
 // synchronous write runs within HaltNonHosted's UPDATE phase, so the record
 // is durable before UNLOCK admits the first recovery arrival.
 func (g *Guards) Spawn(ctx, rootCtx context.Context, actorID, taskKey string, call *inflight.Call) {
@@ -38,7 +38,6 @@ func (g *Guards) Spawn(ctx, rootCtx context.Context, actorID, taskKey string, ca
 		return
 	}
 	g.active[taskKey] = struct{}{}
-	g.wg.Add(1)
 	g.lock.Unlock()
 
 	log.Infof("Activity actor '%s': guarding its in-flight execution claim across placement churn", actorID)
@@ -50,22 +49,9 @@ func (g *Guards) Spawn(ctx, rootCtx context.Context, actorID, taskKey string, ca
 			g.lock.Lock()
 			delete(g.active, taskKey)
 			g.lock.Unlock()
-			g.wg.Done()
 		}()
 		g.guard(rootCtx, actorID, taskKey, call)
 	}()
-}
-
-// Wait blocks until all guard goroutines have exited.
-func (g *Guards) Wait() {
-	g.wg.Wait()
-}
-
-// Active returns the number of running guards.
-func (g *Guards) Active() int {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	return len(g.active)
 }
 
 // guard heartbeats the already-written record every HeartbeatEvery until the

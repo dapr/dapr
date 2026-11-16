@@ -41,6 +41,11 @@ type dissemination struct {
 
 func (d *dissemination) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t,
+		// Joins a fake host through the placement service's own API, which
+		// only the standalone service exposes.
+		workflow.WithPlacementService(),
+		// Signing mode opt-out: the fake "blocker" host joins placement over a raw insecure client, which cannot handshake with an mTLS placement.
+		workflow.WithSigning(false),
 		workflow.WithPlacementOptions(placement.WithDisseminateTimeout(time.Second*7)),
 	)
 	return []framework.Option{

@@ -135,7 +135,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	ctx := stream.Context()
 
 	// Process the data coming from the stream
-	a.wg.Go(func() {
+	if gerr := a.goUnlessClosed(func() {
 		var (
 			readSeq   uint64
 			expectSeq uint64
@@ -185,7 +185,9 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 				return
 			}
 		}
-	})
+	}); gerr != nil {
+		return gerr
+	}
 
 	// Start the encryption or decryption
 	// Errors here are synchronous and can be returned to the user right away
@@ -276,12 +278,14 @@ func (a *api) cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error 
 	defer cancel()
 
 	firstMsgCh := make(chan error, 1)
-	a.wg.Go(func() {
+	if gerr := a.goUnlessClosed(func() {
 		select {
 		case firstMsgCh <- stream.RecvMsg(reqProto):
 		case <-firstChunkCtx.Done():
 		}
-	})
+	}); gerr != nil {
+		return gerr
+	}
 
 	select {
 	case <-firstChunkCtx.Done():

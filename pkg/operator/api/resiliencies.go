@@ -19,6 +19,9 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	kubeclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,13 +34,20 @@ import (
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var resiliencyConfig resiliencyapi.Resiliency
-	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
+	err = a.Client.Get(ctx, key, &resiliencyConfig)
+	// A resiliency scoped to another app is reported as missing, so its name is
+	// not disclosed.
+	if apierrors.IsNotFound(err) || (err == nil && !resiliencyConfig.IsAppScoped(id.AppID())) {
+		return nil, status.Errorf(codes.NotFound, "resiliency %s/%s not found", in.GetNamespace(), in.GetName())
+	}
+	if err != nil {
 		return nil, fmt.Errorf("error getting resiliency: %w", err)
 	}
 	b, err := json.Marshal(&resiliencyConfig)
@@ -51,7 +61,8 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -66,7 +77,12 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 		return nil, fmt.Errorf("error listing resiliencies: %w", err)
 	}
 
+	appID := id.AppID()
 	for _, item := range resiliencies.Items {
+		if !item.IsAppScoped(appID) {
+			continue
+		}
+
 		b, err := json.Marshal(item)
 		if err != nil {
 			log.Warnf("Error unmarshalling resiliency: %s", err)

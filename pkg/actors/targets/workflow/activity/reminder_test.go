@@ -71,7 +71,7 @@ func Test_ReminderPayload_PreservesPropagation(t *testing.T) {
 		},
 	}
 
-	// Simulate createReminder: marshal the ActivityInvocation
+	// Simulate createActivityReminder: marshal the ActivityInvocation
 	data, err := anypb.New(original)
 	require.NoError(t, err, "marshal to anypb.Any should succeed")
 
@@ -170,7 +170,7 @@ func Test_ReminderData_LegacyHistoryEventPayload(t *testing.T) {
 			TaskScheduled: &protos.TaskScheduledEvent{Name: "staleActivity"},
 		},
 	}
-	// Simulate what pre-propagation createReminder would have written to
+	// Simulate what pre-propagation createActivityReminder would have written to
 	// reminder.Data: anypb.Any wrapping a HistoryEvent (not ActivityInvocation).
 	legacyData, err := anypb.New(legacyEvent)
 	require.NoError(t, err)
@@ -242,6 +242,46 @@ func (c *captureScheduler) List(context.Context, *actorapi.ListRemindersRequest)
 	return nil, nil
 }
 
+const testActivityActorType = "dapr.internal.default.testapp.activity"
+
+// Test_createActivityReminder_pullFlag pins that the run-activity reminder
+// carries the pull flag exactly when the configured dispatch mode resolves to
+// pull for the activity name, and never without a resolver or a name.
+func Test_createActivityReminder_pullFlag(t *testing.T) {
+	t.Parallel()
+
+	invocation := &protos.ActivityInvocation{
+		HistoryEvent: &protos.HistoryEvent{
+			EventId: 1,
+			EventType: &protos.HistoryEvent_TaskScheduled{
+				TaskScheduled: &protos.TaskScheduledEvent{Name: "Transcode"},
+			},
+		},
+	}
+	name := "Transcode"
+	other := "SendEmail"
+
+	create := func(t *testing.T, resolver func(string) bool, activityName *string) *actorapi.CreateReminderRequest {
+		t.Helper()
+		sched := &captureScheduler{}
+		f := &factory{
+			actorType:    testActivityActorType,
+			reminders:    sched,
+			dispatchPull: resolver,
+		}
+		require.NoError(t, f.createActivityReminder(t.Context(), "wf::1::0", invocation, time.Now(), activityName))
+		sched.mu.Lock()
+		defer sched.mu.Unlock()
+		require.Len(t, sched.creates, 1)
+		return sched.creates[0]
+	}
+
+	assert.False(t, create(t, nil, &name).Pull, "no resolver means hashed dispatch")
+	assert.False(t, create(t, func(string) bool { return true }, nil).Pull, "no activity name cannot resolve a mode")
+	assert.True(t, create(t, func(n string) bool { return n == name }, &name).Pull)
+	assert.False(t, create(t, func(n string) bool { return n == name }, &other).Pull)
+}
+
 // Test_reminderRetryPoliciesAreJittered pins the retry failure policy on the
 // activity and activity-result reminder create paths: retry forever with a
 // jittered interval drawn from [RetryBackoffBase, RetryBackoffCap), not a
@@ -256,9 +296,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 		reminders:         sched,
 	}
 
-	a := newActivity()
-	a.factory = f
-	a.actorID = "activity-1"
+	const actorID = "activity-1"
 
 	invocation := &protos.ActivityInvocation{
 		HistoryEvent: &protos.HistoryEvent{
@@ -268,7 +306,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 
 	result := &backend.HistoryEvent{
 		EventId: -1,
@@ -276,16 +314,18 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1},
 		},
 	}
-	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", result))
+	require.NoError(t, f.createWorkflowResultReminder(t.Context(), f.workflowActorType, "wf-1", "exec-1", result))
 
 	// Repeated creates so the decorrelation assertion below has enough draws.
 	for range 50 {
-		require.NoError(t, a.createReminder(t.Context(), invocation, time.Now(), nil))
+		require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
 	}
 
 	sched.mu.Lock()
 	defer sched.mu.Unlock()
 	require.Len(t, sched.creates, 52)
+	assert.Equal(t, "exec-1", common.ActivityResultParentExecutionID(sched.creates[1].Name),
+		"the result reminder carries the dispatching execution ID")
 
 	seen := make(map[time.Duration]struct{})
 	for _, req := range sched.creates {

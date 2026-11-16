@@ -14,6 +14,8 @@ limitations under the License.
 package metrics
 
 import (
+	"net/http"
+
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -42,6 +44,9 @@ type Options struct {
 	Healthz healthz.Healthz
 	// Meter is the OpenCensus meter used to register views.
 	Meter view.Meter
+	// Handlers are served by the metrics server on the given paths, next to
+	// the metrics on the root path.
+	Handlers map[string]http.Handler
 }
 
 type FlagOptions struct {

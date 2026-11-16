@@ -50,10 +50,10 @@ func (l *leases) Run(t *testing.T, ctx context.Context) {
 	client := l.scheduler.ETCDClient(t, ctx)
 
 	var resp *clientv3.LeaseLeasesResponse
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
 		resp, err = client.Leases(ctx)
-		require.NoError(t, err)
+		require.NoError(c, err)
 		assert.Len(c, resp.Leases, 1)
 	}, time.Second*20, time.Millisecond*10)
 

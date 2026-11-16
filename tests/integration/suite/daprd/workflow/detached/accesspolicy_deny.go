@@ -114,7 +114,7 @@ func (d *accesspolicyDeny) Run(t *testing.T, ctx context.Context) {
 	targetReg := task.NewTaskRegistry()
 
 	require.NoError(t, callerReg.AddWorkflowN("Caller", func(ctx *task.WorkflowContext) (any, error) {
-		_, err := ctx.ScheduleNewWorkflow("DeniedSpawn",
+		_, err := ctx.ScheduleNewDetachedWorkflow("DeniedSpawn",
 			task.WithDetachedWorkflowInstanceID(spawnedInstanceID),
 			task.WithDetachedWorkflowAppID(d.target.AppID()),
 		)

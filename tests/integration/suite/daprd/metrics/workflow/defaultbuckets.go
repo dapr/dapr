@@ -22,12 +22,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/metrics/util"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -72,7 +72,7 @@ func (b *defaultBuckets) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
-	taskHubClient := client.NewTaskHubGrpcClient(b.w.Dapr().GRPCConn(t, ctx), backend.DefaultLogger())
+	taskHubClient := client.NewTaskHubGrpcClient(b.w.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, taskHubClient.StartWorkItemListener(ctx, r))
 
 	t.Run("default latency buckets", func(t *testing.T) {

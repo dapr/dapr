@@ -50,6 +50,11 @@ type CreateReminderRequest struct {
 	// at the scheduler level. For activities this is the activity name, for
 	// workflows this is the workflow name.
 	ConcurrencyKey *string `json:"-"`
+
+	// Pull asks the scheduler to deliver the reminder to any sidecar hosting
+	// the actor type that has a free per-stream slot, to be executed there
+	// rather than on the placement owner. Used by pull-dispatched activities.
+	Pull bool `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -237,6 +242,36 @@ type DeleteRemindersByActorIDRequest struct {
 type ListRemindersRequest struct {
 	ActorType string
 	ActorID   *string
+}
+
+// GetTimerRequest is a request object for reading a single timer registered
+// on this host.
+type GetTimerRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key of the actor for this timer.
+func (req GetTimerRequest) ActorKey() string {
+	return req.ActorType + DaprSeparator + req.ActorID
+}
+
+// Key returns the key for this unique timer.
+func (req GetTimerRequest) Key() string {
+	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
+}
+
+// ListTimersRequest is a request object for listing the timers registered on
+// this host for a single actor.
+type ListTimersRequest struct {
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key of the actor for this request.
+func (req ListTimersRequest) ActorKey() string {
+	return req.ActorType + DaprSeparator + req.ActorID
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.

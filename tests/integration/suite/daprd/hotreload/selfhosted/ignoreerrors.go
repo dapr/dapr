@@ -123,5 +123,6 @@ spec:
  version: v1
 `), 0o600))
 		i.logline.EventuallyFoundAll(t)
+		i.daprd.WaitUntilExit(t, 15*time.Second)
 	})
 }

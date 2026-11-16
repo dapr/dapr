@@ -23,6 +23,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -30,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -90,7 +90,7 @@ func (f *senderlapse) Run(t *testing.T, ctx context.Context) {
 		return "ok", nil
 	}))
 
-	cl := client.NewTaskHubGrpcClient(f.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	cl := client.NewTaskHubGrpcClient(f.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, registry))
 
 	resp, err := f.daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
@@ -108,11 +108,14 @@ func (f *senderlapse) Run(t *testing.T, ctx context.Context) {
 
 	folded := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:folded")
 	nacked := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_completions_fold_count", "status:fold_nacked")
+	// A janitor fire landing inside a held completion's fold wait commits it
+	// before the wait lapses, so that first submit is acked, not nacked.
+	recovered := f.daprd.Metrics(t, ctx).SumWithLabels("dapr_runtime_workflow_local_wake_count", "status:janitor_fold_recovered")
 	assert.GreaterOrEqual(t, folded, float64(2),
 		"non-terminal captive entries must fold: any committing turn takes them first")
 	assert.LessOrEqual(t, folded, float64(3), "folded is commit-attributed: at most one record per completion")
-	assert.GreaterOrEqual(t, nacked, float64(3),
-		"every completion's first submit must lapse at the shortened fold wait")
+	assert.GreaterOrEqual(t, nacked+recovered, float64(3),
+		"every completion's first submit must lapse at the shortened fold wait unless a janitor turn folded it first")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		janitors := f.scheduler.JobKeyCount(t, ctx, "new-event-janitor")

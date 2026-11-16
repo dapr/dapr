@@ -28,13 +28,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 
 	mcpnames "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp/v1/names"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
@@ -134,7 +134,7 @@ func (s *middlewareAfterCallTool) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
-	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(conn, logger.New(t))
 	r := task.NewTaskRegistry()
 
 	// after_hook_fail: returns an error → workflow should FAIL.

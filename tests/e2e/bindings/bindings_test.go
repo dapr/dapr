@@ -232,42 +232,39 @@ func testBindingsForApp(app struct {
 		// act for http
 		httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
 
-		// This delay allows all the messages to reach corresponding input bindings.
-		time.Sleep(bindingPropagationDelay * time.Second)
-
-		// assert for HTTP
-		resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
-
+		// Poll until all the messages have reached the corresponding input
+		// bindings; the sets converge to the asserted state
 		var decodedResponse receivedTopicsResponse
-		err = json.Unmarshal(resp, &decodedResponse)
-		require.NoError(t, err)
-
-		// Only the first message fails, all other messages are successfully consumed.
-		// nine messages succeed.
-		require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
-		// one message fails.
-		require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
-		// routed binding will receive all messages
-		require.Equal(t, testMessages[0:], decodedResponse.RoutedMessages)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
+			if !assert.NoError(c, json.Unmarshal(resp, &decodedResponse)) {
+				return
+			}
+			// Only the first message fails, all other messages are successfully consumed.
+			// nine messages succeed.
+			assert.Equal(c, testMessages[1:], decodedResponse.ReceivedMessages)
+			// one message fails.
+			assert.Equal(c, testMessages[0], decodedResponse.FailedMessage)
+			// routed binding will receive all messages
+			assert.Equal(c, testMessages[0:], decodedResponse.RoutedMessages)
+		}, bindingPropagationDelay*2*time.Second, time.Second, "messages did not reach the input bindings")
 
 		// act for gRPC
 		httpPostWithAssert(t, fmt.Sprintf("%s/tests/sendGRPC", outputExternalURL), body, http.StatusOK)
 
-		// This delay allows all the messages to reach corresponding input bindings.
-		time.Sleep(bindingPropagationDelay * time.Second)
-
-		// assert for gRPC
-		resp = httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
-
-		// assert for gRPC
-		err = json.Unmarshal(resp, &decodedResponse)
-		require.NoError(t, err)
-
-		// Only the first message fails, all other messages are successfully consumed.
-		// nine messages succeed.
-		require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
-		// one message fails.
-		require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+		// Poll until all the messages have reached the corresponding input
+		// bindings; the sets converge to the asserted state
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
+			if !assert.NoError(c, json.Unmarshal(resp, &decodedResponse)) {
+				return
+			}
+			// Only the first message fails, all other messages are successfully consumed.
+			// nine messages succeed.
+			assert.Equal(c, testMessages[1:], decodedResponse.ReceivedMessages)
+			// one message fails.
+			assert.Equal(c, testMessages[0], decodedResponse.FailedMessage)
+		}, bindingPropagationDelay*2*time.Second, time.Second, "messages did not reach the input bindings")
 	}
 }
 

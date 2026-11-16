@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/crypto/spiffe"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
 )
 
@@ -127,6 +128,9 @@ func Test_Start(t *testing.T) {
 		sec, err := p.Handler(ctx)
 		require.NoError(t, err)
 
+		_, ok := spiffecontext.JWTMinterFrom(sec.WithSVIDContext(ctx))
+		assert.True(t, ok, "an overridden certificate request must still provide a JWT SVID minter")
+
 		td, err := sec.CurrentTrustAnchors(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, root1, td)
@@ -146,7 +150,7 @@ func Test_Start(t *testing.T) {
 
 		assert.Eventually(t, func() bool {
 			// We put the write file inside this assert loop since we have to wait
-			// for the fsnotify go rountine to warm up.
+			// for the fsnotify go routine to warm up.
 			assert.NoError(t, os.WriteFile(tdFile, root2, 0o600))
 
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)

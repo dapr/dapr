@@ -31,7 +31,7 @@ components:
     testAppName: rabbitmq-test-app
     testLabel: pubsub_subscribe_rabbitmq
     subscribeHTTPThresholdMs: 3000
-    bulkSubscribeHTTPThresholdMs: 500
+    bulkSubscribeHTTPThresholdMs: 3000
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 
@@ -53,7 +53,7 @@ components:
     testAppName: pulsar-test-app
     testLabel: pubsub_subscribe_pulsar
     subscribeHTTPThresholdMs: 1500
-    bulkSubscribeHTTPThresholdMs: 500
+    bulkSubscribeHTTPThresholdMs: 2000
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]
 

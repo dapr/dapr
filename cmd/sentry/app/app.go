@@ -157,11 +157,12 @@ func Run() {
 	caMngrFactory := func(ctx context.Context) error {
 		healthz := healthz.New()
 		metricsExporter := metrics.New(metrics.Options{
-			Log:       log,
-			Enabled:   opts.Metrics.Enabled(),
-			Namespace: metrics.DefaultMetricNamespace,
-			Port:      opts.Metrics.Port(),
-			Healthz:   healthz,
+			Log:           log,
+			Enabled:       opts.Metrics.Enabled(),
+			Namespace:     metrics.DefaultMetricNamespace,
+			Port:          opts.Metrics.Port(),
+			Healthz:       healthz,
+			ListenAddress: opts.Metrics.ListenAddress(),
 		})
 
 		sentry, serr := sentry.New(ctx, sentry.Options{

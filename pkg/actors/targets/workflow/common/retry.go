@@ -37,7 +37,7 @@ const reminderCreateMaxElapsedTime = time.Minute
 
 // CreateReminderWithRetry calls reminders.Create with bounded exponential
 // backoff. Every error is retried except a context error, a clearly-permanent
-// request error (see isPermanentCreateError), or scheduler storage exhaustion
+// request error (see IsPermanentCreateError), or scheduler storage exhaustion
 // (ResourceExhausted). The create is often the only signal that will ever
 // advance durable state committed just before it (a workflow's start, timer,
 // or activity reminder), so dropping an unrecognised-but-transient error
@@ -64,7 +64,10 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && (isPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted) {
+		if isCreated(err) {
+			return nil
+		}
+		if IsPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted {
 			return backoff.Permanent(err)
 		}
 		return err
@@ -73,7 +76,7 @@ func CreateReminderWithRetry(ctx context.Context, r reminderCreator, req *actora
 
 // CreateReminderWithRetryForever calls reminders.Create and retries on every
 // error except a context error or a clearly-permanent request error (see
-// isPermanentCreateError), with no overall time bound: it stops only when ctx
+// IsPermanentCreateError), with no overall time bound: it stops only when ctx
 // is cancelled (i.e. the actor is torn down).
 func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req *actorapi.CreateReminderRequest) error {
 	bo := backoff.NewExponentialBackOff()
@@ -86,23 +89,68 @@ func CreateReminderWithRetryForever(ctx context.Context, r reminderCreator, req 
 			return backoff.Permanent(err)
 		}
 		err := r.Create(ctx, req)
-		if err != nil && isPermanentCreateError(err) {
+		if isCreated(err) {
+			return nil
+		}
+		if IsPermanentCreateError(err) {
 			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(bo, ctx))
 }
 
-// isPermanentCreateError reports whether a reminder Create error is a
+// reminderDeleter is the minimal interface needed by DeleteRemindersWithRetry.
+// It is satisfied by both reminders.Interface and scheduler.Interface.
+type reminderDeleter interface {
+	DeleteByActorID(ctx context.Context, req *actorapi.DeleteRemindersByActorIDRequest) error
+}
+
+// DeleteRemindersWithRetry calls DeleteByActorID with the bounded backoff of
+// CreateReminderWithRetry and the same error classification; NotFound means
+// nothing is left to delete. A delete by actor ID is idempotent. Purge commits
+// the state rows and deletes the reminders concurrently, so a delete given up
+// on the first transient scheduler error (a connection reset after a network
+// partition or a scheduler restart) fails a purge whose rows are already gone:
+// the caller can no longer retry it, and the reminders are orphaned.
+func DeleteRemindersWithRetry(ctx context.Context, r reminderDeleter, req *actorapi.DeleteRemindersByActorIDRequest) error {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 100 * time.Millisecond
+	bo.MaxInterval = 5 * time.Second
+	bo.MaxElapsedTime = reminderCreateMaxElapsedTime
+
+	return backoff.Retry(func() error {
+		if err := ctx.Err(); err != nil {
+			return backoff.Permanent(err)
+		}
+		err := r.DeleteByActorID(ctx, req)
+		if err == nil || status.Code(err) == codes.NotFound {
+			return nil
+		}
+		if IsPermanentCreateError(err) || status.Code(err) == codes.ResourceExhausted {
+			return backoff.Permanent(err)
+		}
+		return err
+	}, backoff.WithContext(bo, ctx))
+}
+
+// isCreated reports whether a Create left the reminder in place. A create
+// without overwrite answers AlreadyExists when a retry follows a create whose
+// success was lost in transit; the reminder is there, which is the goal.
+func isCreated(err error) bool {
+	return err == nil || status.Code(err) == codes.AlreadyExists
+}
+
+// IsPermanentCreateError reports whether a reminder Create error is a
 // client-side mistake that retrying can never fix (malformed request, missing
-// auth, unimplemented method). Everything else: Unavailable, DeadlineExceeded,
+// auth, unimplemented method). A context error is not a gRPC status and so
+// reads as permanent here. Everything else: Unavailable, DeadlineExceeded,
 // Internal, Aborted, and notably Unknown (the code carried by the scheduler's
 // plain-error returns, including cron shutdown), is treated as retryable by
 // both retry helpers, because the scheduler may recover and the create is an
 // idempotent overwrite-by-name. ResourceExhausted (transient etcd pressure)
 // is also retryable for the forever helper; the bounded helper additionally
 // treats it as permanent, see CreateReminderWithRetry.
-func isPermanentCreateError(err error) bool {
+func IsPermanentCreateError(err error) bool {
 	s, ok := status.FromError(err)
 	if !ok {
 		// Not a gRPC status (e.g. a local marshalling error): retrying forever

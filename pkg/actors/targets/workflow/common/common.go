@@ -49,12 +49,20 @@ func (a *ActorTypeBuilder) Activity(appID string) string {
 	return "dapr.internal." + a.ns + "." + appID + ".activity"
 }
 
+// ActivityIDSeparator splits an activity actor ID into its parent workflow
+// instance ID, task ID and generation. Identifiers that reach a durable
+// artifact or another daprd are wire format: readers must accept every shape
+// a released version has written, and writers may only add.
+const ActivityIDSeparator = "::"
+
 // ActivityActorID returns the activity actor ID for a scheduled task. The
 // executor rendezvous actor for the task deliberately uses the same ID
 // (ClusterTasksBackend): placement hashes only the actor ID and all workflow
 // actor types are registered by the same hosts, so equal IDs resolve to equal
 // hosts across actor types, co-locating the rendezvous with the activity
-// actor and its pending-task waiter.
+// actor and its pending-task waiter. The trailing 0 is a fixed generation
+// component present so the ID has the same shape on every release that reads
+// it.
 func ActivityActorID(workflowID string, taskID int32) string {
-	return workflowID + "::" + strconv.Itoa(int(taskID))
+	return workflowID + ActivityIDSeparator + strconv.Itoa(int(taskID)) + ActivityIDSeparator + "0"
 }

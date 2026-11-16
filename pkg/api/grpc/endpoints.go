@@ -63,6 +63,8 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorReminder",
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorRemindersByType",
 		daprRuntimePrefix + "v1.Dapr/ListActorReminders",
+		daprRuntimePrefix + "v1.Dapr/ListActorTimers",
+		daprRuntimePrefix + "v1.Dapr/GetActorTimer",
 		daprRuntimePrefix + "v1.Dapr/GetActorState",
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",
@@ -146,6 +148,32 @@ var endpoints = map[string][]string{
 	},
 	"conversation.v1alpha2": {
 		daprRuntimePrefix + "v1.Dapr/ConverseAlpha2",
+	},
+	"search.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/CreateIndexAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetIndexAlpha1",
+		daprRuntimePrefix + "v1.Dapr/ListIndexesAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteIndexAlpha1",
+		daprRuntimePrefix + "v1.Dapr/IndexDocumentsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetDocumentsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteDocumentsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/SearchAlpha1",
+	},
+	"vector.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/CreateCollectionAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetCollectionAlpha1",
+		daprRuntimePrefix + "v1.Dapr/ListCollectionsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteCollectionAlpha1",
+		daprRuntimePrefix + "v1.Dapr/UpsertVectorsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetVectorsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteVectorsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/QueryVectorsAlpha1",
+		daprRuntimePrefix + "v1.Dapr/BatchQueryVectorsAlpha1",
+	},
+	"binarystore.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SetBinaryFileAlpha1",
+		daprRuntimePrefix + "v1.Dapr/GetBinaryFileAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteBinaryFileAlpha1",
 	},
 }
 

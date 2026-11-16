@@ -67,7 +67,8 @@ func (a *apiServer) WorkflowAccessPolicyUpdate(in *operatorv1pb.WorkflowAccessPo
 
 // ListWorkflowAccessPolicy returns the list of workflow access policies in a namespace.
 func (a *apiServer) ListWorkflowAccessPolicy(ctx context.Context, in *operatorv1pb.ListWorkflowAccessPolicyRequest) (*operatorv1pb.ListWorkflowAccessPolicyResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -88,7 +89,12 @@ func (a *apiServer) ListWorkflowAccessPolicy(ctx context.Context, in *operatorv1
 		return nil, fmt.Errorf("error listing workflow access policies: %w", err)
 	}
 
+	appID := id.AppID()
 	for _, item := range policies.Items {
+		if !item.IsAppScoped(appID) {
+			continue
+		}
+
 		b, err := json.Marshal(item)
 		if err != nil {
 			log.Warnf("Error marshalling workflow access policy: %s", err)

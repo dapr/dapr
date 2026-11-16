@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -50,9 +52,10 @@ type PublishRequest struct {
 }
 
 type PublishBulkRequestEntry struct {
-	EntryID     string `json:"entryId"`
-	Event       string `json:"event"`
-	ContentType string `json:"contentType,omitempty"`
+	EntryID     string            `json:"entryId"`
+	Event       string            `json:"event"`
+	ContentType string            `json:"contentType,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type PublishBulkRequest struct {
@@ -60,6 +63,9 @@ type PublishBulkRequest struct {
 	PubSubName string
 	Topic      string
 	Entries    []PublishBulkRequestEntry
+	// Metadata is sent as request-level metadata (`metadata.<key>` query
+	// parameters) and applies to every entry.
+	Metadata map[string]string
 }
 
 type Subscriber struct {
@@ -115,9 +121,18 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 				Statuses []statusT `json:"statuses"`
 			}
 
+			var statuses map[string]contribpubsub.AppResponseStatus
+			if opts.bulkStatusFn != nil {
+				statuses = opts.bulkStatusFn(r.Context(), bulkEntryIDs(&ce))
+			}
+
 			var resp respT
 			for _, entry := range ce.Entries {
-				resp.Statuses = append(resp.Statuses, statusT{EntryID: entry.EntryId, Status: "SUCCESS"})
+				status, ok := statuses[entry.EntryId]
+				if !ok {
+					status = contribpubsub.Success
+				}
+				resp.Statuses = append(resp.Statuses, statusT{EntryID: entry.EntryId, Status: string(status)})
 			}
 			json.NewEncoder(w).Encode(resp)
 		}))
@@ -188,8 +203,39 @@ func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *pubsub.Bulk
 	}
 }
 
+// ReceiveBulkEventIDs returns the cloud event IDs of the entries of the next
+// bulk delivery, in the order they were delivered.
+func (s *Subscriber) ReceiveBulkEventIDs(t *testing.T, ctx context.Context) []string {
+	t.Helper()
+
+	env := s.ReceiveBulk(t, ctx)
+	if env == nil {
+		return nil
+	}
+
+	ids := make([]string, len(env.Entries))
+	for i, entry := range env.Entries {
+		ce, ok := entry.Event.(map[string]any)
+		require.True(t, ok, "bulk entry %s is not a cloud event", entry.EntryId)
+		ids[i], _ = ce["id"].(string)
+	}
+	return ids
+}
+
+func bulkEntryIDs(env *pubsub.BulkSubscribeEnvelope) []string {
+	ids := make([]string, len(env.Entries))
+	for i, entry := range env.Entries {
+		ids[i] = entry.EntryId
+	}
+	return ids
+}
+
 func (s *Subscriber) AssertEventChanLen(t assert.TestingT, l int) {
 	assert.Len(t, s.inCh, l)
+}
+
+func (s *Subscriber) AssertBulkEventChanLen(t assert.TestingT, l int) {
+	assert.Len(t, s.inBulk, l)
 }
 
 func (s *Subscriber) ExpectPublishReceive(t *testing.T, ctx context.Context, req PublishRequest) {
@@ -248,6 +294,13 @@ func (s *Subscriber) publishBulk(t *testing.T, ctx context.Context, req PublishB
 	payload, err := json.Marshal(req.Entries)
 	require.NoError(t, err)
 	reqURL := fmt.Sprintf("http://%s/v1.0/publish/bulk/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
+	if len(req.Metadata) > 0 {
+		query := make(url.Values, len(req.Metadata))
+		for k, v := range req.Metadata {
+			query.Set("metadata."+k, v)
+		}
+		reqURL += "?" + query.Encode()
+	}
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
 	require.NoError(t, err)
 	hreq.Header.Add("Content-Type", "application/json")

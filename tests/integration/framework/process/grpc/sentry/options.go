@@ -17,10 +17,22 @@ import (
 	"context"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 type options struct {
 	signCertificateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error)
+	bundle            *bundle.Bundle
+}
+
+// WithCABundle serves sentry's identity from b instead of a generated CA, so
+// a daprd that trusts a real sentry's CA trusts this one too. The identity is
+// spiffe://localhost/ns/default/dapr-sentry: daprd's default trust domain and
+// namespace.
+func WithCABundle(b bundle.Bundle) func(*options) {
+	return func(o *options) {
+		o.bundle = &b
+	}
 }
 
 func WithSignCertificateFn(fn func(context.Context, *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error)) func(*options) {

@@ -275,6 +275,21 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 				"parameterValue":         "my%20actor",
 				"expectedParameterValue": "my actor",
 			},
+			{
+				"parameterName":          binaryStoreFileNameParam,
+				"parameterValue":         "c++.txt",
+				"expectedParameterValue": "c++.txt",
+			},
+			{
+				"parameterName":          binaryStoreFileNameParam,
+				"parameterValue":         "file%20name.txt",
+				"expectedParameterValue": "file name.txt",
+			},
+			{
+				"parameterName":          binaryStoreFileNameParam,
+				"parameterValue":         "path%2Ffile.txt",
+				"expectedParameterValue": "path/file.txt",
+			},
 		}
 		srv := newServer()
 

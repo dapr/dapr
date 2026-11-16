@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -44,6 +46,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -52,6 +55,7 @@ import (
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	actorsstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
+	wfcommon "github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	timersfake "github.com/dapr/dapr/pkg/actors/timers/fake"
 	daprerrors "github.com/dapr/dapr/pkg/api/errors"
@@ -64,6 +68,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -79,7 +84,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
@@ -155,6 +162,7 @@ var testResiliency = &v1alpha1.Resiliency{
 }
 
 func TestPubSubEndpoints(t *testing.T) {
+	var publishedData []byte
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
@@ -163,6 +171,10 @@ func TestPubSubEndpoints(t *testing.T) {
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
+				if req.Topic == "baggage" {
+					publishedData = req.Data
+				}
+
 				if req.PubsubName == "errorpubsub" {
 					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 				}
@@ -204,6 +216,21 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		}
+	})
+
+	t.Run("Publish propagates baggage header to CloudEvent", func(t *testing.T) {
+		resp := fakeServer(t).DoRequest(
+			"POST",
+			apiVersionV1+"/publish/pubsubname/baggage",
+			[]byte(`{"key": "value"}`),
+			nil,
+			diagConsts.BaggageHeader, "key1=value1,key2=value2",
+		)
+		require.Equal(t, 204, resp.StatusCode)
+
+		var cloudEvent map[string]any
+		require.NoError(t, json.Unmarshal(publishedData, &cloudEvent))
+		require.Equal(t, "key1=value1,key2=value2", cloudEvent[diagConsts.BaggageHeader])
 	})
 
 	t.Run("Publish multi path successfully - 204 No Content", func(t *testing.T) {
@@ -329,6 +356,8 @@ func TestPubSubEndpoints(t *testing.T) {
 }
 
 func TestBulkPubSubEndpoints(t *testing.T) {
+	var capturedEntries []pubsub.BulkMessageEntry
+
 	testAPI := &api{
 		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
@@ -355,6 +384,9 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				case "errnotallowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				case "metadatapubsub":
+					capturedEntries = req.Entries
+					return pubsub.BulkPublishResponse{}, nil
 				default:
 					return pubsub.BulkPublishResponse{}, nil
 				}
@@ -368,6 +400,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
 	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
 	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("metadatapubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer := func(t *testing.T) *fakeHTTPServer {
 		f := newFakeHTTPServer()
@@ -424,6 +457,28 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
 			assert.Equal(t, resBytes, resp.RawBody, "failed to match response on bulk publish")
+		}
+	})
+
+	t.Run("Bulk Publish request metadata reaches entry without metadata - 204", func(t *testing.T) {
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/metadatapubsub/topic?metadata.ttlInSeconds=300"
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			capturedEntries = nil
+			// act
+			resp := fakeServer(t).DoRequest(method, apiPath, reqBytes, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			require.Len(t, capturedEntries, len(bulkRequest))
+
+			// Entry "1" has no metadata of its own: request-level metadata must still reach it.
+			assert.Equal(t, "300", capturedEntries[0].Metadata["ttlInSeconds"])
+
+			// Entry "2" has its own metadata: request-level metadata is merged in without
+			// overriding the entry-level keys.
+			assert.Equal(t, "300", capturedEntries[1].Metadata["ttlInSeconds"])
+			assert.Equal(t, "mdVal1", capturedEntries[1].Metadata["md1"])
+			assert.Equal(t, "mdVal2", capturedEntries[1].Metadata["md2"])
 		}
 	})
 
@@ -1067,8 +1122,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders":           {"GET"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
-			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers":              {"GET"},
 		}
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
@@ -1420,6 +1477,108 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
 	})
 
+	t.Run("Reminder List - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		period := actorsapi.NewSchedulerReminderPeriod("@every 2s", 0)
+		data, err := anypb.New(wrapperspb.Bytes([]byte(`{"foo":"bar"}`)))
+		require.NoError(t, err)
+
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(_ context.Context, req *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				assert.Equal(t, "fakeActorType", req.ActorType)
+				require.NotNil(t, req.ActorID)
+				assert.Equal(t, "fakeActorID", *req.ActorID)
+				return []*actorsapi.Reminder{
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "reminder1",
+						DueTime:   "1s",
+						Period:    period,
+						Data:      data,
+					},
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "reminder2",
+					},
+				}, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"reminders":[
+			{"name":"reminder1","actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","data":{"foo":"bar"}},
+			{"name":"reminder2","actorType":"fakeActorType","actorID":"fakeActorID"}
+		]}`, string(resp.RawBody))
+	})
+
+	t.Run("Reminder List - 200 empty list", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New(), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"reminders":[]}`, string(resp.RawBody))
+	})
+
+	t.Run("Reminder List - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, reminders.ErrReminderOpActorNotHosted
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder List - 403 on reserved internal actor type", func(t *testing.T) {
+		apiPath := "v1.0/actors/dapr.internal.default.fakeAPI.workflow/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				t.Fatal("reserved actor types must be rejected before reaching the reminders layer")
+				return nil, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Reminder List - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders"
+		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
+			return remindersfake.New().WithList(func(context.Context, *actorsapi.ListRemindersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, errors.New("UPSTREAM_ERROR")
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
@@ -1581,6 +1740,240 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
+	t.Run("Timer Get - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		period, err := actorsapi.NewReminderPeriod("2s")
+		require.NoError(t, err)
+		data, err := anypb.New(wrapperspb.Bytes([]byte(`{"foo":"bar"}`)))
+		require.NoError(t, err)
+
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(_ context.Context, req *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				assert.Equal(t, "fakeActorType", req.ActorType)
+				assert.Equal(t, "fakeActorID", req.ActorID)
+				assert.Equal(t, "timer1", req.Name)
+				return &actorsapi.Reminder{
+					ActorType: "fakeActorType",
+					ActorID:   "fakeActorID",
+					Name:      "timer1",
+					DueTime:   "1s",
+					Period:    period,
+					Callback:  "cb",
+					Data:      data,
+					IsTimer:   true,
+				}, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","callback":"cb","data":{"foo":"bar"}}`, string(resp.RawBody))
+	})
+
+	t.Run("Timer Get - 404 when not found", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New(), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 404, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_FOUND", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 403 when actor not owned by this host", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorNotOwned
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer List - 403 on reserved internal actor type", func(t *testing.T) {
+		apiPath := "v1.0/actors/dapr.internal.default.fakeAPI.workflow/fakeActorID/timers"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithListFn(func(context.Context, *actorsapi.ListTimersRequest) ([]*actorsapi.Reminder, error) {
+				t.Fatal("reserved actor types must be rejected before reaching the timers layer")
+				return nil, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 403 on reserved internal actor type", func(t *testing.T) {
+		apiPath := "v1.0/actors/dapr.internal.default.fakeAPI.workflow/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				t.Fatal("reserved actor types must be rejected before reaching the timers layer")
+				return nil, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 403 when actor type not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorTypeNotHosted
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer Get - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithGetFn(func(context.Context, *actorsapi.GetTimerRequest) (*actorsapi.Reminder, error) {
+				return nil, errors.New("UPSTREAM_ERROR")
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_GET", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer List - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers"
+		period, err := actorsapi.NewReminderPeriod("2s")
+		require.NoError(t, err)
+		data, err := anypb.New(wrapperspb.Bytes([]byte(`{"foo":"bar"}`)))
+		require.NoError(t, err)
+
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithListFn(func(_ context.Context, req *actorsapi.ListTimersRequest) ([]*actorsapi.Reminder, error) {
+				assert.Equal(t, "fakeActorType", req.ActorType)
+				assert.Equal(t, "fakeActorID", req.ActorID)
+				return []*actorsapi.Reminder{
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "timer1",
+						DueTime:   "1s",
+						Period:    period,
+						Callback:  "cb",
+						Data:      data,
+						IsTimer:   true,
+					},
+					{
+						ActorType: "fakeActorType",
+						ActorID:   "fakeActorID",
+						Name:      "timer2",
+						IsTimer:   true,
+					},
+				}, nil
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"timers":[
+			{"name":"timer1","actorType":"fakeActorType","actorID":"fakeActorID","dueTime":"1s","period":"@every 2s","callback":"cb","data":{"foo":"bar"}},
+			{"name":"timer2","actorType":"fakeActorType","actorID":"fakeActorID"}
+		]}`, string(resp.RawBody))
+	})
+
+	t.Run("Timer List - 200 empty list", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New(), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.JSONEq(t, `{"timers":[]}`, string(resp.RawBody))
+	})
+
+	t.Run("Timer List - 403 when actor not owned by this host", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithListFn(func(context.Context, *actorsapi.ListTimersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorNotOwned
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NOT_OWNED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer List - 403 when actor type not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithListFn(func(context.Context, *actorsapi.ListTimersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, timers.ErrTimerActorTypeNotHosted
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_NON_HOSTED", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Timer List - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers"
+		actors.WithTimers(func(context.Context) (timers.Interface, error) {
+			return timersfake.New().WithListFn(func(context.Context, *actorsapi.ListTimersRequest) ([]*actorsapi.Reminder, error) {
+				return nil, errors.New("UPSTREAM_ERROR")
+			}), nil
+		})
+
+		// act
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_LIST", resp.ErrorBody["errorCode"])
+	})
+
 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 		fakeData := []byte("fakeData")
@@ -1620,6 +2013,24 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Direct Message - 403 on reserved internal actor type", func(t *testing.T) {
+		for _, actorType := range []string{
+			"dapr.internal.default.fakeAPI.workflow",
+			"dapr.internal.default.fakeAPI.activity",
+			"dapr.internal.default.fakeAPI.executor",
+			"dapr.internal.default.fakeAPI.retentioner",
+		} {
+			apiPath := "v1.0/actors/" + actorType + "/fakeActorID/method/Complete"
+
+			// act
+			resp := fakeServer(t).DoRequest("POST", apiPath, []byte("fakeData"), nil)
+
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, actorType)
+			assert.Equal(t, "ERR_ACTOR_TYPE_RESERVED", resp.ErrorBody["errorCode"], actorType)
+		}
 	})
 }
 
@@ -1765,6 +2176,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.JSONEq(t, expectedBody, string(resp.RawBody))
 		assert.Equal(t, int64(1), called.Load())
 	})
+}
+
+func TestPublicEndpointsReadOnly(t *testing.T) {
+	eps := NewAPI(APIOpts{}).PublicEndpoints()
+	routes := make([]string, 0, len(eps))
+	for _, e := range eps {
+		assert.Equal(t, []string{nethttp.MethodGet}, e.Methods, e.Route)
+		routes = append(routes, e.Route)
+	}
+	assert.ElementsMatch(t, []string{"metadata", "healthz", "healthz/outbound"}, routes)
 }
 
 func createExporters(buffer *string) {
@@ -2701,6 +3122,88 @@ func TestV1Workflow(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
+	})
+}
+
+// TestV1WorkflowStaged checks that a workflow operation a fallback host
+// served says so in its body, and that any other keeps the response it had
+// before staged existed: the same status code and body.
+func TestV1WorkflowStaged(t *testing.T) {
+	newServer := func(t *testing.T, fallback bool) *fakeHTTPServer {
+		t.Helper()
+
+		cs := compstore.New()
+		require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
+
+		r := routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+			res := new(internalsv1pb.InternalInvokeResponse)
+			if fallback {
+				wfcommon.SetFallback(res)
+			}
+			return res, nil
+		})
+		actors := actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+			return r, nil
+		})
+		wfe, err := wfengine.New(wfengine.Options{
+			AppID:             "myapp",
+			Namespace:         "default",
+			ComponentStore:    cs,
+			Actors:            actors,
+			InProcessExecutor: inprocess.NewExecutor(),
+		})
+		require.NoError(t, err)
+
+		testAPI := &api{
+			healthz: healthz.New(),
+			universal: universal.New(universal.Options{
+				Logger:         logger.NewLogger("fakeLogger"),
+				CompStore:      cs,
+				Resiliency:     resiliency.New(nil),
+				WorkflowEngine: wfe,
+				Actors:         actors,
+			}),
+		}
+
+		f := newFakeHTTPServer()
+		t.Cleanup(f.Shutdown)
+		f.StartServer(testAPI.constructWorkflowEndpoints(), nil)
+		return f
+	}
+
+	paths := map[string]string{
+		"terminate":   "v1.0/workflows/dapr/myInstanceID/terminate",
+		"raise event": "v1.0/workflows/dapr/myInstanceID/raiseEvent/myEvent",
+		"pause":       "v1.0/workflows/dapr/myInstanceID/pause",
+		"resume":      "v1.0/workflows/dapr/myInstanceID/resume",
+	}
+
+	t.Run("served by a fallback host", func(t *testing.T) {
+		srv := newServer(t, true)
+
+		resp := srv.DoRequest("POST", "v1.0/workflows/dapr/myWorkflow/start?instanceID=myInstanceID", nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.JSONEq(t, `{"instanceID":"myInstanceID","staged":true}`, string(resp.RawBody))
+
+		for name, path := range paths {
+			resp := srv.DoRequest("POST", path, nil, nil)
+			assert.Equal(t, 202, resp.StatusCode, name)
+			assert.JSONEq(t, `{"staged":true}`, string(resp.RawBody), name)
+		}
+	})
+
+	t.Run("served by a host with an executor", func(t *testing.T) {
+		srv := newServer(t, false)
+
+		resp := srv.DoRequest("POST", "v1.0/workflows/dapr/myWorkflow/start?instanceID=myInstanceID", nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.JSONEq(t, `{"instanceID":"myInstanceID"}`, string(resp.RawBody))
+
+		for name, path := range paths {
+			resp := srv.DoRequest("POST", path, nil, nil)
+			assert.Equal(t, 202, resp.StatusCode, name)
+			assert.Equal(t, "{}", string(resp.RawBody), name)
+		}
 	})
 }
 
@@ -3764,6 +4267,21 @@ func (c fakeStateStore) Multi(ctx context.Context, request *state.TransactionalS
 	return nil
 }
 
+type multiContextKey struct{}
+
+type multiContextStore struct {
+	fakeStateStore
+	hasDeadline atomic.Bool
+	hasIdentity atomic.Bool
+}
+
+func (c *multiContextStore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
+	_, ok := ctx.Deadline()
+	c.hasDeadline.Store(ok)
+	c.hasIdentity.Store(ctx.Value(multiContextKey{}) == "identity")
+	return nil
+}
+
 type fakeStateStoreQuerier struct {
 	state.Store
 	state.TransactionalStore
@@ -4223,6 +4741,47 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
+}
+
+func TestV1TransactionResiliencyContext(t *testing.T) {
+	store := &multiContextStore{fakeStateStore: newFakeStateStore()}
+	compStore := compstore.New()
+	compStore.AddStateStore("failStore", store)
+
+	res := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
+	res.SetComponentContextDecorator(func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, multiContextKey{}, "identity")
+	})
+	testAPI := &api{
+		healthz: healthz.New(),
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: res,
+		}),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
+	}
+
+	f := newFakeHTTPServer()
+	t.Cleanup(f.Shutdown)
+	f.StartServer(testAPI.constructStateEndpoints(), nil)
+
+	b, err := json.Marshal(stateTransactionRequestBody{
+		Operations: []stateTransactionRequestBodyOperation{
+			{
+				Operation: string(state.OperationDelete),
+				Request:   map[string]string{"key": "key1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resp := f.DoRequest("POST", "v1.0/state/failStore/transaction", b, nil)
+
+	assert.Equal(t, 204, resp.StatusCode)
+	assert.True(t, store.hasDeadline.Load(), "store must receive the context with the resiliency timeout")
+	assert.True(t, store.hasIdentity.Load(), "store must receive the component context")
 }
 
 func TestV1TransactionEndpoints(t *testing.T) {

@@ -8,9 +8,11 @@ const owners = [
     'daixiang0',
     'elena-kolevska',
     'halspang',
+    'javier-aliaga',
     'joshvanl',
     'mikeee',
     'msfussell',
+    'nelson-parente',
     'yaron2'
 ]
 

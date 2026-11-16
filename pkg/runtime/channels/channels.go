@@ -329,7 +329,7 @@ func appHTTPClient(connConfig config.AppConnectionConfig, globalConfig *config.C
 
 	if connConfig.Protocol == protocol.H2CProtocol {
 		// Enable HTTP/2 Cleartext transport
-		transport = &http2.Transport{
+		transport = &http2.Transport{ //nolint:staticcheck
 			AllowHTTP: true, // To enable using "http" as protocol
 			DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
 				// Return the TCP socket without TLS

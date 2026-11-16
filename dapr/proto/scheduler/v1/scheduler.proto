@@ -3,6 +3,7 @@ syntax = "proto3";
 package dapr.proto.scheduler.v1;
 
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/scheduler/v1/placement.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -29,6 +30,13 @@ service Scheduler {
   // DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
   // prefix. An empty prefix deletes all jobs from the target.
   rpc DeleteByNamePrefix(DeleteByNamePrefixRequest) returns (DeleteByNamePrefixResponse) {}
+  // ReportActorTypes is used by the daprd sidecar to report its presence and
+  // hosted actor types, and to receive per-actor-type placement orders
+  // (lock/update/unlock) in return. Only served by the current scheduler
+  // placement leader. Returns Unimplemented when the scheduler does not serve
+  // placement, and FailedPrecondition when this scheduler is not the
+  // placement leader.
+  rpc ReportActorTypes(stream ReportActorTypesRequest) returns (stream PlacementOrder) {}
 }
 
 message Job {
@@ -103,6 +111,13 @@ message JobMetadata {
   // value in addition to any type-level gate. For workflow activities this is
   // the activity name, for workflows this is the workflow name.
   optional string concurrency_key = 4;
+
+  // pull requests pull dispatch for an actor reminder trigger: the scheduler
+  // delivers it to a sidecar hosting the actor type that reported free slots
+  // (see PullSlots) and marks the delivery with WatchJobsResponse.pull. A
+  // scheduler without pull dispatch, or with no connected sidecar reporting
+  // slots for the actor type, routes the trigger as a regular actor reminder.
+  optional bool pull = 5;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -111,6 +126,11 @@ message WatchJobsRequest {
   oneof watch_job_request_type {
     WatchJobsRequestInitial initial = 1;
     WatchJobsRequestResult result = 2;
+
+    // pull_slots updates the free pull slots this sidecar reports for an
+    // actor type. Only sent to schedulers advertising
+    // Host.supports_pull_slots.
+    PullSlots pull_slots = 3;
   }
 }
 
@@ -135,6 +155,62 @@ message WatchJobsRequestInitial {
   // a key which groups triggers, and an optional concurrency_key for per-name
   // sub-limits within a group.
   repeated ConcurrencyLimit concurrency_limits = 5;
+
+  // actor_address is the daprd internal gRPC host:port of this client, the
+  // same string reported as ActorHost.address on the ReportActorTypes stream.
+  // When set, schedulers route actor reminder triggers directly to the
+  // placement owner host instead of load balancing across hosts.
+  optional string actor_address = 6;
+
+  // supports_scheduler_placement marks a daprd which can take actor
+  // placement from the scheduler. Schedulers withhold the placement
+  // advertisement while any connected sidecar lacks it (an older daprd),
+  // keeping a mixed-version cluster on a single placement authority.
+  bool supports_scheduler_placement = 7;
+
+  // placement_addresses are the placement service addresses this daprd was
+  // configured with. Schedulers probe them so a placement service outside
+  // the well-known service name still withholds the placement leader
+  // advertisement while it runs.
+  repeated string placement_addresses = 8;
+
+  // pull_slots are the free pull slots this sidecar offers per actor type when
+  // the stream opens. A sidecar is eligible for pull-dispatched triggers of an
+  // actor type only when it reports slots for it and lists it in actor_types.
+  // Later changes are sent as WatchJobsRequest.pull_slots.
+  repeated PullSlots pull_slots = 9;
+
+  // inflight_reminders are the pull-dispatched actor reminders an earlier
+  // stream of this sidecar to this scheduler delivered which are still
+  // executing, or whose result has not been sent yet. The scheduler keeps
+  // waiting for their results instead of delivering them again, and their
+  // results are sent with WatchJobsRequestResult.reminder.
+  repeated ActorReminderRef inflight_reminders = 10;
+}
+
+// ActorReminderRef identifies an actor reminder job of the stream's
+// namespace and app.
+message ActorReminderRef {
+  string actor_type = 1;
+  string actor_id = 2;
+  string name = 3;
+}
+
+// PullSlots reports the number of pull-dispatched actor reminder triggers of
+// actor_type a sidecar can accept right now. It is the sidecar's activity cap
+// minus all activity work it holds, so every scheduler sees the same count.
+// A scheduler takes a slot off its copy of the count for every delivery and
+// only puts one back on the next report, so the sidecar must send its current
+// count after every change (an activity accepted, finished or refused), even
+// when it equals the last count sent. Reports may be coalesced as long as the
+// latest count always goes out.
+message PullSlots {
+  // actor_type is the actor type the slots apply to (e.g., the activity actor
+  // type).
+  string actor_type = 1;
+
+  // free is the number of free slots.
+  uint32 free = 2;
 }
 
 // ConcurrencyLimit defines a global concurrency limit enforced by the
@@ -177,6 +253,12 @@ enum WatchJobsRequestResultStatus {
 
   // The job was processed with an error.
   FAILED = 1;
+
+  // NO_CAPACITY is sent for a pull-dispatched trigger the sidecar refused
+  // because it had no free slot left. The job was not executed: the scheduler
+  // queues it again without applying the failure policy. Only sent to
+  // schedulers advertising Host.supports_pull_slots.
+  NO_CAPACITY = 2;
 }
 
 // WatchJobsRequestResult is the result of a job execution to allow the job to
@@ -187,6 +269,11 @@ message WatchJobsRequestResult {
 
   // status is the status of the job processing.
   WatchJobsRequestResultStatus status = 2;
+
+  // reminder identifies the job instead of id for the result of a
+  // pull-dispatched reminder delivered on an earlier stream (see
+  // WatchJobsRequestInitial.inflight_reminders). id is 0 when it is set.
+  optional ActorReminderRef reminder = 3;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
@@ -203,6 +290,13 @@ message WatchJobsResponse {
 
   // The metadata associated with the job.
   JobMetadata metadata = 4;
+
+  // pull marks a delivery the scheduler made against a free slot the sidecar
+  // reported (see PullSlots): the sidecar executes it locally instead of
+  // forwarding it to the placement owner, and answers NO_CAPACITY if the slot
+  // is gone. The stored JobMetadata.pull alone does not make a delivery pull:
+  // a scheduler without pull dispatch passes it through unchanged.
+  optional bool pull = 5;
 }
 
 message ScheduleJobRequest {
@@ -289,6 +383,23 @@ message WatchHostsResponse {
 message Host {
   // address is the address of the host.
   string address = 1;
+
+  // leader is true on the single scheduler host which is currently the
+  // placement leader, serving the ReportActorTypes RPC. At most one host in a
+  // WatchHostsResponse has this set. Never set when no scheduler in the
+  // cluster serves placement.
+  bool leader = 2;
+
+  // scheduler_placement_enabled is true when this scheduler host can serve
+  // placement (started with placement enabled). Used to elect the placement
+  // leader among capable hosts only, keeping mixed-version clusters safe.
+  bool scheduler_placement_enabled = 3;
+
+  // supports_pull_slots is true when this scheduler accepts
+  // WatchJobsRequest.pull_slots, the NO_CAPACITY result status and
+  // reattachment of in-flight jobs. Sidecars only use pull dispatch while
+  // every scheduler host advertises it.
+  bool supports_pull_slots = 4;
 }
 
 // DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.

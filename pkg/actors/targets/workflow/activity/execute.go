@@ -17,15 +17,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/messages"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
@@ -35,101 +34,119 @@ import (
 var errStaleClaimEvicted = wferrors.NewRecoverable(errors.New(
 	"in-flight activity claim evicted as stale (its work item is no longer held by the engine); re-executing"))
 
-// executeActivity runs one activity delivery. gated marks a recovery
-// arrival (scheduler-fired reminder under the fast path): a fresh owner
-// consults the durable execution-claim record first (see claimrecord.go) so
-// a body still live on the previous owner is deferred to, not duplicated.
-func (a *activity) executeActivity(ctx context.Context, name string, invocation *protos.ActivityInvocation, skipLock, gated bool) error {
+// ErrNoCapacity is returned by the work item scheduler for a pull delivery
+// that arrives when this sidecar has no free activity slot. It is returned
+// unwrapped so the scheduler stream can tell the scheduler to queue the
+// trigger again instead of retrying it as a failure.
+var ErrNoCapacity = errors.New("no free activity slot for a pull-dispatched activity")
+
+// executeActivity runs one activity delivery. A scheduler-fired reminder is a
+// recovery arrival that can land on a fresh placement owner mid-handoff, so
+// under the fast path a fresh owner consults the durable execution-claim
+// record first (see gate). A local drive sets SkipRetries and stays ungated:
+// handleInvoke gates its janitor re-dispatch before arming it.
+func (a *activity) executeActivity(ctx context.Context, reminder *actorapi.Reminder, invocation *protos.ActivityInvocation) error {
 	taskEvent := invocation.GetHistoryEvent()
-	activityName := ""
-	if ts := taskEvent.GetTaskScheduled(); ts != nil {
-		activityName = ts.GetName()
-	} else {
+	ts := taskEvent.GetTaskScheduled()
+	if ts == nil {
 		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
 	}
+	activityName := ts.GetName()
 
-	endIndex := strings.Index(a.actorID, "::")
-	if endIndex < 0 {
-		return fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
+	workflowID, err := a.workflowID()
+	if err != nil {
+		return err
 	}
-	workflowID := a.actorID[0:endIndex]
 
-	// Cryptographically verify any propagated history before letting the
-	// activity see it. Activities are stateless workers with no
-	// ext-sigcert table to absorb certs into, so this is a verify-or-
-	// reject gate. The helper handles the disabled-signer case (logs a
-	// warning if a signed payload arrives) and the nil-payload case
-	// internally. On failure, abort activity execution: the caller (parent
-	// workflow) gets a recoverable error and the activity never runs.
+	// Activities are stateless workers with no ext-sigcert table to absorb
+	// certs into, so propagated history is verify-or-reject. The helper covers
+	// the disabled-signer and nil-payload cases.
 	if err := a.signing.VerifyPropagatedHistoryStateless(invocation.GetPropagatedHistory()); err != nil {
 		return fmt.Errorf("activity '%s::%d' rejecting invocation: propagated history verification failed: %w", activityName, taskEvent.GetEventId(), err)
 	}
 
 	key := inflight.Key(a.actorID, taskEvent)
+	taskID := taskEvent.GetEventId()
+	gated := a.fastPath && !reminder.SkipRetries
+
+	// Under the fast path a local drive that runs out of retries creates
+	// the run-activity reminder, unordered with a purge of its workflow.
+	// Ack such a reminder rather than run the activity of a purged workflow.
+	if gated {
+		purged, perr := a.parentPurged(ctx, workflowID, invocation)
+		if perr != nil {
+			return wferrors.NewRecoverable(fmt.Errorf("failed to read the workflow metadata row: %w", perr))
+		}
+		if purged {
+			log.Infof("Activity actor '%s': workflow '%s' was purged; dropping its run-activity reminder", a.actorID, workflowID)
+			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusPurgedDropped)
+			return nil
+		}
+	}
 	for {
-		call, owner, err := a.claim(ctx, key, workflowID, taskEvent.GetEventId(), skipLock)
+		call, owner, err := a.claim(ctx, key, workflowID, taskID, reminder.SkipLock)
 		if err != nil {
 			return err
 		}
 		if owner {
 			if gated {
-				proceed, gerr := a.gateFreshOwner(ctx, key, call)
-				if !proceed {
+				if proceed, gerr := a.gate(ctx, key, call); !proceed {
 					return gerr
 				}
 			}
-			return a.runOwned(ctx, key, call, name, activityName, workflowID, taskEvent, invocation)
+			return a.runOwned(ctx, key, call, activityName, workflowID, taskEvent, invocation, reminder.ExecuteLocally)
 		}
 
-		// A previous reminder for this activity scheduling is already in
-		// flight (or just finished and its outcome is still cached). Wait
-		// for its result and surface the same outcome so the scheduler's
-		// retry can be acked without dispatching the activity to the SDK
-		// again. The owner is responsible for posting the result to the
-		// workflow actor. Staleness is re-checked while parked: the claim
-		// can turn stale AFTER followers arrive (the owner's work item lost
-		// mid-wait), and claim() only evicts at claim time.
-		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, name)
-		if a.staleClaimAfter <= 0 {
-			// No eviction grace configured (test harnesses): park without
-			// the staleness recheck.
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-call.Done():
-				return call.Err()
+		// Another arrival owns this scheduling (in flight, or its outcome is
+		// still cached): follow it and surface the same outcome, so the
+		// scheduler's retry acks without dispatching the activity again.
+		log.Debugf("Activity actor '%s': following in-flight execution of '%s'", a.actorID, reminder.Name)
+		if stale, ferr := a.follow(ctx, call, workflowID, taskID); !stale {
+			if errors.Is(ferr, errResultUndelivered) {
+				return nil
+			}
+			// A refused pull owner did not run the activity: contend again,
+			// under this delivery's own dispatch mode.
+			if !errors.Is(ferr, ErrNoCapacity) {
+				return ferr
 			}
 		}
-		stale := false
-		ticker := time.NewTicker(a.staleClaimAfter)
-		for !stale {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return ctx.Err()
-			case <-call.Done():
-				ticker.Stop()
-				return call.Err()
-			case <-ticker.C:
-				stale = a.staleClaim(call, workflowID, taskEvent.GetEventId())
+		// claim() evicts the stale entry (unblocking parked followers into
+		// their retry chains) and re-contends for ownership.
+	}
+}
+
+// follow parks on an in-flight call owned by another arrival. stale means the
+// claim died while we waited and the caller must re-contend through claim(),
+// which is what evicts it. The staleness predicate is re-sampled here because
+// a claim can turn stale AFTER its followers arrive (the owner's work item
+// lost mid-wait), and outside the fast path no janitor re-dispatch would ever
+// re-evaluate it.
+func (a *activity) follow(ctx context.Context, call *inflight.Call, workflowID string, taskID int32) (stale bool, err error) {
+	ticker := time.NewTicker(a.staleClaimAfter)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-call.Done():
+			return false, call.Err()
+		case <-ticker.C:
+			if a.staleClaim(call, workflowID, taskID) {
+				return true, nil
 			}
 		}
-		ticker.Stop()
-		// Loop back into claim(): it evicts the stale entry (unblocking
-		// every parked follower into their retry chains) and re-contends
-		// for ownership, so this arrival can re-execute as a fresh owner.
 	}
 }
 
 // claim acquires the inflight entry for key, taking the actor lock for the
-// claim only unless the caller asked to skip it.
-// The lock MUST NOT extend past the claim: the segments that follow are the
-// app roundtrip (arbitrary length) and the result delivery into the parent
-// workflow (contends on the parent's turn lock), and holding the per-actor
-// lock across either parks Execute dispatches mesh-wide behind slow parent
-// turns. Neither segment needs the actor's serialization: the inflight entry
-// dedups duplicate arrivals (they join as followers, locked or not), and a
-// crash mid-execution is recovered by the parent janitor re-dispatching the
+// claim only unless the caller asked to skip it. The lock MUST NOT extend past
+// the claim: what follows is the app roundtrip (arbitrary length) and the
+// result delivery into the parent workflow (contends on the parent's turn
+// lock), and holding the per-actor lock across either parks Execute
+// dispatches mesh-wide behind slow parent turns. Neither needs the actor's
+// serialization: the inflight entry dedups duplicate arrivals, and a crash
+// mid-execution is recovered by the parent janitor re-dispatching the
 // unresolved TaskScheduled event.
 func (a *activity) claim(ctx context.Context, key, workflowID string, taskID int32, skipLock bool) (*inflight.Call, bool, error) {
 	if !skipLock {
@@ -147,21 +164,17 @@ func (a *activity) claim(ctx context.Context, key, workflowID string, taskID int
 		}
 
 		// The claim belongs to a dead execution: its work item left the
-		// engine without resolving (completion or cancellation delivery lost
-		// to a stream break), so nothing will ever settle it. Following it
-		// strands the activity forever while the janitor re-dispatches every
-		// period to no effect (the janitor-livelock class). Evict it so this
-		// arrival re-executes as a fresh owner: the eviction error unblocks
-		// parked followers into their retry chains, and a completion of the
-		// evicted execution arriving late is dropped by the orchestrator's
-		// duplicate-completion dedup.
+		// engine without resolving, so nothing will ever settle it. Following
+		// it strands the activity while the janitor re-dispatches every period
+		// to no effect (the janitor-livelock class). Evict it so this arrival
+		// re-executes as a fresh owner; a late completion of the evicted
+		// execution is dropped by the orchestrator's duplicate dedup.
 		if !call.TryEvict() {
 			// The owner entered resolve between the staleness read and here:
 			// the execution is publishing its result and must not be evicted.
 			return call, owner, nil
 		}
-		call.Finish(errStaleClaimEvicted)
-		a.inflight.Release(key, call)
+		a.settle(key, call, errStaleClaimEvicted)
 		log.Warnf("Activity actor '%s': evicted a stale in-flight claim (no engine-held work item after %s); re-executing", a.actorID, call.Age())
 		diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusClaimEvicted)
 	}
@@ -170,18 +183,14 @@ func (a *activity) claim(ctx context.Context, key, workflowID string, taskID int
 // staleClaim reports whether an inflight claim is provably dead: unsettled,
 // not resolving, older than the stale grace, and with no engine-held work
 // item for it. The resolving phase covers the gap between the engine
-// releasing its held registration (work item completed) and the result
-// publish settling the call: the publish contends on the parent workflow's
-// turn lock and must never read as stale. A
-// live execution of any length keeps its completion registration in the
-// engine, so it is never stale regardless of age (long-running activities
-// are not re-executed). The grace is two janitor periods: it must exceed the
-// registration latency of a freshly-claimed dispatch, including one parked on
-// the engine handoff under load, before the first janitor re-dispatch can
-// observe it. Eviction of a claim whose work item is still queued pre-
-// registration is therefore possible only under extreme handoff delay, and
-// degrades to a duplicate execution absorbed by the orchestrator's dedup
-// (at-least-once, the same guarantee the durable reminder path provides).
+// releasing its held registration and the result publish settling the call
+// (the publish contends on the parent's turn lock and must never read as
+// stale). A live execution of any length keeps its registration, so it is
+// never stale regardless of age. The grace is two janitor periods: it must
+// exceed the registration latency of a freshly-claimed dispatch, including
+// one parked on the engine handoff under load, before the first janitor
+// re-dispatch can observe it; an eviction under more extreme delay degrades
+// to a duplicate execution absorbed by the orchestrator's dedup.
 func (a *activity) staleClaim(call *inflight.Call, workflowID string, taskID int32) bool {
 	if call.Settled() || call.Resolving() || call.Age() < a.staleClaimAfter {
 		return false
@@ -189,40 +198,65 @@ func (a *activity) staleClaim(call *inflight.Call, workflowID string, taskID int
 	return a.executionHeld != nil && !a.executionHeld(workflowID, taskID)
 }
 
-func (f *factory) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
-	_, _, cancel, err := f.placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
-		ActorType: wfActorType,
-		ActorID:   workflowID,
-	})
-	if cancel != nil {
-		cancel(nil)
-	}
-	return errors.Is(err, messages.ErrActorNoAddress)
-}
-
-// gateFreshOwner runs the claim-record gate for a fresh-owner recovery
-// arrival. False means the claim was settled and released with the surfaced
-// error (nil = completed ack).
-func (a *activity) gateFreshOwner(ctx context.Context, key string, call *inflight.Call) (bool, error) {
-	outcome, err := a.claims.Check(ctx, a.actorID, key)
-	if err != nil {
-		werr := wferrors.NewRecoverable(fmt.Errorf("failed to read the execution-claim record: %w", err))
-		call.Finish(werr)
-		a.inflight.Release(key, call)
-		return false, werr
-	}
-	switch outcome {
-	case claim.Defer:
-		log.Infof("Activity actor '%s': execution claim is live on another host; deferring", a.actorID)
-		call.Finish(claim.ErrHeldElsewhere)
-		a.inflight.Release(key, call)
-		return false, claim.ErrHeldElsewhere
-	case claim.Completed:
-		log.Infof("Activity actor '%s': execution completed on its previous host; acking without re-executing", a.actorID)
-		call.Finish(nil)
-		a.inflight.ReleaseAfter(key, call, InflightCacheTTL)
-		return false, nil
+// gate classifies the durable execution-claim record (see the claim
+// subpackage) for a recovery arrival about to execute key. proceed=false means
+// do not execute here, and err is what the arrival surfaces: nil acks (the
+// guarded execution already completed and published), recoverable defers
+// (live elsewhere, or unreadable record). owned is the inflight entry the
+// arrival already holds, if any; it is settled with the same outcome so the
+// followers parked on it read it too.
+func (a *activity) gate(ctx context.Context, key string, owned *inflight.Call) (proceed bool, err error) {
+	outcome, cerr := a.claims.Check(ctx, a.actorID, key)
+	switch {
+	case cerr != nil:
+		err = wferrors.NewRecoverable(fmt.Errorf("failed to read the execution-claim record: %w", cerr))
+	case outcome == claim.Defer:
+		log.Infof("Activity actor '%s': the execution claim is live on another host; deferring re-execution", a.actorID)
+		err = claim.ErrHeldElsewhere
+	case outcome == claim.Completed:
+		log.Infof("Activity actor '%s': the execution completed on its previous host; acking without re-executing", a.actorID)
 	default:
 		return true, nil
 	}
+	if owned != nil {
+		a.settle(key, owned, err)
+	}
+	return false, err
+}
+
+// purgeConfirmWindow is how long after a task was scheduled a missing
+// workflow metadata row is not yet taken as a purge. The row is written when
+// the workflow is created, before any task is scheduled, so a store whose
+// reads lag its writes can still be missing it for a young task. Dropping the
+// reminder of a live workflow can strand it: its janitor is only asserted by
+// a fast path orchestrator.
+const purgeConfirmWindow = 5 * time.Second
+
+// parentPurged reports whether the activity's workflow has no state left. An
+// empty read is confirmed once, as a store may not yet serve its own write
+// (see the orchestrator's saveInternalState), and is an error, for the
+// reminder to retry, while the task is younger than purgeConfirmWindow. False
+// for a workflow of another app, whose state this daprd cannot read.
+func (a *activity) parentPurged(ctx context.Context, workflowID string, invocation *protos.ActivityInvocation) (bool, error) {
+	if src := invocation.GetHistoryEvent().GetRouter().GetSourceAppID(); src != "" && src != a.appID {
+		return false, nil
+	}
+	req := &actorapi.GetStateRequest{
+		ActorType: a.workflowActorType,
+		ActorID:   workflowID,
+		Key:       wfenginestate.MetadataKey,
+	}
+	for range 2 {
+		res, err := a.state.Get(ctx, req, false)
+		if err != nil {
+			return false, err
+		}
+		if res == nil || len(res.Data) > 0 {
+			return false, nil
+		}
+	}
+	if age := time.Since(invocation.GetHistoryEvent().GetTimestamp().AsTime()); age < purgeConfirmWindow {
+		return false, fmt.Errorf("workflow '%s' has no metadata row %s after its task was scheduled; not yet taken as purged", workflowID, age.Truncate(time.Millisecond))
+	}
+	return true, nil
 }

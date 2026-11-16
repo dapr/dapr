@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/fault"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -59,9 +60,14 @@ func (l *loadretry) Setup(t *testing.T) []framework.Option {
 		statestore.WithStateStore(l.store),
 	)
 
-	l.sched = scheduler.New(t)
+	sen := sentry.New(t)
+	l.sched = scheduler.New(t,
+		scheduler.WithSentry(sen),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
 
 	l.workflow = workflow.New(t,
+		workflow.WithSentryInstance(sen),
 		workflow.WithNoDB(),
 		workflow.WithSchedulerInstance(l.sched),
 		workflow.WithDaprdOptions(0,
@@ -82,7 +88,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(l.sched, l.ss, l.workflow),
+		framework.WithProcesses(sen, l.sched, l.ss, l.workflow),
 	}
 }
 

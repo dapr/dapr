@@ -52,6 +52,8 @@ func (n *nomtls) Setup(t *testing.T) []framework.Option {
 	)
 
 	n.workflow = procworkflow.New(t,
+		// Signing mode opt-out: this test's premise is a standalone deployment WITHOUT mTLS/signing, asserting the unsigned-propagation warning log.
+		procworkflow.WithSigning(false),
 		procworkflow.WithDaprds(1),
 		procworkflow.WithDaprdOptions(0, daprd.WithLogLineStdout(n.logline)),
 	)

@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -79,7 +80,7 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	cl := workflow.NewClient(d.daprd1.GRPCConn(t, ctx))
+	cl := workflow.NewClientWithLogger(d.daprd1.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorker(ctx, reg))
 	_, err := cl.ScheduleWorkflow(ctx, "foo")
 	require.NoError(t, err)
@@ -95,7 +96,7 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 		d.daprd2.Kill(t)
 	})
 
-	cl = workflow.NewClient(d.daprd2.GRPCConn(t, ctx))
+	cl = workflow.NewClientWithLogger(d.daprd2.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorker(ctx, reg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -58,8 +58,6 @@ func (r *staticConnector) Connect(ctx context.Context) (*grpc.ClientConn, error)
 		return nil, err
 	}
 
-	log.Infof("Connected to placement %s", address)
-
 	return conn, nil
 }
 

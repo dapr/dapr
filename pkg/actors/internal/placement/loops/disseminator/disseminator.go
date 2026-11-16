@@ -24,9 +24,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/inflight"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/disseminator/timeout"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops/stream/transport"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -42,7 +42,8 @@ var (
 )
 
 type Options struct {
-	Channel       v1pb.Placement_ReportDaprStatusClient
+	Channel       transport.Transport
+	StreamCancel  context.CancelFunc
 	PlacementLoop loop.Interface[loops.EventPlace]
 	ActorTable    table.Interface
 	Scheduler     schedclient.Reloader
@@ -55,18 +56,23 @@ type Options struct {
 	Inflight  *inflight.Inflight
 	Namespace string
 	ID        string
+
+	// SchedulerPlacement speaks the v2 protocol: seq-keyed rounds
+	// scoped to actor types with partial table merges.
+	SchedulerPlacement bool
 }
 
 type disseminator struct {
 	namespace string
 	id        string
 
-	loop         loop.Interface[loops.EventDiss]
-	inflight     *inflight.Inflight
-	actorTable   table.Interface
-	scheduler    schedclient.Reloader
-	healthTarget healthz.Target
-	ready        *atomic.Bool
+	loop          loop.Interface[loops.EventDiss]
+	placementLoop loop.Interface[loops.EventPlace]
+	inflight      *inflight.Inflight
+	actorTable    table.Interface
+	scheduler     schedclient.Reloader
+	healthTarget  healthz.Target
+	ready         *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
@@ -76,7 +82,7 @@ type disseminator struct {
 
 	wg sync.WaitGroup
 
-	currentOperation v1pb.HostOperation
+	currentOperation loops.OrderOp
 	currentVersion   uint64
 
 	// roundChangedTypes accumulates the union of actor types whose hash
@@ -86,6 +92,20 @@ type disseminator struct {
 	// in that case, the final UNLOCK must release every type accumulated
 	// across the compressed rounds, not just the most recent UPDATE.
 	roundChangedTypes map[string]struct{}
+
+	// v2 speaks the v2 (scheduler placement) protocol.
+	schedulerPlacement bool
+
+	// v2Rounds are the in-flight v2 dissemination rounds, keyed by seq.
+	v2Rounds map[uint64]*v2Round
+
+	// v2Completed are the seqs of rounds completed on this stream.
+	v2Completed map[uint64]struct{}
+
+	// roundCompleted is set once a dissemination round completed on this
+	// stream. Until then, a change of the reminder types in place waits for
+	// that round, which sends them.
+	roundCompleted bool
 }
 
 func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
@@ -96,14 +116,19 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.actorTable = opts.ActorTable
 	diss.scheduler = opts.Scheduler
 
-	diss.currentOperation = v1pb.HostOperation_LOCK
+	diss.currentOperation = loops.OrderLock
 	diss.currentVersion = 0
 	diss.timeoutVersion = 0
 	diss.roundChangedTypes = make(map[string]struct{})
+	diss.schedulerPlacement = opts.SchedulerPlacement
+	diss.v2Rounds = make(map[uint64]*v2Round)
+	diss.v2Completed = make(map[uint64]struct{})
+	diss.roundCompleted = false
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
+	diss.placementLoop = opts.PlacementLoop
 	diss.inflight = opts.Inflight
 
 	diss.timeout = opts.DisseminationTimeout
@@ -113,6 +138,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	})
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
+		Cancel:        opts.StreamCancel,
 		PlacementLoop: opts.PlacementLoop,
 		IDx:           opts.IDx,
 	})
@@ -135,7 +161,14 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		d.handleAcquireRequest(e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
+	case *loops.ReloadReminderTypes:
+		if d.roundCompleted {
+			d.reloadReminderTypes()
+		}
 	case *loops.StreamOrder:
+		if d.schedulerPlacement {
+			return d.handleOrderV2(ctx, e)
+		}
 		return d.handleOrder(ctx, e)
 	case *loops.DisseminationTimeout:
 		d.handleTimeout(ctx, e)
@@ -160,7 +193,12 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 }
 
 func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
-	if timeout.Version != d.timeoutVersion {
+	if d.schedulerPlacement {
+		// v2 timeouts are keyed by round seq; only in-flight rounds count.
+		if _, ok := d.v2Rounds[timeout.Version]; !ok {
+			return
+		}
+	} else if timeout.Version != d.timeoutVersion {
 		// Ignore old timeouts.
 		return
 	}

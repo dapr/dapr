@@ -56,13 +56,14 @@ type uppercase struct {
 
 func (u *uppercase) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
+	nameResolution := daprd.NameResolutionJSON(t)
 
 	u.operator = operator.New(t,
 		operator.WithSentry(sentry),
 		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
 			return &operatorv1.GetConfigurationResponse{
 				Configuration: []byte(
-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": {"component": "mdns"},
+					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"middleware"},"spec":{"nameResolution": ` + nameResolution + `,
 					"httpPipeline":{"handlers":[{"name":"uppercase","type":"middleware.http.uppercase"},{"name":"uppercase2","type":"middleware.http.uppercase"}]}}}`,
 				),
 			}, nil
@@ -342,7 +343,7 @@ func (u *uppercase) doReq(t require.TestingT, ctx context.Context, client *netht
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader("hello"))
-		if !assert.NoError(t, err) {
+		if !assert.NoError(c, err) {
 			return
 		}
 		resp, err := client.Do(req)
