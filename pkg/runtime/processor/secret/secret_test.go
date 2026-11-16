@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security/consts"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
@@ -246,4 +247,45 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestResolveResourceReportsFailedReads checks that ResolveResource returns
+// the error of a failed secret read, which ProcessResource only logs, so a
+// caller can tell it from an empty secret.
+func TestResolveResourceReportsFailedReads(t *testing.T) {
+	cs := compstore.New()
+	cs.AddSecretStore("store", daprt.FakeSecretStore{})
+	sec := New(Options{
+		Registry:       registry.New(registry.NewOptions()).SecretStores(),
+		ComponentStore: cs,
+		Meta:           meta.New(meta.Options{ID: "test", Mode: modes.StandaloneMode}),
+	})
+
+	comp := func(secretName string) *componentsapi.Component {
+		return &componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+			Spec: componentsapi.ComponentSpec{
+				Type:    "state.mock",
+				Version: "v1",
+				Metadata: []commonapi.NameValuePair{{
+					Name:         "a",
+					SecretKeyRef: commonapi.SecretKeyRef{Name: secretName},
+				}},
+			},
+			Auth: componentsapi.Auth{SecretStore: "store"},
+		}
+	}
+
+	_, unready, err := sec.ResolveResource(t.Context(), comp("error-key"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error getting secret error-key")
+	assert.Empty(t, unready)
+
+	// ProcessResource keeps ignoring the failure.
+	updated, unready := sec.ProcessResource(t.Context(), comp("error-key"))
+	assert.False(t, updated)
+	assert.Empty(t, unready)
+
+	_, _, err = sec.ResolveResource(t.Context(), comp("good-key"))
+	require.NoError(t, err)
 }
