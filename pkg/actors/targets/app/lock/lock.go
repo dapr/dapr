@@ -110,10 +110,19 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		defer func() { <-l.lock }()
 
 		flight.depth--
-		if flight.depth == 0 {
-			if v := l.inflights.RemoveFront(); v != nil {
-				close(v.startCh)
-			}
+		if flight.depth > 0 || l.inflights.Front() != flight {
+			// Only the running (front) flight may pop the ring. A flight cancelled
+			// while queued stays in place with depth 0 until the running flight
+			// releases and skips it below.
+			return
+		}
+
+		v := l.inflights.RemoveFront()
+		for v != nil && v.depth == 0 {
+			v = l.inflights.RemoveFront()
+		}
+		if v != nil {
+			close(v.startCh)
 		}
 	}
 

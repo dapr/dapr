@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -1127,6 +1128,77 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		// Publishing should not have errored
 		require.NoError(t, <-errCh)
 	})
+
+	outboxComp := v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+		Spec: v1alpha1.ComponentSpec{
+			Metadata: []common.NameValuePair{
+				{
+					Name:  outboxPublishPubsubKey,
+					Value: common.DynamicValue{JSON: v1.JSON{Raw: []byte("a")}},
+				},
+				{
+					Name:  outboxPublishTopicKey,
+					Value: common.DynamicValue{JSON: v1.JSON{Raw: []byte("1")}},
+				},
+			},
+		},
+	}
+
+	t.Run("message with a non outbox id is dropped without touching state", func(t *testing.T) {
+		psMock := &outboxPubsubMock{expectedOutboxTopic: "test1outbox", t: t}
+		stateMock := &outboxStateMock{
+			receivedKey: make(chan string, 1),
+			deletedKey:  make(chan string, 1),
+		}
+		stateMock.expectedKey.Store(new("otherapp||key"))
+
+		var published atomic.Bool
+		o := newTestOutbox(func(context.Context, *contribPubsub.PublishRequest) error {
+			published.Store(true)
+			return nil
+		}).(*outboxImpl)
+		o.getPubsubFn = func(string) (contribPubsub.PubSub, bool) { return psMock, true }
+		o.getStateFn = func(string) (state.Store, bool) { return stateMock, true }
+		o.AddOrUpdateOutbox(outboxComp)
+		require.NoError(t, o.SubscribeToInternalTopics(t.Context(), "test"))
+
+		for _, id := range []string{"otherapp||key", "outbox-1", "outbox-" + uuid.NewString() + "||key"} {
+			require.NoError(t, psMock.handler(t.Context(), &contribPubsub.NewMessage{
+				Data: []byte(`{"id":"` + id + `","datacontenttype":"application/json","data":{"forged":true}}`),
+			}))
+			require.Empty(t, stateMock.receivedKey, id)
+			require.Empty(t, stateMock.deletedKey, id)
+			require.False(t, published.Load(), id)
+		}
+	})
+
+	t.Run("outbox id without datacontenttype is published with the default content type", func(t *testing.T) {
+		psMock := &outboxPubsubMock{expectedOutboxTopic: "test1outbox", t: t}
+		id := "outbox-" + uuid.NewString()
+		stateMock := &outboxStateMock{deletedKey: make(chan string, 1)}
+		stateMock.expectedKey.Store(&id)
+
+		var contentType *string
+		o := newTestOutbox(func(_ context.Context, pr *contribPubsub.PublishRequest) error {
+			contentType = pr.ContentType
+			return nil
+		}).(*outboxImpl)
+		o.getPubsubFn = func(string) (contribPubsub.PubSub, bool) { return psMock, true }
+		o.getStateFn = func(string) (state.Store, bool) { return stateMock, true }
+		o.AddOrUpdateOutbox(outboxComp)
+		require.NoError(t, o.SubscribeToInternalTopics(t.Context(), "test"))
+
+		require.NoError(t, psMock.handler(t.Context(), &contribPubsub.NewMessage{
+			Data: []byte(`{"id":"` + id + `"}`),
+		}))
+
+		require.NotNil(t, contentType)
+		assert.Equal(t, contribPubsub.DefaultCloudEventDataContentType, *contentType)
+		assert.Equal(t, id, <-stateMock.deletedKey)
+	})
 }
 
 type outboxPubsubMock struct {
@@ -1177,6 +1249,7 @@ func (o *outboxPubsubMock) Close() error {
 type outboxStateMock struct {
 	expectedKey      atomic.Pointer[string]
 	receivedKey      chan string
+	deletedKey       chan string
 	returnEmptyOnGet bool
 }
 
@@ -1189,6 +1262,10 @@ func (o *outboxStateMock) Features() []state.Feature {
 }
 
 func (o *outboxStateMock) Delete(ctx context.Context, req *state.DeleteRequest) error {
+	if o.deletedKey != nil {
+		o.deletedKey <- req.Key
+	}
+
 	return nil
 }
 

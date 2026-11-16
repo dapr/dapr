@@ -15,6 +15,7 @@ syntax = "proto3";
 
 package dapr.proto.sentry.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
@@ -26,6 +27,11 @@ service CA {
   // The requesting side must provide an id for both loosely based
   // And strong based identities.
   rpc SignCertificate (SignCertificateRequest) returns (SignCertificateResponse) {}
+
+  // Mints a fresh JWT SVID for the caller. The caller is authenticated by the
+  // X.509 SVID it presents as the mTLS client certificate, and the JWT subject
+  // is that SVID's SPIFFE ID.
+  rpc FetchJWTSVID (FetchJWTSVIDRequest) returns (FetchJWTSVIDResponse) {}
 }
 
 message SignCertificateRequest {
@@ -69,4 +75,19 @@ message SignCertificateResponse {
   // Map of audience to JWT token for authentication, providing a per audience
   // JWT.
   map<string, google.protobuf.StringValue> per_audience_jwts = 5;
+}
+
+message FetchJWTSVIDRequest {
+  // Audiences of the JWT. At least one non-empty audience is required. The
+  // audiences are used as given; the trust domain is not added.
+  repeated string audiences = 1;
+
+  // Lifetime of the JWT. Defaults to 5 minutes, and is capped at the JWT TTL
+  // Sentry is configured with.
+  google.protobuf.Duration ttl = 2;
+}
+
+message FetchJWTSVIDResponse {
+  // The signed JWT SVID.
+  string jwt = 1;
 }

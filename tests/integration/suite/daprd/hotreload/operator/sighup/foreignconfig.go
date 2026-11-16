@@ -86,6 +86,10 @@ func (f *foreignconfig) Setup(t *testing.T) []framework.Option {
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "daprd"}}},
 	}
+	pods := &corev1.PodList{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+		Items:    []corev1.Pod{*pod},
+	}
 
 	f.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -94,10 +98,8 @@ func (f *foreignconfig) Setup(t *testing.T) []framework.Option {
 			snt.Port(),
 		),
 		kubernetes.WithClusterDaprConfigurationListFromStore(t, f.store),
-		kubernetes.WithClusterPodList(t, &corev1.PodList{
-			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
-			Items:    []corev1.Pod{*pod},
-		}),
+		kubernetes.WithClusterPodList(t, pods),
+		kubernetes.WithNamespacedPodList(t, "default", pods),
 	)
 
 	f.operator = operator.New(t,

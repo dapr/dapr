@@ -15,6 +15,7 @@ package authz
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -93,8 +94,33 @@ func (a *Authz) job(ctx context.Context, name string, meta *schedulerv1pb.JobMet
 	return nil
 }
 
+// WatchInitial authorizes a WatchJobs stream. Declared actor types, the actor
+// types of concurrency limits and of in-flight reminders must not be another
+// app's reserved internal actor types, else the stream would receive,
+// throttle, or hold back that app's reminder triggers.
 func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {
-	return a.authz(ctx, initial.GetNamespace(), initial.GetAppId())
+	ns, appID := initial.GetNamespace(), initial.GetAppId()
+	if err := a.authz(ctx, ns, appID); err != nil {
+		return err
+	}
+
+	actorTypes := slices.Clone(initial.GetActorTypes())
+	for _, limit := range initial.GetConcurrencyLimits() {
+		actorTypes = append(actorTypes, limit.GetActor().GetType())
+	}
+	for _, ref := range initial.GetInflightReminders() {
+		actorTypes = append(actorTypes, ref.GetActorType())
+	}
+
+	for _, actorType := range actorTypes {
+		if internal, owned := hostauthz.InternalActorType(actorType, ns, appID); internal && !owned {
+			log.Debugf("internal actor type does not belong to app: type=%s, req=%s/%s", actorType, ns, appID)
+			monitoring.RecordSidecarAuthError()
+			return status.Errorf(codes.PermissionDenied, "actor type %s is not allowed for app ID %s in namespace %s", actorType, appID, ns)
+		}
+	}
+
+	return nil
 }
 
 func (a *Authz) authz(ctx context.Context, ns, appID string) error {

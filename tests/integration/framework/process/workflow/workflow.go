@@ -85,6 +85,15 @@ func SigningFromEnv() bool {
 	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_SIGNING"))
 }
 
+// StagedOperationsFromEnv reports whether the suite is running with
+// DAPR_INTEGRATION_WORKFLOW_STAGED set truthy, which enables the
+// WorkflowsStagedOperations feature flag on every daprd built by this harness
+// unless a test overrides it with WithStagedOperations or
+// WithStagedOperationsN.
+func StagedOperationsFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_STAGED"))
+}
+
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
@@ -99,6 +108,8 @@ type Workflow struct {
 	signing      bool
 
 	schedulerPlacement bool
+
+	stagedOperations bool
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -125,6 +136,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	fastPath := FastPathFromEnv()
 	if opts.fastPath != nil {
 		fastPath = *opts.fastPath
+	}
+
+	staged := StagedOperationsFromEnv()
+	if opts.stagedOperations != nil {
+		staged = *opts.stagedOperations
 	}
 
 	schedulerPlacement := SchedulerPlacementFromEnv()
@@ -212,13 +228,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
 	}
 
-	// daprd loads each config file onto one Configuration struct and
-	// spec.features is a slice, so the LAST config file that specifies
-	// features replaces every earlier feature list. All harness-driven
-	// features must therefore land in a single manifest per daprd; it is
-	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath)
-
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
 		// scheduler) truly replaces any addresses appended by other option
@@ -239,7 +248,16 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts := make([]daprd.Option, 0, len(baseDopts)+1)
 		dopts = append(dopts, baseDopts...)
 
-		features := baseFeatures
+		// daprd loads each config file onto one Configuration struct and
+		// spec.features is a slice, so the LAST config file that specifies
+		// features replaces every earlier feature list. All harness-driven
+		// features must therefore land in a single manifest per daprd, built
+		// here because signing and staged operations are per-daprd.
+		stagedI := staged
+		if v, ok := opts.stagedN[i]; ok {
+			stagedI = v
+		}
+		features := baseFeatureList(clustered, fastPath, stagedI)
 		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}
@@ -288,6 +306,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		signing:      signing,
 
 		schedulerPlacement: schedulerPlacement,
+
+		stagedOperations: staged,
 	}
 
 	for i := range workflow.taskregistry {
@@ -348,19 +368,35 @@ func (w *Workflow) WaitForNoConnectedWorkers(t *testing.T, ctx context.Context) 
 
 func (w *Workflow) WaitForNoConnectedWorkersN(t *testing.T, ctx context.Context, index int) {
 	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, index, 0)
+}
+
+// WaitForExactlyConnectedWorkers waits until daprd index 0 reports exactly
+// count connected workers. See WaitForExactlyConnectedWorkersN.
+func (w *Workflow) WaitForExactlyConnectedWorkers(t *testing.T, ctx context.Context, count int) {
+	t.Helper()
+	w.WaitForExactlyConnectedWorkersN(t, ctx, 0, count)
+}
+
+// WaitForExactlyConnectedWorkersN waits until the daprd at the given index
+// reports exactly count connected workers, for example after one of several
+// workers disconnected.
+func (w *Workflow) WaitForExactlyConnectedWorkersN(t *testing.T, ctx context.Context, index, count int) {
+	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md := w.DaprN(index).GetMetadata(c, ctx)
 		if !assert.NotNil(c, md) {
 			return
 		}
 		// The workflows metadata field is omitted when there are no connected
 		// workers, so a nil value means zero workers (drained).
-		if md.Workflows == nil {
-			return
+		var connected int
+		if md.Workflows != nil {
+			connected = md.Workflows.ConnectedWorkers
 		}
-		assert.Zero(c, md.Workflows.ConnectedWorkers)
+		assert.Equal(c, count, connected)
 	}, time.Second*30, time.Millisecond*10)
 }
 
@@ -447,13 +483,16 @@ func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv
 	return w.daprds[index].GRPCClient(t, ctx)
 }
 
-func baseFeatureList(clustered, fastPath bool) []string {
-	features := make([]string, 0, 2)
+func baseFeatureList(clustered, fastPath, stagedOperations bool) []string {
+	features := make([]string, 0, 3)
 	if clustered {
 		features = append(features, "WorkflowsClusteredDeployment")
 	}
 	if fastPath {
 		features = append(features, "WorkflowsFastPath")
+	}
+	if stagedOperations {
+		features = append(features, "WorkflowsStagedOperations")
 	}
 	return features
 }
@@ -463,7 +502,7 @@ func baseFeatureList(clustered, fastPath bool) []string {
 // the Sentry wiring.
 func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	t.Helper()
-	features := baseFeatureList(w.clustered, w.fastPath)
+	features := baseFeatureList(w.clustered, w.fastPath, w.stagedOperations)
 	var opts []daprd.Option
 	if w.sentry != nil {
 		opts = append(opts, daprd.WithSentry(t, w.sentry))
@@ -482,6 +521,14 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 // branch assertions which differ between the two modes.
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
+}
+
+// StagedOperations reports whether every daprd in this workflow runs with
+// the WorkflowsStagedOperations feature flag enabled, except any overridden
+// via WithStagedOperationsN. Tests use this to branch assertions which differ
+// between the two modes.
+func (w *Workflow) StagedOperations() bool {
+	return w.stagedOperations
 }
 
 // SchedulerPlacement reports whether the scheduler serves actor placement
@@ -507,9 +554,11 @@ func (w *Workflow) Signing() bool {
 
 // ActorTypesCount returns the number of actor types a daprd in this workflow
 // registers when a worker is connected: workflow, activity and retentioner,
-// plus the executor rendezvous type in clustered deployment mode.
+// plus the executor rendezvous type in clustered deployment or staged
+// operations mode. It reads the harness-wide modes: a daprd overridden with
+// WithStagedOperationsN may differ.
 func (w *Workflow) ActorTypesCount() int {
-	if w.clustered {
+	if w.clustered || w.stagedOperations {
 		return 4
 	}
 	return 3

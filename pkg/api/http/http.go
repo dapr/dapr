@@ -22,6 +22,7 @@ import (
 	"io"
 	"maps"
 	nethttp "net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -92,6 +93,8 @@ const (
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
 	storeNameParam           = "storeName"
+	indexParam               = "index"
+	collectionParam          = "collection"
 	stateKeyParam            = "key"
 	configurationKeyParam    = "key"
 	configurationSubscribeID = "configurationSubscribeID"
@@ -162,10 +165,16 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSearchEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructVectorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
-	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
-	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
+	// The public port has no API token auth, so it only serves read-only endpoints.
+	for _, e := range slices.Concat(metadataEndpoints, healthEndpoints) {
+		if slices.Equal(e.Methods, []string{nethttp.MethodGet}) {
+			api.publicEndpoints = append(api.publicEndpoints, e)
+		}
+	}
 
 	return api
 }
@@ -1284,11 +1293,9 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			Event:       dBytes,
 			ContentType: entry.ContentType,
 		}
-		if entry.Metadata != nil {
-			// Populate entry metadata with request level metadata. Entry level metadata keys
-			// override request level metadata.
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
-		}
+		// Populate entry metadata with request level metadata. Entry level metadata keys
+		// override request level metadata.
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(),

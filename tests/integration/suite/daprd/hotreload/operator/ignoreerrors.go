@@ -124,5 +124,6 @@ func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 		i.operator.SetComponents(upComp)
 		i.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &upComp, EventType: operatorv1.ResourceEventType_UPDATED})
 		i.logline.EventuallyFoundAll(t)
+		i.daprd.WaitUntilExit(t, 15*time.Second)
 	})
 }

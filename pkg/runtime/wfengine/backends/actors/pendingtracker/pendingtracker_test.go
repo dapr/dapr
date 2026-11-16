@@ -271,3 +271,53 @@ func Test_OlderRegistrationStaysTrackedAfterNewerDeregisters(t *testing.T) {
 	require.ErrorIs(t, wfErr, api.ErrTaskCancelled)
 	require.ErrorIs(t, actErr, api.ErrTaskCancelled)
 }
+
+// blockingBackend holds every workflow cancel until release is closed, as a
+// cancel of a waiter on another daprd waits on the router.
+type blockingBackend struct {
+	Backend
+	release chan struct{}
+}
+
+func (b *blockingBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
+	<-b.release
+	return b.Backend.CancelWorkflowTask(ctx, id)
+}
+
+// Test_StartSweepReturnsBeforeSweepSettles covers the engine's
+// disconnect callback, which flips under its lock and waits for the sweep
+// without it: the flip returns at once, and the returned function waits for
+// every cancel to settle.
+func Test_StartSweepReturnsBeforeSweepSettles(t *testing.T) {
+	t.Parallel()
+
+	bb := &blockingBackend{Backend: local.NewTasksBackend(), release: make(chan struct{})}
+	tr := New(bb)
+
+	var cancelled atomic.Bool
+	tr.OnWorkflowTaskCompletion(wfReq("wf1"), func(_ *protos.WorkflowResponse, err error) {
+		cancelled.Store(errors.Is(err, api.ErrTaskCancelled))
+	})
+
+	settled := tr.StartSweep()
+	assert.False(t, tr.ExecutorAvailable())
+
+	done := make(chan struct{})
+	go func() {
+		settled()
+		close(done)
+	}()
+	select {
+	case <-done:
+		require.Fail(t, "the sweep settled with its cancel still held")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(bb.release)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the sweep did not settle once its cancel was released")
+	}
+	assert.True(t, cancelled.Load())
+}

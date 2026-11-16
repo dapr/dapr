@@ -26,8 +26,10 @@ import (
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
+	compsearch "github.com/dapr/dapr/pkg/components/search"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
+	compvector "github.com/dapr/dapr/pkg/components/vector"
 	messagingv1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -54,6 +56,8 @@ type Registry struct {
 	httpMiddleware *http.Registry
 	crypto         *crypto.Registry
 	conversations  *conversation.Registry
+	searches       *compsearch.Registry
+	vectors        *compvector.Registry
 	binaryStores   *binarystore.Registry
 	componentCb    ComponentsCallback
 	reporter       Reporter
@@ -71,6 +75,8 @@ func New(opts *Options) *Registry {
 		httpMiddleware: opts.httpMiddleware,
 		crypto:         opts.crypto,
 		conversations:  opts.conversation,
+		searches:       opts.search,
+		vectors:        opts.vector,
 		binaryStores:   opts.binaryStore,
 		componentCb:    opts.componentsCallback,
 		reporter:       opts.reporter,
@@ -115,6 +121,14 @@ func (r *Registry) Crypto() *crypto.Registry {
 
 func (r *Registry) Conversations() *conversation.Registry {
 	return r.conversations
+}
+
+func (r *Registry) Searches() *compsearch.Registry {
+	return r.searches
+}
+
+func (r *Registry) Vectors() *compvector.Registry {
+	return r.vectors
 }
 
 func (r *Registry) BinaryStores() *binarystore.Registry {

@@ -78,6 +78,15 @@ type Options struct {
 	// and the in-memory completions fold (fold.go).
 	FastPath bool
 
+	// Fallback, if set, reports whether this daprd hosts the workflow actor
+	// type as a fallback host (the WorkflowsStagedOperations preview): with no
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
+	Fallback func() bool
+
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
@@ -116,6 +125,7 @@ type factory struct {
 	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
 	// the Wait.
 	fastPath   bool
+	fallback   func() bool
 	wakeLock   sync.Mutex
 	wakeCtx    context.Context
 	wakeCancel context.CancelFunc
@@ -203,6 +213,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		scheduler:              opts.Scheduler,
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
+		fallback:               opts.Fallback,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,
@@ -212,9 +223,10 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		detached:               det,
 	}
 
-	// The worker pool and reaper are factory-lifetime: they exit when the
-	// engine's context dies and are joined by the final HaltAll, so engine
-	// close leaks no goroutines.
+	// The worker pool and reaper are factory-lifetime: they exit when ctx, the
+	// registration's context, ends. The actors backend cancels it once the
+	// types are unregistered and when it stops, so neither leaks goroutines.
+	// HaltAll joins them when ctx has already ended.
 	for range 8 {
 		f.bgWG.Go(func() {
 			for {
@@ -330,6 +342,22 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	}
 
 	return errors.Join(errs.Slice()...)
+}
+
+// CancelWakes cancels the detached local wakes as HaltAll does, without
+// deactivating the actors, for a daprd turning into a fallback host in place.
+// It has no local executor left to drive them, and a wake parked in a stall
+// hold would keep its actor's turn until the wake times out, failing every
+// janitor delivery meanwhile. The janitor drives what they leave once a
+// daprd has an executor.
+func (f *factory) CancelWakes() {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.wakeLock.Lock()
+	defer f.wakeLock.Unlock()
+	f.wakeCancel()
+	f.wakeCtx, f.wakeCancel = context.WithCancel(context.Background())
 }
 
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {

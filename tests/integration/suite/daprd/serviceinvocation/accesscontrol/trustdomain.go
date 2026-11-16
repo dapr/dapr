@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,9 +73,7 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-config", Namespace: "default"},
 		Spec: configapi.ConfigurationSpec{
-			NameResolutionSpec: &configapi.NameResolutionSpec{
-				Component: "mdns",
-			},
+			NameResolutionSpec: daprd.NameResolutionSpec(t),
 			MTLSSpec: &configapi.MTLSSpec{
 				ControlPlaneTrustDomain: "localhost",
 				SentryAddress:           e.sentry.Address(),
@@ -85,12 +84,15 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
+	appID1, appID2 := uuid.New().String(), uuid.New().String()
+
 	kubeapi := kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("localhost"),
 			"default",
 			e.sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{appID1: "my-config", appID2: "my-config"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items:    []configapi.Configuration{cnf},
@@ -106,6 +108,7 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 	app := app.New(t)
 
 	e.daprd1 = daprd.New(t,
+		daprd.WithAppID(appID1),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithConfigs("my-config"),
 		daprd.WithAppPort(app.Port(t)),
@@ -121,6 +124,7 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 	)
 
 	e.daprd2 = daprd.New(t,
+		daprd.WithAppID(appID2),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithConfigs("my-config"),
 		daprd.WithAppPort(app.Port(t)),

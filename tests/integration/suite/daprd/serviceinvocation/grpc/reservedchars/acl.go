@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,12 +81,13 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 
 	r.caller = procdaprd.New(t)
 	callerAppID := r.caller.AppID()
+	calleeAppID := uuid.New().String()
 
 	cnf := configapi.Configuration{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 		ObjectMeta: metav1.ObjectMeta{Name: "acl-config", Namespace: "default"},
 		Spec: configapi.ConfigurationSpec{
-			NameResolutionSpec: &configapi.NameResolutionSpec{Component: "mdns"},
+			NameResolutionSpec: procdaprd.NameResolutionSpec(t),
 			MTLSSpec: &configapi.MTLSSpec{
 				ControlPlaneTrustDomain: "localhost",
 				SentryAddress:           sen.Address(),
@@ -114,6 +116,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 			"default",
 			sen.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{callerAppID: "acl-config", calleeAppID: "acl-config"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items:    []configapi.Configuration{cnf},
@@ -143,6 +146,7 @@ func (r *acl) Setup(t *testing.T) []framework.Option {
 	}
 
 	r.callee = procdaprd.New(t, daprdOpts(
+		procdaprd.WithAppID(calleeAppID),
 		procdaprd.WithAppProtocol("grpc"),
 		procdaprd.WithAppPort(srv.Port(t)),
 	)...)

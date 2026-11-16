@@ -86,6 +86,30 @@ const (
 	// limits gate per job delivery, which local drives bypass. Preview
 	// feature; disabled by default.
 	WorkflowsFastPath Feature = "WorkflowsFastPath"
+
+	// WorkflowsStagedOperations accepts workflow operations while no daprd of
+	// the app has a workflow worker connected (or an in-process executor).
+	// Starts, raised events, terminate, suspend, resume and rerun are staged:
+	// daprd saves them, with their usual synchronous errors, and they run
+	// once a worker connects. Status queries and purges complete at once.
+	// Without it they block or fail with no address. To stage them, a daprd
+	// with an executor registers the executor actor type as well, which
+	// tells the app's other daprds that one exists; once none has for a few
+	// seconds, every daprd of the app hosts the workflow actor types itself,
+	// as a fallback host, and a daprd whose last worker leaves keeps hosting
+	// them as one. A fallback host runs no workflow code: it
+	// does not advertise the types to the scheduler for reminder delivery,
+	// so the reminders its actors arm fire once a daprd with an executor
+	// exists, and it gives the types up once one has existed for a short
+	// while. No control plane change is needed. Enable it only once every
+	// daprd of the app runs a version which knows it: an older daprd with a
+	// worker does not register the executor actor type, so a daprd with the
+	// flag and no worker would take a share of the app's instances it cannot
+	// run. Every daprd with the flag and an actor runtime hosts the types
+	// while no worker exists, so set it in the Configuration of the apps
+	// which run workflows rather than of every app. Preview feature;
+	// disabled by default.
+	WorkflowsStagedOperations Feature = "WorkflowsStagedOperations"
 )
 
 // end feature flags section
@@ -181,10 +205,17 @@ type WorkflowSpec struct {
 	// If omitted, no global maximum will be enforced.
 	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
 
+	// activityDispatchMode is the application-wide activity dispatch mode:
+	// "hashed" or "pull"; nil means "hashed". See ActivityDispatchPull. The
+	// slots offered to the scheduler are MaxConcurrentActivityInvocations less
+	// every activity the replica runs, pull or hashed.
+	ActivityDispatchMode *string `json:"activityDispatchMode,omitempty" yaml:"activityDispatchMode,omitempty"`
+
 	// Per-workflow-name concurrency limits enforced globally by the scheduler.
 	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
-	// Per-activity-name concurrency limits enforced globally by the scheduler.
-	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler,
+	// plus optional per-name dispatch mode overrides.
+	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
 
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
@@ -197,6 +228,25 @@ type NamedConcurrencyLimit struct {
 	Name          *string `json:"name"          yaml:"name"`
 	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
 }
+
+// ActivityConcurrencyLimit defines per-activity-name settings. MaxConcurrent
+// is the global (cross-replica) limit; DispatchMode overrides the
+// application's ActivityDispatchMode for this name, nil inherits it.
+type ActivityConcurrencyLimit struct {
+	Name          *string `json:"name"                   yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent"          yaml:"maxConcurrent"`
+	DispatchMode  *string `json:"dispatchMode,omitempty" yaml:"dispatchMode,omitempty"`
+}
+
+const (
+	// ActivityDispatchModeHashed runs each activity on the replica its actor ID
+	// hashes to. This is the default.
+	ActivityDispatchModeHashed = "hashed"
+	// ActivityDispatchModePull lets the scheduler deliver each activity to any
+	// replica with a free slot, where MaxConcurrentActivityInvocations is the
+	// per-replica slot count.
+	ActivityDispatchModePull = "pull"
+)
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
 // for workflow instances once they reaches a specific or any terminal state.
@@ -293,15 +343,96 @@ func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
 	}
 	// Only entries the scheduler actually enforces count (mirrors
 	// cluster.buildConcurrencyLimits).
-	enforced := func(ls []NamedConcurrencyLimit) bool {
-		for _, l := range ls {
-			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
-				return true
-			}
+	for _, l := range w.WorkflowConcurrencyLimits {
+		if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+			return true
 		}
+	}
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ActivityDispatchPull reports whether activities with the given name are
+// pull-dispatched: a per-name entry with a DispatchMode wins, otherwise the
+// application-wide ActivityDispatchMode applies.
+func (w *WorkflowSpec) ActivityDispatchPull(name string) bool {
+	if w == nil {
 		return false
 	}
-	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && *l.Name == name && l.DispatchMode != nil {
+			return isPull(l.DispatchMode)
+		}
+	}
+	return isPull(w.ActivityDispatchMode)
+}
+
+func isPull(mode *string) bool {
+	return mode != nil && *mode == ActivityDispatchModePull
+}
+
+// HasPullActivityDispatch reports whether any activity of this application is
+// pull-dispatched, either through the application-wide mode or a per-name
+// override.
+func (w *WorkflowSpec) HasPullActivityDispatch() bool {
+	if w == nil {
+		return false
+	}
+	if isPull(w.ActivityDispatchMode) {
+		return true
+	}
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && isPull(l.DispatchMode) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateWorkflowSpec rejects dispatch settings the runtime cannot honour.
+func (c *Configuration) validateWorkflowSpec() error {
+	w := c.Spec.WorkflowSpec
+	if w == nil {
+		return nil
+	}
+
+	validMode := func(mode *string) bool {
+		return mode == nil || *mode == ActivityDispatchModeHashed || *mode == ActivityDispatchModePull
+	}
+	if !validMode(w.ActivityDispatchMode) {
+		return fmt.Errorf("invalid workflow activityDispatchMode %q: must be %q or %q", *w.ActivityDispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+	}
+
+	// A name may repeat as before (the last limit wins), but not once a
+	// dispatchMode makes the entries disagree on how it is dispatched.
+	seen := make(map[string]bool, len(w.ActivityConcurrencyLimits))
+	for _, l := range w.ActivityConcurrencyLimits {
+		if !validMode(l.DispatchMode) {
+			return fmt.Errorf("invalid dispatchMode %q in workflow activityConcurrencyLimits: must be %q or %q", *l.DispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+		}
+		if l.Name == nil {
+			if l.DispatchMode != nil {
+				return fmt.Errorf("dispatchMode %q in workflow activityConcurrencyLimits requires a name", *l.DispatchMode)
+			}
+			continue
+		}
+		if hadMode, ok := seen[*l.Name]; ok && (hadMode || l.DispatchMode != nil) {
+			return fmt.Errorf("duplicate activity name %q with a dispatchMode in workflow activityConcurrencyLimits", *l.Name)
+		}
+		seen[*l.Name] = seen[*l.Name] || l.DispatchMode != nil
+	}
+
+	// Pull dispatch is only work-conserving when each replica advertises a slot
+	// count; without one the scheduler would deliver everything on arrival.
+	if w.HasPullActivityDispatch() && w.GetMaxConcurrentActivityInvocations() == nil {
+		return errors.New("workflow activity dispatchMode pull requires maxConcurrentActivityInvocations to be set to a positive value: it is the number of activity slots each sidecar offers to the scheduler")
+	}
+
+	return nil
 }
 
 type SecretsSpec struct {
@@ -499,9 +630,7 @@ func (m MetricSpec) GetEnabled() bool {
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-		// TODO: [MetricsCardinality] Change default in 1.15+
-		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		log.Warn("'spec.metrics.http.increasedCardinality' is not set and defaults to 'true'. Set it to 'false' or configure 'pathMatching' to reduce the cardinality of HTTP metrics")
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality
@@ -582,9 +711,8 @@ func (m MetricSpec) GetRecordErrorCodes() bool {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-	// TODO: [MetricsCardinality] Change default in 1.15+
+	// If true (default), metrics for the HTTP server are collected with increased cardinality.
+	// Set to false, or use pathMatching, to reduce cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	// +optional
@@ -761,6 +889,10 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		return nil, err
 	}
 
+	if err = conf.validateWorkflowSpec(); err != nil {
+		return nil, err
+	}
+
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
 	return conf, nil
@@ -793,6 +925,10 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 
 	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if err = conf.validateWorkflowSpec(); err != nil {
 		return nil, nil, err
 	}
 

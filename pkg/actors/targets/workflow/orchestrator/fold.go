@@ -88,6 +88,22 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 	unlockOnce := sync.OnceFunc(unlock)
 	defer unlockOnce()
 
+	// InvokeMethod chose this path before the lock: the last worker may have
+	// disconnected while this call waited for it. A fallback host serves the
+	// event on the durable path and marks the response, or the caller would
+	// wait for a state change that comes only once the instance moves.
+	// Otherwise the state is held until the event is admitted, as
+	// handleInvoke holds it: a worker disconnecting meanwhile does not move
+	// the event to the durable path behind an unmarked response. It is
+	// released before the lock, so the folding turn reads it afresh.
+	fallback, unpin := o.pinFallback()
+	unpinOnce := sync.OnceFunc(unpin)
+	defer unpinOnce()
+	if fallback {
+		unpinOnce()
+		return o.handleInvoke(ctx, req)
+	}
+
 	// Under the lock, like the normal handleInvoke path: the policy check
 	// reads mutable cached workflow state, and authorizing before the lock
 	// could approve a completion against an execution that a concurrent
@@ -97,6 +113,7 @@ func (o *orchestrator) invokeAddEventFold(ctx context.Context, req *internalsv1p
 	}
 
 	entry, err := o.admitEvent(ctx, &ev, senderFromMetadata(req.GetMetadata()), true)
+	unpinOnce()
 	if err != nil {
 		return nil, err
 	}

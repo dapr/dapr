@@ -456,9 +456,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 		entries[i].Event = entry.GetEvent()
 		// Populate entry metadata with request level metadata. Entry level metadata keys
 		// override request level metadata.
-		if entry.GetMetadata() != nil {
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
-		}
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
 
 		if !rawPayload {
 			// Extract trace context from context.
@@ -1290,6 +1288,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return router.Call(ctx, req)
 	})
 	if err != nil {
+		// A deadline (the caller's or the actor's resiliency timeout) is not an
+		// internal failure.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
 			return nil, err

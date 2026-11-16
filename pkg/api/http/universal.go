@@ -49,6 +49,11 @@ type UniversalHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 	// When true, unpopulated fields in proto responses (i.e. fields whose value is the zero one) are included in the response too.
 	// Defaults to false.
 	ProtoResponseEmitUnpopulated bool
+
+	// When true, a plain gRPC status error returned by the handler keeps its canonical code and details instead of becoming a generic 500.
+	// Meant for building blocks whose components return gRPC status errors.
+	// Defaults to false.
+	ComponentStatusErrors bool
 }
 
 // UniversalHTTPHandler wraps a Universal API method into a HTTP handler.
@@ -105,6 +110,9 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 		res, err := handler(r.Context(), in)
 		if err != nil {
 			// Error is already logged by the handlers, we won't log it again
+			if opts.ComponentStatusErrors && respondWithComponentStatusError(w, err) {
+				return
+			}
 			respondWithError(w, err)
 			return
 		}

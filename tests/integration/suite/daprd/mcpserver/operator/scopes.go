@@ -69,6 +69,7 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"myapp": "mcpconfig", "otherapp": "mcpconfig"}),
 		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},

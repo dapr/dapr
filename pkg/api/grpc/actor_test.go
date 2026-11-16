@@ -15,6 +15,8 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,10 +27,15 @@ import (
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/api/universal"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 func TestGetActorState(t *testing.T) {
@@ -158,6 +165,53 @@ func TestInvokeActorRejectsInternalActorType(t *testing.T) {
 			require.Error(t, err)
 			assert.Equal(t, codes.PermissionDenied, status.Code(err))
 			assert.Contains(t, err.Error(), "reserved for the Dapr workflow runtime")
+		})
+	}
+}
+
+func TestActorCallContextError(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		code codes.Code
+	}{
+		"deadline exceeded":         {err: context.DeadlineExceeded, code: codes.DeadlineExceeded},
+		"wrapped deadline exceeded": {err: fmt.Errorf("failed to lookup actor: %w", context.DeadlineExceeded), code: codes.DeadlineExceeded},
+		// daprd cancels calls internally (dissemination, shutdown); the caller
+		// did not cancel, so that stays an internal error.
+		"wrapped canceled": {err: fmt.Errorf("failed to lookup actor: %w", context.Canceled), code: codes.Internal},
+		"other error":      {err: errors.New("boom"), code: codes.Internal},
+	} {
+		t.Run(name, func(t *testing.T) {
+			api := &api{
+				Universal: universal.New(universal.Options{
+					AppID:      "fakeAPI",
+					Resiliency: resiliency.New(nil),
+					Actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+						return routerfake.New().WithCallFn(func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+							return nil, tc.err
+						}), nil
+					}),
+				}),
+			}
+
+			lis := startDaprAPIServer(t, api, "")
+			conn := createTestClient(lis)
+			defer conn.Close()
+			_, err := runtimev1pb.NewDaprClient(conn).InvokeActor(t.Context(), &runtimev1pb.InvokeActorRequest{
+				ActorType: "mytype", ActorId: "1", Method: "foo",
+			})
+			assert.Equal(t, tc.code, status.Code(err), "InvokeActor: %v", err)
+
+			server, ilis := startInternalServer(api)
+			defer server.Stop()
+			iconn := createTestClient(ilis)
+			defer iconn.Close()
+			_, err = internalv1pb.NewServiceInvocationClient(iconn).CallActor(t.Context(), &internalv1pb.InternalInvokeRequest{
+				Ver:     internalv1pb.APIVersion_V1,
+				Actor:   &internalv1pb.Actor{ActorType: "mytype", ActorId: "1"},
+				Message: &commonv1pb.InvokeRequest{Method: "foo"},
+			})
+			assert.Equal(t, tc.code, status.Code(err), "CallActor: %v", err)
 		})
 	}
 }

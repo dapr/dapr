@@ -285,7 +285,7 @@ func Test_runWorkflow_oversizeStallPersistsFoldedToInbox(t *testing.T) {
 	h.orch.actorState = statefake.New().
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {
 			if req.Key == wfenginestate.MetadataKey {
-				etag := "etag"
+				etag := testETag
 				return &actorapi.StateResponse{Data: []byte{1}, ETag: &etag}, nil
 			}
 			return &actorapi.StateResponse{}, nil

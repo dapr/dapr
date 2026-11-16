@@ -20,4 +20,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/httpendpointupdate"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/listcomponents"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/resiliencyupdate"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/scopes"
 )

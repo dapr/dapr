@@ -16,6 +16,7 @@ package resources
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -67,4 +68,5 @@ spec:
 
 func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	w.logline.EventuallyFoundAll(t)
+	w.daprd.WaitUntilExit(t, 15*time.Second)
 }

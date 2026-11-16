@@ -94,6 +94,11 @@ func (r Resiliency) GetScopes() []string {
 	return r.Scopes
 }
 
+// IsAppScoped returns true if the appID is allowed in the scopes for the resiliency.
+func (r Resiliency) IsAppScoped(appID string) bool {
+	return (&common.Scoped{Scopes: r.Scopes}).IsAppScoped(appID)
+}
+
 // EmptyMetaDeepCopy returns a new instance of the resiliency type with the
 // TypeMeta's Kind and APIVersion fields set.
 func (r Resiliency) EmptyMetaDeepCopy() metav1.Object {
