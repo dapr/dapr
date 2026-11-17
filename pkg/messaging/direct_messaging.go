@@ -203,6 +203,9 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	case 1:
 		return targetAppID, d.namespace, nil
 	case 2:
+		if items[0] == "" || items[1] == "" {
+			return "", "", fmt.Errorf("invalid app id %s", targetAppID)
+		}
 		return items[0], items[1], nil
 	default:
 		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
