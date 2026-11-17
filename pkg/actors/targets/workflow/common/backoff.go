@@ -15,6 +15,7 @@ package common
 
 import (
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -29,6 +30,40 @@ const (
 	RetryBackoffBase = 50 * time.Millisecond
 	RetryBackoffCap  = 2 * time.Second
 )
+
+// RejectedTurnBackoffCap bounds the extra hold a workflow actor puts on the
+// retry of a turn that daprd rejects again and again. A turn that is rejected
+// once or twice usually converges on the next try, so the hold starts at
+// RetryBackoffBase and doubles. A turn that is still rejected after about ten
+// tries does not converge by itself (for example, the workflow code is not
+// deterministic), so retrying it more than twice a minute only costs a full
+// state load and an app round trip each time.
+const RejectedTurnBackoffCap = 30 * time.Second
+
+// rejectedTurnBackoffBase is the first hold of RejectedTurnBackoff. Integration
+// tests shorten or lengthen it through the environment.
+var rejectedTurnBackoffBase = sync.OnceValue(func() time.Duration {
+	return EnvDurationOr("DAPR_WORKFLOW_TEST_REJECTED_TURN_BACKOFF_BASE", RetryBackoffBase)
+})
+
+// RejectedTurnBackoff returns how long to hold the retry of a turn that daprd
+// has now rejected the given number of times in a row: the base doubled for
+// each rejection after the first, up to RejectedTurnBackoffCap. The workflow
+// actor adds this hold to the interval the scheduler waits between retries,
+// because that interval is constant for the life of the reminder.
+func RejectedTurnBackoff(rejections int) time.Duration {
+	if rejections < 1 {
+		return 0
+	}
+	base := rejectedTurnBackoffBase()
+	// Doubling more than this overflows or passes the cap for any base.
+	const maxShift = 30
+	shift := min(rejections-1, maxShift)
+	if base > RejectedTurnBackoffCap>>shift {
+		return RejectedTurnBackoffCap
+	}
+	return base << shift
+}
 
 // JitterBackoff is the decorrelated exponential jitter from pkg/backoff,
 // aliased here for the workflow-internal call sites.
