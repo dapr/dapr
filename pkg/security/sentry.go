@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -183,7 +184,21 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 		}, nil
 	}
 
-	return fn, nil
+	return withRotationMetrics(fn), nil
+}
+
+// withRotationMetrics records a successful workload certificate rotation for
+// every successful request after the first one, which is the initial identity
+// rather than a rotation.
+func withRotationMetrics(fn spiffe.RequestSVIDFn) spiffe.RequestSVIDFn {
+	var issued atomic.Bool
+	return func(ctx context.Context, csrDER []byte) (*spiffe.SVIDResponse, error) {
+		resp, err := fn(ctx, csrDER)
+		if err == nil && !issued.CompareAndSwap(false, true) {
+			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+		}
+		return resp, err
+	}
 }
 
 // newJWTRequestFn returns a function which mints a JWT SVID on demand from
