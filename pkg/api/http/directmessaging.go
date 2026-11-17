@@ -311,6 +311,9 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			// response cleanly and present the truncated body as
 			// complete, so abort the connection instead, the same way
 			// httputil.ReverseProxy handles a failed copy.
+			// net/http does not log ErrAbortHandler, so log the error
+			// here or the failure is invisible on the daprd side.
+			log.Warnf("HTTP service invocation failed to complete with error: %v", err)
 			panic(http.ErrAbortHandler)
 		}
 

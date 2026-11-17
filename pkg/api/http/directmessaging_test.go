@@ -1124,6 +1124,16 @@ func (r *failingReader) Read(p []byte) (int, error) {
 }
 
 func TestV1DirectMessagingTruncatedResponseAborts(t *testing.T) {
+	// Capture the package logger so we can assert the truncated
+	// response is logged on the daprd side.
+	prevLog := log
+	log = logger.NewLogger("test.directmessaging.truncated")
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	defer func() {
+		log = prevLog
+	}()
+
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	compStore := compstore.New()
@@ -1170,4 +1180,9 @@ func TestV1DirectMessagingTruncatedResponseAborts(t *testing.T) {
 	body, err := io.ReadAll(res.Body)
 	assert.Equal(t, "fakeDirectMessageResponse", string(body))
 	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+
+	// The truncated response must leave a trace in the daprd logs:
+	// net/http does not log ErrAbortHandler, so without the explicit
+	// warning the failure would be invisible server-side.
+	assert.Contains(t, logBuf.String(), `level=warning msg="HTTP service invocation failed to complete with error: unexpected EOF"`)
 }
