@@ -32,8 +32,8 @@ import (
 // whether or not this app enables the preview: an operation targeting
 // another app is staged on that app's fallback host if that app enables it,
 // and with the preview off everywhere no response carries the marker, so
-// every call waits as before. Each of these calls, and a raise event or error, also
-// sets staged on its response when a fallback host served it, so the caller
+// every call waits as before. Each operation, including raised events and
+// errors, sets staged when served by a fallback host.
 // can tell a staged operation from one that ran.
 func registerFallbackAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
 	return func(s grpc.ServiceRegistrar) {
