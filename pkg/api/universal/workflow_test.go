@@ -350,10 +350,23 @@ func TestRaiseErrorWorkflowApi(t *testing.T) {
 			expectedError: messages.ErrInvalidWorkflowFailureDetails,
 		},
 		{
+			name:          "blank error type",
+			instanceID:    fakeInstanceID,
+			eventName:     eventName,
+			failureData:   []byte(`{"errorType":"  ","errorMessage":"failed"}`),
+			expectedError: messages.ErrInvalidWorkflowFailureDetails,
+		},
+		{
 			name:         "valid failure details",
 			instanceID:   fakeInstanceID,
 			eventName:    eventName,
 			failureData:  []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`),
+		},
+		{
+			name:         "error message is optional",
+			instanceID:   fakeInstanceID,
+			eventName:    eventName,
+			failureData:  []byte(`{"errorType":"ExternalError"}`),
 		},
 	}
 
