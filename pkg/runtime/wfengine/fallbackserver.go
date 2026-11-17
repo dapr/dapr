@@ -32,7 +32,7 @@ import (
 // whether or not this app enables the preview: an operation targeting
 // another app is staged on that app's fallback host if that app enables it,
 // and with the preview off everywhere no response carries the marker, so
-// every call waits as before. Each of these calls, and a raise event, also
+// every call waits as before. Each of these calls, and a raise event or error, also
 // sets staged on its response when a fallback host served it, so the caller
 // can tell a staged operation from one that ran.
 func registerFallbackAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
@@ -104,13 +104,12 @@ func (s fallbackAwareServer) ResumeInstance(ctx context.Context, req *protos.Res
 	return res, err
 }
 
-// RaiseEvent and RaiseError enqueue external event notifications without
-// waiting for the workflow instance to run, so the marker only tells the
-// caller whether the notification was staged.
+// RaiseEvent forwards an external event notification.
 func (s fallbackAwareServer) RaiseEvent(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
 	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseEvent)
 }
 
+// RaiseError forwards an external error notification.
 func (s fallbackAwareServer) RaiseError(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
 	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseError)
 }
