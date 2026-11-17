@@ -54,7 +54,14 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 			for tempTopic := range tempTopics {
 				tempTopic = strings.TrimSpace(tempTopic)
 				if tempTopic == "" {
+					// An explicit app= denies every topic; no entries means unscoped.
+					if len(topics) == 0 {
+						topics = append(topics, "")
+					}
 					continue
+				}
+				if len(topics) == 1 && topics[0] == "" {
+					topics = topics[:0]
 				}
 
 				if _, ok = existM[tempTopic]; !ok {
