@@ -381,8 +381,6 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 }
 
 // Route: POST "workflows/{workflowComponent}/{instanceID}/raiseError/{eventName}"
-// The body is proto-JSON TaskFailureDetails, preserving structured error type,
-// message, stack trace, retryability, and nested failures.
 func (a *api) onRaiseErrorWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.RaiseErrorWorkflow,
