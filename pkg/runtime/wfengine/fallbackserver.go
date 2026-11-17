@@ -34,7 +34,6 @@ import (
 // and with the preview off everywhere no response carries the marker, so
 // every call waits as before. Each operation, including raised events and
 // errors, sets staged when served by a fallback host.
-// can tell a staged operation from one that ran.
 func registerFallbackAware(register func(grpc.ServiceRegistrar)) func(grpc.ServiceRegistrar) {
 	return func(s grpc.ServiceRegistrar) {
 		register(fallbackAwareRegistrar{s})
@@ -104,12 +103,14 @@ func (s fallbackAwareServer) ResumeInstance(ctx context.Context, req *protos.Res
 	return res, err
 }
 
-// RaiseEvent forwards an external event notification.
+// RaiseEvent does not wait for the instance on any host, so the marker only
+// tells the caller whether the event was staged.
 func (s fallbackAwareServer) RaiseEvent(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
 	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseEvent)
 }
 
-// RaiseError forwards an external error notification.
+// RaiseError does not wait for the instance on any host, so the marker only
+// tells the caller whether the error was staged.
 func (s fallbackAwareServer) RaiseError(ctx context.Context, req *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
 	return s.raiseExternalEvent(ctx, req, s.TaskHubSidecarServiceServer.RaiseError)
 }
