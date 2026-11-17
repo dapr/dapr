@@ -297,8 +297,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	return res, nil
 }
 
-// RaiseErrorWorkflow is the API handler for failing an external-event wait
-// in a workflow. EventData carries proto-JSON TaskFailureDetails.
+// RaiseErrorWorkflow is the API handler for raising an error event to a workflow.
 func (a *Universal) RaiseErrorWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
