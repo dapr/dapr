@@ -262,14 +262,15 @@ func TestDispatcher_OverwrittenJobDoesNotLeakInflight(t *testing.T) {
 	// when its reminder is created a second time.
 	second := h.trigger("wf::1::0", "act")
 	h.handle(second)
+	h.pump(t)
 	require.Len(t, h.dispatched[0], 2)
+	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, first), "the replaced delivery is resolved; the cron drops an old job version's result")
 	assert.Equal(t, uint32(1), h.gates[testActorType+":act"].current, "the replaced delivery gives its gate back")
 
-	// The first delivery's stream closes: nothing resolves it any more.
-	h.closeStream(t, 0, first)
-	h.addStream(t, 0, 2)
-	h.ack(t, second)
+	// The first delivery's late result is spent.
 	h.ack(t, first)
+	h.ack(t, second)
+	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, first))
 	assert.Empty(t, h.d.inflight.counts)
 	assert.Equal(t, uint32(0), h.gates[testActorType+":act"].current)
 }

@@ -154,19 +154,17 @@ func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool, takeSlot bool)
 		gateKeys:  gateKeys,
 	}
 	sc := d.sidecarFor(p.sidecar)
-	stale := sc.flights[f.key]
+	if stale := sc.flights[f.key]; stale != nil {
+		// The job was overwritten and fired again before its earlier
+		// delivery resolved. Nothing finds a replaced flight again, so it is
+		// resolved now to release its gates. The cron drops the result of an
+		// old job version, and endFlight skips a replaced flight, so the
+		// gauge is released here.
+		d.inflight.add(stale.req, -1)
+		stale.req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+	}
 	sc.flights[f.key] = f
 	d.inflight.add(req, 1)
-	if stale != nil {
-		// The job was overwritten and fired again before its earlier
-		// delivery resolved. Nothing finds that flight any more, so it ends
-		// here, unless its result is already on its way to release the gates.
-		stale.stopTimer()
-		d.inflight.add(stale.req, -1)
-		if stale.done.CompareAndSwap(false, true) {
-			d.opts.ReleaseGates(stale.gateKeys)
-		}
-	}
 
 	cronFn := req.ResultFn
 	req.ResultFn = func(result api.TriggerResponseResult) {
