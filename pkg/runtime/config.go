@@ -330,6 +330,10 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
 			log.Error(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
+		} else if cfg.Security != nil && cfg.Security.MTLSEnabled() {
+			// The security provider is ready before the runtime is built, so mTLS
+			// init can only be recorded once the metric views are registered.
+			diag.DefaultMonitoring.MTLSInitCompleted()
 		}
 	}
 
