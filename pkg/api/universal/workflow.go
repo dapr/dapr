@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode"
 
@@ -297,7 +298,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	return res, nil
 }
 
-// RaiseErrorWorkflow is the API handler for raising an error event to a workflow.
+// RaiseErrorWorkflow is the API handler for failing a workflow's external-event wait.
 func (a *Universal) RaiseErrorWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
@@ -321,8 +322,12 @@ func (a *Universal) RaiseErrorWorkflow(ctx context.Context, in *runtimev1pb.Rais
 
 	failureDetails := new(protos.TaskFailureDetails)
 	if err := protojson.Unmarshal(in.GetEventData(), failureDetails); err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
-			fmt.Errorf("invalid workflow error details: %w", err))
+		err = messages.ErrInvalidWorkflowFailureDetails.WithFormat(err)
+		a.logger.Debug(err)
+		return res, err
+	}
+	if strings.TrimSpace(failureDetails.GetErrorType()) == "" {
+		err := messages.ErrInvalidWorkflowFailureDetails.WithFormat(fmt.Errorf("errorType is required"))
 		a.logger.Debug(err)
 		return res, err
 	}
@@ -334,7 +339,7 @@ func (a *Universal) RaiseErrorWorkflow(ctx context.Context, in *runtimev1pb.Rais
 
 	ctx = backendactors.WithFallbackMarker(ctx)
 	if err := a.workflowEngine.Client().RaiseError(ctx, api.InstanceID(in.GetInstanceId()), in.GetEventName(), opts...); err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
+		err = messages.ErrRaiseErrorWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to raise error for event %s on workflow %s: %w", in.GetEventName(), in.GetInstanceId(), err))
 		a.logger.Debug(err)
 		return res, err

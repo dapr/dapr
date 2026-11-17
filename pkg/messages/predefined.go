@@ -139,6 +139,8 @@ var (
 	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", errorcodes.WorkflowTerminate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", errorcodes.WorkflowEventNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow '%s': %s", errorcodes.WorkflowRaiseEvent, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrRaiseErrorWorkflow            = APIError{"error raising workflow error on instance '%s': %s", errorcodes.WorkflowRaiseError, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrInvalidWorkflowFailureDetails = APIError{"invalid workflow error details: %s", errorcodes.WorkflowRaiseErrorInvalidDetails, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", errorcodes.WorkflowPause, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", errorcodes.WorkflowResume, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}

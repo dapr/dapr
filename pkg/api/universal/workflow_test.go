@@ -313,6 +313,106 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 	}
 }
 
+func TestRaiseErrorWorkflowApi(t *testing.T) {
+	const eventName = "external_error"
+
+	tests := []struct {
+		name          string
+		instanceID    string
+		eventName     string
+		failureData   []byte
+		expectedError error
+	}{
+		{
+			name:          "missing instance ID",
+			eventName:     eventName,
+			failureData:   []byte(`{"errorType":"ExternalError","errorMessage":"failed"}`),
+			expectedError: messages.ErrMissingOrEmptyInstance,
+		},
+		{
+			name:          "missing event name",
+			instanceID:    fakeInstanceID,
+			failureData:   []byte(`{"errorType":"ExternalError","errorMessage":"failed"}`),
+			expectedError: messages.ErrMissingWorkflowEventName,
+		},
+		{
+			name:          "invalid failure details",
+			instanceID:    fakeInstanceID,
+			eventName:     eventName,
+			failureData:   []byte("{"),
+			expectedError: messages.ErrInvalidWorkflowFailureDetails,
+		},
+		{
+			name:          "missing error type",
+			instanceID:    fakeInstanceID,
+			eventName:     eventName,
+			failureData:   []byte(`{"errorMessage":"failed"}`),
+			expectedError: messages.ErrInvalidWorkflowFailureDetails,
+		},
+		{
+			name:         "valid failure details",
+			instanceID:   fakeInstanceID,
+			eventName:    eventName,
+			failureData:  []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeAPI := &Universal{
+				logger:         logger.NewLogger("test"),
+				resiliency:     resiliency.New(nil),
+				workflowEngine: fake.New(),
+				actors:         actorsfake.New(),
+			}
+			_, err := fakeAPI.RaiseErrorWorkflow(t.Context(), &runtimev1pb.RaiseEventWorkflowRequest{
+				WorkflowComponent: fakeComponentName,
+				InstanceId:        tt.instanceID,
+				EventName:         tt.eventName,
+				EventData:         tt.failureData,
+			})
+			if tt.expectedError == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
+			}
+		})
+	}
+
+	t.Run("targets the requested app and forwards structured failure details", func(t *testing.T) {
+		targetAppID := "target-app"
+		client := fake.NewClient().WithRaiseError(func(_ context.Context, id api.InstanceID, name string, opts ...api.RaiseErrorOptions) error {
+			require.Equal(t, api.InstanceID(fakeInstanceID), id)
+			require.Equal(t, eventName, name)
+
+			req := new(protos.RaiseEventRequest)
+			for _, configure := range opts {
+				require.NoError(t, configure(req))
+			}
+			require.Equal(t, "ExternalError", req.GetFailureDetails().GetErrorType())
+			require.Equal(t, "external operation failed", req.GetFailureDetails().GetErrorMessage())
+			require.Equal(t, targetAppID, req.GetRouter().GetTargetAppID())
+			return nil
+		})
+		fakeAPI := &Universal{
+			logger:     logger.NewLogger("test"),
+			resiliency: resiliency.New(nil),
+			workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+				return client
+			}),
+			actors: actorsfake.New(),
+		}
+		_, err := fakeAPI.RaiseErrorWorkflow(t.Context(), &runtimev1pb.RaiseEventWorkflowRequest{
+			WorkflowComponent: fakeComponentName,
+			InstanceId:        fakeInstanceID,
+			EventName:         eventName,
+			EventData:         []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`),
+			AppId:             &targetAppID,
+		})
+		require.NoError(t, err)
+	})
+}
+
 func TestPauseWorkflowApi(t *testing.T) {
 	testCases := []struct {
 		testName          string
@@ -601,6 +701,14 @@ func TestWorkflowStaged(t *testing.T) {
 		},
 		"raise event": func(ctx context.Context, a *Universal) (bool, error) {
 			res, err := a.RaiseEventWorkflow(ctx, &runtimev1pb.RaiseEventWorkflowRequest{InstanceId: fakeInstanceID, EventName: "event"})
+			return res.GetStaged(), err
+		},
+		"raise error": func(ctx context.Context, a *Universal) (bool, error) {
+			res, err := a.RaiseErrorWorkflow(ctx, &runtimev1pb.RaiseEventWorkflowRequest{
+				InstanceId: fakeInstanceID,
+				EventName:  "event",
+				EventData:  []byte(`{"errorType":"ExternalError","errorMessage":"failed"}`),
+			})
 			return res.GetStaged(), err
 		},
 		"pause": func(ctx context.Context, a *Universal) (bool, error) {

@@ -81,6 +81,11 @@ func (s *recordingServer) RaiseEvent(ctx context.Context, _ *protos.RaiseEventRe
 	return nil, nil
 }
 
+func (s *recordingServer) RaiseError(ctx context.Context, _ *protos.RaiseEventRequest) (*protos.RaiseEventResponse, error) {
+	s.record(ctx, "raiseError")
+	return nil, nil
+}
+
 type captureRegistrar struct {
 	impl any
 }
@@ -104,6 +109,7 @@ func TestFallbackAwareServer(t *testing.T) {
 	_, _ = wrapped.ResumeInstance(ctx, nil)
 	_, _ = wrapped.RerunWorkflowFromEvent(ctx, nil)
 	_, _ = wrapped.RaiseEvent(ctx, nil)
+	_, _ = wrapped.RaiseError(ctx, nil)
 
 	// Every call a fallback host may stage gets a marker.
 	assert.Equal(t, map[string]bool{
@@ -113,6 +119,7 @@ func TestFallbackAwareServer(t *testing.T) {
 		"resume":    true,
 		"rerun":     true,
 		"raise":     true,
+		"raiseError": true,
 	}, srv.marked)
 }
 
@@ -154,6 +161,17 @@ func TestFallbackAwareServer_Staged(t *testing.T) {
 		},
 		"raise": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {
 			res, err := srv.RaiseEvent(ctx, &protos.RaiseEventRequest{InstanceId: "wf1", Name: "event"})
+			return res.GetStaged(), err
+		},
+		"raise error": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {
+			res, err := srv.RaiseError(ctx, &protos.RaiseEventRequest{
+				InstanceId: "wf1",
+				Name:       "event",
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    "ExternalError",
+					ErrorMessage: "external operation failed",
+				},
+			})
 			return res.GetStaged(), err
 		},
 		"terminate": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {
