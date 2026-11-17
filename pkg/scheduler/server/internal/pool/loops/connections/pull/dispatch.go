@@ -153,7 +153,14 @@ func (d *Dispatcher) dispatch(req *loops.TriggerRequest, p *pool, takeSlot bool)
 		req:       req,
 		gateKeys:  gateKeys,
 	}
-	d.sidecarFor(p.sidecar).flights[f.key] = f
+	sc := d.sidecarFor(p.sidecar)
+	if stale := sc.flights[f.key]; stale != nil {
+		// The job was overwritten and fired again before its earlier
+		// delivery resolved, whose late result no longer finds its flight.
+		stale.stopTimer()
+		d.inflight.add(stale.req, -1)
+	}
+	sc.flights[f.key] = f
 	d.inflight.add(req, 1)
 
 	cronFn := req.ResultFn

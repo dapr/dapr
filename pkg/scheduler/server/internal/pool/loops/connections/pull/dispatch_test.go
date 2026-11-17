@@ -250,3 +250,20 @@ func TestDispatcher_DrainStopsWhenTypeGateFull(t *testing.T) {
 	assert.Len(t, h.dispatched[0], 2, "the released gate admits one parked instance")
 	assert.Equal(t, 4, h.d.pending[testActorType].len())
 }
+
+func TestDispatcher_OverwrittenJobDoesNotLeakInflight(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 2)
+
+	first := h.trigger("wf::1::0", "act")
+	h.handle(first)
+	// The same job fires again while its first delivery is unresolved, as
+	// when its reminder is created a second time.
+	second := h.trigger("wf::1::0", "act")
+	h.handle(second)
+	require.Len(t, h.dispatched[0], 2)
+
+	h.ack(t, first)
+	h.ack(t, second)
+	assert.Empty(t, h.d.inflight.counts)
+}
