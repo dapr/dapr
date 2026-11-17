@@ -18,15 +18,16 @@ import "cmp"
 // waiting is a min heap of names by dispatches ÷ weight, then first arrival.
 type waiting []*flow
 
-func (w waiting) Len() int { return len(w) }
+func (w *waiting) Len() int { return len(*w) }
 
-func (w waiting) Less(i, j int) bool {
-	return cmp.Or(cmp.Compare(w[i].dispatchesPerWeight, w[j].dispatchesPerWeight), cmp.Compare(w[i].seq, w[j].seq)) < 0
+func (w *waiting) Less(i, j int) bool {
+	a, b := (*w)[i], (*w)[j]
+	return cmp.Or(cmp.Compare(a.dispatchesPerWeight, b.dispatchesPerWeight), cmp.Compare(a.seq, b.seq)) < 0
 }
 
-func (w waiting) Swap(i, j int) {
-	w[i], w[j] = w[j], w[i]
-	w[i].index, w[j].index = i, j
+func (w *waiting) Swap(i, j int) {
+	(*w)[i], (*w)[j] = (*w)[j], (*w)[i]
+	(*w)[i].index, (*w)[j].index = i, j
 }
 
 func (w *waiting) Push(x any) {
