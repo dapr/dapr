@@ -37,3 +37,27 @@ Create initial cluster peer list.
 {{- define "dapr_placement.initialcluster" -}}
 {{- print "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort -}}
 {{- end -}}
+
+{{/*
+Whether the placement StatefulSet carries the raft-log volumeClaimTemplate.
+
+StatefulSet.spec.volumeClaimTemplates is immutable in Kubernetes, so the claim
+can be neither added to nor removed from an existing StatefulSet. A fresh
+install renders it when placement runs in HA with a persistent raft log. On an
+upgrade, the live StatefulSet decides, so toggling HA or forceInMemoryLog on an
+existing release does not try to change the claims. Falls back to the values
+when lookup() returns nothing (e.g. offline `helm template`).
+*/}}
+{{- define "dapr_placement.raftLogVolumeClaim" -}}
+{{- $claim := and (or (eq .Values.global.ha.enabled true) (eq .Values.ha true)) (eq .Values.cluster.forceInMemoryLog false) -}}
+{{- $existing := lookup "apps/v1" "StatefulSet" .Release.Namespace "dapr-placement-server" -}}
+{{- if $existing -}}
+{{- $claim = false -}}
+{{- range $existing.spec.volumeClaimTemplates -}}
+{{- if eq .metadata.name "raft-log" -}}
+{{- $claim = true -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $claim -}}true{{- end -}}
+{{- end -}}
