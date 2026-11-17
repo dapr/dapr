@@ -254,6 +254,7 @@ func TestDispatcher_DrainStopsWhenTypeGateFull(t *testing.T) {
 func TestDispatcher_OverwrittenJobDoesNotLeakInflight(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, 1, 2)
+	h.gates[testActorType+":act"] = &gate{limit: 2}
 
 	first := h.trigger("wf::1::0", "act")
 	h.handle(first)
@@ -262,8 +263,13 @@ func TestDispatcher_OverwrittenJobDoesNotLeakInflight(t *testing.T) {
 	second := h.trigger("wf::1::0", "act")
 	h.handle(second)
 	require.Len(t, h.dispatched[0], 2)
+	assert.Equal(t, uint32(1), h.gates[testActorType+":act"].current, "the replaced delivery gives its gate back")
 
-	h.ack(t, first)
+	// The first delivery's stream closes: nothing resolves it any more.
+	h.closeStream(t, 0, first)
+	h.addStream(t, 0, 2)
 	h.ack(t, second)
+	h.ack(t, first)
 	assert.Empty(t, h.d.inflight.counts)
+	assert.Equal(t, uint32(0), h.gates[testActorType+":act"].current)
 }
