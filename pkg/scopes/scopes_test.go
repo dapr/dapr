@@ -280,7 +280,12 @@ func TestTopicMetadataWhitespace(t *testing.T) {
 		t.Run(parser.name, func(t *testing.T) {
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
-					assert.Equal(t, tt.want, parser.parse(tt.value))
+					want := tt.want
+					if len(want) == 0 && (parser.name == "subscription" || parser.name == "publishing") {
+						// An explicit app with no topics is denied, not unscoped.
+						want = []string{""}
+					}
+					assert.Equal(t, want, parser.parse(tt.value))
 				})
 			}
 		})
@@ -288,8 +293,21 @@ func TestTopicMetadataWhitespace(t *testing.T) {
 
 	for _, scope := range []string{SubscriptionScopes, PublishingScopes} {
 		t.Run(scope+"_empty_topics", func(t *testing.T) {
-			assert.Equal(t, []string{}, GetScopedTopics(scope, "app2", map[string]string{
-				scope: "app1=other;app2=,, ,;app3=other",
+			for _, value := range []string{
+				"app1=other;app2=;app3=other",
+				"app1=other;app2=,, ,;app3=other",
+			} {
+				assert.Equal(t, []string{""}, GetScopedTopics(scope, "app2", map[string]string{scope: value}))
+			}
+		})
+		t.Run(scope+"_blank_then_real_topics", func(t *testing.T) {
+			assert.Equal(t, []string{"topic1", "topic2"}, GetScopedTopics(scope, "app2", map[string]string{
+				scope: "app1=other;app2=;app2=topic1,;app2=topic2",
+			}))
+		})
+		t.Run(scope+"_real_topics_then_blank", func(t *testing.T) {
+			assert.Equal(t, []string{"topic1"}, GetScopedTopics(scope, "app2", map[string]string{
+				scope: "app1=other;app2=topic1,;app2=;app3=other",
 			}))
 		})
 		t.Run(scope, func(t *testing.T) {
