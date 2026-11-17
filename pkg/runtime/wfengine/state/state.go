@@ -126,6 +126,11 @@ type State struct {
 	creationInputParent creationParent
 	keepCreationInput   bool
 
+	// Ordering is the instance's place in its ordering key's queue, nil for
+	// an instance created without an ordering key. It is kept in the metadata
+	// row, so every save writes it.
+	Ordering *protos.BackendWorkflowOrderingMetadata
+
 	// externalCertDigestIndex maps SHA-256 cert digests (raw 32-byte digest
 	// converted to a string for use as a map key, not hex-encoded) to their
 	// index in ExternalSigningCertificates. Built on load and maintained
@@ -236,6 +241,7 @@ func (s *State) Reset() {
 		s.CreationInput = nil
 		s.creationInputChanged = true
 	}
+	s.Ordering = nil
 	s.Generation++
 }
 
@@ -697,6 +703,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		SignatureLength:                  uint64(len(s.Signatures)),
 		SigningCertificateLength:         uint64(len(s.SigningCertificates)),
 		ExternalSigningCertificateLength: uint64(len(s.ExternalSigningCertificates)),
+		Ordering:                         s.Ordering,
 	})
 	if err != nil {
 		return nil, err
@@ -973,6 +980,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	// signatures, and custom status using a bulk request.
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
+	wState.Ordering = metadata.GetOrdering()
 	// Capture the metadata ETag for optimistic-concurrency on the next save.
 	// nil here just means the store didn't return one for this row, which is
 	// also fine: the next save will fall through to a blind upsert.

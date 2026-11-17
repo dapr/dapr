@@ -616,6 +616,9 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 	if !runtimestate.IsCompleted(o.rstate) || state.ParentNotifyPending {
 		return api.ErrNotCompleted
 	}
+	if err = o.ordering.Purged(ctx, state); err != nil {
+		return err
+	}
 
 	s, ok := meta[todo.MetadataPurgeRetentionCall]
 	retentionCall := ok && len(s.GetValues()) > 0 && s.GetValues()[0] == "true"
@@ -624,15 +627,8 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 }
 
 func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
-	for _, e := range state.History {
-		if es := e.GetExecutionStarted(); es != nil {
-			return es
-		}
-	}
-	for _, e := range state.Inbox {
-		if es := e.GetExecutionStarted(); es != nil {
-			return es
-		}
+	if es := state.ExecutionStarted(); es != nil {
+		return es
 	}
 	return &protos.ExecutionStartedEvent{}
 }

@@ -100,7 +100,7 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, cl.StartWorker(ctx, reg))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, d.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
+		assert.Len(c, d.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 4)
 		assert.GreaterOrEqual(c, here.Load(), int64(2))
 	}, time.Second*10, time.Millisecond*10)
 

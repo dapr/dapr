@@ -25,6 +25,7 @@ import (
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/messages"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/ordering"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -129,6 +130,7 @@ type orchestrator struct {
 
 	signing  *signing.Signing
 	messages *messages.Messages
+	ordering *ordering.Ordering
 }
 
 type streamFn struct {

@@ -78,6 +78,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 
 	expTable.Tables["default"].Hosts[0].Entities = []string{
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".activity",
+		"dapr.internal.default." + w.actors.Daprd().AppID() + ".ordering",
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors.Daprd().AppID() + ".workflow",
 		"mytype",

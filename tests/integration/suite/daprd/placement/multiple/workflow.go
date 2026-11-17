@@ -97,6 +97,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
 	expHosts[0].Entities = []string{
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".activity",
+		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".ordering",
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors1.Daprd().AppID() + ".workflow",
 		"mytype",
@@ -110,6 +111,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client2.StartWorker(cctx2, dworkflow.NewRegistry()))
 	expHosts[1].Entities = []string{
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".activity",
+		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".ordering",
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".retentioner",
 		"dapr.internal.default." + w.actors2.Daprd().AppID() + ".workflow",
 		"mytype",
