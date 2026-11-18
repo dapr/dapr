@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/fork"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -36,28 +37,30 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) error {
+// forkWorkflowHistory forks this instance's history into the rerun's new
+// instance, and reports whether a fallback host staged the rerun there.
+func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) (bool, error) {
 	var rerunReq backend.RerunWorkflowFromEventRequest
 	if err := proto.Unmarshal(request, &rerunReq); err != nil {
-		return fmt.Errorf("failed to unmarshal rerun workflow request: %w", err)
+		return false, fmt.Errorf("failed to unmarshal rerun workflow request: %w", err)
 	}
 
 	state, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if state == nil {
 		defer o.deactivate(o)
-		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
+		return false, status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
 	if !api.WorkflowMetadataIsComplete(ometa) {
-		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
+		return false, status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
 	if len(ometa.ParentInstanceId) > 0 {
-		return status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
+		return false, status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
 	}
 
 	defer o.deactivate(o)
@@ -80,23 +83,23 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 
 	newState, err := fork.Build()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	data, err := proto.Marshal(newState.ToWorkflowState())
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Call target instance ID to execute workflow rerun.
-	_, err = o.router.Call(ctx, internalsv1pb.
+	res, err := o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.RerunWorkflowInstance).
 		WithActor(o.actorType, rerunReq.GetNewInstanceID()).
 		WithData(data).
 		WithContentType(invokev1.ProtobufContentType),
 	)
 
-	return err
+	return common.IsFallback(res), err
 }
 
 func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request []byte) error {

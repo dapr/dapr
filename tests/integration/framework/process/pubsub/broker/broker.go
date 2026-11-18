@@ -34,9 +34,10 @@ type Broker struct {
 	pmrReqCh  chan *compv1.PullMessagesRequest
 	pmrRespCh chan *compv1.PullMessagesResponse
 
-	inmem     *pubsub.PubSub
-	socket    *socket.Socket
-	published chan *contribpubsub.PublishRequest
+	inmem           *pubsub.PubSub
+	socket          *socket.Socket
+	published       chan *contribpubsub.PublishRequest
+	recordPublishes bool
 }
 
 // Option configures broker creation.
@@ -99,11 +100,12 @@ func New(t *testing.T, opts ...Option) *Broker {
 	inmem := pubsub.New(t, psOpts...)
 
 	return &Broker{
-		pmrReqCh:  pmrReqCh,
-		pmrRespCh: pmrRespCh,
-		inmem:     inmem,
-		socket:    socket,
-		published: published,
+		pmrReqCh:        pmrReqCh,
+		pmrRespCh:       pmrRespCh,
+		inmem:           inmem,
+		socket:          socket,
+		published:       published,
+		recordPublishes: bo.recordPublishes,
 	}
 }
 
@@ -201,26 +203,39 @@ func (b *Broker) Acks(t *testing.T, ctx context.Context, n int) map[string]strin
 	return acks
 }
 
-// NextPublishedCloudEvent waits for daprd to publish a cloud event to the
-// broker, such as to a dead letter topic, and returns its topic and ID. The
-// broker must have been created WithRecordPublishes.
-func (b *Broker) NextPublishedCloudEvent(t *testing.T, ctx context.Context) (string, string) {
+// NextPublish waits for daprd to publish a message to the broker and returns
+// the publish request the component received, including its metadata. A bulk
+// publish is received as one publish per entry. The broker must have been
+// created WithRecordPublishes.
+func (b *Broker) NextPublish(t *testing.T, ctx context.Context) *contribpubsub.PublishRequest {
 	t.Helper()
+
+	require.True(t, b.recordPublishes, "broker must be created WithRecordPublishes")
 
 	select {
 	case req := <-b.published:
-		var ce struct {
-			ID string `json:"id"`
-		}
-		require.NoError(t, json.Unmarshal(req.Data, &ce))
-		return req.Topic, ce.ID
+		return req
 	case <-ctx.Done():
 		require.FailNow(t, "context cancelled waiting for a publish")
 	case <-time.After(10 * time.Second):
 		require.FailNow(t, "timed out waiting for a publish")
 	}
 
-	return "", ""
+	return nil
+}
+
+// NextPublishedCloudEvent waits for daprd to publish a cloud event to the
+// broker, such as to a dead letter topic, and returns its topic and ID. The
+// broker must have been created WithRecordPublishes.
+func (b *Broker) NextPublishedCloudEvent(t *testing.T, ctx context.Context) (string, string) {
+	t.Helper()
+
+	req := b.NextPublish(t, ctx)
+	var ce struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(req.Data, &ce))
+	return req.Topic, ce.ID
 }
 
 // DropStream ends the in-flight PullMessages stream, cancelling the context

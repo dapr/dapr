@@ -395,19 +395,19 @@ type DaprClient interface {
 	// Terminates a running workflow instance
 	//
 	// Deprecated: do not use.
-	TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error)
 	// Pauses a running workflow instance
 	//
 	// Deprecated: do not use.
-	PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error)
 	// Resumes a paused workflow instance
 	//
 	// Deprecated: do not use.
-	ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error)
 	// Raise an event to a running workflow instance
 	//
 	// Deprecated: do not use.
-	RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error)
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(context.Context, *connect.Request[v1.StartWorkflowRequest]) (*connect.Response[v1.StartWorkflowResponse], error)
 	// Gets details about a started workflow instance
@@ -415,13 +415,13 @@ type DaprClient interface {
 	// Purge Workflow
 	PurgeWorkflowBeta1(context.Context, *connect.Request[v1.PurgeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
 	// Terminates a running workflow instance
-	TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error)
 	// Pauses a running workflow instance
-	PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[emptypb.Empty], error)
 	// Deprecated: Create and schedule a job
@@ -813,25 +813,25 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("PurgeWorkflowAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		terminateWorkflowAlpha1: connect.NewClient[v1.TerminateWorkflowRequest, emptypb.Empty](
+		terminateWorkflowAlpha1: connect.NewClient[v1.TerminateWorkflowRequest, v1.TerminateWorkflowResponse](
 			httpClient,
 			baseURL+DaprTerminateWorkflowAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("TerminateWorkflowAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		pauseWorkflowAlpha1: connect.NewClient[v1.PauseWorkflowRequest, emptypb.Empty](
+		pauseWorkflowAlpha1: connect.NewClient[v1.PauseWorkflowRequest, v1.PauseWorkflowResponse](
 			httpClient,
 			baseURL+DaprPauseWorkflowAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("PauseWorkflowAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		resumeWorkflowAlpha1: connect.NewClient[v1.ResumeWorkflowRequest, emptypb.Empty](
+		resumeWorkflowAlpha1: connect.NewClient[v1.ResumeWorkflowRequest, v1.ResumeWorkflowResponse](
 			httpClient,
 			baseURL+DaprResumeWorkflowAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("ResumeWorkflowAlpha1")),
 			connect.WithClientOptions(opts...),
 		),
-		raiseEventWorkflowAlpha1: connect.NewClient[v1.RaiseEventWorkflowRequest, emptypb.Empty](
+		raiseEventWorkflowAlpha1: connect.NewClient[v1.RaiseEventWorkflowRequest, v1.RaiseEventWorkflowResponse](
 			httpClient,
 			baseURL+DaprRaiseEventWorkflowAlpha1Procedure,
 			connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowAlpha1")),
@@ -855,25 +855,25 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			connect.WithSchema(daprMethods.ByName("PurgeWorkflowBeta1")),
 			connect.WithClientOptions(opts...),
 		),
-		terminateWorkflowBeta1: connect.NewClient[v1.TerminateWorkflowRequest, emptypb.Empty](
+		terminateWorkflowBeta1: connect.NewClient[v1.TerminateWorkflowRequest, v1.TerminateWorkflowResponse](
 			httpClient,
 			baseURL+DaprTerminateWorkflowBeta1Procedure,
 			connect.WithSchema(daprMethods.ByName("TerminateWorkflowBeta1")),
 			connect.WithClientOptions(opts...),
 		),
-		pauseWorkflowBeta1: connect.NewClient[v1.PauseWorkflowRequest, emptypb.Empty](
+		pauseWorkflowBeta1: connect.NewClient[v1.PauseWorkflowRequest, v1.PauseWorkflowResponse](
 			httpClient,
 			baseURL+DaprPauseWorkflowBeta1Procedure,
 			connect.WithSchema(daprMethods.ByName("PauseWorkflowBeta1")),
 			connect.WithClientOptions(opts...),
 		),
-		resumeWorkflowBeta1: connect.NewClient[v1.ResumeWorkflowRequest, emptypb.Empty](
+		resumeWorkflowBeta1: connect.NewClient[v1.ResumeWorkflowRequest, v1.ResumeWorkflowResponse](
 			httpClient,
 			baseURL+DaprResumeWorkflowBeta1Procedure,
 			connect.WithSchema(daprMethods.ByName("ResumeWorkflowBeta1")),
 			connect.WithClientOptions(opts...),
 		),
-		raiseEventWorkflowBeta1: connect.NewClient[v1.RaiseEventWorkflowRequest, emptypb.Empty](
+		raiseEventWorkflowBeta1: connect.NewClient[v1.RaiseEventWorkflowRequest, v1.RaiseEventWorkflowResponse](
 			httpClient,
 			baseURL+DaprRaiseEventWorkflowBeta1Procedure,
 			connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowBeta1")),
@@ -1132,17 +1132,17 @@ type daprClient struct {
 	startWorkflowAlpha1            *connect.Client[v1.StartWorkflowRequest, v1.StartWorkflowResponse]
 	getWorkflowAlpha1              *connect.Client[v1.GetWorkflowRequest, v1.GetWorkflowResponse]
 	purgeWorkflowAlpha1            *connect.Client[v1.PurgeWorkflowRequest, emptypb.Empty]
-	terminateWorkflowAlpha1        *connect.Client[v1.TerminateWorkflowRequest, emptypb.Empty]
-	pauseWorkflowAlpha1            *connect.Client[v1.PauseWorkflowRequest, emptypb.Empty]
-	resumeWorkflowAlpha1           *connect.Client[v1.ResumeWorkflowRequest, emptypb.Empty]
-	raiseEventWorkflowAlpha1       *connect.Client[v1.RaiseEventWorkflowRequest, emptypb.Empty]
+	terminateWorkflowAlpha1        *connect.Client[v1.TerminateWorkflowRequest, v1.TerminateWorkflowResponse]
+	pauseWorkflowAlpha1            *connect.Client[v1.PauseWorkflowRequest, v1.PauseWorkflowResponse]
+	resumeWorkflowAlpha1           *connect.Client[v1.ResumeWorkflowRequest, v1.ResumeWorkflowResponse]
+	raiseEventWorkflowAlpha1       *connect.Client[v1.RaiseEventWorkflowRequest, v1.RaiseEventWorkflowResponse]
 	startWorkflowBeta1             *connect.Client[v1.StartWorkflowRequest, v1.StartWorkflowResponse]
 	getWorkflowBeta1               *connect.Client[v1.GetWorkflowRequest, v1.GetWorkflowResponse]
 	purgeWorkflowBeta1             *connect.Client[v1.PurgeWorkflowRequest, emptypb.Empty]
-	terminateWorkflowBeta1         *connect.Client[v1.TerminateWorkflowRequest, emptypb.Empty]
-	pauseWorkflowBeta1             *connect.Client[v1.PauseWorkflowRequest, emptypb.Empty]
-	resumeWorkflowBeta1            *connect.Client[v1.ResumeWorkflowRequest, emptypb.Empty]
-	raiseEventWorkflowBeta1        *connect.Client[v1.RaiseEventWorkflowRequest, emptypb.Empty]
+	terminateWorkflowBeta1         *connect.Client[v1.TerminateWorkflowRequest, v1.TerminateWorkflowResponse]
+	pauseWorkflowBeta1             *connect.Client[v1.PauseWorkflowRequest, v1.PauseWorkflowResponse]
+	resumeWorkflowBeta1            *connect.Client[v1.ResumeWorkflowRequest, v1.ResumeWorkflowResponse]
+	raiseEventWorkflowBeta1        *connect.Client[v1.RaiseEventWorkflowRequest, v1.RaiseEventWorkflowResponse]
 	shutdown                       *connect.Client[v1.ShutdownRequest, emptypb.Empty]
 	scheduleJobAlpha1              *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
 	scheduleJob                    *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
@@ -1439,28 +1439,28 @@ func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, req *connect.Reque
 // TerminateWorkflowAlpha1 calls dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1.
 //
 // Deprecated: do not use.
-func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error) {
 	return c.terminateWorkflowAlpha1.CallUnary(ctx, req)
 }
 
 // PauseWorkflowAlpha1 calls dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1.
 //
 // Deprecated: do not use.
-func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error) {
 	return c.pauseWorkflowAlpha1.CallUnary(ctx, req)
 }
 
 // ResumeWorkflowAlpha1 calls dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1.
 //
 // Deprecated: do not use.
-func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error) {
 	return c.resumeWorkflowAlpha1.CallUnary(ctx, req)
 }
 
 // RaiseEventWorkflowAlpha1 calls dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1.
 //
 // Deprecated: do not use.
-func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, req *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error) {
 	return c.raiseEventWorkflowAlpha1.CallUnary(ctx, req)
 }
 
@@ -1480,22 +1480,22 @@ func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, req *connect.Reques
 }
 
 // TerminateWorkflowBeta1 calls dapr.proto.runtime.v1.Dapr.TerminateWorkflowBeta1.
-func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, req *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, req *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error) {
 	return c.terminateWorkflowBeta1.CallUnary(ctx, req)
 }
 
 // PauseWorkflowBeta1 calls dapr.proto.runtime.v1.Dapr.PauseWorkflowBeta1.
-func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, req *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, req *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error) {
 	return c.pauseWorkflowBeta1.CallUnary(ctx, req)
 }
 
 // ResumeWorkflowBeta1 calls dapr.proto.runtime.v1.Dapr.ResumeWorkflowBeta1.
-func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, req *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, req *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error) {
 	return c.resumeWorkflowBeta1.CallUnary(ctx, req)
 }
 
 // RaiseEventWorkflowBeta1 calls dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowBeta1.
-func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, req *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, req *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error) {
 	return c.raiseEventWorkflowBeta1.CallUnary(ctx, req)
 }
 
@@ -1792,19 +1792,19 @@ type DaprHandler interface {
 	// Terminates a running workflow instance
 	//
 	// Deprecated: do not use.
-	TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error)
 	// Pauses a running workflow instance
 	//
 	// Deprecated: do not use.
-	PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error)
 	// Resumes a paused workflow instance
 	//
 	// Deprecated: do not use.
-	ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error)
 	// Raise an event to a running workflow instance
 	//
 	// Deprecated: do not use.
-	RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error)
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(context.Context, *connect.Request[v1.StartWorkflowRequest]) (*connect.Response[v1.StartWorkflowResponse], error)
 	// Gets details about a started workflow instance
@@ -1812,13 +1812,13 @@ type DaprHandler interface {
 	// Purge Workflow
 	PurgeWorkflowBeta1(context.Context, *connect.Request[v1.PurgeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
 	// Terminates a running workflow instance
-	TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error)
 	// Pauses a running workflow instance
-	PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
+	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[emptypb.Empty], error)
 	// Deprecated: Create and schedule a job
@@ -2869,19 +2869,19 @@ func (UnimplementedDaprHandler) PurgeWorkflowAlpha1(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) TerminateWorkflowAlpha1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) PauseWorkflowAlpha1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) ResumeWorkflowAlpha1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) RaiseEventWorkflowAlpha1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1 is not implemented"))
 }
 
@@ -2897,19 +2897,19 @@ func (UnimplementedDaprHandler) PurgeWorkflowBeta1(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.PurgeWorkflowBeta1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) TerminateWorkflowBeta1(context.Context, *connect.Request[v1.TerminateWorkflowRequest]) (*connect.Response[v1.TerminateWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.TerminateWorkflowBeta1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) PauseWorkflowBeta1(context.Context, *connect.Request[v1.PauseWorkflowRequest]) (*connect.Response[v1.PauseWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.PauseWorkflowBeta1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) ResumeWorkflowBeta1(context.Context, *connect.Request[v1.ResumeWorkflowRequest]) (*connect.Response[v1.ResumeWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ResumeWorkflowBeta1 is not implemented"))
 }
 
-func (UnimplementedDaprHandler) RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error) {
+func (UnimplementedDaprHandler) RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[v1.RaiseEventWorkflowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowBeta1 is not implemented"))
 }
 

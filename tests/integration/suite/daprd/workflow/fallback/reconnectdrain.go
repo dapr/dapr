@@ -47,7 +47,7 @@ type reconnectdrain struct {
 }
 
 func (r *reconnectdrain) Setup(t *testing.T) []framework.Option {
-	r.workflow = newPair(t, time.Second, fallbackSettle)
+	r.workflow = workflow.New(t, workflow.WithFallbackPair(t, time.Second, workflow.FallbackSettle))
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),

@@ -138,7 +138,7 @@ func newNotifyHarness(t *testing.T, history, inbox []*backend.HistoryEvent, pend
 	if pending {
 		h.rows["parent-notify"] = []byte{1}
 	}
-	etag := "etag"
+	etag := testETag
 
 	fakeState := statefake.New().
 		WithGetFn(func(_ context.Context, req *actorapi.GetStateRequest, _ bool) (*actorapi.StateResponse, error) {

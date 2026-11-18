@@ -92,11 +92,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--app-port", strconv.FormatInt(int64(c.AppPort), 10))
 	}
 
+	// daprd enables metrics by default, so false has to be passed explicitly.
+	args = append(args, "--enable-metrics="+strconv.FormatBool(c.EnableMetrics))
 	if c.EnableMetrics {
-		args = append(args,
-			"--enable-metrics",
-			"--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10),
-		)
+		args = append(args, "--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10))
 	}
 
 	if c.Config != "" {
@@ -390,6 +389,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 			Value: opts.ComponentsSocketsVolumeMount.MountPath,
+		})
+	}
+
+	// Set as an env var rather than a flag, so that older daprd images, which
+	// do not know the option, still start.
+	if c.WorkloadKeyAlgorithm != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  securityConsts.WorkloadKeyAlgorithmEnvVar,
+			Value: c.WorkloadKeyAlgorithm,
 		})
 	}
 
