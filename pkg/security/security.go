@@ -278,7 +278,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		}
 		sec.spiffe = spiffe.New(spiffe.Options{
 			Log:                 log,
-			RequestSVIDFn:       reqFn,
+			RequestSVIDFn:       monitorCertificateRequests(reqFn),
 			RequestJWTSVIDFn:    jwtReqFn,
 			WriteIdentityToFile: opts.WriteIdentityToFile,
 			TrustAnchors:        trustAnchors,
@@ -320,6 +320,7 @@ func (p *provider) Run(ctx context.Context) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
+				diagnostics.DefaultMonitoring.MTLSInitFailed(certificateFailureReason(err))
 				return err
 			}
 			return nil
@@ -570,4 +571,42 @@ func (s *security) Signer() *signer.Signer {
 
 func (s *security) ID() spiffeid.ID {
 	return s.id
+}
+
+// certificateRequestError retains the bounded metric reason from Sentry while
+// preserving the error message and chain returned to callers.
+type certificateRequestError struct {
+	reason string
+	err    error
+}
+
+func (e *certificateRequestError) Error() string { return e.err.Error() }
+func (e *certificateRequestError) Unwrap() error { return e.err }
+
+func certificateFailureReason(err error) string {
+	var requestErr *certificateRequestError
+	if errors.As(err, &requestErr) {
+		return requestErr.reason
+	}
+	return "cert_request"
+}
+
+// SPIFFE calls the request function serially for initial issuance and renewals.
+// Initial success is recorded by Run after SPIFFE has accepted the identity.
+func monitorCertificateRequests(request spiffe.RequestSVIDFn) spiffe.RequestSVIDFn {
+	initialized := false
+	return func(ctx context.Context, csr []byte) (*spiffe.SVIDResponse, error) {
+		resp, err := request(ctx, csr)
+		if initialized && ctx.Err() == nil {
+			if err != nil {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed(certificateFailureReason(err))
+			} else {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+			}
+		}
+		if err == nil {
+			initialized = true
+		}
+		return resp, err
+	}
 }

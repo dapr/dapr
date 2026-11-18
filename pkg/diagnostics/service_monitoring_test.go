@@ -1,10 +1,12 @@
 package diagnostics
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -104,3 +106,75 @@ var (
 	StatusKey        = statusKey
 	PolicyKey        = policyKey
 )
+
+// Security starts before runtime.FromConfig initializes the metrics meter.
+func TestMTLSMetricsBeforeInit(t *testing.T) {
+	s := newServiceMetrics()
+	record := func() {
+		s.MTLSInitCompleted()
+		s.MTLSInitFailed("sign")
+		s.MTLSWorkLoadCertRotationCompleted()
+		s.MTLSWorkLoadCertRotationFailed("sentry_token")
+	}
+	record()
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(meter.Stop)
+	require.NoError(t, s.Init(meter, "sidecar", view.Distribution(1)))
+	check := func(want int64) {
+		for _, tc := range []struct{ name, reason string }{
+			{"init_total", ""},
+			{"init_fail_total", "sign"},
+			{"workload_cert_rotated_total", ""},
+			{"workload_cert_rotated_fail_total", "sentry_token"},
+		} {
+			rows, err := meter.RetrieveData("runtime/mtls/" + tc.name)
+			require.NoError(t, err)
+			require.Len(t, rows, 1, "startup observation missing: %s", tc.name)
+			assert.Equal(t, want, rows[0].Data.(*view.CountData).Value, tc.name)
+			RequireTagExist(t, rows, NewTag("app_id", "sidecar"))
+			if tc.reason != "" {
+				RequireTagExist(t, rows, NewTag("reason", tc.reason))
+			}
+		}
+	}
+	check(1)
+	record()
+	check(2)
+	// Reinitialization must not replay observations that have already been flushed.
+	second := view.NewMeter()
+	second.Start()
+	t.Cleanup(second.Stop)
+	require.NoError(t, s.Init(second, "second", view.Distribution(1)))
+	rows, err := second.RetrieveData("runtime/mtls/init_total")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestMTLSMetricsConcurrentInit(t *testing.T) {
+	s := newServiceMetrics()
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(meter.Stop)
+	started := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		s.MTLSInitCompleted()
+		close(started)
+		for range 99 {
+			s.MTLSInitCompleted()
+		}
+	})
+	<-started
+	require.NoError(t, s.Init(meter, "sidecar", view.Distribution(1)))
+	wg.Wait()
+	rows, err := meter.RetrieveData("runtime/mtls/init_total")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, int64(100), rows[0].Data.(*view.CountData).Value)
+}
+
+// NewServiceMetricsForTest gives external integration tests isolated monitoring state.
+func NewServiceMetricsForTest() *serviceMetrics {
+	return newServiceMetrics()
+}

@@ -40,6 +40,12 @@ const (
 	typeStreaming = "streaming"
 )
 
+// mtlsObservation identifies a security event that may precede metrics setup.
+type mtlsObservation struct {
+	measure *stats.Int64Measure
+	reason  string
+}
+
 // serviceMetrics holds dapr runtime metric monitoring methods.
 type serviceMetrics struct {
 	// component metrics
@@ -48,6 +54,8 @@ type serviceMetrics struct {
 	componentInitFailed    *stats.Int64Measure
 
 	// mTLS metrics
+	mtlsLock                      sync.Mutex
+	pendingMTLS                   map[mtlsObservation]uint64
 	mtlsInitCompleted             *stats.Int64Measure
 	mtlsInitFailed                *stats.Int64Measure
 	mtlsWorkloadCertRotated       *stats.Int64Measure
@@ -236,11 +244,13 @@ func newServiceMetrics() *serviceMetrics {
 
 // Init initialize metrics views for metrics.
 func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistribution *view.Aggregation) error {
+	s.mtlsLock.Lock()
+	defer s.mtlsLock.Unlock()
+
 	s.appID = appID
-	s.enabled = true
 	s.meter = meter
 
-	return meter.Register(
+	err := meter.Register(
 		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey, componentNameKey}, view.Count()),
@@ -277,6 +287,17 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, statusKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, statusKey}, latencyDistribution),
 	)
+	if err != nil {
+		return err
+	}
+	s.enabled = true
+	for observation, count := range s.pendingMTLS {
+		for range count {
+			s.recordMTLSLocked(observation)
+		}
+	}
+	s.pendingMTLS = nil
+	return nil
 }
 
 // ComponentLoaded records metric when component is loaded successfully.
@@ -311,40 +332,48 @@ func (s *serviceMetrics) ComponentInitFailed(component string, reason string, na
 	}
 }
 
-// MTLSInitCompleted records metric when component is initialized.
+// MTLSInitCompleted records successful mTLS initialization.
 func (s *serviceMetrics) MTLSInitCompleted() {
-	if s.enabled {
-		stats.RecordWithOptions(s.ctx, stats.WithRecorder(s.meter), stats.WithTags(diagUtils.WithTags(s.mtlsInitCompleted.Name(), appIDKey, s.appID)...), stats.WithMeasurements(s.mtlsInitCompleted.M(1)))
-	}
+	s.recordMTLS(mtlsObservation{measure: s.mtlsInitCompleted})
 }
 
-// MTLSInitFailed records metric when component initialization is failed.
+// MTLSInitFailed records failed mTLS initialization.
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
-	if s.enabled {
-		stats.RecordWithOptions(
-			s.ctx,
-			stats.WithRecorder(s.meter),
-			stats.WithTags(diagUtils.WithTags(s.mtlsInitFailed.Name(), appIDKey, s.appID, failReasonKey, reason)...),
-			stats.WithMeasurements(s.mtlsInitFailed.M(1)))
-	}
+	s.recordMTLS(mtlsObservation{measure: s.mtlsInitFailed, reason: reason})
 }
 
-// MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
+// MTLSWorkLoadCertRotationCompleted records a successful workload certificate rotation.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
-	if s.enabled {
-		stats.RecordWithOptions(s.ctx, stats.WithRecorder(s.meter), stats.WithTags(diagUtils.WithTags(s.mtlsWorkloadCertRotated.Name(), appIDKey, s.appID)...), stats.WithMeasurements(s.mtlsWorkloadCertRotated.M(1)))
-	}
+	s.recordMTLS(mtlsObservation{measure: s.mtlsWorkloadCertRotated})
 }
 
-// MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed.
+// MTLSWorkLoadCertRotationFailed records a failed workload certificate rotation.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
-	if s.enabled {
-		stats.RecordWithOptions(
-			s.ctx,
-			stats.WithRecorder(s.meter),
-			stats.WithTags(diagUtils.WithTags(s.mtlsWorkloadCertRotatedFailed.Name(), appIDKey, s.appID, failReasonKey, reason)...),
-			stats.WithMeasurements(s.mtlsWorkloadCertRotatedFailed.M(1)))
+	s.recordMTLS(mtlsObservation{measure: s.mtlsWorkloadCertRotatedFailed, reason: reason})
+}
+
+func (s *serviceMetrics) recordMTLS(observation mtlsObservation) {
+	s.mtlsLock.Lock()
+	defer s.mtlsLock.Unlock()
+	// Security is ready before runtime.FromConfig initializes metrics. Keep
+	// counts until views and app ID tags are available, including when metrics
+	// are disabled, without retaining one allocation per certificate rotation.
+	if !s.enabled {
+		if s.pendingMTLS == nil {
+			s.pendingMTLS = make(map[mtlsObservation]uint64)
+		}
+		s.pendingMTLS[observation]++
+		return
 	}
+	s.recordMTLSLocked(observation)
+}
+
+func (s *serviceMetrics) recordMTLSLocked(observation mtlsObservation) {
+	tags := diagUtils.WithTags(observation.measure.Name(), appIDKey, s.appID)
+	if observation.measure == s.mtlsInitFailed || observation.measure == s.mtlsWorkloadCertRotatedFailed {
+		tags = diagUtils.WithTags(observation.measure.Name(), appIDKey, s.appID, failReasonKey, observation.reason)
+	}
+	stats.RecordWithOptions(s.ctx, stats.WithRecorder(s.meter), stats.WithTags(tags...), stats.WithMeasurements(observation.measure.M(1)))
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
