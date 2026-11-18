@@ -1233,6 +1233,26 @@ func TestActorsSpecDecode(t *testing.T) {
 	})
 }
 
+func TestWorkflowSpecStateStoreDecode(t *testing.T) {
+	t.Run("standalone YAML", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_state_store_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("operator JSON", func(t *testing.T) {
+		var config Configuration
+		require.NoError(t, json.Unmarshal([]byte(`{"spec":{"workflow":{"stateStore":"wallet-workflows"}}}`), &config))
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("no stateStore leaves it empty", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		require.NoError(t, err)
+		assert.Empty(t, config.Spec.WorkflowSpec.GetStateStore())
+	})
+}
+
 func TestActorsSpecStateStoreByActorType(t *testing.T) {
 	spec := &ActorsSpec{
 		StateStores: []ActorStateStoreBinding{
