@@ -43,6 +43,7 @@ type Fake struct {
 	fnReminders                func(context.Context) (reminders.Interface, error)
 	fnPlacement                func(context.Context) (placement.Interface, error)
 	fnRuntimeStatus            func() *runtimev1pb.ActorRuntime
+	fnStateStoreResolver       func() state.StoreResolver
 	fnRegisterHosted           func(context.Context, hostconfig.Config) error
 	fnUnRegisterHosted         func(ctx context.Context, actorTypes ...string) error
 	fnWaitForRegisteredHosts   func(ctx context.Context) error
@@ -76,6 +77,9 @@ func New() *Fake {
 			return nil, nil
 		},
 		fnRuntimeStatus: func() *runtimev1pb.ActorRuntime {
+			return nil
+		},
+		fnStateStoreResolver: func() state.StoreResolver {
 			return nil
 		},
 		fnRegisterHosted: func(context.Context, hostconfig.Config) error {
@@ -145,6 +149,11 @@ func (f *Fake) WithPlacementLookupActor(fn func(context.Context, *api.LookupActo
 	return f
 }
 
+func (f *Fake) WithStateStoreResolver(fn func() state.StoreResolver) *Fake {
+	f.fnStateStoreResolver = fn
+	return f
+}
+
 func (f *Fake) WithRuntimeStatus(fn func() *runtimev1pb.ActorRuntime) *Fake {
 	f.fnRuntimeStatus = fn
 	return f
@@ -199,6 +208,10 @@ func (f *Fake) Placement(ctx context.Context) (placement.Interface, error) {
 
 func (f *Fake) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	return f.fnRuntimeStatus()
+}
+
+func (f *Fake) StateStoreResolver() state.StoreResolver {
+	return f.fnStateStoreResolver()
 }
 
 func (f *Fake) RegisterHosted(ctx context.Context, cfg hostconfig.Config) error {

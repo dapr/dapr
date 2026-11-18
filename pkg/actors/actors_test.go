@@ -400,6 +400,22 @@ func TestNew_ActorStateStoreBindings(t *testing.T) {
 	})
 }
 
+// TestStateStoreResolver checks that the actor runtime exposes the resolver
+// built from its bindings, which the workflow backend uses to find the store
+// of the workflow actor types.
+func TestStateStoreResolver(t *testing.T) {
+	cs := compstore.New()
+	cs.AddStateStore("wallet-workflows", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
+	a := New(Options{
+		CompStore:        cs,
+		ActorStateStores: map[string]string{"dapr.internal.ns.app.workflow": "wallet-workflows"},
+	})
+
+	name, _, err := a.StateStoreResolver().Resolve("dapr.internal.ns.app.workflow")
+	require.NoError(t, err)
+	assert.Equal(t, "wallet-workflows", name)
+}
+
 func TestWarnUnusableStateStores(t *testing.T) {
 	newStore := func() contribstate.Store {
 		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
