@@ -89,7 +89,7 @@ message TerminateWorkflowRequest {
   // app's WorkflowAccessPolicy governs whether the call is permitted.
   optional string app_id = 3 [json_name = "appID"];
   // Optional reason describing why the workflow is being terminated.
-  optional string reason = 4;
+  optional string terminate_reason = 4 [json_name = "terminateReason"];
 }
 
 // TerminateWorkflowResponse is the response for TerminateWorkflowBeta1.
