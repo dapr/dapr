@@ -14,7 +14,9 @@ limitations under the License.
 package state
 
 import (
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -41,14 +43,14 @@ func TerminationInput(state *backend.WorkflowRuntimeState) *wrapperspb.StringVal
 // terminated with a reason; otherwise it returns the status set by the
 // workflow implementation.
 func CustomStatus(state *backend.WorkflowRuntimeState) *wrapperspb.StringValue {
+	if state == nil {
+		return nil
+	}
+
 	if runtimestate.RuntimeStatus(state) == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED {
 		if input := TerminationInput(state); input != nil {
 			return input
 		}
 	}
-	if state == nil {
-		return nil
-	}
-
 	return state.GetCustomStatus()
 }
