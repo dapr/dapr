@@ -90,13 +90,14 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	// Delayed executions keep the scheduler path so the delay is honoured; a
 	// drive that cannot be armed (factory halting) falls through to the
 	// durable reminder.
+	prio := a.priorityOf(req.GetMetadata(), activityName)
 	if a.localFastPath() && metaFlagged(req, todo.MetadataActivityLocalDrive) && !dueTime.After(time.Now()) {
-		if a.localDrive(invocation, activityName) {
+		if a.localDrive(invocation, activityName, prio) {
 			return nil, nil
 		}
 	}
 
-	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName, priorityFromMetadata(req.GetMetadata()))
+	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName, prio)
 }
 
 // localFastPath reports whether an activity may be driven locally: never on

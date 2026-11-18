@@ -33,7 +33,30 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName, parentExecutionID string, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
+// childStartPriority is the parent's resolved priority, given to its children.
+// With no resolver the children get a copy of the parent's start value.
+func (o *orchestrator) childStartPriority(es *protos.ExecutionStartedEvent) *protos.Priority {
+	if o.workflowPriority == nil {
+		if es.GetPriority() == nil {
+			return nil
+		}
+		return proto.Clone(es.GetPriority()).(*protos.Priority)
+	}
+	level, weight := o.workflowPriority(es.GetName(), es.GetPriority().GetPriorityLevel(), es.GetPriority().GetFairnessWeight())
+	if level == "" && weight == 0 {
+		return nil
+	}
+	p := new(protos.Priority)
+	if level != "" {
+		p.PriorityLevel = &level
+	}
+	if weight > 0 {
+		p.FairnessWeight = &weight
+	}
+	return p
+}
+
+func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName, parentExecutionID string, priority *protos.Priority, es []*protos.HistoryEvent, outgoingHistory map[int32]*protos.PropagatedHistory) error {
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	var errs []error
@@ -60,6 +83,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName, p
 						ExecutionId: wrapperspb.String(uuid.New().String()),
 					},
 					ParentTraceContext: createSO.ParentTraceContext,
+					Priority:           priority,
 				},
 			},
 		}

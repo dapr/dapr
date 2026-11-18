@@ -36,7 +36,7 @@ func init() {
 }
 
 // basic asserts the configured level and weight reach the scheduler on the
-// activity's reminder: own entry, else calling workflow's, else default.
+// activity's reminder: own config entry, else calling workflow's, else default.
 type basic struct {
 	workflow *workflow.Workflow
 }
@@ -100,7 +100,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		{workflow: "wf-critical", activity: "plain", level: schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, weight: 2},
 		// Both of its own.
 		{workflow: "wf-default", activity: "background", level: schedulerv1.PriorityLevel_PRIORITY_LEVEL_BACKGROUND, weight: 5},
-		// Nothing of its own and no workflow entry: the default.
+		// Nothing of its own and no workflow config entry: the default.
 		{workflow: "wf-default", activity: "other", level: schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, weight: 2},
 		// Own weight beats the default's.
 		{workflow: "wf-default", activity: "heavy", level: schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, weight: 4},
@@ -134,38 +134,24 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}
 
 	client := b.workflow.BackendClient(t, ctx)
-	appID := b.workflow.Dapr().AppID()
-	var schedClient schedulerv1.SchedulerClient
-	if b.workflow.Signing() {
-		schedClient = b.workflow.Scheduler().ClientMTLS(t, ctx, appID)
-	} else {
-		schedClient = b.workflow.Scheduler().Client(t, ctx)
-	}
+	sched := b.workflow.SchedulerClientN(t, ctx, 0)
 
 	ids := make([]api.InstanceID, len(calls))
 	for i, c := range calls {
-		id, err := client.ScheduleNewWorkflow(ctx, c.workflow, api.WithInput(c.activity))
+		id, err := client.ScheduleNewWorkflow(ctx, c.workflow,
+			api.WithInput(c.activity))
 		require.NoError(t, err)
 		ids[i] = id
 	}
 
 	for i, c := range calls {
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
-			jobs, err := schedClient.ListJobs(ctx, &schedulerv1.ListJobsRequest{
-				Metadata: &schedulerv1.JobMetadata{
-					Namespace: "default", AppId: appID,
-					Target: &schedulerv1.JobTargetMetadata{
-						Type: &schedulerv1.JobTargetMetadata_Actor{
-							Actor: &schedulerv1.TargetActorReminder{Type: b.workflow.ActivityActorType(0)},
-						},
-					},
-				},
-			})
+			jobs, err := b.workflow.ListActivityReminders(ctx, sched, 0)
 			if !assert.NoError(col, err) {
 				return
 			}
 			var found bool
-			for _, job := range jobs.GetJobs() {
+			for _, job := range jobs {
 				meta := job.GetMetadata()
 				if !strings.HasPrefix(meta.GetTarget().GetActor().GetId(), string(ids[i])+"::") {
 					continue
@@ -176,7 +162,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(col, c.weight, meta.GetFairnessWeight(), "%s/%s", c.workflow, c.activity)
 			}
 			assert.True(col, found, "no reminder for %s/%s", c.workflow, c.activity)
-		}, time.Second*20, time.Millisecond*10)
+		}, time.Second*10, time.Millisecond*10)
 	}
 
 	close(release)

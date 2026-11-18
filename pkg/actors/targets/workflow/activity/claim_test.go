@@ -1004,7 +1004,7 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), &name))
+		require.True(t, a.localDrive(testInvocation(), &name, priority{}))
 		h.fact.driveScope().Wait()
 		h.fact.detached.Wait()
 
@@ -1023,7 +1023,7 @@ func Test_driveActivity_escalationSuppressedByLiveClaim(t *testing.T) {
 
 		a := h.fact.GetOrCreate("wf::3::0").(*activity)
 		name := testActivityName
-		require.True(t, a.localDrive(testInvocation(), &name))
+		require.True(t, a.localDrive(testInvocation(), &name, priority{}))
 		assert.Eventually(t, func() bool {
 			return len(h.sched.snapshotCreates()) == 1
 		}, time.Second*5, time.Millisecond*10, "without a live claim the durable-reminder escalation must be restored")

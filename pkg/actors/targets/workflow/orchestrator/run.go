@@ -389,6 +389,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if oerr != nil {
 		return todo.RunCompletedTrue, oerr
 	}
+	for _, msg := range createWorkflows {
+		// A detached workflow has no parent and inherits nothing.
+		if es := msg.GetHistoryEvent().GetExecutionStarted(); es.GetParentInstance() != nil {
+			es.Priority = o.childStartPriority(rs.GetStartEvent())
+		}
+	}
 
 	if err = o.signOutgoingHistories(wi, createWorkflows); err != nil {
 		return todo.RunCompletedFalse, err

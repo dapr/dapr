@@ -117,8 +117,11 @@ type Options struct {
 	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
 	// per-name overrides). Nil means never.
 	ActivityDispatchPull func(activityName string) bool
-	// ActivityPriority returns an activity's level name and weight. Nil means none.
-	ActivityPriority func(workflowName, activityName string) (string, uint32)
+	// ActivityPriority and WorkflowPriority resolve a level and weight.
+	ActivityPriority func(workflowName, activityName, startLevel string, startWeight uint32) (string, uint32)
+	WorkflowPriority func(workflowName, startLevel string, startWeight uint32) (string, uint32)
+	// ActivityReceivedPriority resolves an activity from what the calling app sent.
+	ActivityReceivedPriority func(activityName, sentLevel string, sentWeight uint32) (string, uint32)
 
 	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
 	// same value the engine's activity worker is limited to. 0 means no cap.
@@ -162,7 +165,9 @@ type Actors struct {
 	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	activityDispatchPull            func(activityName string) bool
-	activityPriority                func(workflowName, activityName string) (string, uint32)
+	activityPriority                func(workflowName, activityName, startLevel string, startWeight uint32) (string, uint32)
+	workflowPriority                func(workflowName, startLevel string, startWeight uint32) (string, uint32)
+	activityReceivedPriority        func(activityName, sentLevel string, sentWeight uint32) (string, uint32)
 	pendingCompletions              *pending.Pending
 
 	// activityCommitted counts activity work items handed to the engine and
@@ -312,6 +317,8 @@ func New(opts Options) (*Actors, error) {
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		activityDispatchPull:            opts.ActivityDispatchPull,
 		activityPriority:                opts.ActivityPriority,
+		workflowPriority:                opts.WorkflowPriority,
+		activityReceivedPriority:        opts.ActivityReceivedPriority,
 		pendingCompletions:              pendingCompletions,
 		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
@@ -372,6 +379,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
 		ActivityPriority:       abe.activityPriority,
+		WorkflowPriority:       abe.workflowPriority,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -433,6 +441,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		Fallback:                        abe.fallbackFunc(),
 		GracefulShutdownDuration:        abe.gracefulShutdownDuration,
 		DispatchPull:                    abe.activityDispatchPull,
+		ReceivedPriority:                abe.activityReceivedPriority,
 		ExecutionHeld:                   abe.ActivityExecutionHeld,
 		RegisterResolver:                abe.RegisterActivityResolver,
 	}
@@ -653,6 +662,13 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.Crea
 		workflowInstanceID = oi.GetInstanceId()
 		if err := schedule.CheckCreate(ctx, es.GetName(), workflowInstanceID); err != nil {
 			return err
+		}
+		if p := es.GetPriority(); p != nil && p.PriorityLevel != nil {
+			level, ok := config.PriorityLevelName(p.GetPriorityLevel())
+			if !ok {
+				return status.Errorf(codes.InvalidArgument, "unknown priority level %q: must be one of %s", p.GetPriorityLevel(), strings.Join(config.PriorityLevels, ", "))
+			}
+			p.PriorityLevel = &level
 		}
 	}
 

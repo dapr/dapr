@@ -49,18 +49,32 @@ var priorityLevels = map[string]schedulerv1pb.PriorityLevel{
 	config.PriorityLevelBackground: schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND,
 }
 
-// Unknown values stay unset.
-func priorityFromMetadata(md map[string]*internalsv1pb.ListStringValue) priority {
-	var p priority
-	if v := md[todo.MetadataActivityPriorityLevel].GetValues(); len(v) > 0 {
-		p.level = priorityLevels[v[0]]
+// priorityOf is this app's entry, else what the caller sent, else the default.
+func (f *factory) priorityOf(md map[string]*internalsv1pb.ListStringValue, activityName *string) priority {
+	level, weight := sentPriority(md)
+	if f.receivedPriority != nil && activityName != nil {
+		level, weight = f.receivedPriority(*activityName, level, weight)
 	}
-	if v := md[todo.MetadataActivityFairnessWeight].GetValues(); len(v) > 0 {
-		if w, err := strconv.ParseUint(v[0], 10, 32); err == nil && w > 0 {
-			p.weight = uint32(w)
+	return priority{level: priorityLevels[level], weight: weight}
+}
+
+// Unknown values stay unset.
+func sentPriority(md map[string]*internalsv1pb.ListStringValue) (string, uint32) {
+	var (
+		level  string
+		weight uint32
+	)
+	if v := md[todo.MetadataActivityPriorityLevel].GetValues(); len(v) > 0 {
+		if _, ok := priorityLevels[v[0]]; ok {
+			level = v[0]
 		}
 	}
-	return p
+	if v := md[todo.MetadataActivityFairnessWeight].GetValues(); len(v) > 0 {
+		if w, err := strconv.ParseUint(v[0], 10, 32); err == nil && w >= config.MinFairnessWeight && w <= config.MaxFairnessWeight {
+			weight = uint32(w)
+		}
+	}
+	return level, weight
 }
 
 // activityReminderName is the constant name of the per-activity-actor
