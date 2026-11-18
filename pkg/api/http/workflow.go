@@ -327,7 +327,7 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 				// empty reason. Query().Get cannot distinguish these cases.
 				if reasons, ok := r.URL.Query()["reason"]; ok && len(reasons) > 0 {
 					reason := reasons[0]
-					in.Reason = &reason
+					in.TerminateReason = &reason
 				}
 
 				return in, nil
