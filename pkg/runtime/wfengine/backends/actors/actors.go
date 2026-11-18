@@ -62,7 +62,6 @@ import (
 	staterrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -259,6 +258,8 @@ func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
 }
 
 func New(opts Options) (*Actors, error) {
+	actorTypes := NewActorTypes(opts.Namespace, opts.AppID)
+
 	var pendingTasksBackend PendingTasksBackend
 	var pendingCompletions *pending.Pending
 	if opts.EnableClusteredDeployment {
@@ -266,7 +267,7 @@ func New(opts Options) (*Actors, error) {
 		var err error
 		pendingTasksBackend, err = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
-			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+			ExecutorActorType: actorTypes.Executor,
 			Pending:           pendingCompletions,
 		})
 		if err != nil {
@@ -288,10 +289,10 @@ func New(opts Options) (*Actors, error) {
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
-		workflowActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		executorActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
-		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
+		workflowActorType:         actorTypes.Workflow,
+		activityActorType:         actorTypes.Activity,
+		executorActorType:         actorTypes.Executor,
+		retentionerActorType:      actorTypes.Retentioner,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       trackedPendingTasksBackend,
