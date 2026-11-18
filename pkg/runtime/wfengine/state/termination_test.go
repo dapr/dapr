@@ -76,6 +76,19 @@ func TestCustomStatusUsesFirstTerminationEventInHistoryOrder(t *testing.T) {
 	require.Same(t, first, CustomStatus(state))
 }
 
+func TestCustomStatusKeepsFirstTerminationWithoutInput(t *testing.T) {
+	customStatus := wrapperspb.String("workflow progress")
+	state := &backend.WorkflowRuntimeState{
+		CustomStatus: customStatus,
+		OldEvents: []*backend.HistoryEvent{
+			terminationEvent(nil),
+			terminationEvent(wrapperspb.String("later reason")),
+		},
+	}
+
+	require.Same(t, customStatus, CustomStatus(state))
+}
+
 func TestCustomStatusNilState(t *testing.T) {
 	assert.Nil(t, CustomStatus(nil))
 	assert.Nil(t, TerminationInput(nil))
