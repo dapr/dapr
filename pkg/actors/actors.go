@@ -38,6 +38,7 @@ import (
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -254,7 +255,9 @@ func warnUnusableStateStores(l logger.Logger, r *actorstate.Resolver, actorTypes
 // logged as a warning naming the hosted type.
 func logUnhostedBindings(l logger.Logger, logged *sync.Map, bindings map[string]string, hosted []string) {
 	for _, actorType := range slices.Sorted(maps.Keys(bindings)) {
-		if slices.Contains(hosted, actorType) {
+		// The internal workflow actor types are hosted only while a workflow
+		// worker is connected, so not hosting them is their normal state.
+		if slices.Contains(hosted, actorType) || reserved.IsInternalActorType(actorType) {
 			continue
 		}
 		if _, ok := logged.LoadOrStore(actorType, struct{}{}); ok {

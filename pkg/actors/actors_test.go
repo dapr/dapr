@@ -455,3 +455,24 @@ func TestLogUnhostedBindings(t *testing.T) {
 	assert.NotContains(t, buf.String(), "OrphanActor")
 	assert.NotContains(t, buf.String(), "transactionactor")
 }
+
+// TestLogUnhostedBindingsSkipsInternalTypes checks that the workflow actor
+// types bound by spec.workflow.stateStore are not logged: they are hosted
+// only while a workflow worker is connected, so not hosting them is normal.
+func TestLogUnhostedBindingsSkipsInternalTypes(t *testing.T) {
+	bindings := map[string]string{
+		"dapr.internal.ns.app.workflow": "wallet-workflows",
+		"dapr.internal.ns.app.activity": "wallet-workflows",
+		"OrphanActor":                   "wallet-orphans",
+	}
+
+	var buf bytes.Buffer
+	l := logger.NewLogger(t.Name())
+	l.SetOutput(&buf)
+
+	var logged sync.Map
+	logUnhostedBindings(l, &logged, bindings, nil)
+
+	assert.Contains(t, buf.String(), "Actor type OrphanActor is bound")
+	assert.NotContains(t, buf.String(), "dapr.internal")
+}
