@@ -229,6 +229,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		DNS:             dns,
 		ContainerImages: res.ContainerImages,
 		TTLOverride:     res.CertTTL,
+		Extensions:      res.Extensions,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)
