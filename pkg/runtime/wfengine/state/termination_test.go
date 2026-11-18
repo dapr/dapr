@@ -32,33 +32,35 @@ func terminationEvent(input *wrapperspb.StringValue) *backend.HistoryEvent {
 	}
 }
 
+func terminatedRuntimeState(oldEvents, newEvents []*backend.HistoryEvent, customStatus *wrapperspb.StringValue) *backend.WorkflowRuntimeState {
+	return &backend.WorkflowRuntimeState{
+		CustomStatus: customStatus,
+		CompletedEvent: &protos.ExecutionCompletedEvent{
+			WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+		},
+		OldEvents: oldEvents,
+		NewEvents: newEvents,
+	}
+}
+
 func TestCustomStatusUsesTerminationInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
 	reason := wrapperspb.String("cancelled by operator")
-	state := &backend.WorkflowRuntimeState{
-		CustomStatus: customStatus,
-		OldEvents:    []*backend.HistoryEvent{terminationEvent(reason)},
-	}
+	state := terminatedRuntimeState([]*backend.HistoryEvent{terminationEvent(reason)}, nil, customStatus)
 
 	require.Same(t, reason, CustomStatus(state))
 }
 
 func TestCustomStatusPreservesWorkflowStatusWithoutTerminationInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
-	state := &backend.WorkflowRuntimeState{
-		CustomStatus: customStatus,
-		OldEvents:    []*backend.HistoryEvent{terminationEvent(nil)},
-	}
+	state := terminatedRuntimeState([]*backend.HistoryEvent{terminationEvent(nil)}, nil, customStatus)
 
 	require.Same(t, customStatus, CustomStatus(state))
 }
 
 func TestCustomStatusPreservesExplicitEmptyTerminationInput(t *testing.T) {
 	reason := wrapperspb.String("")
-	state := &backend.WorkflowRuntimeState{
-		CustomStatus: wrapperspb.String("workflow progress"),
-		NewEvents:    []*backend.HistoryEvent{terminationEvent(reason)},
-	}
+	state := terminatedRuntimeState(nil, []*backend.HistoryEvent{terminationEvent(reason)}, wrapperspb.String("workflow progress"))
 
 	got := CustomStatus(state)
 	require.NotNil(t, got)
@@ -68,22 +70,35 @@ func TestCustomStatusPreservesExplicitEmptyTerminationInput(t *testing.T) {
 func TestCustomStatusUsesFirstTerminationEventInHistoryOrder(t *testing.T) {
 	first := wrapperspb.String("first")
 	second := wrapperspb.String("second")
-	state := &backend.WorkflowRuntimeState{
-		OldEvents: []*backend.HistoryEvent{terminationEvent(first)},
-		NewEvents: []*backend.HistoryEvent{terminationEvent(second)},
-	}
+	state := terminatedRuntimeState(
+		[]*backend.HistoryEvent{terminationEvent(first)},
+		[]*backend.HistoryEvent{terminationEvent(second)},
+		nil,
+	)
 
 	require.Same(t, first, CustomStatus(state))
 }
 
 func TestCustomStatusKeepsFirstTerminationWithoutInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
-	state := &backend.WorkflowRuntimeState{
-		CustomStatus: customStatus,
-		OldEvents: []*backend.HistoryEvent{
+	state := terminatedRuntimeState(
+		[]*backend.HistoryEvent{
 			terminationEvent(nil),
 			terminationEvent(wrapperspb.String("later reason")),
 		},
+		nil,
+		customStatus,
+	)
+
+	require.Same(t, customStatus, CustomStatus(state))
+}
+
+func TestCustomStatusDoesNotExposePendingTerminationInput(t *testing.T) {
+	customStatus := wrapperspb.String("workflow progress")
+	state := &backend.WorkflowRuntimeState{
+		CustomStatus: customStatus,
+		StartEvent:   &protos.ExecutionStartedEvent{Name: "test"},
+		NewEvents:    []*backend.HistoryEvent{terminationEvent(wrapperspb.String("pending reason"))},
 	}
 
 	require.Same(t, customStatus, CustomStatus(state))
