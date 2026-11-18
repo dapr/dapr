@@ -451,3 +451,18 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 		assert.Equal(t, customMetadataValue(i), val[0])
 	}
 }
+
+func TestDaprInternalMetadataGet(t *testing.T) {
+	md := DaprInternalMetadata{
+		"Retry-After": {Values: []string{"5", "10"}},
+		"x-empty":     {Values: []string{}},
+	}
+
+	assert.Equal(t, "5", md.Get("Retry-After"))
+	assert.Equal(t, "5", md.Get("retry-after"))
+	assert.Empty(t, md.Get("x-empty"))
+	assert.Empty(t, md.Get("missing"))
+
+	var nilMD DaprInternalMetadata
+	assert.Empty(t, nilMD.Get("Retry-After"))
+}

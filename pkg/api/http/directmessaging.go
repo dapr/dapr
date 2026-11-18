@@ -219,12 +219,13 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			// error response body for the resiliency policy to evaluate
 			// and potentially retry.
 			msg, _ := rResp.RawDataFull()
+			headers := rResp.Headers()
 			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
-				headers:     rResp.Headers(),
+				headers:     headers,
 				statusCode:  int(resStatus.GetCode()),
 				msg:         msg,
 				contentType: rResp.ContentType(),
-			})
+			}).WithRetryAfterHeader(headers.Get("Retry-After"))
 		}
 		// For streaming requests with non-2xx responses, retries are
 		// impossible so we fall through to stream the response directly

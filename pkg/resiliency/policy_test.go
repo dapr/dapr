@@ -615,3 +615,116 @@ func TestRetryExcluded(t *testing.T) {
 		assert.False(t, PolicyDefinition{}.RetryExcluded(NewCodeError(404, errors.New("not found"))))
 	})
 }
+
+func TestRetryAfterBackOff(t *testing.T) {
+	t.Run("uses the longer of the hint and the policy delay", func(t *testing.T) {
+		b := &retryAfterBackOff{BackOff: backoff.NewConstantBackOff(time.Second)}
+
+		b.setHint(5 * time.Second)
+		assert.Equal(t, 5*time.Second, b.NextBackOff())
+
+		// The hint only applies to the next wait.
+		assert.Equal(t, time.Second, b.NextBackOff())
+
+		b.setHint(100 * time.Millisecond)
+		assert.Equal(t, time.Second, b.NextBackOff())
+	})
+
+	t.Run("doesn't extend a policy that gave up", func(t *testing.T) {
+		b := &retryAfterBackOff{BackOff: backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Millisecond), 1)}
+
+		assert.Equal(t, time.Millisecond, b.NextBackOff())
+		b.setHint(time.Minute)
+		assert.Equal(t, backoff.Stop, b.NextBackOff())
+	})
+
+	t.Run("reset clears the hint", func(t *testing.T) {
+		b := &retryAfterBackOff{BackOff: backoff.NewConstantBackOff(time.Millisecond)}
+		b.setHint(time.Minute)
+		b.Reset()
+		assert.Equal(t, time.Millisecond, b.NextBackOff())
+	})
+}
+
+func TestPolicyRetryAfter(t *testing.T) {
+	const retryAfter = 300 * time.Millisecond
+
+	newPolicy := func(t *testing.T) Runner[struct{}] {
+		t.Helper()
+		return NewRunner[struct{}](t.Context(), &PolicyDefinition{
+			log:  testLog,
+			name: "retry-after",
+			r: NewRetry(retry.Config{
+				Policy:     retry.PolicyConstant,
+				Duration:   time.Millisecond,
+				MaxRetries: 3,
+			}, NewRetryConditionMatch()),
+		})
+	}
+
+	t.Run("waits for the Retry-After delay", func(t *testing.T) {
+		called := atomic.Int32{}
+		var gap time.Duration
+		var last time.Time
+		fn := func(ctx context.Context) (struct{}, error) {
+			now := time.Now()
+			if called.Add(1) == 1 {
+				last = now
+				ce := NewCodeError(429, errors.New("slow down"))
+				ce.retryAfter = retryAfter
+				return struct{}{}, ce
+			}
+			gap = now.Sub(last)
+			return struct{}{}, nil
+		}
+
+		_, err := newPolicy(t)(fn)
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), called.Load())
+		assert.GreaterOrEqual(t, gap, retryAfter)
+	})
+
+	t.Run("plain errors use the policy delay", func(t *testing.T) {
+		called := atomic.Int32{}
+		fn := func(ctx context.Context) (struct{}, error) {
+			if called.Add(1) == 1 {
+				return struct{}{}, NewCodeError(500, errors.New("boom"))
+			}
+			return struct{}{}, nil
+		}
+
+		start := time.Now()
+		_, err := newPolicy(t)(fn)
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), called.Load())
+		assert.Less(t, time.Since(start), retryAfter)
+	})
+
+	t.Run("canceling the context stops the wait", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		policy := NewRunner[struct{}](ctx, &PolicyDefinition{
+			log:  testLog,
+			name: "retry-after",
+			r: NewRetry(retry.Config{
+				Policy:     retry.PolicyConstant,
+				Duration:   time.Millisecond,
+				MaxRetries: 3,
+			}, NewRetryConditionMatch()),
+		})
+
+		called := atomic.Int32{}
+		fn := func(ctx context.Context) (struct{}, error) {
+			called.Add(1)
+			ce := NewCodeError(429, errors.New("slow down"))
+			ce.retryAfter = time.Minute
+			time.AfterFunc(50*time.Millisecond, cancel)
+			return struct{}{}, ce
+		}
+
+		start := time.Now()
+		_, err := policy(fn)
+		require.Error(t, err)
+		assert.Equal(t, int32(1), called.Load())
+		assert.Less(t, time.Since(start), 10*time.Second)
+	})
+}
