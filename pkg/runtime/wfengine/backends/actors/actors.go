@@ -25,7 +25,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
+
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	"github.com/dapr/dapr/pkg/actors"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
@@ -64,11 +71,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
-	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")

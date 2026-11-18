@@ -25,6 +25,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
@@ -33,10 +38,6 @@ import (
 	"github.com/dapr/durabletask-go/backend/historysigning"
 	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
-	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
@@ -1508,8 +1509,8 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	req := &api.TransactionalRequest{
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
-		Operations: make([]api.TransactionalOperation, 0,
-			inboxLen+historyLen+signingCertLen+extSigningCertLen+signatureLen+5),
+		// Initial capacity should be enough to contain the entire inbox, history, signing data, and custom status + metadata
+		Operations: make([]api.TransactionalOperation, 0, inboxLen+historyLen+signingCertLen+extSigningCertLen+signatureLen+5),
 	}
 
 	addPurgeStateOperations(req, inboxKeyPrefix, inboxLen)
