@@ -3,7 +3,7 @@ Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://wwb.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -56,6 +56,7 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { close(holdCh) })
 	var inAct atomic.Int32
 	h.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
+		ctx.SetCustomStatus("workflow status before termination")
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -71,12 +72,12 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	tests := []struct {
 		name        string
 		reason      *string
-		wantPresent bool
-		wantReason  string
+		wantPresent      bool
+		wantCustomStatus string
 	}{
-		{name: "reason supplied", reason: &reason, wantPresent: true, wantReason: reason},
-		{name: "explicit empty reason", reason: &emptyReason, wantPresent: true},
-		{name: "reason omitted", reason: nil, wantPresent: false},
+		{name: "reason supplied", reason: &reason, wantPresent: true, wantCustomStatus: reason},
+		{name: "explicit empty reason", reason: &emptyReason, wantPresent: true, wantCustomStatus: ""},
+		{name: "reason omitted", reason: nil, wantPresent: true, wantCustomStatus: "workflow status before termination"},
 	}
 
 	for i, tc := range tests {
@@ -101,9 +102,8 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 
-			// The reason is observable in metadata without being folded into
-			// the workflow output. An explicit empty value is still present,
-			// while an omitted query parameter produces no metadata key.
+			// A supplied reason is exposed as custom status; without a reason,
+			// the custom status set by the workflow remains unchanged.
 			metadataURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s", h.workflow.Dapr().HTTPPort(), id)
 			metadataReq, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 			require.NoError(t, err)
@@ -115,11 +115,13 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 			}
 			require.NoError(t, json.NewDecoder(metadataResp.Body).Decode(&workflowMetadata))
 			require.NoError(t, metadataResp.Body.Close())
-			value, present := workflowMetadata.Properties["dapr.workflow.termination_reason"]
+			value, present := workflowMetadata.Properties["dapr.workflow.custom_status"]
 			assert.Equal(t, tc.wantPresent, present)
 			if tc.wantPresent {
-				assert.Equal(t, tc.wantReason, value)
+				assert.Equal(t, tc.wantCustomStatus, value)
 			}
+			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.termination_reason")
+			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.output")
 		})
 	}
 }
