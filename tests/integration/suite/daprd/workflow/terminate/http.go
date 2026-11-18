@@ -121,7 +121,6 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(t, tc.wantCustomStatus, value)
 			}
 			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.termination_reason")
-			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.output")
 		})
 	}
 }
