@@ -254,36 +254,46 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 	}
 }
 
-func TestTerminateWorkflowIncludesReason(t *testing.T) {
-	const reason = "operator requested termination"
-	var captured *protos.TerminateRequest
-
-	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
-		resiliency: resiliency.New(nil),
-		workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
-			return fake.NewClient().WithTerminateWorkflow(func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error {
-				captured = new(protos.TerminateRequest)
-				for _, opt := range opts {
-					if err := opt(captured); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}),
-		actors: actorsfake.New(),
+func TestTerminateWorkflowPassesReasonAsOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+	}{
+		{name: "non-empty reason", reason: "operator requested termination"},
+		{name: "explicit empty reason", reason: ""},
 	}
 
-	_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
-		WorkflowComponent: fakeComponentName,
-		InstanceId:        fakeInstanceID,
-		Reason:            &reason,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, captured)
-	require.NotNil(t, captured.GetReason())
-	assert.Equal(t, reason, captured.GetReason().GetValue())
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured *protos.TerminateRequest
+
+			fakeAPI := &Universal{
+				logger:     logger.NewLogger("test"),
+				resiliency: resiliency.New(nil),
+				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+					return fake.NewClient().WithTerminateWorkflow(func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error {
+						captured = new(protos.TerminateRequest)
+						for _, opt := range opts {
+							if err := opt(captured); err != nil {
+								return err
+							}
+						}
+						return nil
+					})
+				}),
+				actors: actorsfake.New(),
+			}
+
+			_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
+				WorkflowComponent: fakeComponentName,
+				InstanceId:        fakeInstanceID,
+				Reason:            &tc.reason,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, captured)
+			require.Equal(t, wrapperspb.String(tc.reason), captured.GetOutput())
+		})
+	}
 }
 
 func TestRaiseEventWorkflowApi(t *testing.T) {
@@ -551,37 +561,19 @@ func TestGetWorkflowOutputOnFailure(t *testing.T) {
 	}
 }
 
-func TestGetWorkflowTerminationReason(t *testing.T) {
+func TestGetWorkflowExposesTerminationReasonAsCustomStatus(t *testing.T) {
 	const reason = "operator requested termination"
 
-	tests := []struct {
-		name     string
-		reason   *wrapperspb.StringValue
-		want     string
-		wantPresent bool
-	}{
-		{name: "reason is exposed", reason: wrapperspb.String(reason), want: reason, wantPresent: true},
-		{name: "explicitly empty reason is exposed", reason: wrapperspb.String(""), want: "", wantPresent: true},
-		{name: "missing reason is omitted", reason: nil, wantPresent: false},
-	}
+	fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{
+		RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+		CustomStatus:  wrapperspb.String(reason),
+	}, nil)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{
-				RuntimeStatus:     protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
-				TerminationReason: tc.reason,
-			}, nil)
+	res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+	require.NoError(t, err)
 
-			res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
-			require.NoError(t, err)
-
-			got, present := res.GetProperties()["dapr.workflow.termination_reason"]
-			assert.Equal(t, tc.wantPresent, present)
-			if tc.wantPresent {
-				assert.Equal(t, tc.want, got)
-			}
-		})
-	}
+	assert.Equal(t, reason, res.GetProperties()["dapr.workflow.custom_status"])
+	assert.NotContains(t, res.GetProperties(), "dapr.workflow.termination_reason")
 }
 
 func TestGetWorkflowRuntimeStatus(t *testing.T) {
