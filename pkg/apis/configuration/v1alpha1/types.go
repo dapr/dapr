@@ -109,8 +109,10 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec *PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec *TracingSpec `json:"tracing,omitempty"`
+	// MetricSpec (`metric`) is deprecated. Use `metrics` instead.
 	// +kubebuilder:default={enabled:true}
 	MetricSpec *MetricSpec `json:"metric,omitempty"`
+	// MetricsSpec (`metrics`) defines metrics configuration. It takes precedence over the deprecated `metric`.
 	// +kubebuilder:default={enabled:true}
 	MetricsSpec *MetricSpec `json:"metrics,omitempty"`
 	// +optional

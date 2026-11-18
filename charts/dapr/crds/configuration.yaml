@@ -251,7 +251,7 @@ spec:
               metric:
                 default:
                   enabled: true
-                description: MetricSpec defines metrics configuration.
+                description: MetricSpec (`metric`) is deprecated. Use `metrics` instead.
                 properties:
                   enabled:
                     type: boolean
@@ -338,7 +338,8 @@ spec:
               metrics:
                 default:
                   enabled: true
-                description: MetricSpec defines metrics configuration.
+                description: MetricsSpec (`metrics`) defines metrics configuration.
+                  It takes precedence over the deprecated `metric`.
                 properties:
                   enabled:
                     type: boolean
