@@ -502,10 +502,21 @@ func (abe *Actors) swapRegCancel(cancel context.CancelFunc) {
 // configured the workflow actor types are not advertised to placement, so
 // routing would retry indefinitely instead of surfacing an error; fail fast
 // with the same error the state-reading paths return. The actor state store
-// can be hot reloaded, so this is evaluated per call.
-func (abe *Actors) requireActorStateStore() error {
+// can be hot reloaded, so this is evaluated per call. When
+// spec.workflow.stateStore binds this app's workflow actor types to another
+// state store, an operation on this app's workflows requires that store too,
+// so it fails with an error naming it before reaching the workflow actor. An
+// operation on another app's workflow (targetAppID) uses that app's store,
+// which its own sidecar resolves.
+func (abe *Actors) requireActorStateStore(targetAppID string) error {
 	if _, _, ok := abe.compStore.GetStateStoreActor(); !ok {
 		return messages.ErrActorRuntimeNotFound
+	}
+	if targetAppID != "" && targetAppID != abe.appID {
+		return nil
+	}
+	if _, _, err := abe.actors.StateStoreResolver().Resolve(abe.workflowActorType); err != nil {
+		return err
 	}
 	return nil
 }
@@ -523,7 +534,7 @@ func (abe *Actors) noWorkerError(err error, targetAppID string) error {
 	if terr != nil || (!isActorNotRegisteredError(err, actorType) && !isActorNoAddressError(err, actorType) && !isReminderNotHostedError(err)) {
 		return err
 	}
-	if serr := abe.requireActorStateStore(); serr != nil {
+	if serr := abe.requireActorStateStore(targetAppID); serr != nil {
 		return serr
 	}
 	if targetAppID == "" {
@@ -574,7 +585,7 @@ func (abe *Actors) targetWorkflowActorType(target string) (string, error) {
 // RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
 // a specific event ID.
 func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
-	if err := abe.requireActorStateStore(); err != nil {
+	if err := abe.requireActorStateStore(req.GetRouter().GetTargetAppID()); err != nil {
 		return "", err
 	}
 
@@ -638,7 +649,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateWorkflowInstance(ctx context.Context, req *backend.CreateWorkflowInstanceRequest) error {
-	if err := abe.requireActorStateStore(); err != nil {
+	if err := abe.requireActorStateStore(req.GetStartEvent().GetRouter().GetTargetAppID()); err != nil {
 		return err
 	}
 
@@ -869,7 +880,7 @@ func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.Workflow
 
 // AddNewWorkflowEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
 func (abe *Actors) AddNewWorkflowEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
-	if err := abe.requireActorStateStore(); err != nil {
+	if err := abe.requireActorStateStore(e.GetRouter().GetTargetAppID()); err != nil {
 		return err
 	}
 
@@ -1075,7 +1086,7 @@ func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.Instan
 // driver walks local descendants itself), so the remote delegation path
 // above already covers it and it needs no separate handling here.
 func (abe *Actors) PurgeWorkflowState(ctx context.Context, id api.InstanceID, router *protos.TaskRouter, recursive bool, force bool) (int, error) {
-	if err := abe.requireActorStateStore(); err != nil {
+	if err := abe.requireActorStateStore(router.GetTargetAppID()); err != nil {
 		return 0, err
 	}
 
