@@ -80,7 +80,7 @@ func New() *Fake {
 			return nil
 		},
 		fnStateStoreResolver: func() state.StoreResolver {
-			return nil
+			return noopResolver{}
 		},
 		fnRegisterHosted: func(context.Context, hostconfig.Config) error {
 			return nil
@@ -233,4 +233,11 @@ func (f *Fake) OnActorStateStoreChanged() {
 
 func (f *Fake) UnRegisterHosted(ctx context.Context, ids ...string) error {
 	return f.fnUnRegisterHosted(ctx, ids...)
+}
+
+// noopResolver resolves every actor type without error, to no store.
+type noopResolver struct{}
+
+func (noopResolver) Resolve(string) (string, state.Backend, error) {
+	return "", nil, nil
 }
