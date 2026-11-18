@@ -287,7 +287,7 @@ func TestTerminateWorkflowPassesReasonAsOutput(t *testing.T) {
 			_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
 				WorkflowComponent: fakeComponentName,
 				InstanceId:        fakeInstanceID,
-				Reason:            &tc.reason,
+				TerminateReason:   &tc.reason,
 			})
 			require.NoError(t, err)
 			require.NotNil(t, captured)
