@@ -35,20 +35,30 @@ const (
 // delete entry rows the just-read metadata still declares. That torn read is
 // transient: retry the whole load with fresh metadata. If the metadata ETag is
 // unchanged between two attempts no save landed in between, so the data is
-// genuinely missing and the error is surfaced.
+// genuinely missing and the error is surfaced, unless opts.AllowMissingEntries
+// is set, in which case the state is loaded without the missing entries.
 func LoadWorkflowState(ctx context.Context, astate state.Interface, actorID string, opts Options) (*State, error) {
+	// Always attempt strict loads first so that a torn read is retried with
+	// fresh metadata rather than tolerated.
+	strict := opts
+	strict.AllowMissingEntries = false
+
 	var prevETag *string
 	var havePrev bool
 	for attempt := 1; ; attempt++ {
-		s, err := loadWorkflowStateOnce(ctx, astate, actorID, opts)
+		s, err := loadWorkflowStateOnce(ctx, astate, actorID, strict)
 		var mErr *transientKeyMismatchError
 		if err == nil || !errors.As(err, &mErr) {
+			if s != nil {
+				s.allowMissingEntries = opts.AllowMissingEntries
+			}
 			return s, err
 		}
-		if havePrev && prevETag != nil && mErr.etag != nil && *prevETag == *mErr.etag {
-			return nil, mErr.err
-		}
-		if attempt >= loadStateMaxAttempts {
+		if (havePrev && prevETag != nil && mErr.etag != nil && *prevETag == *mErr.etag) ||
+			attempt >= loadStateMaxAttempts {
+			if opts.AllowMissingEntries {
+				return loadWorkflowStateOnce(ctx, astate, actorID, opts)
+			}
 			return nil, mErr.err
 		}
 		prevETag, havePrev = mErr.etag, true
