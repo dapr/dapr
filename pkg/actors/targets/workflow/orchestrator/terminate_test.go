@@ -23,47 +23,42 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 )
 
-func TestCascadeTerminateEventPreservesInputAndReason(t *testing.T) {
-	output := wrapperspb.String(`{"status":"cancelled"}`)
-	reason := wrapperspb.String("cancelled by parent workflow")
+func TestCascadeTerminateEventPreservesInput(t *testing.T) {
+	input := wrapperspb.String("cancelled by parent workflow")
 
 	event := cascadeTerminateEvent(&protos.ExecutionTerminatedEvent{
-		Input:   output,
-		Reason:  reason,
+		Input:   input,
 		Recurse: true,
 	})
 
 	terminated := event.GetExecutionTerminated()
 	require.NotNil(t, terminated)
-	assert.Equal(t, output, terminated.GetInput())
-	assert.Equal(t, reason, terminated.GetReason())
+	assert.Same(t, input, terminated.GetInput())
 	assert.True(t, terminated.GetRecurse())
 }
 
-func TestCascadeTerminateEventPreservesExplicitEmptyReason(t *testing.T) {
+func TestCascadeTerminateEventPreservesExplicitEmptyInput(t *testing.T) {
+	input := wrapperspb.String("")
+
 	event := cascadeTerminateEvent(&protos.ExecutionTerminatedEvent{
-		Input:   wrapperspb.String("legacy termination input"),
-		Reason:  wrapperspb.String(""),
+		Input:   input,
 		Recurse: true,
 	})
 
 	terminated := event.GetExecutionTerminated()
 	require.NotNil(t, terminated)
-	require.NotNil(t, terminated.GetReason())
-	assert.Empty(t, terminated.GetReason().GetValue())
-	assert.Equal(t, "legacy termination input", terminated.GetInput().GetValue())
+	assert.Same(t, input, terminated.GetInput())
+	assert.Empty(t, terminated.GetInput().GetValue())
 	assert.True(t, terminated.GetRecurse())
 }
 
-func TestCascadeTerminateEventPreservesMissingReason(t *testing.T) {
+func TestCascadeTerminateEventPreservesNilInput(t *testing.T) {
 	event := cascadeTerminateEvent(&protos.ExecutionTerminatedEvent{
-		Input:   wrapperspb.String("legacy termination input"),
 		Recurse: true,
 	})
 
 	terminated := event.GetExecutionTerminated()
 	require.NotNil(t, terminated)
-	assert.Nil(t, terminated.GetReason())
-	assert.Equal(t, "legacy termination input", terminated.GetInput().GetValue())
+	assert.Nil(t, terminated.GetInput())
 	assert.True(t, terminated.GetRecurse())
 }
