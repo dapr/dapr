@@ -16,6 +16,7 @@ package resiliency
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/apps"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/daprd"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/logs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/publish"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/subscriptions"
 )
