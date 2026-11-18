@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func terminationEvent(input *wrapperspb.StringValue) *backend.HistoryEvent {
+func terminationEvent(input *wrapperspb.StringValue) *protos.HistoryEvent {
 	return &protos.HistoryEvent{
 		EventType: &protos.HistoryEvent_ExecutionTerminated{
 			ExecutionTerminated: &protos.ExecutionTerminatedEvent{Input: input},
@@ -32,7 +32,7 @@ func terminationEvent(input *wrapperspb.StringValue) *backend.HistoryEvent {
 	}
 }
 
-func terminatedRuntimeState(oldEvents, newEvents []*backend.HistoryEvent, customStatus *wrapperspb.StringValue) *backend.WorkflowRuntimeState {
+func terminatedRuntimeState(oldEvents, newEvents []*protos.HistoryEvent, customStatus *wrapperspb.StringValue) *backend.WorkflowRuntimeState {
 	return &backend.WorkflowRuntimeState{
 		CustomStatus: customStatus,
 		CompletedEvent: &protos.ExecutionCompletedEvent{
@@ -46,21 +46,21 @@ func terminatedRuntimeState(oldEvents, newEvents []*backend.HistoryEvent, custom
 func TestCustomStatusUsesTerminationInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
 	reason := wrapperspb.String("cancelled by operator")
-	state := terminatedRuntimeState([]*backend.HistoryEvent{terminationEvent(reason)}, nil, customStatus)
+	state := terminatedRuntimeState([]*protos.HistoryEvent{terminationEvent(reason)}, nil, customStatus)
 
 	require.Same(t, reason, CustomStatus(state))
 }
 
 func TestCustomStatusPreservesWorkflowStatusWithoutTerminationInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
-	state := terminatedRuntimeState([]*backend.HistoryEvent{terminationEvent(nil)}, nil, customStatus)
+	state := terminatedRuntimeState([]*protos.HistoryEvent{terminationEvent(nil)}, nil, customStatus)
 
 	require.Same(t, customStatus, CustomStatus(state))
 }
 
 func TestCustomStatusPreservesExplicitEmptyTerminationInput(t *testing.T) {
 	reason := wrapperspb.String("")
-	state := terminatedRuntimeState(nil, []*backend.HistoryEvent{terminationEvent(reason)}, wrapperspb.String("workflow progress"))
+	state := terminatedRuntimeState(nil, []*protos.HistoryEvent{terminationEvent(reason)}, wrapperspb.String("workflow progress"))
 
 	got := CustomStatus(state)
 	require.NotNil(t, got)
@@ -71,8 +71,8 @@ func TestCustomStatusUsesFirstTerminationEventInHistoryOrder(t *testing.T) {
 	first := wrapperspb.String("first")
 	second := wrapperspb.String("second")
 	state := terminatedRuntimeState(
-		[]*backend.HistoryEvent{terminationEvent(first)},
-		[]*backend.HistoryEvent{terminationEvent(second)},
+		[]*protos.HistoryEvent{terminationEvent(first)},
+		[]*protos.HistoryEvent{terminationEvent(second)},
 		nil,
 	)
 
@@ -82,7 +82,7 @@ func TestCustomStatusUsesFirstTerminationEventInHistoryOrder(t *testing.T) {
 func TestCustomStatusKeepsFirstTerminationWithoutInput(t *testing.T) {
 	customStatus := wrapperspb.String("workflow progress")
 	state := terminatedRuntimeState(
-		[]*backend.HistoryEvent{
+		[]*protos.HistoryEvent{
 			terminationEvent(nil),
 			terminationEvent(wrapperspb.String("later reason")),
 		},
@@ -98,7 +98,7 @@ func TestCustomStatusDoesNotExposePendingTerminationInput(t *testing.T) {
 	state := &backend.WorkflowRuntimeState{
 		CustomStatus: customStatus,
 		StartEvent:   &protos.ExecutionStartedEvent{Name: "test"},
-		NewEvents:    []*backend.HistoryEvent{terminationEvent(wrapperspb.String("pending reason"))},
+		NewEvents:    []*protos.HistoryEvent{terminationEvent(wrapperspb.String("pending reason"))},
 	}
 
 	require.Same(t, customStatus, CustomStatus(state))
