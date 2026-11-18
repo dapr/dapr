@@ -41,8 +41,10 @@ func TerminationInput(state *backend.WorkflowRuntimeState) *wrapperspb.StringVal
 // terminated with a reason; otherwise it returns the status set by the
 // workflow implementation.
 func CustomStatus(state *backend.WorkflowRuntimeState) *wrapperspb.StringValue {
-	if input := TerminationInput(state); input != nil {
-		return input
+	if runtimestate.RuntimeStatus(state) == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED {
+		if input := TerminationInput(state); input != nil {
+			return input
+		}
 	}
 	if state == nil {
 		return nil
