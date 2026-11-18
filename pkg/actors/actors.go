@@ -116,6 +116,12 @@ type Interface interface {
 	Reminders(context.Context) (reminders.Interface, error)
 	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
+
+	// StateStoreResolver returns the resolver of the state store which holds
+	// each actor type's state. It is usable before the runtime is ready, and
+	// looks up the stores on every call.
+	StateStoreResolver() actorstate.StoreResolver
+
 	RegisterHosted(context.Context, hostconfig.Config) error
 	UnRegisterHosted(ctx context.Context, actorTypes ...string) error
 	WaitForRegisteredHosts(ctx context.Context) error
@@ -798,6 +804,10 @@ func (a *actors) currentBoundStores() map[string]boundStore {
 		}
 	}
 	return stores
+}
+
+func (a *actors) StateStoreResolver() actorstate.StoreResolver {
+	return a.stateResolver
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {

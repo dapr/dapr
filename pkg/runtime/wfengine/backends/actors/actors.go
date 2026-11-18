@@ -1424,8 +1424,8 @@ func (abe *Actors) OnWorkflowTaskCompletion(request *protos.WorkflowRequest, cb 
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
 	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
-		ComponentStore:    abe.compStore,
-		Namespace:         abe.namespace,
+		StoreResolver:     abe.actors.StateStoreResolver(),
+		WorkflowActorType: abe.workflowActorType,
 		AppID:             abe.appID,
 		PageSize:          req.PageSize,
 		ContinuationToken: req.ContinuationToken,
