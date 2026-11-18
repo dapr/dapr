@@ -754,10 +754,6 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
-	terminationInput := state.TerminationInput(rstate)
-	if terminationInput != nil {
-		output = nil
-	}
 	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 
 	var startedAt *timestamppb.Timestamp
