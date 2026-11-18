@@ -68,11 +68,11 @@ var (
 		stats.UnitDimensionless)
 	workflowActivityBacklogGauge = stats.Int64(
 		"scheduler/workflow_activity_backlog",
-		"Current number of pull-dispatched workflow activities waiting for a free sidecar slot on this scheduler instance, by namespace, app_id and activity_name.",
+		"Current number of pull-dispatched workflow activities waiting for a free sidecar slot on this scheduler instance, by namespace, app_id, activity_name and priority_level.",
 		stats.UnitDimensionless)
 	workflowActivityInflightGauge = stats.Int64(
 		"scheduler/workflow_activity_inflight",
-		"Current number of pull-dispatched workflow activities this scheduler instance handed to a sidecar and that have not finished, by namespace, app_id and activity_name.",
+		"Current number of pull-dispatched workflow activities this scheduler instance handed to a sidecar and that have not finished, by namespace, app_id, activity_name and priority_level.",
 		stats.UnitDimensionless)
 	workflowActivityRefusedTotal = stats.Int64(
 		"scheduler/workflow_activity_refused_total",
@@ -126,6 +126,7 @@ var (
 	tagActorType      = tag.MustNewKey("actor_type")
 	tagAppID          = tag.MustNewKey("app_id")
 	tagActivityName   = tag.MustNewKey("activity_name")
+	tagPriorityLevel  = tag.MustNewKey("priority_level")
 )
 
 var (
@@ -336,15 +337,27 @@ func RecordConcurrencyThrottled(key string) {
 // RecordWorkflowActivityBacklog records the number of pull-dispatched
 // activities of one name waiting for a free sidecar slot on this scheduler
 // instance.
-func RecordWorkflowActivityBacklog(namespace, appID, activityName string, count int64) {
-	recordWorkflowActivity(workflowActivityBacklogGauge, namespace, appID, activityName, count)
+func RecordWorkflowActivityBacklog(namespace, appID, activityName, priorityLevel string, count int64) {
+	recordWorkflowActivityLevel(workflowActivityBacklogGauge, namespace, appID, activityName, priorityLevel, count)
 }
 
 // RecordWorkflowActivityInflight records the number of pull-dispatched
 // activities of one name this scheduler instance handed to a sidecar and that
 // have not finished.
-func RecordWorkflowActivityInflight(namespace, appID, activityName string, count int64) {
-	recordWorkflowActivity(workflowActivityInflightGauge, namespace, appID, activityName, count)
+func RecordWorkflowActivityInflight(namespace, appID, activityName, priorityLevel string, count int64) {
+	recordWorkflowActivityLevel(workflowActivityInflightGauge, namespace, appID, activityName, priorityLevel, count)
+}
+
+func recordWorkflowActivityLevel(measure *stats.Int64Measure, namespace, appID, activityName, priorityLevel string, count int64) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(measure.Name(),
+			tagNamespace, namespace,
+			tagAppID, appID,
+			tagActivityName, activityName,
+			tagPriorityLevel, priorityLevel,
+		),
+		measure.M(count),
+	)
 }
 
 // RecordWorkflowActivityRefused counts a pull-dispatched activity a sidecar
@@ -446,8 +459,8 @@ func InitMetrics() error {
 		utils.NewMeasureView(concurrencyInflightGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyPendingGauge, []tag.Key{tagConcurrencyKey}, view.LastValue()),
 		utils.NewMeasureView(concurrencyThrottledTotal, []tag.Key{tagConcurrencyKey}, view.Count()),
-		utils.NewMeasureView(workflowActivityBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
-		utils.NewMeasureView(workflowActivityInflightGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.LastValue()),
+		utils.NewMeasureView(workflowActivityBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName, tagPriorityLevel}, view.LastValue()),
+		utils.NewMeasureView(workflowActivityInflightGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName, tagPriorityLevel}, view.LastValue()),
 		utils.NewMeasureView(workflowActivityRefusedTotal, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.Count()),
 		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
