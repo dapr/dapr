@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/contenttype"
@@ -73,14 +74,16 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		WithCustomHTTPMetadata(msg.Metadata)
 	defer req.Close()
 
-	iTraceID := cloudEvent[contribpubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[contribpubsub.TraceIDField]
-	}
-	if iTraceID != nil {
-		traceID := iTraceID.(string)
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
+	// A zero parent starts a new root span, so a message delivered without
+	// inbound trace context is still traced. No ops if tracing is off.
+	sc := pubsub.ParentSpanContextFromCloudEvent(cloudEvent, log)
+	ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, h.tracingSpec)
+
+	if span != nil {
+		// Every return path below must end the span, including the ones that
+		// bail out before the status is known. Ending a span twice is a no-op,
+		// so the success path can still set the status first.
+		defer span.End()
 	}
 
 	start := time.Now()
@@ -88,6 +91,10 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
+		if span != nil {
+			diag.AddAttributesToSpan(span, diag.ConstructSubscriptionSpanAttributes(msg.Topic))
+			span.SetStatus(otelcodes.Error, err.Error())
+		}
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(err))
 	}
@@ -213,20 +220,15 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	n := 0
 	for _, pubsubMsg := range psm.PubSubMessages {
-		cloudEvent := pubsubMsg.CloudEvent
-		iTraceID := cloudEvent[contribpubsub.TraceParentField]
-		if iTraceID == nil {
-			iTraceID = cloudEvent[contribpubsub.TraceIDField]
-		}
-		if iTraceID != nil {
-			traceID := iTraceID.(string)
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			var span trace.Span
-			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
-			if span != nil {
-				spans[n] = span
-				n++
-			}
+		// A zero parent starts a new root span, so an entry delivered without
+		// inbound trace context is still traced. No ops if tracing is off.
+		sc := pubsub.ParentSpanContextFromCloudEvent(pubsubMsg.CloudEvent, log)
+
+		var span trace.Span
+		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, h.tracingSpec)
+		if span != nil {
+			spans[n] = span
+			n++
 		}
 	}
 	spans = spans[:n]
