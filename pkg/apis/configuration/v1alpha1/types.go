@@ -212,6 +212,14 @@ type WorkflowSpec struct {
 	// instances will not be automatically purged.
 	// +optional
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty"`
+
+	// stateStore is the name of the state store which holds the state of the
+	// app's workflow actor types: the workflow, activity, executor and
+	// retentioner actors. They are bound to it together, as an actor type is
+	// bound by spec.actors.stateStores, and never fall back to the default
+	// actor state store. If omitted, they use the default actor state store.
+	// +optional
+	StateStore string `json:"stateStore,omitempty"`
 }
 
 // NamedConcurrencyLimit defines a per-name concurrency limit for a specific

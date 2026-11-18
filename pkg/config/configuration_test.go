@@ -1444,4 +1444,20 @@ func TestLoadKubernetesConfiguration(t *testing.T) {
 		require.NotNil(t, res.Spec.ActorsSpec)
 		assert.Equal(t, cfg.Spec.ActorsSpec, res.Spec.ActorsSpec)
 	})
+
+	t.Run("operator-marshalled CRD carries the workflow state store", func(t *testing.T) {
+		cfg := configapi.Configuration{
+			Spec: configapi.ConfigurationSpec{
+				WorkflowSpec: &configapi.WorkflowSpec{StateStore: "wallet-workflows"},
+			},
+		}
+		b, err := json.Marshal(&cfg)
+		require.NoError(t, err)
+
+		conf, res, err := LoadKubernetesConfiguration("c", "default", &fakeOperatorClient{resp: b})
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", conf.Spec.WorkflowSpec.GetStateStore())
+		require.NotNil(t, res.Spec.WorkflowSpec)
+		assert.Equal(t, "wallet-workflows", res.Spec.WorkflowSpec.StateStore)
+	})
 }
