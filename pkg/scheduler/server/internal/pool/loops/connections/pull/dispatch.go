@@ -52,9 +52,12 @@ func (d *Dispatcher) HandleTrigger(req *loops.TriggerRequest) bool {
 	return true
 }
 
-// park queues req until a sidecar has a free slot. A new trigger beyond
-// MaxParked is resolved FAILED, so its failure policy retries it later; an
-// admitted one, which a sidecar refused, is parked regardless.
+// park queues req until a sidecar has a free slot. At MaxParked a new trigger
+// of a higher level evicts the newest parked trigger of the lowest level that
+// has one not yet refused by a sidecar, and the evicted trigger is resolved
+// FAILED. Otherwise the new trigger is resolved FAILED. Either way the failure
+// policy retries it later. An admitted trigger, which a sidecar refused, is
+// parked regardless and is never evicted.
 func (d *Dispatcher) park(req *loops.TriggerRequest, throttledKey string, admitted bool) {
 	actor := req.Job.GetMetadata().GetTarget().GetActor()
 	q, ok := d.pending[actor.GetType()]
