@@ -28,7 +28,7 @@ func TerminationInput(state *backend.WorkflowRuntimeState) *wrapperspb.StringVal
 		return nil
 	}
 
-	for _, events := range [][]*backend.HistoryEvent{state.GetOldEvents(), state.GetNewEvents()} {
+	for _, events := range [][]*protos.HistoryEvent{state.GetOldEvents(), state.GetNewEvents()} {
 		for _, event := range events {
 			if terminated := event.GetExecutionTerminated(); terminated != nil {
 				return terminated.GetInput()
