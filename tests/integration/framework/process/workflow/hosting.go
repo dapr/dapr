@@ -120,3 +120,20 @@ func (w *Workflow) WaitForActorTypePlaced(t *testing.T, ctx context.Context, ind
 		assert.Equal(c, placed, found)
 	}, time.Second*10, time.Millisecond*10)
 }
+
+// OwnerIndex waits until one of the daprds at indexes holds a workflow
+// actor of its app and returns that daprd's index.
+func (w *Workflow) OwnerIndex(t *testing.T, ctx context.Context, indexes ...int) int {
+	t.Helper()
+
+	owner := -1
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, i := range indexes {
+			if n, _ := w.DaprN(i).ActiveActorCount(c, ctx, w.WorkflowActorType(i)); n > 0 {
+				owner = i
+			}
+		}
+		assert.GreaterOrEqual(c, owner, 0)
+	}, time.Second*10, time.Millisecond*50)
+	return owner
+}

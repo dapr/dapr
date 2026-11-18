@@ -323,6 +323,18 @@ func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
+// WaitUntilPullInflight waits until the scheduler has want activities
+// delivered by pull dispatch and not yet resolved. A delivery on the regular
+// path is never counted.
+func (s *Scheduler) WaitUntilPullInflight(t *testing.T, ctx context.Context, want float64, labels ...string) {
+	t.Helper()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, want, s.Metrics(c, ctx).SumWithLabels(
+			"dapr_scheduler_workflow_activity_inflight", labels...), 0)
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
 func (s *Scheduler) ID() string {
 	return s.id
 }
@@ -617,6 +629,13 @@ func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID strin
 			},
 		},
 	}
+}
+
+// JobNowPull is an actor reminder due now, flagged for pull dispatch.
+func (s *Scheduler) JobNowPull(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
+	req := s.JobNowActor(name, namespace, appID, actorType, actorID)
+	req.Metadata.Pull = new(true)
+	return req
 }
 
 func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {

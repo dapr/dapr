@@ -41,7 +41,9 @@ type raiseevent struct {
 }
 
 func (r *raiseevent) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+	// Asserts the workflow actor types are unregistered once the worker
+	// leaves, which the staged operations preview does not do.
+	r.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),

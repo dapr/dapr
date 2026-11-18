@@ -158,6 +158,7 @@ func TestFallbackWorkerConnectsMidCall(t *testing.T) {
 	var reads atomic.Int32
 	h.fact.fallback = func() bool { return reads.Add(1) == 1 }
 	h.primeRunning(t, instanceID, 7)
+	h.persist(t)
 
 	data, err := proto.Marshal(&backend.HistoryEvent{
 		EventId:   -1,
@@ -204,6 +205,7 @@ func TestFallbackAfterLockWait(t *testing.T) {
 			var fallback atomic.Bool
 			h.fact.fallback = fallback.Load
 			h.primeRunning(t, instanceID, 7)
+			h.persist(t)
 
 			// A turn holds the lock while a worker is connected.
 			unlock, err := h.orch.lock.ContextLock(t.Context())
@@ -316,6 +318,7 @@ func TestFallbackForkFollowsNewInstance(t *testing.T) {
 			})
 			h.orch.rstate = runtimestate.NewWorkflowRuntimeState(instanceID, nil, h.orch.state.History)
 			h.orch.ometa = h.orch.ometaFromState(h.orch.rstate, h.orch.state.History[0].GetExecutionStarted())
+			h.persist(t)
 
 			data, err := proto.Marshal(&backend.RerunWorkflowFromEventRequest{
 				SourceInstanceID: instanceID,
@@ -328,6 +331,44 @@ func TestFallbackForkFollowsNewInstance(t *testing.T) {
 			res, err := h.orch.handleInvoke(t.Context(), req)
 			require.NoError(t, err)
 			assert.Equal(t, tc.destination, common.IsFallback(res))
+		})
+	}
+}
+
+// A force purge served by another daprd deletes the instance's rows, and
+// its eviction of this daprd's actor may not land. The cached state has been
+// served an ETag, so a start of the same ID finds the row gone, drops the
+// cache and is accepted, as on a daprd that never held the actor, whether
+// this daprd is a fallback host or has a local executor.
+func TestFallbackCacheAfterRemotePurge(t *testing.T) {
+	const instanceID = "wf1"
+
+	for name, fallback := range map[string]bool{
+		"fallback host":    true,
+		"a local executor": false,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newWakeHarness(t, instanceID, false)
+			h.fact.resiliency = resiliency.New(logger.NewLogger("test"))
+			h.fact.fallback = func() bool { return fallback }
+			h.primeRunning(t, instanceID, 7)
+			h.persist(t)
+			// The ETag the store served for the persisted rows.
+			etag := testETag
+			h.orch.state.SetMetadataETag(&etag)
+
+			// Another daprd force purges the instance.
+			h.lock.Lock()
+			clear(h.store)
+			h.lock.Unlock()
+
+			data, err := proto.Marshal(createRequest(startEventFor(instanceID, time.Now(), nil)))
+			require.NoError(t, err)
+			req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).WithData(data)
+
+			_, err = h.orch.InvokeMethod(t.Context(), req)
+			require.NoError(t, err)
+			assert.Contains(t, h.snapshotOps(), "save", "the new instance must be saved")
 		})
 	}
 }

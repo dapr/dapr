@@ -85,6 +85,15 @@ func SigningFromEnv() bool {
 	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_SIGNING"))
 }
 
+// StagedOperationsFromEnv reports whether the suite is running with
+// DAPR_INTEGRATION_WORKFLOW_STAGED set truthy, which enables the
+// WorkflowsStagedOperations feature flag on every daprd built by this harness
+// unless a test overrides it with WithStagedOperations or
+// WithStagedOperationsN.
+func StagedOperationsFromEnv() bool {
+	return kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_WORKFLOW_STAGED"))
+}
+
 type Workflow struct {
 	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
@@ -127,6 +136,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	fastPath := FastPathFromEnv()
 	if opts.fastPath != nil {
 		fastPath = *opts.fastPath
+	}
+
+	staged := StagedOperationsFromEnv()
+	if opts.stagedOperations != nil {
+		staged = *opts.stagedOperations
 	}
 
 	schedulerPlacement := SchedulerPlacementFromEnv()
@@ -214,13 +228,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		baseDopts = append(baseDopts, daprd.WithSentry(t, sen))
 	}
 
-	// daprd loads each config file onto one Configuration struct and
-	// spec.features is a slice, so the LAST config file that specifies
-	// features replaces every earlier feature list. All harness-driven
-	// features must therefore land in a single manifest per daprd; it is
-	// built in the per-daprd loop below because signing is per-daprd.
-	baseFeatures := baseFeatureList(clustered, fastPath, opts.stagedOperations)
-
 	if opts.schedulerAddress != nil {
 		// Reset so a caller-supplied override (e.g. a proxy in front of the
 		// scheduler) truly replaces any addresses appended by other option
@@ -241,7 +248,16 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		dopts := make([]daprd.Option, 0, len(baseDopts)+1)
 		dopts = append(dopts, baseDopts...)
 
-		features := baseFeatures
+		// daprd loads each config file onto one Configuration struct and
+		// spec.features is a slice, so the LAST config file that specifies
+		// features replaces every earlier feature list. All harness-driven
+		// features must therefore land in a single manifest per daprd, built
+		// here because signing and staged operations are per-daprd.
+		stagedI := staged
+		if v, ok := opts.stagedN[i]; ok {
+			stagedI = v
+		}
+		features := baseFeatureList(clustered, fastPath, stagedI)
 		if sen != nil && signing && !signingDisabled[i] {
 			features = append(features[:len(features):len(features)], "WorkflowHistorySigning")
 		}
@@ -291,7 +307,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 		schedulerPlacement: schedulerPlacement,
 
-		stagedOperations: opts.stagedOperations,
+		stagedOperations: staged,
 	}
 
 	for i := range workflow.taskregistry {
@@ -419,9 +435,17 @@ func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.Task
 func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
+	return w.BackendClientFor(t, ctx, w.daprds[index], w.RegistryN(index))
+}
 
-	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
+// BackendClientFor starts a work item listener on d for registry and waits
+// until the sidecar hosts the workflow actor types and sees the worker. Use
+// it for a daprd built with NewDaprd; the indexed daprds use BackendClientN.
+func (w *Workflow) BackendClientFor(t *testing.T, ctx context.Context, d *daprd.Daprd, registry *task.TaskRegistry) *client.TaskHubGrpcClient {
+	t.Helper()
+
+	backendClient := client.NewTaskHubGrpcClient(d.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, registry))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// GetMetadata can return a partially-populated value if the underlying
@@ -429,7 +453,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 		// context with its own deadline). Guard each field access so a nil
 		// here causes the Eventually tick to retry rather than panic the
 		// whole test binary.
-		md := w.DaprN(index).GetMetadata(t, ctx)
+		md := d.GetMetadata(t, ctx)
 		if !assert.NotNil(c, md) {
 			return
 		}
@@ -500,11 +524,36 @@ func (w *Workflow) JoinOptions(t *testing.T) []daprd.Option {
 	return opts
 }
 
+// NewDaprd builds, without starting, a daprd that joins this harness's
+// cluster: the same actor state store, scheduler and placement as the
+// indexed daprds, plus JoinOptions. opts are applied last. The caller runs it
+// and connects a worker with BackendClientFor.
+func (w *Workflow) NewDaprd(t *testing.T, opts ...daprd.Option) *daprd.Daprd {
+	t.Helper()
+	all := []daprd.Option{
+		daprd.WithResourceFiles(w.db.GetComponent(t)),
+		daprd.WithSchedulerAddresses(w.sched.Address()),
+	}
+	if w.HasPlacement() {
+		all = append(all, daprd.WithPlacementAddresses(w.place.Address()))
+	}
+	all = append(all, w.JoinOptions(t)...)
+	return daprd.New(t, append(all, opts...)...)
+}
+
 // ClusteredDeployment reports whether every daprd in this workflow runs with
 // the WorkflowsClusteredDeployment feature flag enabled. Tests use this to
 // branch assertions which differ between the two modes.
 func (w *Workflow) ClusteredDeployment() bool {
 	return w.clustered
+}
+
+// StagedOperations reports whether every daprd in this workflow runs with
+// the WorkflowsStagedOperations feature flag enabled, except any overridden
+// via WithStagedOperationsN. Tests use this to branch assertions which differ
+// between the two modes.
+func (w *Workflow) StagedOperations() bool {
+	return w.stagedOperations
 }
 
 // SchedulerPlacement reports whether the scheduler serves actor placement
@@ -530,9 +579,11 @@ func (w *Workflow) Signing() bool {
 
 // ActorTypesCount returns the number of actor types a daprd in this workflow
 // registers when a worker is connected: workflow, activity and retentioner,
-// plus the executor rendezvous type in clustered deployment mode.
+// plus the executor rendezvous type in clustered deployment or staged
+// operations mode. It reads the harness-wide modes: a daprd overridden with
+// WithStagedOperationsN may differ.
 func (w *Workflow) ActorTypesCount() int {
-	if w.clustered {
+	if w.clustered || w.stagedOperations {
 		return 4
 	}
 	return 3

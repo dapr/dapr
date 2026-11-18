@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 	"github.com/dapr/dapr/pkg/actors/router"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/claim"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
@@ -71,6 +72,11 @@ type Options struct {
 	// reminder in place of a local drive, which would run the activity
 	// here. Nil when the feature is off.
 	Fallback func() bool
+	// DispatchPull reports whether the named activity is pull-dispatched: its
+	// run-activity reminder is then delivered by the scheduler to any sidecar
+	// of this app with a free slot instead of the placement owner. Nil means
+	// never.
+	DispatchPull func(activityName string) bool
 
 	// Detached runs the work that must outlive a placement churn (the
 	// drive-failure escalations and the handed-off result publishes) on the
@@ -102,6 +108,7 @@ type factory struct {
 
 	router                 router.Interface
 	reminders              scheduler.Interface
+	state                  actorstate.Interface
 	placement              placement.Interface
 	actorTypeBuilder       *common.ActorTypeBuilder
 	workflowAccessPolicies *workflowacl.Holder
@@ -132,6 +139,10 @@ type factory struct {
 	// place of the run-activity reminder fire.
 	fastPath bool
 	fallback func() bool
+
+	// dispatchPull resolves the configured dispatch mode per activity name
+	// (see Options.DispatchPull). Nil means never.
+	dispatchPull func(activityName string) bool
 
 	// drives is the churn-scoped runner carrying those local drives: HaltAll
 	// (which also fires on placement disconnection) aborts and drains it, then
@@ -223,6 +234,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		inflight:         inflightFor(opts.ActivityActorType),
 		fastPath:         opts.FastPath,
 		fallback:         opts.Fallback,
+		dispatchPull:     opts.DispatchPull,
 		executionHeld:    opts.ExecutionHeld,
 		registerResolver: opts.RegisterResolver,
 		staleClaimAfter:  2 * common.JanitorPeriod(),
@@ -242,6 +254,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		publishGrace:           newPublishGrace(det.Context(), opts.GracefulShutdownDuration),
 		router:                 router,
 		reminders:              sreminders,
+		state:                  state,
 		scheduler:              opts.Scheduler,
 		placement:              placement,
 		workflowActorType:      opts.WorkflowActorType,
@@ -308,6 +321,12 @@ func (f *factory) driveScope() *detached.Runner {
 	return f.drives
 }
 
+// HaltNonHosted drops every activity actor the placement table no longer
+// hosts here. Pull-dispatched activities run on whichever host the scheduler
+// picked, so they are non-hosted by construction and are dropped from the
+// table on every dissemination while their execution is still in flight. That
+// is expected and harmless: runOwned snapshots everything the execution and
+// its result publish need, so the drop only releases the table entry.
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()

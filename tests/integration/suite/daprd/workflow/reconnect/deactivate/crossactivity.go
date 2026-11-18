@@ -50,6 +50,9 @@ func (c *crossactivity) Setup(t *testing.T) []framework.Option {
 	// the janitor reminder, so shrink its period below the completion timeout.
 	// The variable is unused in default mode.
 	c.workflow = workflow.New(t,
+		// Asserts the workflow actor types are unregistered once the worker
+		// leaves, which the staged operations preview does not do.
+		workflow.WithStagedOperations(false),
 		workflow.WithDaprds(2),
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",

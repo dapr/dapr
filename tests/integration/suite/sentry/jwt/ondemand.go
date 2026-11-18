@@ -143,7 +143,12 @@ func (o *ondemand) Run(t *testing.T, ctx context.Context) {
 		tkn, err := jwxjwt.Parse([]byte(resp.GetJwt()), jwxjwt.WithKeySet(keySet))
 		require.NoError(t, err)
 		assert.Equal(t, []string{"a", "b"}, tkn.Audience())
-		assert.Equal(t, 24*time.Hour, tkn.Expiration().Sub(tkn.IssuedAt()))
+		// The TTL is also capped at the client certificate's remaining
+		// lifetime: 24h minus the time since the certificate was signed, in
+		// whole seconds.
+		ttl := tkn.Expiration().Sub(tkn.IssuedAt())
+		assert.LessOrEqual(t, ttl, 24*time.Hour)
+		assert.Greater(t, ttl, 24*time.Hour-30*time.Second)
 
 		_, err = client.FetchJWTSVID(ctx, &sentryv1pb.FetchJWTSVIDRequest{})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err), "%v", err)

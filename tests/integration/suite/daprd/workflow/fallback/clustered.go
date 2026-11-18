@@ -49,7 +49,7 @@ type clustered struct {
 
 func (c *clustered) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		workflow.WithClusteredDeployment(true),
 		workflow.WithFallbackSettleN(t, 0),
 	)
