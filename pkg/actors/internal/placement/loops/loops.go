@@ -266,6 +266,17 @@ type SetEntityDrainOngoingCallTimeouts struct {
 	Timeouts map[string]time.Duration
 }
 
+// HaltActorTypes runs Halt once the in-flight calls of ActorTypes have
+// drained, with the configured drain timeout, while new calls of those types
+// wait for Halt to return. Its result is sent on Done.
+type HaltActorTypes struct {
+	*placebase
+	*dissbase
+	ActorTypes []string
+	Halt       func(context.Context) error
+	Done       chan error
+}
+
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {
 	if targetActorAddress == net.JoinHostPort(hostAddress, port) {
 		// Easy case when there is a perfect match

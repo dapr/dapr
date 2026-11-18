@@ -159,6 +159,8 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 		d.handleLookupRequest(e)
 	case *loops.LockRequest:
 		d.handleAcquireRequest(e)
+	case *loops.HaltActorTypes:
+		d.handleHaltActorTypes(ctx, e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
 	case *loops.ReloadReminderTypes:

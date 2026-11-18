@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
 const (
@@ -53,12 +52,17 @@ type Backend interface {
 	contribstate.TransactionalStore
 }
 
+// StoreResolver resolves the state store that holds an actor type's state.
+type StoreResolver interface {
+	Resolve(actorType string) (storeName string, store Backend, err error)
+}
+
 type Options struct {
-	AppID      string
-	CompStore  *compstore.ComponentStore
-	Resiliency resiliency.Provider
-	Table      table.Interface
-	Placement  placement.Interface
+	AppID         string
+	StoreResolver StoreResolver
+	Resiliency    resiliency.Provider
+	Table         table.Interface
+	Placement     placement.Interface
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -66,7 +70,7 @@ type Options struct {
 
 type state struct {
 	appID      string
-	compStore  *compstore.ComponentStore
+	resolver   StoreResolver
 	resiliency resiliency.Provider
 	table      table.Interface
 	placement  placement.Interface
@@ -78,7 +82,7 @@ type state struct {
 func New(opts Options) Interface {
 	return &state{
 		appID:           opts.AppID,
-		compStore:       opts.CompStore,
+		resolver:        opts.StoreResolver,
 		resiliency:      opts.Resiliency,
 		table:           opts.Table,
 		placement:       opts.Placement,
@@ -97,7 +101,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 		defer cancel(nil)
 	}
 
-	storeName, store, err := s.stateStore()
+	storeName, store, err := s.resolver.Resolve(req.ActorType)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 		defer cancel(nil)
 	}
 
-	storeName, store, err := s.stateStore()
+	storeName, store, err := s.resolver.Resolve(req.ActorType)
 	if err != nil {
 		return nil, err
 	}
@@ -222,11 +226,11 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 		}
 	}
 
-	return s.executeStateStoreTransaction(ctx, operations, metadata)
+	return s.executeStateStoreTransaction(ctx, req.ActorType, operations, metadata)
 }
 
-func (s *state) executeStateStoreTransaction(ctx context.Context, operations []contribstate.TransactionalStateOperation, metadata map[string]string) error {
-	storeName, store, err := s.stateStore()
+func (s *state) executeStateStoreTransaction(ctx context.Context, actorType string, operations []contribstate.TransactionalStateOperation, metadata map[string]string) error {
+	storeName, store, err := s.resolver.Resolve(actorType)
 	if err != nil {
 		return err
 	}
@@ -248,23 +252,6 @@ func (s *state) executeStateStoreTransaction(ctx context.Context, operations []c
 		return struct{}{}, store.Multi(ctx, stateReq)
 	})
 	return err
-}
-
-// stateStore resolves the actor state store from the component store on
-// every call, so the store can be hot reloaded (added, replaced, or removed)
-// at any point in the runtime's lifetime.
-func (s *state) stateStore() (string, Backend, error) {
-	storeS, storeName, ok := s.compStore.GetStateStoreActor()
-	if !ok {
-		return "", nil, messages.ErrActorRuntimeNotFound
-	}
-
-	store, ok := storeS.(Backend)
-	if !ok || !contribstate.FeatureETag.IsPresent(store.Features()) || !contribstate.FeatureTransactional.IsPresent(store.Features()) {
-		return "", nil, errors.New(errStateStoreNotConfigured)
-	}
-
-	return storeName, store, nil
 }
 
 func (s *state) constructActorStateKey(actorKey, actorID string) string {

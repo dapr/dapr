@@ -18,6 +18,8 @@ import (
 	"errors"
 
 	"github.com/dapr/durabletask-go/backend"
+
+	"github.com/dapr/dapr/pkg/actors/reserved"
 )
 
 const (
@@ -77,7 +79,7 @@ const (
 	// task IDs restart with each generation.
 	MetadataParentExecutionID = "ParentExecutionID"
 
-	ActorTypePrefix = "dapr.internal."
+	ActorTypePrefix = reserved.InternalActorTypePrefix
 
 	// ActivityReminderName is the per-activity-actor execution reminder name.
 	// Shared so the orchestrator can reap an escalated reminder whose task
