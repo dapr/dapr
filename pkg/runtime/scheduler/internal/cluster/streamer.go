@@ -44,13 +44,105 @@ type streamer struct {
 	channels *channels.Channels
 	wfengine wfengine.Interface
 
+	// addr is the address of the scheduler this stream is connected to.
+	addr string
+	// pull is set when this sidecar pull-dispatches activities of
+	// pullActorType and every scheduler supports it. A pull-flagged job then
+	// executes here, and only then: the scheduler falls back to regular
+	// routing when no sidecar offers slots, and that delivery must forward to
+	// the placement owner like any other reminder.
+	pull          *Pull
+	pullActorType string
+
+	// pullCh carries pull messages to outgoing, which reports whether Send
+	// succeeded. done is closed when outgoing stops sending.
+	pullCh chan pullSend
+	done   chan struct{}
+
 	wg       sync.WaitGroup
 	inflight atomic.Int64
 }
 
 // run starts the streamer and blocks until the stream is closed or an error occurs.
 func (s *streamer) run(ctx context.Context) error {
-	return concurrency.NewRunnerManager(s.receive, s.outgoing).Run(ctx)
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
+	if s.pullCh == nil {
+		s.pullCh = make(chan pullSend)
+	}
+	runners := []concurrency.Runner{s.receive, s.outgoing}
+	if s.pull != nil {
+		s.pull.attach(s)
+		defer s.pull.detach(s)
+		runners = append(runners, s.reportPull)
+	}
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
+}
+
+type pullSend struct {
+	req  *schedulerv1pb.WatchJobsRequest
+	sent chan bool
+}
+
+// send sends msg on the stream, returning whether it was sent.
+func (s *streamer) send(msg *schedulerv1pb.WatchJobsRequest) bool {
+	sent := make(chan bool, 1)
+	select {
+	case s.pullCh <- pullSend{req: msg, sent: sent}:
+		return <-sent
+	case <-s.done:
+		return false
+	}
+}
+
+// isPull reports whether job is a pull delivery this sidecar executes itself.
+func (s *streamer) isPull(job *schedulerv1pb.WatchJobsResponse) bool {
+	return s.pull != nil && job.GetPull() &&
+		job.GetMetadata().GetTarget().GetActor().GetType() == s.pullActorType
+}
+
+// pullReportInterval is how often the reporting stream repeats the free slots
+// when nothing changed. The scheduler overwrites its count with a stream's
+// initial request and zeroes it on a refusal, and neither is ordered with the
+// reports of another stream, so a stale value can land last. The repeat
+// bounds how long work then stays parked.
+const pullReportInterval = 5 * time.Second
+
+// reportPull sends the results of pull reminders that finished while no
+// stream to this scheduler was connected, then reports free slots on every
+// change, and every pullReportInterval, while this stream is the scheduler's
+// reporting stream. Every change is sent even when the count looks the same:
+// the scheduler takes a slot off its count for each delivery, and an activity
+// that starts and finishes between two reports must still give it back.
+func (s *streamer) reportPull(ctx context.Context) error {
+	if !s.pull.flush(s) {
+		return nil
+	}
+
+	for {
+		free, freeChanged := s.wfengine.ActivityFreeSlots()
+		reporter, reporterChanged := s.pull.reporter(s)
+		if reporter {
+			if !s.send(&schedulerv1pb.WatchJobsRequest{
+				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_PullSlots{
+					PullSlots: &schedulerv1pb.PullSlots{ActorType: s.pullActorType, Free: free},
+				},
+			}) {
+				return nil
+			}
+		}
+
+		select {
+		case <-freeChanged:
+		case <-reporterChanged:
+		case <-time.After(pullReportInterval):
+		case <-s.done:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // receive is a long running blocking process which listens for incoming
@@ -75,6 +167,15 @@ func (s *streamer) receive(ctx context.Context) error {
 
 		if err != nil {
 			return err
+		}
+
+		// A pull reminder outlives this stream: it keeps running and its
+		// result goes back on whichever stream to this scheduler is live.
+		if s.isPull(resp) {
+			s.pull.run(s, resp.GetId(), resp.GetMetadata().GetTarget().GetActor(), resp.GetName(), func(ctx context.Context) schedulerv1pb.WatchJobsRequestResultStatus {
+				return s.handleJob(ctx, resp)
+			})
+			continue
 		}
 
 		s.wg.Add(1)
@@ -108,12 +209,19 @@ func (s *streamer) receive(ctx context.Context) error {
 // message sends.
 // It is the only caller of Send and CloseSend.
 func (s *streamer) outgoing(ctx context.Context) error {
+	defer close(s.done)
 	defer s.stream.CloseSend()
 
 	for {
 		select {
 		case result := <-s.resultCh:
 			err := s.stream.Send(result)
+			if err != nil {
+				return err
+			}
+		case m := <-s.pullCh:
+			err := s.stream.Send(m.req)
+			m.sent <- err == nil
 			if err != nil {
 				return err
 			}
@@ -155,6 +263,11 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		err := s.invokeActorReminder(ctx, job, t.Actor)
 		if err == nil {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
+		}
+
+		if errors.Is(err, actorerrors.ErrNoCapacity) {
+			log.Debugf("Refused pull reminder %s for actor %s: %s", job.GetName(), t.Actor.GetId(), err)
+			return schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY
 		}
 
 		if errors.Is(err, context.Canceled) {
@@ -256,9 +369,13 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
 		// Verified by the scheduler against the creator's SPIFFE ID at
 		// schedule time and echoed back on trigger.
-		SourceAppID: job.GetMetadata().GetAppId(),
+		SourceAppID:    job.GetMetadata().GetAppId(),
+		ExecuteLocally: s.isPull(job),
 	})
-	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+	// A refused pull delivery ran nothing, so it is not a failed fire.
+	if !errors.Is(err, actorerrors.ErrNoCapacity) {
+		diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+	}
 
 	if err != nil {
 		return err

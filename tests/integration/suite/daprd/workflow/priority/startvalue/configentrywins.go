@@ -94,8 +94,8 @@ func (s *configentrywins) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// wf's config entry low overrides the start value normal, and the start value's weight 4 applies bc it was not set in config override.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(4), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(4), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

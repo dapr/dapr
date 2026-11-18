@@ -158,8 +158,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 				found = true
 				assert.True(col, meta.GetPull(), "%s/%s", c.workflow, c.activity)
-				assert.Equal(col, c.level, meta.GetPriorityLevel(), "%s/%s", c.workflow, c.activity)
-				assert.Equal(col, c.weight, meta.GetFairnessWeight(), "%s/%s", c.workflow, c.activity)
+				assert.Equal(col, c.level, meta.GetPriority().GetLevel(), "%s/%s", c.workflow, c.activity)
+				assert.Equal(col, c.weight, meta.GetPriority().GetFairnessWeight(), "%s/%s", c.workflow, c.activity)
 			}
 			assert.True(col, found, "no reminder for %s/%s", c.workflow, c.activity)
 		}, time.Second*10, time.Millisecond*10)

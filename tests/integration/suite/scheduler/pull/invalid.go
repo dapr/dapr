@@ -51,8 +51,7 @@ func (i *invalid) Run(t *testing.T, ctx context.Context) {
 
 	job := func(name string, level schedulerv1.PriorityLevel, weight uint32) *schedulerv1.ScheduleJobRequest {
 		req := i.scheduler.JobNowPull(name, namespace, appID, actorType, name+"::0")
-		req.Metadata.PriorityLevel = level.Enum()
-		req.Metadata.FairnessWeight = &weight
+		req.Metadata.Priority = &schedulerv1.JobPriority{Level: level.Enum(), FairnessWeight: &weight}
 		return req
 	}
 

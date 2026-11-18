@@ -111,8 +111,8 @@ func (r *roundtrip) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// grandchild is back on app 0, started by child on app 1, and parent's critical 6 is inherited.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(6), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(6), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

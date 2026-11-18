@@ -15,6 +15,7 @@ package pull
 
 import (
 	"cmp"
+	"container/heap"
 	"slices"
 	"strings"
 
@@ -52,18 +53,37 @@ type queue struct {
 // name had when it was served. A new name starts there, a name that could not
 // go is brought up to it, and an empty name is forgotten once it is not ahead
 // of it, so a name that leaves and returns keeps only the turns it is owed.
+// waiting holds the names with triggers, furthest behind first. idle holds the
+// empty names not yet forgotten. evictable holds the arrival order of every
+// trigger that can be evicted, and appended lists them oldest first, with
+// entries that have since left removed lazily.
 type level struct {
-	names   map[string]*flow
-	startAt uint64
+	names     map[string]*flow
+	startAt   uint64
+	waiting   waiting
+	idle      map[string]*flow
+	evictable map[uint64]struct{}
+	appended  []slot
+}
+
+// slot locates a parked trigger that can be evicted.
+type slot struct {
+	f    *flow
+	inst string
+	seq  uint64
 }
 
 // flow is the triggers of one name at one level, grouped by workflow
 // instance. The name with the lowest dispatches ÷ weight is furthest behind
-// its share and is served next.
+// its share and is served next. weight is the weight of its newest trigger,
+// so a name has one share even while triggers of an older weight are parked.
 type flow struct {
+	lv                  *level
 	name                string
 	seq                 uint64
 	dispatchesPerWeight uint64
+	weight              uint64
+	index               int
 	groups              map[string][]parked
 	ring                []string
 	next                int
@@ -86,7 +106,7 @@ func newQueue(maxLen int) *queue {
 // so does a level this version does not know: ScheduleJob rejects those, but
 // a job stored by a newer Scheduler can still carry one after a downgrade.
 func levelOf(req *loops.TriggerRequest) int {
-	l := req.Job.GetMetadata().GetPriorityLevel()
+	l := req.Job.GetMetadata().GetPriority().GetLevel()
 	if l < schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL || l > schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND {
 		l = schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL
 	}
@@ -104,7 +124,7 @@ func levelName(level int) string {
 // weight above 1000: ScheduleJob rejects those, but a job stored by a newer
 // Scheduler can still carry one after a downgrade.
 func weightOf(req *loops.TriggerRequest) uint64 {
-	w := req.Job.GetMetadata().GetFairnessWeight()
+	w := req.Job.GetMetadata().GetPriority().GetFairnessWeight()
 	if w < MinFairnessWeight || w > MaxFairnessWeight {
 		return 1
 	}
@@ -112,7 +132,7 @@ func weightOf(req *loops.TriggerRequest) uint64 {
 }
 
 // instanceKey is the workflow instance ID in an activity actor ID
-// "<instanceID>::<taskID>::<generation>"; any other actor ID is its own key.
+// "<instanceID>::<taskID>::<generation>". Any other actor ID is its own key.
 func instanceKey(actorID string) string {
 	if i := strings.LastIndex(actorID, "::"); i >= 0 {
 		if j := strings.LastIndex(actorID[:i], "::"); j >= 0 {
@@ -151,15 +171,27 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) (evicted *loop
 			lv.names = make(map[string]*flow)
 		}
 		q.seq++
-		f = &flow{name: name, seq: q.seq, dispatchesPerWeight: lv.startAt, groups: make(map[string][]parked)}
+		f = &flow{lv: lv, name: name, seq: q.seq, dispatchesPerWeight: lv.startAt, index: -1, groups: make(map[string][]parked)}
 		lv.names[name] = f
 	}
+	f.weight = weightOf(req)
 	inst := instanceKey(meta.GetTarget().GetActor().GetId())
 	if _, ok := f.groups[inst]; !ok {
 		f.ring = append(f.ring, inst)
 	}
 	q.seq++
 	f.groups[inst] = append(f.groups[inst], parked{req: req, seq: q.seq, admitted: admitted})
+	if !admitted {
+		if lv.evictable == nil {
+			lv.evictable = make(map[uint64]struct{})
+		}
+		lv.evictable[q.seq] = struct{}{}
+		lv.appended = append(lv.appended, slot{f: f, inst: inst, seq: q.seq})
+	}
+	if f.n == 0 {
+		delete(lv.idle, name)
+		heap.Push(&lv.waiting, f)
+	}
 	f.n++
 	q.n++
 	return evicted, true
@@ -169,37 +201,34 @@ func (q *queue) enqueue(req *loops.TriggerRequest, admitted bool) (evicted *loop
 // admitted, or -1 when none has.
 func (q *queue) lowestEvictable() int {
 	for i := numLevels - 1; i >= 0; i-- {
-		for _, f := range q.levels[i].names {
-			for _, reqs := range f.groups {
-				if slices.ContainsFunc(reqs, func(p parked) bool { return !p.admitted }) {
-					return i
-				}
-			}
+		if len(q.levels[i].evictable) > 0 {
+			return i
 		}
 	}
 	return -1
 }
 
 // tryDispatchOne offers parked triggers to fn in serving order until one is
-// accepted, and removes it. The accepted name is charged; the names offered
+// accepted, and removes it. The accepted name is charged. The names offered
 // before it at that level are brought up to startAt.
 func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 	for i := range q.levels {
 		lv := &q.levels[i]
-		if len(lv.names) == 0 {
-			continue
-		}
 		var skipped []*flow
-		for _, f := range lv.furthestBehind() {
-			req, ok := f.offer(fn)
-			if !ok {
+		for lv.waiting.Len() > 0 {
+			f := heap.Pop(&lv.waiting).(*flow)
+			if !f.offer(fn) {
 				skipped = append(skipped, f)
 				continue
 			}
 			lv.startAt = max(lv.startAt, f.dispatchesPerWeight)
-			f.dispatchesPerWeight += oneDispatch / weightOf(req)
+			f.dispatchesPerWeight += oneDispatch / f.weight
 			for _, s := range skipped {
 				s.dispatchesPerWeight = max(s.dispatchesPerWeight, lv.startAt)
+				heap.Push(&lv.waiting, s)
+			}
+			if f.n > 0 {
+				heap.Push(&lv.waiting, f)
 			}
 			lv.forget()
 			if lv.startAt >= rebaseAt {
@@ -208,14 +237,18 @@ func (q *queue) tryDispatchOne(fn func(*loops.TriggerRequest) bool) bool {
 			q.n--
 			return true
 		}
+		for _, s := range skipped {
+			heap.Push(&lv.waiting, s)
+		}
 	}
 	return false
 }
 
 // forget drops the empty names that are not ahead of startAt.
 func (lv *level) forget() {
-	for name, f := range lv.names {
-		if f.n == 0 && f.dispatchesPerWeight <= lv.startAt {
+	for name, f := range lv.idle {
+		if f.dispatchesPerWeight <= lv.startAt {
+			delete(lv.idle, name)
 			delete(lv.names, name)
 		}
 	}
@@ -228,54 +261,61 @@ func (lv *level) rebase() {
 		f.dispatchesPerWeight -= min(f.dispatchesPerWeight, lv.startAt)
 	}
 	lv.startAt = 0
-}
-
-// furthestBehind returns the level's names with triggers waiting, in serving
-// order.
-func (lv *level) furthestBehind() []*flow {
-	fs := make([]*flow, 0, len(lv.names))
-	for _, f := range lv.names {
-		if f.n > 0 {
-			fs = append(fs, f)
-		}
-	}
-	slices.SortFunc(fs, func(a, b *flow) int {
-		return cmp.Or(cmp.Compare(a.dispatchesPerWeight, b.dispatchesPerWeight), cmp.Compare(a.seq, b.seq))
-	})
-	return fs
+	heap.Init(&lv.waiting)
 }
 
 // evictNewest removes and returns the trigger that arrived last at this
 // level among those not admitted.
 func (lv *level) evictNewest() *loops.TriggerRequest {
-	var (
-		newest *flow
-		inst   string
-		idx    int
-		seq    uint64
-	)
-	for _, f := range lv.names {
-		for key, reqs := range f.groups {
-			for i := len(reqs) - 1; i >= 0; i-- {
-				if !reqs[i].admitted && reqs[i].seq > seq {
-					newest, inst, idx, seq = f, key, i, reqs[i].seq
-					break
-				}
+	for len(lv.appended) > 0 {
+		s := lv.appended[len(lv.appended)-1]
+		lv.appended = lv.appended[:len(lv.appended)-1]
+		if _, ok := lv.evictable[s.seq]; !ok {
+			continue
+		}
+		for i, p := range slices.Backward(s.f.groups[s.inst]) {
+			if p.seq == s.seq {
+				return s.f.take(s.inst, i)
 			}
 		}
 	}
-	return newest.take(inst, idx)
+	return nil
+}
+
+// left records that p is no longer parked in f.
+func (f *flow) left(p parked) {
+	lv := f.lv
+	if !p.admitted {
+		delete(lv.evictable, p.seq)
+		if len(lv.appended) > 2*len(lv.evictable)+64 {
+			lv.appended = slices.DeleteFunc(lv.appended, func(s slot) bool {
+				_, ok := lv.evictable[s.seq]
+				return !ok
+			})
+		}
+	}
+	f.n--
+	if f.n > 0 {
+		return
+	}
+	if f.index >= 0 {
+		heap.Remove(&lv.waiting, f.index)
+	}
+	if lv.idle == nil {
+		lv.idle = make(map[string]*flow)
+	}
+	lv.idle[f.name] = f
 }
 
 // offer offers each instance's head in ring order, starting after the
 // instance served last, until fn accepts one.
-func (f *flow) offer(fn func(*loops.TriggerRequest) bool) (*loops.TriggerRequest, bool) {
+func (f *flow) offer(fn func(*loops.TriggerRequest) bool) bool {
 	for i := range len(f.ring) {
 		pos := (f.next + i) % len(f.ring)
 		key := f.ring[pos]
 		reqs := f.groups[key]
-		req := reqs[0].req
-		if !fn(req) {
+		head := reqs[0]
+		if !fn(head.req) {
 			continue
 		}
 		reqs[0] = parked{}
@@ -291,10 +331,10 @@ func (f *flow) offer(fn func(*loops.TriggerRequest) bool) (*loops.TriggerRequest
 			f.groups[key] = reqs[1:]
 			f.next = (pos + 1) % len(f.ring)
 		}
-		f.n--
-		return req, true
+		f.left(head)
+		return true
 	}
-	return nil, false
+	return false
 }
 
 // remove takes the parked trigger of the job stored under key out of the
@@ -318,7 +358,7 @@ func (q *queue) remove(key string) *loops.TriggerRequest {
 // take removes the trigger at idx of instance inst and returns it.
 func (f *flow) take(inst string, idx int) *loops.TriggerRequest {
 	reqs := f.groups[inst]
-	req := reqs[idx].req
+	p := reqs[idx]
 	if len(reqs) > 1 {
 		f.groups[inst] = slices.Delete(reqs, idx, idx+1)
 	} else {
@@ -332,22 +372,26 @@ func (f *flow) take(inst string, idx int) *loops.TriggerRequest {
 			f.next = 0
 		}
 	}
-	f.n--
-	return req
+	f.left(p)
+	return p.req
 }
 
 // drainAll removes every parked trigger, passing each to fn in serving order.
 func (q *queue) drainAll(fn func(*loops.TriggerRequest)) {
 	for i := range q.levels {
 		lv := &q.levels[i]
-		for _, f := range lv.furthestBehind() {
+		order := slices.Clone(lv.waiting)
+		slices.SortFunc(order, func(a, b *flow) int {
+			return cmp.Or(cmp.Compare(a.dispatchesPerWeight, b.dispatchesPerWeight), cmp.Compare(a.seq, b.seq))
+		})
+		for _, f := range order {
 			for _, inst := range f.ring {
 				for _, p := range f.groups[inst] {
 					fn(p.req)
 				}
 			}
 		}
-		lv.names = nil
+		*lv = level{startAt: lv.startAt}
 	}
 	q.n = 0
 }

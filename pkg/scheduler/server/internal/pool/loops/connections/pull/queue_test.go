@@ -14,9 +14,11 @@ limitations under the License.
 package pull
 
 import (
+	"container/heap"
 	"strconv"
 	"testing"
 
+	"github.com/diagridio/go-etcd-cron/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,13 +37,12 @@ const (
 
 // prioritized sets a trigger's level and weight.
 func prioritized(req *loops.TriggerRequest, level schedulerv1pb.PriorityLevel, weight uint32) *loops.TriggerRequest {
-	req.Job.Metadata.PriorityLevel = level.Enum()
-	req.Job.Metadata.FairnessWeight = &weight
+	req.Job.Metadata.Priority = &schedulerv1pb.JobPriority{Level: level.Enum(), FairnessWeight: &weight}
 	return req
 }
 
 // mustEnqueue parks a trigger that must fit without evicting another.
-func mustEnqueue(t *testing.T, q *queue, req *loops.TriggerRequest) {
+func mustEnqueue(t testing.TB, q *queue, req *loops.TriggerRequest) {
 	t.Helper()
 	evicted, ok := q.enqueue(req, false)
 	require.True(t, ok)
@@ -322,6 +323,7 @@ func TestQueue_RebaseKeepsOrder(t *testing.T) {
 	lv.names["ahead"].dispatchesPerWeight = rebaseAt - 1
 	lv.names["behind"].dispatchesPerWeight = rebaseAt - 1 - oneDispatch
 	lv.startAt = rebaseAt - 1 - oneDispatch
+	heap.Init(&lv.waiting)
 
 	var order []*loops.TriggerRequest
 	for q.tryDispatchOne(accept(&order)) {
@@ -759,4 +761,133 @@ func TestQueue_Remove(t *testing.T) {
 	}
 	assert.Equal(t, []*loops.TriggerRequest{n2}, order)
 	assert.Equal(t, 0, q.len())
+}
+
+func TestQueue_EvictSkipsTriggersThatLeft(t *testing.T) {
+	t.Parallel()
+	q := newQueue(4)
+	h := newHarness(t, 0, 0)
+	bg1 := prioritized(h.trigger("b::1::0", "bg"), background, 1)
+	bg2 := prioritized(h.trigger("b::2::0", "bg"), background, 1)
+	bg3 := prioritized(h.trigger("c::1::0", "bg"), background, 1)
+	for _, r := range []*loops.TriggerRequest{bg1, bg2, bg3} {
+		mustEnqueue(t, q, r)
+	}
+
+	// The newest is removed by its job key, so the next eviction must skip it.
+	require.Same(t, bg3, q.remove(bg3.Job.GetKey()))
+	mustEnqueue(t, q, prioritized(h.trigger("n::1::0", "n"), normal, 1))
+	mustEnqueue(t, q, prioritized(h.trigger("n::2::0", "n"), normal, 1))
+	evicted, ok := q.enqueue(prioritized(h.trigger("n::3::0", "n"), normal, 1), false)
+	require.True(t, ok)
+	assert.Same(t, bg2, evicted, "the newest still parked, not the one already removed")
+	evicted, ok = q.enqueue(prioritized(h.trigger("n::4::0", "n"), normal, 1), false)
+	require.True(t, ok)
+	assert.Same(t, bg1, evicted)
+	assert.Equal(t, 2, q.lowestEvictable(), "only normal triggers are left")
+	assert.Empty(t, q.levels[levelOf(bg1)].evictable)
+}
+
+func TestQueue_LowestEvictableCountsOnlyNotAdmitted(t *testing.T) {
+	t.Parallel()
+	q := newQueue(10)
+	h := newHarness(t, 0, 0)
+	assert.Equal(t, -1, q.lowestEvictable(), "empty")
+	_, ok := q.enqueue(prioritized(h.trigger("b::1::0", "bg"), background, 1), true)
+	require.True(t, ok)
+	assert.Equal(t, -1, q.lowestEvictable(), "an admitted trigger is not evictable")
+	lo := prioritized(h.trigger("l::1::0", "lo"), low, 1)
+	mustEnqueue(t, q, lo)
+	assert.Equal(t, 3, q.lowestEvictable())
+	var order []*loops.TriggerRequest
+	require.True(t, q.tryDispatchOne(func(r *loops.TriggerRequest) bool {
+		order = append(order, r)
+		return r == lo
+	}))
+	assert.Equal(t, -1, q.lowestEvictable(), "a dispatched trigger no longer counts")
+}
+
+func TestQueue_AppendedIsCompacted(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100000)
+	h := newHarness(t, 0, 0)
+	for i := range 1000 {
+		mustEnqueue(t, q, h.trigger("wf::"+strconv.Itoa(i)+"::0", "act"))
+	}
+	for q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }) {
+	}
+	lv := &q.levels[levelOf(h.trigger("x::1::0", "act"))]
+	assert.Empty(t, lv.evictable)
+	assert.LessOrEqual(t, len(lv.appended), 64, "entries that left are dropped, not kept forever")
+}
+
+func TestQueue_NameChargedAtItsNewestWeight(t *testing.T) {
+	t.Parallel()
+	q := newQueue(100)
+	h := newHarness(t, 0, 0)
+
+	// A's older triggers carry weight 1 and its newest weight 10, as after a
+	// configuration change. B has weight 10 throughout. They share turns
+	// equally, whichever of A's instances is served.
+	for i := range 4 {
+		mustEnqueue(t, q, prioritized(h.trigger("a"+strconv.Itoa(i)+"::1::0", "a"), normal, 1))
+	}
+	mustEnqueue(t, q, prioritized(h.trigger("a9::1::0", "a"), normal, 10))
+	for i := range 5 {
+		mustEnqueue(t, q, prioritized(h.trigger("b"+strconv.Itoa(i)+"::1::0", "b"), normal, 10))
+	}
+
+	var order []*loops.TriggerRequest
+	for q.tryDispatchOne(accept(&order)) {
+	}
+	names := make([]string, 0, len(order))
+	for _, r := range order {
+		names = append(names, nameOf(r))
+	}
+	assert.Equal(t, []string{"a", "b", "a", "b", "a", "b", "a", "b", "a", "b"}, names)
+}
+
+// The queue is full with 50,000 background and 50,000 normal triggers, and
+// each op is a normal trigger that arrives and evicts a background one. The
+// queue is refilled, off the clock, when the background triggers run out.
+func BenchmarkQueue_EnqueueEvictsAtBound(b *testing.B) {
+	h := &harness{results: make(map[*loops.TriggerRequest]api.TriggerResponseResult)}
+	fill := func() *queue {
+		q := newQueue(100000)
+		for i := range 50000 {
+			mustEnqueue(b, q, prioritized(h.trigger("b"+strconv.Itoa(i)+"::1::0", "bg"+strconv.Itoa(i%200)), background, 1))
+			mustEnqueue(b, q, prioritized(h.trigger("n"+strconv.Itoa(i)+"::1::0", "n"+strconv.Itoa(i%200)), normal, 1))
+		}
+		return q
+	}
+	q := fill()
+	evictions := 0
+	b.ResetTimer()
+	for i := range b.N {
+		if evictions == 50000 {
+			b.StopTimer()
+			q, evictions = fill(), 0
+			b.StartTimer()
+		}
+		if evicted, ok := q.enqueue(prioritized(h.trigger("x"+strconv.Itoa(i)+"::1::0", "x"), normal, 1), false); !ok || evicted == nil {
+			b.Fatal("a normal trigger must evict a background one")
+		}
+		evictions++
+	}
+}
+
+// 1,000 triggers of 200 names, drained one at a time as a sidecar with
+// 1,000 free slots would.
+func BenchmarkQueue_DrainManyNames(b *testing.B) {
+	h := &harness{results: make(map[*loops.TriggerRequest]api.TriggerResponseResult)}
+	for range b.N {
+		b.StopTimer()
+		q := newQueue(100000)
+		for i := range 1000 {
+			mustEnqueue(b, q, h.trigger("wf"+strconv.Itoa(i)+"::1::0", "act"+strconv.Itoa(i%200)))
+		}
+		b.StartTimer()
+		for q.tryDispatchOne(func(*loops.TriggerRequest) bool { return true }) {
+		}
+	}
 }

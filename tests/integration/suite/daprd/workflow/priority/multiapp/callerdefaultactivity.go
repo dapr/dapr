@@ -104,8 +104,8 @@ func (c *callerdefaultactivity) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// parent has no config entry on app 0, so app 0's default high 3 is inherited and beats app 1's default.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(3), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(3), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

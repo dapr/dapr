@@ -98,8 +98,8 @@ func (c *childlevelset) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// child's config entry sets low but no weight, so parent's weight 6 is inherited instead of the default's 2.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(6), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(6), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

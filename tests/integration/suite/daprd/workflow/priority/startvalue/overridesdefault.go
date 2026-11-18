@@ -91,8 +91,8 @@ func (s *overridesdefault) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// wf has no config entry, so the start value low 4 applies instead of the default's high 2.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(4), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(4), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

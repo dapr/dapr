@@ -112,8 +112,8 @@ func (c *childlevelset) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// child's config entry on app 1 sets background but no weight, so parent's weight 6 is inherited instead of app 1's default's 2.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_BACKGROUND, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(6), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_BACKGROUND, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(6), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 

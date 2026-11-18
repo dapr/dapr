@@ -133,7 +133,7 @@ func (s *validate) Run(t *testing.T, ctx context.Context) {
 		for _, job := range jobs {
 			meta := job.GetMetadata()
 			id, _, _ := strings.Cut(meta.GetTarget().GetActor().GetId(), "::")
-			got[id] = fmt.Sprintf("%s %d", strings.TrimPrefix(meta.GetPriorityLevel().String(), "PRIORITY_LEVEL_"), meta.GetFairnessWeight())
+			got[id] = fmt.Sprintf("%s %d", strings.TrimPrefix(meta.GetPriority().GetLevel().String(), "PRIORITY_LEVEL_"), meta.GetPriority().GetFairnessWeight())
 		}
 		assert.Equal(col, map[string]string{
 			// CRITICAL is matched in any case, and the start value's weight 3 applies.

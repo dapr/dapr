@@ -136,8 +136,8 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
 			meta := jobs[0].GetMetadata()
 			// The retried flaky keeps parent's config entry critical 6.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(6), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(6), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 	open()
@@ -157,8 +157,8 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(col, err) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
 			meta := jobs[0].GetMetadata()
 			// The retried flaky-child inherits parent's critical 6.
-			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriorityLevel())
-			assert.Equal(col, uint32(6), meta.GetFairnessWeight())
+			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())
+			assert.Equal(col, uint32(6), meta.GetPriority().GetFairnessWeight())
 		}
 	}, time.Second*10, time.Millisecond*10)
 	open()

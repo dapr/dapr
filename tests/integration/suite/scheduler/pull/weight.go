@@ -58,7 +58,7 @@ func (w *weight) Run(t *testing.T, ctx context.Context) {
 			job := name + "-" + strconv.Itoa(i)
 			req := w.scheduler.JobNowPull(job, namespace, appID, actorType, job+"::0")
 			req.Metadata.ConcurrencyKey = new(name)
-			req.Metadata.FairnessWeight = new(fairness)
+			req.Metadata.Priority = &schedulerv1.JobPriority{FairnessWeight: new(fairness)}
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 		}

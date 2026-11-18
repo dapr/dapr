@@ -55,7 +55,7 @@ func (p *priority) Run(t *testing.T, ctx context.Context) {
 		req := p.scheduler.JobNowPull(name, namespace, appID, actorType, name+"::0")
 		req.Metadata.ConcurrencyKey = new("act")
 		if level != schedulerv1.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
-			req.Metadata.PriorityLevel = level.Enum()
+			req.Metadata.Priority = &schedulerv1.JobPriority{Level: level.Enum()}
 		}
 		_, err := client.ScheduleJob(ctx, req)
 		require.NoError(t, err)
