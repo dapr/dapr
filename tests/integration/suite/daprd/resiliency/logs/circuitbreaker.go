@@ -15,6 +15,8 @@ package logs
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -24,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -91,29 +94,40 @@ func (c *circuitbreaker) Run(t *testing.T, ctx context.Context) {
 	c.caller.WaitUntilRunning(t, ctx)
 	c.target.WaitUntilRunning(t, ctx)
 
-	// The breaker's name is the endpoint, which the log line quotes.
-	stateChange := func(from, to string) []string {
-		return []string{
-			"Resiliency circuit breaker (myCB): ",
-			c.target.AppID() + `:cb\" changed state from ` + from + " to " + to + `"`,
-		}
+	httpClient := client.HTTP(t)
+	invoke := func(t require.TestingT) int {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/cb", c.caller.HTTPPort(), c.target.AppID()), nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
 	}
 
-	assert.Equal(t, http.StatusInternalServerError, invoke(t, ctx, c.caller, c.target, "cb"))
-	assert.Equal(t, http.StatusInternalServerError, invoke(t, ctx, c.caller, c.target, "cb"))
+	// The breaker's name is the endpoint, which the log line quotes.
+	stateChange := func(level, from, to string) string {
+		return `level=` + level + ` msg="Resiliency circuit breaker (myCB): \"` + c.target.AppID() +
+			`:cb\" changed state from ` + from + ` to ` + to + `"`
+	}
+
+	assert.Equal(t, http.StatusInternalServerError, invoke(t))
+	assert.Equal(t, http.StatusInternalServerError, invoke(t))
 	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Equal(ct, 1, countLines(c.logline, "warning", stateChange("closed", "open")...))
+		assert.Equal(ct, 1, c.logline.Count(stateChange("warning", "closed", "open")))
 	}, time.Second*10, time.Millisecond*10)
 
 	// After the breaker's timeout, the next successful call goes through the
 	// half-open state and closes the breaker.
 	c.fail.Store(false)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Equal(ct, http.StatusOK, invoke(t, ctx, c.caller, c.target, "cb"))
+		assert.Equal(ct, http.StatusOK, invoke(ct))
 	}, time.Second*10, time.Millisecond*100)
 
 	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Equal(ct, 1, countLines(c.logline, "info", stateChange("open", "half-open")...))
-		assert.Equal(ct, 1, countLines(c.logline, "info", stateChange("half-open", "closed")...))
+		assert.Equal(ct, 1, c.logline.Count(stateChange("info", "open", "half-open")))
+		assert.Equal(ct, 1, c.logline.Count(stateChange("info", "half-open", "closed")))
 	}, time.Second*10, time.Millisecond*10)
 }

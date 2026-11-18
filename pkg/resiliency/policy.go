@@ -105,12 +105,14 @@ func (p PolicyDefinition) policyName(name string) string {
 
 // logTimeout logs a timeout at warning level the first time it fires for an
 // operation, and at debug level after that, to keep log volume down.
-func (p PolicyDefinition) logTimeout(first bool) {
+func (p PolicyDefinition) logTimeout(ctx context.Context, first bool) {
 	logf := p.log.Debugf
 	if first {
 		logf = p.log.Warnf
 	}
-	logf("Resiliency timeout (%s): operation %s timed out after %v", p.policyName(p.timeoutName), p.name, p.t)
+	// Without a retry policy there is no attempt number in the context.
+	attempt := max(GetAttempt(ctx), 1)
+	logf("Resiliency timeout (%s): operation %s timed out after %v (attempt %d)", p.policyName(p.timeoutName), p.name, p.t, attempt)
 }
 
 // String implements fmt.Stringer and is used for debugging.
@@ -270,7 +272,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 						if opts.Disposer != nil && !isZero(v.res) {
 							opts.Disposer(v.res)
 						}
-						def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
+						def.logTimeout(ctx, timeoutLogged.CompareAndSwap(false, true))
 						if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 							def.addTimeoutActivatedMetric()
 						}
@@ -293,7 +295,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 							opts.Disposer(v.res)
 						}
 					}
-					def.logTimeout(timeoutLogged.CompareAndSwap(false, true))
+					def.logTimeout(ctx, timeoutLogged.CompareAndSwap(false, true))
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
@@ -380,7 +382,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 						def.addRetryActivatedMetric()
 					}
 				}
-				logf("Resiliency retry (%s): error processing operation %s. Retrying in %v…", retryName, def.name, d)
+				logf("Resiliency retry (%s): error processing operation %s (attempt %d). Retrying in %v…", retryName, def.name, attempts.Load(), d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 		)

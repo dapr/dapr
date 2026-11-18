@@ -15,6 +15,8 @@ package logs
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -24,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -97,29 +100,43 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	r.target.WaitUntilRunning(t, ctx)
 
 	id := r.target.AppID()
+	httpClient := client.HTTP(t)
+	invoke := func(t *testing.T, method string) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", r.caller.HTTPPort(), id, method), nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
+	}
 
 	t.Run("recovers after two retries", func(t *testing.T) {
-		require.Equal(t, http.StatusOK, invoke(t, ctx, r.caller, r.target, "recover"))
+		require.Equal(t, http.StatusOK, invoke(t, "recover"))
 		assert.Equal(t, int32(3), r.recoverCalls.Load())
 
-		retrying := "Resiliency retry (threeTimes): error processing operation endpoint[" + id + ", " + id + ":recover]. Retrying in 10ms…"
+		retrying := `level=%s msg="Resiliency retry (threeTimes): error processing operation endpoint[` + id + ", " + id + `:recover] (attempt %d). Retrying in 10ms…"`
 		recovered := "Resiliency retry (threeTimes): recovered processing operation endpoint[" + id + ", " + id + ":recover] after 3 attempts"
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, 1, countLines(r.logline, "warning", retrying))
-			assert.Equal(c, 1, countLines(r.logline, "debug", retrying))
-			assert.Equal(c, 1, countLines(r.logline, "info", recovered))
+			assert.Equal(c, 1, r.logline.Count(fmt.Sprintf(retrying, "warning", 1)))
+			assert.Equal(c, 1, r.logline.Count(fmt.Sprintf(retrying, "debug", 2)))
+			assert.Equal(c, 1, r.logline.Count(`level=info msg="`+recovered+`"`))
 		}, time.Second*10, time.Millisecond*10)
 	})
 
 	t.Run("one warning when retries are exhausted", func(t *testing.T) {
-		require.Equal(t, http.StatusInternalServerError, invoke(t, ctx, r.caller, r.target, "fail"))
+		require.Equal(t, http.StatusInternalServerError, invoke(t, "fail"))
 		assert.Equal(t, int32(4), r.failCalls.Load())
 
-		retrying := "Resiliency retry (threeTimes): error processing operation endpoint[" + id + ", " + id + ":fail]. Retrying in 10ms…"
+		retrying := `level=%s msg="Resiliency retry (threeTimes): error processing operation endpoint[` + id + ", " + id + `:fail] (attempt %d). Retrying in 10ms…"`
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, 1, countLines(r.logline, "warning", retrying))
-			assert.Equal(c, 2, countLines(r.logline, "debug", retrying))
+			assert.Equal(c, 1, r.logline.Count(fmt.Sprintf(retrying, "warning", 1)))
+			assert.Equal(c, 1, r.logline.Count(fmt.Sprintf(retrying, "debug", 2)))
+			assert.Equal(c, 1, r.logline.Count(fmt.Sprintf(retrying, "debug", 3)))
 		}, time.Second*10, time.Millisecond*10)
-		assert.Zero(t, countLines(r.logline, "info", "recovered processing operation endpoint["+id+", "+id+":fail]"))
+		assert.Zero(t, r.logline.Count("recovered processing operation endpoint["+id+", "+id+":fail]"))
 	})
 }

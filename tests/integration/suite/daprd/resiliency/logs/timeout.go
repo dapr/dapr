@@ -15,14 +15,18 @@ package logs
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -95,15 +99,27 @@ func (o *timeout) Run(t *testing.T, ctx context.Context) {
 	o.target.WaitUntilRunning(t, ctx)
 
 	id := o.target.AppID()
-	assert.Equal(t, http.StatusInternalServerError, invoke(t, ctx, o.caller, o.target, "slow"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/slow", o.caller.HTTPPort(), id), nil)
+	require.NoError(t, err)
+	resp, err := client.HTTP(t).Do(req)
+	require.NoError(t, err)
+	_, err = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
-	timedOut := "Resiliency timeout (downstream): operation endpoint[" + id + ", " + id + ":slow] timed out after 200ms"
-	retrying := "Resiliency retry (threeTimes): error processing operation endpoint[" + id + ", " + id + ":slow]. Retrying in 10ms…"
+	timedOut := `level=%s msg="Resiliency timeout (downstream): operation endpoint[` + id + ", " + id + `:slow] timed out after 200ms (attempt %d)"`
+	retrying := `level=%s msg="Resiliency retry (threeTimes): error processing operation endpoint[` + id + ", " + id + `:slow] (attempt %d). Retrying in 10ms…"`
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int32(4), o.calls.Load())
-		assert.Equal(c, 1, countLines(o.logline, "warning", timedOut))
-		assert.Equal(c, 3, countLines(o.logline, "debug", timedOut))
-		assert.Equal(c, 1, countLines(o.logline, "warning", retrying))
-		assert.Equal(c, 2, countLines(o.logline, "debug", retrying))
+		assert.Equal(c, 1, o.logline.Count(fmt.Sprintf(timedOut, "warning", 1)))
+		assert.Equal(c, 1, o.logline.Count(fmt.Sprintf(retrying, "warning", 1)))
+		for attempt := 2; attempt <= 4; attempt++ {
+			assert.Equal(c, 1, o.logline.Count(fmt.Sprintf(timedOut, "debug", attempt)))
+		}
+		for attempt := 2; attempt <= 3; attempt++ {
+			assert.Equal(c, 1, o.logline.Count(fmt.Sprintf(retrying, "debug", attempt)))
+		}
 	}, time.Second*10, time.Millisecond*10)
 }
