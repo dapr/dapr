@@ -43,6 +43,13 @@ type Options struct {
 	Actors   actors.Interface
 	Channels *channels.Channels
 	WFEngine wfengine.Interface
+
+	// Addresses holds the scheduler address of each client.
+	Addresses []string
+	// SupportsPullSlots is true when every scheduler supports pull dispatch.
+	SupportsPullSlots bool
+	// Pull is the sidecar's pull dispatch state, kept across clusters.
+	Pull *Pull
 }
 
 // Cluster manages connections to multiple schedulers.
@@ -59,6 +66,10 @@ type Cluster struct {
 	actors   actors.Interface
 	channels *channels.Channels
 	wfengine wfengine.Interface
+
+	addresses         []string
+	supportsPullSlots bool
+	pull              *Pull
 }
 
 func New(opts Options) *Cluster {
@@ -74,6 +85,9 @@ func New(opts Options) *Cluster {
 		actors:             opts.Actors,
 		channels:           opts.Channels,
 		wfengine:           opts.WFEngine,
+		addresses:          opts.Addresses,
+		supportsPullSlots:  opts.SupportsPullSlots,
+		pull:               opts.Pull,
 	}
 }
 
@@ -136,6 +150,19 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	runners := make([]concurrency.Runner, len(c.clients))
 	connectors := make([]*connector, len(c.clients))
 
+	// Pull dispatch needs every scheduler to support it, and a per-sidecar
+	// activity cap to report free slots against (config validation requires
+	// one whenever pull is configured).
+	pull, pullActorType := c.pull, ""
+	if c.supportsPullSlots && c.wfengine != nil && c.workflowSpec.HasPullActivityDispatch() && c.workflowSpec.GetMaxConcurrentActivityInvocations() != nil {
+		pullActorType = c.wfengine.ActivityActorType()
+	} else {
+		pull = nil
+		if !c.supportsPullSlots && c.workflowSpec.HasPullActivityDispatch() {
+			log.Warnf("Pull activity dispatch is configured but not every scheduler in %v supports it: activities use regular dispatch until they all do", c.addresses)
+		}
+	}
+
 	// Accept engine to be nil, and ignore the disabled error.
 	router, _ := c.actors.Router(ctx)
 	for i := range c.clients {
@@ -145,6 +172,12 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			channels: c.channels,
 			actors:   router,
 			wfengine: c.wfengine,
+
+			pull:          pull,
+			pullActorType: pullActorType,
+		}
+		if i < len(c.addresses) {
+			connectors[i].addr = c.addresses[i]
 		}
 		runners[i] = connectors[i].run
 	}

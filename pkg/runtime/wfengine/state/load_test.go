@@ -191,4 +191,90 @@ func TestLoadWorkflowState_ConcurrentSaveMismatch(t *testing.T) {
 		require.ErrorAs(t, lerr, &verifyErr)
 		assert.Equal(t, 1, gets)
 	})
+
+	purgeKeys := func(t *testing.T, s *State) []string {
+		t.Helper()
+		req, perr := s.GetPurgeRequest(actorID)
+		require.NoError(t, perr)
+		keys := make([]string, 0, len(req.Operations))
+		for _, op := range req.Operations {
+			keys = append(keys, op.Request.(api.TransactionalDelete).Key)
+		}
+		return keys
+	}
+
+	allowMissing := testOpts()
+	allowMissing.AllowMissingEntries = true
+
+	t.Run("allow missing entries loads what exists and purges every declared key", func(t *testing.T) {
+		t.Parallel()
+		var gets int
+		missing := attempt{
+			meta: &backend.BackendWorkflowStateMetadata{InboxLength: 2, HistoryLength: 2, Generation: 1},
+			etag: ptr.Of("e1"),
+			bulk: map[string]api.BulkStateEntry{"history-000000": {Data: histBytes}},
+		}
+		store := newStore(t, []attempt{missing, missing, missing}, &gets)
+
+		got, lerr := LoadWorkflowState(t.Context(), store, actorID, allowMissing)
+		require.NoError(t, lerr)
+		require.NotNil(t, got)
+		assert.Empty(t, got.Inbox)
+		assert.Len(t, got.History, 1)
+		assert.Equal(t, 3, gets)
+		assert.Equal(t, []string{
+			"inbox-000000", "inbox-000001",
+			"history-000000", "history-000001",
+			MetadataKey,
+		}, purgeKeys(t, got))
+	})
+
+	t.Run("allow missing entries still retries a torn read", func(t *testing.T) {
+		t.Parallel()
+		var gets int
+		store := newStore(t, []attempt{
+			{
+				meta: &backend.BackendWorkflowStateMetadata{InboxLength: 1, Generation: 1},
+				etag: ptr.Of("e1"),
+				bulk: map[string]api.BulkStateEntry{},
+			},
+			{
+				meta: &backend.BackendWorkflowStateMetadata{HistoryLength: 2, Generation: 1},
+				etag: ptr.Of("e2"),
+				bulk: map[string]api.BulkStateEntry{
+					"history-000000": {Data: histBytes},
+					"history-000001": {Data: histBytes},
+				},
+			},
+		}, &gets)
+
+		got, lerr := LoadWorkflowState(t.Context(), store, actorID, allowMissing)
+		require.NoError(t, lerr)
+		require.NotNil(t, got)
+		assert.Equal(t, 2, gets)
+		assert.Equal(t, []string{"history-000000", "history-000001", MetadataKey}, purgeKeys(t, got))
+	})
+
+	t.Run("allow missing entries purges declared signing keys that failed to load", func(t *testing.T) {
+		t.Parallel()
+		var gets int
+		store := newStore(t, []attempt{{
+			meta: &backend.BackendWorkflowStateMetadata{
+				HistoryLength: 1, SigningCertificateLength: 1, SignatureLength: 2, Generation: 1,
+			},
+			etag: ptr.Of("e1"),
+			bulk: map[string]api.BulkStateEntry{"history-000000": {Data: histBytes}},
+		}}, &gets)
+
+		got, lerr := LoadWorkflowState(t.Context(), store, actorID, allowMissing)
+		var verifyErr *wferrors.VerificationError
+		require.ErrorAs(t, lerr, &verifyErr)
+		require.NotNil(t, got)
+		assert.Equal(t, []string{
+			"history-000000",
+			"sigcert-000000",
+			"signature-000000", "signature-000001",
+			MetadataKey,
+		}, purgeKeys(t, got))
+	})
 }
