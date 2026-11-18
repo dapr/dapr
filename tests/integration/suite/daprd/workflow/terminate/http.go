@@ -70,8 +70,8 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	const reason = "Operator requested termination: maintenance window"
 	emptyReason := ""
 	tests := []struct {
-		name        string
-		reason      *string
+		name             string
+		reason           *string
 		wantPresent      bool
 		wantCustomStatus string
 	}{
