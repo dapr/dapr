@@ -42,9 +42,9 @@ func init() {
 	suite.Register(new(base))
 }
 
-// base tests that workflow state retention policy works in Kubernetes mode,
-// validating that the CRD string duration fields are correctly parsed.
-type base struct {
+// cluster is a Kubernetes-mode control plane whose Configuration carries a
+// workflow state retention policy.
+type cluster struct {
 	daprd   *daprd.Daprd
 	place   *placement.Placement
 	sched   *scheduler.Scheduler
@@ -52,10 +52,10 @@ type base struct {
 	oper    *operator.Operator
 }
 
-func (b *base) Setup(t *testing.T) []framework.Option {
+func (c *cluster) setup(t *testing.T, policy *configapi.WorkflowStateRetentionPolicy) []framework.Option {
 	sentrySvc := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	b.kubeapi = kubernetes.New(t,
+	c.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
@@ -71,11 +71,7 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
 						SentryAddress:           sentrySvc.Address(),
 					},
-					WorkflowSpec: &configapi.WorkflowSpec{
-						StateRetentionPolicy: &configapi.WorkflowStateRetentionPolicy{
-							AnyTerminal: &metav1.Duration{Duration: time.Millisecond},
-						},
-					},
+					WorkflowSpec: &configapi.WorkflowSpec{StateRetentionPolicy: policy},
 				},
 			}},
 		}),
@@ -84,45 +80,62 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	b.oper = operator.New(t,
+	c.oper = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(b.kubeapi.KubeconfigPath(t)),
+		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentrySvc.TrustAnchorsFile(t)),
 	)
 
-	b.place = placement.New(t, placement.WithSentry(t, sentrySvc))
+	c.place = placement.New(t, placement.WithSentry(t, sentrySvc))
 
-	b.sched = scheduler.New(t,
+	c.sched = scheduler.New(t,
 		scheduler.WithSentry(sentrySvc),
-		scheduler.WithKubeconfig(b.kubeapi.KubeconfigPath(t)),
+		scheduler.WithKubeconfig(c.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
 		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
-	b.daprd = daprd.New(t,
+	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("wfretention"),
 		daprd.WithAppID("myapp"),
 		daprd.WithNamespace("default"),
 		daprd.WithSentry(t, sentrySvc),
-		daprd.WithControlPlaneAddress(b.oper.Address()),
-		daprd.WithPlacementAddresses(b.place.Address()),
-		daprd.WithSchedulerAddresses(b.sched.Address()),
+		daprd.WithControlPlaneAddress(c.oper.Address()),
+		daprd.WithPlacementAddresses(c.place.Address()),
+		daprd.WithSchedulerAddresses(c.sched.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentrySvc, b.kubeapi, b.oper, b.sched, b.place, b.daprd),
+		framework.WithProcesses(sentrySvc, c.kubeapi, c.oper, c.sched, c.place, c.daprd),
 	}
 }
 
-func (b *base) Run(t *testing.T, ctx context.Context) {
-	b.oper.WaitUntilRunning(t, ctx)
-	b.sched.WaitUntilRunning(t, ctx)
-	b.place.WaitUntilRunning(t, ctx)
-	b.daprd.WaitUntilRunning(t, ctx)
+// client waits for the cluster to be running and starts a worker for reg.
+func (c *cluster) client(t *testing.T, ctx context.Context, reg *dworkflow.Registry) *dworkflow.Client {
+	c.oper.WaitUntilRunning(t, ctx)
+	c.sched.WaitUntilRunning(t, ctx)
+	c.place.WaitUntilRunning(t, ctx)
+	c.daprd.WaitUntilRunning(t, ctx)
 
+	client := dworkflow.NewClientWithLogger(c.daprd.GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, client.StartWorker(ctx, reg))
+	return client
+}
+
+// base tests that workflow state retention policy works in Kubernetes mode,
+// validating that the CRD string duration fields are correctly parsed.
+type base struct{ cluster }
+
+func (b *base) Setup(t *testing.T) []framework.Option {
+	return b.setup(t, &configapi.WorkflowStateRetentionPolicy{
+		AnyTerminal: &metav1.Duration{Duration: time.Millisecond},
+	})
+}
+
+func (b *base) Run(t *testing.T, ctx context.Context) {
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("foo", func(ctx *dworkflow.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc").Await(nil))
@@ -131,9 +144,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	reg.AddActivityN("abc", func(ctx dworkflow.ActivityContext) (any, error) {
 		return nil, nil
 	})
-
-	client := dworkflow.NewClientWithLogger(b.daprd.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, client.StartWorker(ctx, reg))
+	client := b.client(t, ctx, reg)
 
 	id, err := client.ScheduleWorkflow(ctx, "foo")
 	require.NoError(t, err)

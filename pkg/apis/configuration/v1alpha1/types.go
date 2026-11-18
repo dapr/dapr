@@ -245,6 +245,43 @@ type WorkflowStateRetentionPolicy struct {
 	// Terminated terminal state.
 	// +optional
 	Terminated *metav1.Duration `json:"terminated,omitempty"`
+
+	// Workflows overrides the TTLs for specific workflow names. A matching
+	// entry is consulted first (its specific terminal state, then its
+	// anyTerminal); any TTL it leaves unset falls back to the app-wide values
+	// above.
+	// +listType=map
+	// +listMapKey=name
+	// +optional
+	Workflows []NamedWorkflowStateRetentionPolicy `json:"workflows,omitempty"`
+}
+
+// NamedWorkflowStateRetentionPolicy defines the retention policy of workflow
+// state for instances of a single workflow name.
+type NamedWorkflowStateRetentionPolicy struct {
+	// Name is the workflow name the entry applies to.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// AnyTerminal is the TTL for purging instances that reach any terminal
+	// state.
+	// +optional
+	AnyTerminal *metav1.Duration `json:"anyTerminal,omitempty"`
+
+	// Completed is the TTL for purging instances that reach the Completed
+	// terminal state.
+	// +optional
+	Completed *metav1.Duration `json:"completed,omitempty"`
+
+	// Failed is the TTL for purging instances that reach the Failed terminal
+	// state.
+	// +optional
+	Failed *metav1.Duration `json:"failed,omitempty"`
+
+	// Terminated is the TTL for purging instances that reach the Terminated
+	// terminal state.
+	// +optional
+	Terminated *metav1.Duration `json:"terminated,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
