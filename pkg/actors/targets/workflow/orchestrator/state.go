@@ -559,6 +559,10 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 	completedAt, _ := runtimestate.CompletedTime(rstate)
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
+	terminationInput := wfenginestate.TerminationInput(rstate)
+	if terminationInput != nil {
+		output = nil
+	}
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
 	var parentAppID *wrapperspb.StringValue
@@ -582,9 +586,8 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		CompletedAt:      timestamppb.New(completedAt),
 		Input:            input,
 		Output:           output,
-		CustomStatus:     rstate.GetCustomStatus(),
+		CustomStatus:     wfenginestate.CustomStatus(rstate),
 		FailureDetails:   failureDetails,
-		TerminationReason: runtimestate.TerminationReason(rstate),
 		ParentInstanceId: parentInstanceID,
 		ParentAppId:      parentAppID,
 		Version:          wfenginestate.WorkflowVersion(rstate.GetOldEvents()),
