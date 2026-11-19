@@ -582,7 +582,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		CompletedAt:      timestamppb.New(completedAt),
 		Input:            input,
 		Output:           output,
-		CustomStatus:     wfenginestate.CustomStatus(rstate),
+		CustomStatus:     rstate.GetCustomStatus(),
 		FailureDetails:   failureDetails,
 		ParentInstanceId: parentInstanceID,
 		ParentAppId:      parentAppID,
