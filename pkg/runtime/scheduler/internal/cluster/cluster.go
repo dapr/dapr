@@ -150,17 +150,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	runners := make([]concurrency.Runner, len(c.clients))
 	connectors := make([]*connector, len(c.clients))
 
-	// Pull dispatch needs every scheduler to support it, and a per-sidecar
-	// activity cap to report free slots against (config validation requires
-	// one whenever pull is configured).
-	pull, pullActorType := c.pull, ""
-	if c.supportsPullSlots && c.wfengine != nil && c.workflowSpec.HasPullActivityDispatch() && c.workflowSpec.GetMaxConcurrentActivityInvocations() != nil {
-		pullActorType = c.wfengine.ActivityActorType()
-	} else {
+	pull, pullTypes := c.pull, c.pullTypes()
+	if len(pullTypes) == 0 {
 		pull = nil
-		if !c.supportsPullSlots && c.workflowSpec.HasPullActivityDispatch() {
-			log.Warnf("Pull activity dispatch is configured but not every scheduler in %v supports it: activities use regular dispatch until they all do", c.addresses)
-		}
 	}
 
 	// Accept engine to be nil, and ignore the disabled error.
@@ -173,8 +165,8 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			actors:   router,
 			wfengine: c.wfengine,
 
-			pull:          pull,
-			pullActorType: pullActorType,
+			pull:      pull,
+			pullTypes: pullTypes,
 		}
 		if i < len(c.addresses) {
 			connectors[i].addr = c.addresses[i]
@@ -183,6 +175,29 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	}
 
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
+}
+
+// pullTypes returns the actor types this sidecar pull-dispatches. Each type
+// needs a per-sidecar cap to report free slots against.
+func (c *Cluster) pullTypes() map[string]pullType {
+	if !c.supportsPullSlots {
+		if c.workflowSpec.HasPullDispatch() {
+			log.Warnf("Pull dispatch is configured but not every scheduler in %v supports it: activities and workflows use regular dispatch until they all do", c.addresses)
+		}
+		return nil
+	}
+	if c.pull == nil || c.wfengine == nil {
+		return nil
+	}
+
+	types := make(map[string]pullType, 2)
+	if c.workflowSpec.HasPullActivityDispatch() && c.workflowSpec.GetMaxConcurrentActivityInvocations() != nil {
+		types[c.wfengine.ActivityActorType()] = pullType{free: c.wfengine.ActivityFreeSlots}
+	}
+	if v := c.workflowSpec.GetMaxConcurrentWorkflowInvocations(); v != nil && c.workflowSpec.HasPullWorkflowDispatch() {
+		types[c.wfengine.WorkflowActorType()] = pullType{workflow: c.pull.workflowSlots(*v)}
+	}
+	return types
 }
 
 func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {

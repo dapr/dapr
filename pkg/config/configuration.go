@@ -206,11 +206,11 @@ type WorkflowSpec struct {
 	// If omitted, no global maximum will be enforced.
 	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
 
-	// activityDispatchMode is the application-wide activity dispatch mode:
-	// "hashed" or "pull"; nil means "hashed". See ActivityDispatchPull. The
-	// slots offered to the scheduler are MaxConcurrentActivityInvocations less
-	// every activity the replica runs, pull or hashed.
-	ActivityDispatchMode *string `json:"activityDispatchMode,omitempty" yaml:"activityDispatchMode,omitempty"`
+	// dispatchMode is the application-wide dispatch mode of activities and
+	// workflow turns: "hashed" or "pull", nil means "hashed". "pull" requires
+	// MaxConcurrentActivityInvocations and MaxConcurrentWorkflowInvocations, the
+	// slots each replica offers. See ActivityDispatchPull.
+	DispatchMode *string `json:"dispatchMode,omitempty" yaml:"dispatchMode,omitempty"`
 
 	// Per-workflow-name concurrency limits enforced globally by the scheduler.
 	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
@@ -269,7 +269,7 @@ type NamedConcurrencyLimit struct {
 
 // ActivityConcurrencyLimit defines per-activity-name settings. MaxConcurrent
 // is the global (cross-replica) limit; DispatchMode overrides the
-// application's ActivityDispatchMode for this name, nil inherits it.
+// application's DispatchMode for this name, nil inherits it.
 type ActivityConcurrencyLimit struct {
 	Name          *string `json:"name"                   yaml:"name"`
 	MaxConcurrent *int32  `json:"maxConcurrent"          yaml:"maxConcurrent"`
@@ -277,13 +277,13 @@ type ActivityConcurrencyLimit struct {
 }
 
 const (
-	// ActivityDispatchModeHashed runs each activity on the replica its actor ID
-	// hashes to. This is the default.
-	ActivityDispatchModeHashed = "hashed"
-	// ActivityDispatchModePull lets the scheduler deliver each activity to any
-	// replica with a free slot, where MaxConcurrentActivityInvocations is the
-	// per-replica slot count.
-	ActivityDispatchModePull = "pull"
+	// DispatchModeHashed runs each activity and workflow turn on the replica
+	// its actor ID hashes to. This is the default.
+	DispatchModeHashed = "hashed"
+	// DispatchModePull lets the scheduler deliver each activity and workflow
+	// turn to a replica with a free slot, where MaxConcurrentActivityInvocations
+	// and MaxConcurrentWorkflowInvocations are the per-replica slot counts.
+	DispatchModePull = "pull"
 )
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -396,7 +396,7 @@ func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
 
 // ActivityDispatchPull reports whether activities with the given name are
 // pull-dispatched: a per-name entry with a DispatchMode wins, otherwise the
-// application-wide ActivityDispatchMode applies.
+// application-wide DispatchMode applies.
 func (w *WorkflowSpec) ActivityDispatchPull(name string) bool {
 	if w == nil {
 		return false
@@ -406,11 +406,11 @@ func (w *WorkflowSpec) ActivityDispatchPull(name string) bool {
 			return isPull(l.DispatchMode)
 		}
 	}
-	return isPull(w.ActivityDispatchMode)
+	return isPull(w.DispatchMode)
 }
 
 func isPull(mode *string) bool {
-	return mode != nil && *mode == ActivityDispatchModePull
+	return mode != nil && *mode == DispatchModePull
 }
 
 // HasPullActivityDispatch reports whether any activity of this application is
@@ -420,7 +420,7 @@ func (w *WorkflowSpec) HasPullActivityDispatch() bool {
 	if w == nil {
 		return false
 	}
-	if isPull(w.ActivityDispatchMode) {
+	if isPull(w.DispatchMode) {
 		return true
 	}
 	for _, l := range w.ActivityConcurrencyLimits {
@@ -431,6 +431,18 @@ func (w *WorkflowSpec) HasPullActivityDispatch() bool {
 	return false
 }
 
+// HasPullDispatch reports whether activities or workflow turns are
+// pull-dispatched.
+func (w *WorkflowSpec) HasPullDispatch() bool {
+	return w.HasPullActivityDispatch() || w.HasPullWorkflowDispatch()
+}
+
+// HasPullWorkflowDispatch reports whether workflow turns are pull-dispatched,
+// which is the application-wide mode. Validation requires the workflow cap.
+func (w *WorkflowSpec) HasPullWorkflowDispatch() bool {
+	return w != nil && isPull(w.DispatchMode)
+}
+
 // validateWorkflowSpec rejects dispatch settings the runtime cannot honour.
 func (c *Configuration) validateWorkflowSpec() error {
 	w := c.Spec.WorkflowSpec
@@ -439,10 +451,10 @@ func (c *Configuration) validateWorkflowSpec() error {
 	}
 
 	validMode := func(mode *string) bool {
-		return mode == nil || *mode == ActivityDispatchModeHashed || *mode == ActivityDispatchModePull
+		return mode == nil || *mode == DispatchModeHashed || *mode == DispatchModePull
 	}
-	if !validMode(w.ActivityDispatchMode) {
-		return fmt.Errorf("invalid workflow activityDispatchMode %q: must be %q or %q", *w.ActivityDispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+	if !validMode(w.DispatchMode) {
+		return fmt.Errorf("invalid workflow dispatchMode %q: must be %q or %q", *w.DispatchMode, DispatchModeHashed, DispatchModePull)
 	}
 
 	// A name may repeat as before (the last limit wins), but not once a
@@ -450,7 +462,7 @@ func (c *Configuration) validateWorkflowSpec() error {
 	seen := make(map[string]bool, len(w.ActivityConcurrencyLimits))
 	for _, l := range w.ActivityConcurrencyLimits {
 		if !validMode(l.DispatchMode) {
-			return fmt.Errorf("invalid dispatchMode %q in workflow activityConcurrencyLimits: must be %q or %q", *l.DispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+			return fmt.Errorf("invalid dispatchMode %q in workflow activityConcurrencyLimits: must be %q or %q", *l.DispatchMode, DispatchModeHashed, DispatchModePull)
 		}
 		if l.Name == nil {
 			if l.DispatchMode != nil {
@@ -468,6 +480,9 @@ func (c *Configuration) validateWorkflowSpec() error {
 	// count; without one the scheduler would deliver everything on arrival.
 	if w.HasPullActivityDispatch() && w.GetMaxConcurrentActivityInvocations() == nil {
 		return errors.New("workflow activity dispatchMode pull requires maxConcurrentActivityInvocations to be set to a positive value: it is the number of activity slots each sidecar offers to the scheduler")
+	}
+	if w.HasPullWorkflowDispatch() && w.GetMaxConcurrentWorkflowInvocations() == nil {
+		return errors.New("workflow dispatchMode pull requires maxConcurrentWorkflowInvocations to be set to a positive value: it is the number of workflow slots each sidecar offers to the scheduler")
 	}
 
 	return w.Priority.validate()
@@ -516,25 +531,48 @@ func (w *WorkflowSpec) ActivityPriority(workflowName, activityName string) (leve
 	if w == nil || w.Priority == nil {
 		return "", 0
 	}
-	p := w.Priority
-	take := func(l *string, wt *uint32) {
-		if level == "" && l != nil {
-			level = *l
-		}
-		if weight == 0 && wt != nil {
-			weight = *wt
-		}
+	var r priorityResolver
+	r.entry(findPriority(w.Priority.Activities, activityName))
+	r.entry(findPriority(w.Priority.Workflows, workflowName))
+	r.defaults(w.Priority.Default)
+	return r.level, r.weight
+}
+
+// WorkflowPriority resolves a workflow's level and weight, falling back to the default.
+func (w *WorkflowSpec) WorkflowPriority(workflowName string) (level string, weight uint32) {
+	if w == nil || w.Priority == nil {
+		return "", 0
 	}
-	if e := findPriority(p.Activities, activityName); e != nil {
-		take(e.PriorityLevel, e.FairnessWeight)
+	var r priorityResolver
+	r.entry(findPriority(w.Priority.Workflows, workflowName))
+	r.defaults(w.Priority.Default)
+	return r.level, r.weight
+}
+
+type priorityResolver struct {
+	level  string
+	weight uint32
+}
+
+func (r *priorityResolver) take(level *string, weight *uint32) {
+	if r.level == "" && level != nil {
+		r.level = *level
 	}
-	if e := findPriority(p.Workflows, workflowName); e != nil {
-		take(e.PriorityLevel, e.FairnessWeight)
+	if r.weight == 0 && weight != nil {
+		r.weight = *weight
 	}
-	if p.Default != nil {
-		take(p.Default.PriorityLevel, p.Default.FairnessWeight)
+}
+
+func (r *priorityResolver) entry(e *NamedPriorityValues) {
+	if e != nil {
+		r.take(e.PriorityLevel, e.FairnessWeight)
 	}
-	return level, weight
+}
+
+func (r *priorityResolver) defaults(d *PriorityValues) {
+	if d != nil {
+		r.take(d.PriorityLevel, d.FairnessWeight)
+	}
 }
 
 func findPriority(entries []NamedPriorityValues, name string) *NamedPriorityValues {

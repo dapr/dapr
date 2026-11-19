@@ -378,7 +378,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 
-		if err = o.createTimers(ctx, rs.GetPendingTimers(), state.Generation); err != nil {
+		if err = o.createTimers(ctx, rs.GetPendingTimers(), state.Generation, o.getExecutionStartedEvent(state).GetName()); err != nil {
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
 		}
 	}

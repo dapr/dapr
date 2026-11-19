@@ -33,11 +33,9 @@ type connector struct {
 	actors   router.Interface
 	wfengine wfengine.Interface
 
-	// addr is the scheduler address of client. pull and pullActorType are
-	// handed to each streamer; see streamer.pull.
-	addr          string
-	pull          *Pull
-	pullActorType string
+	addr      string
+	pull      *Pull
+	pullTypes map[string]pullType
 }
 
 // run starts the scheduler connector, retrying on failures so that a single
@@ -97,9 +95,9 @@ func (c *connector) run(ctx context.Context) error {
 			actors:   c.actors,
 			wfengine: c.wfengine,
 
-			addr:          c.addr,
-			pull:          c.pull,
-			pullActorType: c.pullActorType,
+			addr:      c.addr,
+			pull:      c.pull,
+			pullTypes: c.pullTypes,
 		}).run(ctx)
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")
@@ -127,8 +125,7 @@ func (c *connector) initial() *schedulerv1pb.WatchJobsRequest {
 		return c.req
 	}
 	req := proto.Clone(c.req).(*schedulerv1pb.WatchJobsRequest)
-	free, _ := c.wfengine.ActivityFreeSlots()
-	req.GetInitial().PullSlots = []*schedulerv1pb.PullSlots{{ActorType: c.pullActorType, Free: free}}
+	req.GetInitial().PullSlots = pullSlots(c.pullTypes)
 	req.GetInitial().InflightReminders = c.pull.refs(c.addr)
 	return req
 }

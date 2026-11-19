@@ -989,7 +989,7 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
 	require.False(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(DispatchModePull)}},
 	}).HasSchedulerConcurrencyLimits(), "a dispatch-only entry is not a scheduler-enforced limit")
 }
 
@@ -1003,13 +1003,13 @@ func TestActivityDispatchPull(t *testing.T) {
 	require.False(t, (&WorkflowSpec{}).ActivityDispatchPull(email))
 	require.False(t, (&WorkflowSpec{}).HasPullActivityDispatch())
 
-	appPull := &WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}
+	appPull := &WorkflowSpec{DispatchMode: new(DispatchModePull)}
 	require.True(t, appPull.ActivityDispatchPull(email))
 	require.True(t, appPull.HasPullActivityDispatch())
 
 	appPullOptOut := &WorkflowSpec{
-		ActivityDispatchMode:      new(ActivityDispatchModePull),
-		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(ActivityDispatchModeHashed)}},
+		DispatchMode:              new(DispatchModePull),
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(DispatchModeHashed)}},
 	}
 	require.False(t, appPullOptOut.ActivityDispatchPull(email), "per-name hashed overrides app-wide pull")
 	require.True(t, appPullOptOut.ActivityDispatchPull(transcode))
@@ -1018,13 +1018,39 @@ func TestActivityDispatchPull(t *testing.T) {
 	perName := &WorkflowSpec{
 		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{
 			{Name: &email, MaxConcurrent: new(int32(5))},
-			{Name: &transcode, DispatchMode: new(ActivityDispatchModePull)},
+			{Name: &transcode, DispatchMode: new(DispatchModePull)},
 		},
 	}
 	require.False(t, perName.ActivityDispatchPull(email), "an entry without dispatchMode inherits the app default")
 	require.True(t, perName.ActivityDispatchPull(transcode))
 	require.False(t, perName.ActivityDispatchPull("other"))
 	require.True(t, perName.HasPullActivityDispatch())
+}
+
+func TestHasPullDispatch(t *testing.T) {
+	email := "SendEmail"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.HasPullDispatch())
+	require.False(t, (&WorkflowSpec{}).HasPullDispatch())
+	require.True(t, (&WorkflowSpec{DispatchMode: new(DispatchModePull)}).HasPullDispatch())
+	require.False(t, (&WorkflowSpec{DispatchMode: new(DispatchModeHashed)}).HasPullDispatch())
+	require.True(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(DispatchModePull)}},
+	}).HasPullDispatch(), "a per-name activity entry alone")
+}
+
+func TestHasPullWorkflowDispatch(t *testing.T) {
+	email := "SendEmail"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.HasPullWorkflowDispatch())
+	require.False(t, (&WorkflowSpec{}).HasPullWorkflowDispatch())
+	require.True(t, (&WorkflowSpec{DispatchMode: new(DispatchModePull)}).HasPullWorkflowDispatch())
+	require.False(t, (&WorkflowSpec{DispatchMode: new(DispatchModeHashed)}).HasPullWorkflowDispatch())
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(DispatchModePull)}},
+	}).HasPullWorkflowDispatch(), "a per-name activity pull does not pull workflow turns")
 }
 
 func TestValidateWorkflowSpec(t *testing.T) {
@@ -1037,18 +1063,19 @@ func TestValidateWorkflowSpec(t *testing.T) {
 
 	require.NoError(t, conf(nil).validateWorkflowSpec())
 	require.NoError(t, conf(&WorkflowSpec{}).validateWorkflowSpec())
-	require.NoError(t, conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModeHashed)}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{DispatchMode: new(DispatchModeHashed)}).validateWorkflowSpec())
 	require.NoError(t, conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 2,
-		ActivityDispatchMode:             new(ActivityDispatchModePull),
+		MaxConcurrentWorkflowInvocations: 2,
+		DispatchMode:                     new(DispatchModePull),
 	}).validateWorkflowSpec())
 	require.NoError(t, conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 1,
-		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
-	}).validateWorkflowSpec())
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(DispatchModePull)}},
+	}).validateWorkflowSpec(), "a per-name activity pull needs no workflow cap")
 
-	err := conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validateWorkflowSpec()
-	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+	err := conf(&WorkflowSpec{DispatchMode: new("random")}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid workflow dispatchMode "random"`)
 
 	err = conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 1,
@@ -1061,8 +1088,8 @@ func TestValidateWorkflowSpec(t *testing.T) {
 	}).validateWorkflowSpec(), "duplicate limits without a dispatchMode load as before")
 
 	for _, limits := range [][]ActivityConcurrencyLimit{
-		{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}, {Name: &name}},
-		{{Name: &name}, {Name: &name, DispatchMode: new(ActivityDispatchModeHashed)}},
+		{{Name: &name, DispatchMode: new(DispatchModePull)}, {Name: &name}},
+		{{Name: &name}, {Name: &name, DispatchMode: new(DispatchModeHashed)}},
 	} {
 		err = conf(&WorkflowSpec{
 			MaxConcurrentActivityInvocations: 1,
@@ -1073,26 +1100,38 @@ func TestValidateWorkflowSpec(t *testing.T) {
 
 	err = conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 1,
-		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{DispatchMode: new(DispatchModePull)}},
 	}).validateWorkflowSpec()
 	require.ErrorContains(t, err, `dispatchMode "pull" in workflow activityConcurrencyLimits requires a name`)
 	require.False(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{DispatchMode: new(DispatchModePull)}},
 	}).HasPullActivityDispatch(), "a nameless entry can never match an activity")
 
-	err = conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}).validateWorkflowSpec()
+	err = conf(&WorkflowSpec{DispatchMode: new(DispatchModePull)}).validateWorkflowSpec()
 	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
 
 	err = conf(&WorkflowSpec{
-		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(DispatchModePull)}},
 	}).validateWorkflowSpec()
 	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
 
 	err = conf(&WorkflowSpec{
 		MaxConcurrentActivityInvocations: 0,
-		ActivityDispatchMode:             new(ActivityDispatchModePull),
+		DispatchMode:                     new(DispatchModePull),
 	}).validateWorkflowSpec()
 	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations", "zero means unset")
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 2,
+		DispatchMode:                     new(DispatchModePull),
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentWorkflowInvocations", "pull needs both caps")
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 2,
+		MaxConcurrentWorkflowInvocations: -1,
+		DispatchMode:                     new(DispatchModePull),
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentWorkflowInvocations", "a cap below one is no cap")
 }
 
 func TestLoadStandaloneConfigurationRejectsPullWithoutSlots(t *testing.T) {
@@ -1103,7 +1142,7 @@ metadata:
   name: pull
 spec:
   workflow:
-    activityDispatchMode: pull
+    dispatchMode: pull
 `), 0o600))
 	_, err := LoadStandaloneConfiguration(path)
 	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
@@ -1115,7 +1154,20 @@ metadata:
 spec:
   workflow:
     maxConcurrentActivityInvocations: 3
-    activityDispatchMode: pull
+    dispatchMode: pull
+`), 0o600))
+	_, err = LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "requires maxConcurrentWorkflowInvocations")
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 3
+    maxConcurrentWorkflowInvocations: 2
+    dispatchMode: pull
     activityConcurrencyLimits:
       - name: SendEmail
         maxConcurrent: 5
@@ -1161,6 +1213,47 @@ func TestActivityPriority(t *testing.T) {
 	check("heavy-wf", "weighted", PriorityLevelHigh, 3, "own weight beats the workflow's weight")
 	check("heavy-wf", "other", PriorityLevelHigh, 7, "weight from the calling workflow")
 	check("critical-wf", "background", PriorityLevelBackground, 5, "own values beat the workflow's")
+}
+
+func TestWorkflowPriority(t *testing.T) {
+	var nilSpec *WorkflowSpec
+	level, weight := nilSpec.WorkflowPriority("wf")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+	level, weight = (&WorkflowSpec{}).WorkflowPriority("wf")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+		Workflows: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelCritical)},
+			{Name: new("heavy-wf"), FairnessWeight: new(uint32(7))},
+			{Name: new("both-wf"), PriorityLevel: new(PriorityLevelLow), FairnessWeight: new(uint32(9))},
+		},
+		Activities: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelBackground)},
+		},
+	}}
+
+	check := func(workflow, wantLevel string, wantWeight uint32, msg string) {
+		t.Helper()
+		level, weight := spec.WorkflowPriority(workflow)
+		require.Equal(t, wantLevel, level, msg)
+		require.Equal(t, wantWeight, weight, msg)
+	}
+	check("other-wf", PriorityLevelHigh, 2, "nothing of its own: the default")
+	check("", PriorityLevelHigh, 2, "no name: the default")
+	check("critical-wf", PriorityLevelCritical, 2, "own level, weight from the default, activity entries ignored")
+	check("heavy-wf", PriorityLevelHigh, 7, "own weight, level from the default")
+	check("both-wf", PriorityLevelLow, 9, "own values beat the default")
+
+	noDefault := &WorkflowSpec{Priority: &WorkflowPriority{
+		Workflows: []NamedPriorityValues{{Name: new("heavy-wf"), FairnessWeight: new(uint32(7))}},
+	}}
+	level, weight = noDefault.WorkflowPriority("heavy-wf")
+	require.Empty(t, level, "no default leaves the level unset")
+	require.Equal(t, uint32(7), weight)
 }
 
 func TestValidateWorkflowPriority(t *testing.T) {
