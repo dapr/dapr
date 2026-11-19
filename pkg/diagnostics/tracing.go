@@ -36,6 +36,25 @@ const (
 
 var tracer trace.Tracer = otel.Tracer(tracerName)
 
+// AddTraceLogFields adds the trace and span IDs of the span in ctx to fields,
+// so that a log line can be joined to the trace exported for the same request.
+//
+// The fields are only added for a span daprd started itself and that was
+// sampled. An unsampled span is never exported, so its IDs would point at a
+// trace the backend never received. A remote span context is the caller's,
+// which is what the tracing middleware leaves in the context when no tracing
+// exporter is configured and the tracer is a no-op; logging its span ID would
+// attach daprd's duration and status code to the caller's span.
+func AddTraceLogFields(ctx context.Context, fields map[string]any) {
+	sc := diagUtils.SpanFromContext(ctx).SpanContext()
+	if !sc.IsValid() || !sc.IsSampled() || sc.IsRemote() {
+		return
+	}
+
+	fields["trace_id"] = sc.TraceID().String()
+	fields["span_id"] = sc.SpanID().String()
+}
+
 // SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
 	traceID := sc.TraceID()

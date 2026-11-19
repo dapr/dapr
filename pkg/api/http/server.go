@@ -353,10 +353,12 @@ func (s *server) useAPILogging(mux chi.Router) {
 				return
 			}
 
-			fields := make(map[string]any, 5)
+			fields := make(map[string]any, 7)
 
 			// Report duration in milliseconds
 			fields["duration"] = time.Since(start).Milliseconds()
+
+			diag.AddTraceLogFields(r.Context(), fields)
 
 			if s.config.APILoggingObfuscateURLs {
 				endpointName := endpointData.GetEndpointName()
