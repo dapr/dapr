@@ -3074,6 +3074,32 @@ func TestV1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
+	t.Run("Raise Error with valid API path", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/raiseError/fakeEvent"
+		body := []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`)
+
+		resp := fakeServer(t).DoRequest("POST", apiPath, body, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	for _, version := range []string{"v1.0-beta1", "v1.0"} {
+		t.Run("Raise Error is not exposed in "+version, func(t *testing.T) {
+			apiPath := version + "/workflows/dapr/instanceID/raiseError/fakeEvent"
+			resp := fakeServer(t).DoRequest("POST", apiPath, []byte(`{"errorType":"ExternalError"}`), nil)
+			assert.Equal(t, 404, resp.StatusCode)
+		})
+	}
+
+	t.Run("Raise Error rejects failure details without an error type", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/raiseError/fakeEvent"
+		body := []byte(`{"errorMessage":"external operation failed"}`)
+
+		resp := fakeServer(t).DoRequest("POST", apiPath, body, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.NotNil(t, resp.ErrorBody)
+	})
+
 	/////////////////////////
 	// PAUSE API TESTS //
 	/////////////////////////
@@ -3174,6 +3200,7 @@ func TestV1WorkflowStaged(t *testing.T) {
 	paths := map[string]string{
 		"terminate":   "v1.0/workflows/dapr/myInstanceID/terminate",
 		"raise event": "v1.0/workflows/dapr/myInstanceID/raiseEvent/myEvent",
+		"raise error": "v1.0-alpha1/workflows/dapr/myInstanceID/raiseError/myEvent",
 		"pause":       "v1.0/workflows/dapr/myInstanceID/pause",
 		"resume":      "v1.0/workflows/dapr/myInstanceID/resume",
 	}
@@ -3186,7 +3213,11 @@ func TestV1WorkflowStaged(t *testing.T) {
 		assert.JSONEq(t, `{"instanceID":"myInstanceID","staged":true}`, string(resp.RawBody))
 
 		for name, path := range paths {
-			resp := srv.DoRequest("POST", path, nil, nil)
+			var body []byte
+			if name == "raise error" {
+				body = []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`)
+			}
+			resp := srv.DoRequest("POST", path, body, nil)
 			assert.Equal(t, 202, resp.StatusCode, name)
 			assert.JSONEq(t, `{"staged":true}`, string(resp.RawBody), name)
 		}
@@ -3200,7 +3231,11 @@ func TestV1WorkflowStaged(t *testing.T) {
 		assert.JSONEq(t, `{"instanceID":"myInstanceID"}`, string(resp.RawBody))
 
 		for name, path := range paths {
-			resp := srv.DoRequest("POST", path, nil, nil)
+			var body []byte
+			if name == "raise error" {
+				body = []byte(`{"errorType":"ExternalError","errorMessage":"external operation failed"}`)
+			}
+			resp := srv.DoRequest("POST", path, body, nil)
 			assert.Equal(t, 202, resp.StatusCode, name)
 			assert.Equal(t, "{}", string(resp.RawBody), name)
 		}

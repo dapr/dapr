@@ -29,6 +29,7 @@ type FakeClient struct {
 	waitForWorkflowCompletionFn func(ctx context.Context, id api.InstanceID, opts ...api.FetchWorkflowMetadataOptions) (*backend.WorkflowMetadata, error)
 	terminateWorkflowFn         func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error
 	raiseEventFn                func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error
+	raiseErrorFn                func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseErrorOptions) error
 	suspendWorkflowFn           func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error
 	resumeWorkflowFn            func(ctx context.Context, id api.InstanceID, reason string, opts ...api.ResumeOptions) error
 	purgeWorkflowStateFn        func(ctx context.Context, id api.InstanceID, opts ...api.PurgeOptions) error
@@ -51,6 +52,9 @@ func NewClient() *FakeClient {
 		},
 		terminateWorkflowFn: func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error { return nil },
 		raiseEventFn: func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error {
+			return nil
+		},
+		raiseErrorFn: func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseErrorOptions) error {
 			return nil
 		},
 		suspendWorkflowFn: func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error {
@@ -96,6 +100,11 @@ func (f *FakeClient) WithRaiseEvent(fn func(ctx context.Context, id api.Instance
 	return f
 }
 
+func (f *FakeClient) WithRaiseError(fn func(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseErrorOptions) error) *FakeClient {
+	f.raiseErrorFn = fn
+	return f
+}
+
 func (f *FakeClient) WithSuspendWorkflow(fn func(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error) *FakeClient {
 	f.suspendWorkflowFn = fn
 	return f
@@ -138,6 +147,10 @@ func (f *FakeClient) TerminateWorkflow(ctx context.Context, id api.InstanceID, o
 
 func (f *FakeClient) RaiseEvent(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseEventOptions) error {
 	return f.raiseEventFn(ctx, id, eventName, opts...)
+}
+
+func (f *FakeClient) RaiseError(ctx context.Context, id api.InstanceID, eventName string, opts ...api.RaiseErrorOptions) error {
+	return f.raiseErrorFn(ctx, id, eventName, opts...)
 }
 
 func (f *FakeClient) SuspendWorkflow(ctx context.Context, id api.InstanceID, reason string, opts ...api.SuspendOptions) error {

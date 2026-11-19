@@ -83,6 +83,8 @@ var (
 	WorkflowTerminate                 = ErrorCode{"ERR_TERMINATE_WORKFLOW", "", CategoryWorkflow}           // Error terminating workflow
 	WorkflowPurge                     = ErrorCode{"ERR_PURGE_WORKFLOW", "", CategoryWorkflow}               // Error purging workflow
 	WorkflowRaiseEvent                = ErrorCode{"ERR_RAISE_EVENT_WORKFLOW", "", CategoryWorkflow}         // Error raising event in workflow
+	WorkflowRaiseError                = ErrorCode{"ERR_RAISE_ERROR_WORKFLOW", "", CategoryWorkflow}         // Error raising an error in a workflow
+	WorkflowRaiseErrorInvalidDetails  = ErrorCode{"ERR_RAISE_ERROR_WORKFLOW_INVALID_DETAILS", "", CategoryWorkflow} // Invalid workflow error details
 	WorkflowComponentMissing          = ErrorCode{"ERR_WORKFLOW_COMPONENT_MISSING", "", CategoryWorkflow}   // Missing workflow component
 	WorkflowComponentNotFound         = ErrorCode{"ERR_WORKFLOW_COMPONENT_NOT_FOUND", "", CategoryWorkflow} // Workflow component not found
 	WorkflowEventNameMissing          = ErrorCode{"ERR_WORKFLOW_EVENT_NAME_MISSING", "", CategoryWorkflow}  // Missing workflow event name

@@ -81,6 +81,7 @@ func (s *recordingServer) RaiseEvent(ctx context.Context, _ *protos.RaiseEventRe
 	return nil, nil
 }
 
+
 type captureRegistrar struct {
 	impl any
 }
@@ -154,6 +155,17 @@ func TestFallbackAwareServer_Staged(t *testing.T) {
 		},
 		"raise": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {
 			res, err := srv.RaiseEvent(ctx, &protos.RaiseEventRequest{InstanceId: "wf1", Name: "event"})
+			return res.GetStaged(), err
+		},
+		"raise error": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {
+			res, err := srv.RaiseEvent(ctx, &protos.RaiseEventRequest{
+				InstanceId: "wf1",
+				Name:       "event",
+				FailureDetails: &protos.TaskFailureDetails{
+					ErrorType:    "ExternalError",
+					ErrorMessage: "external operation failed",
+				},
+			})
 			return res.GetStaged(), err
 		},
 		"terminate": func(ctx context.Context, srv protos.TaskHubSidecarServiceServer) (bool, error) {

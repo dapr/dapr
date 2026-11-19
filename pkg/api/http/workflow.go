@@ -110,6 +110,16 @@ func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/raiseError/{eventName}",
+			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
+			Handler: a.onRaiseErrorWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "RaiseErrorWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupWorkflowV1Alpha1,
@@ -339,6 +349,31 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 
 				// We accept the HTTP request body as the payload of the workflow event
 				// without making any assumptions about its format.
+				var err error
+				in.EventData, err = io.ReadAll(r.Body)
+				if err != nil {
+					return nil, messages.ErrBodyRead.WithFormat(err)
+				}
+				return in, nil
+			},
+			SuccessStatusCode: http.StatusAccepted,
+		})
+}
+
+// Route: POST "workflows/{workflowComponent}/{instanceID}/raiseError/{eventName}"
+func (a *api) onRaiseErrorWorkflowHandler() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.RaiseErrorWorkflow,
+		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *runtimev1pb.RaiseEventWorkflowResponse]{
+			SkipInputBody: true,
+			InModifier: func(r *http.Request, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
+				in.InstanceId = chi.URLParam(r, instanceID)
+				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
+				in.EventName = chi.URLParam(r, eventName)
+				if appID := r.URL.Query().Get(workflowAppID); appID != "" {
+					in.AppId = &appID
+				}
+
 				var err error
 				in.EventData, err = io.ReadAll(r.Body)
 				if err != nil {
