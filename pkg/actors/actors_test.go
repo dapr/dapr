@@ -14,16 +14,23 @@ limitations under the License.
 package actors
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+
+	daprt "github.com/dapr/dapr/pkg/testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	inmemory "github.com/dapr/components-contrib/state/in-memory"
+	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	tablefake "github.com/dapr/dapr/pkg/actors/table/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
@@ -156,6 +163,120 @@ func TestConvergeHosting(t *testing.T) {
 	})
 }
 
+// TestConvergeBoundStores verifies that removing or reloading a bound state
+// store deactivates the actors of the actor types bound to it, and only
+// those: their in-memory state, and any state an SDK caches, may no longer
+// match the store.
+func TestConvergeBoundStores(t *testing.T) {
+	t.Parallel()
+
+	store := func(t *testing.T) contribstate.Store {
+		t.Helper()
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	// newConverge returns an actors runtime whose table records the actor
+	// types of each halt.
+	newConverge := func(t *testing.T) (*actors, *compstore.ComponentStore, *[][]string) {
+		t.Helper()
+
+		cs := compstore.New()
+		require.NoError(t, cs.AddStateStoreActor("default", store(t)))
+		cs.AddStateStore("wallet-transactions", store(t))
+		cs.AddStateStore("wallet-balance", store(t))
+
+		var halts [][]string
+		a := &actors{
+			compStore: cs,
+			stateResolver: actorstate.NewResolver(actorstate.ResolverOptions{
+				Stores: cs,
+				Bindings: map[string]string{
+					"TransactionActor": "wallet-transactions",
+					"AuditActor":       "wallet-transactions",
+					"BalanceActor":     "wallet-balance",
+				},
+			}),
+			placement: placementfake.New(),
+			table: tablefake.New().WithHaltActorTypes(func(_ context.Context, actorTypes ...string) error {
+				halts = append(halts, actorTypes)
+				return nil
+			}),
+		}
+		a.boundStores = a.currentBoundStores()
+		return a, cs, &halts
+	}
+
+	t.Run("no change is a no-op", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		// Changes to unbound stores, the default one included, are ignored.
+		cs.AddStateStore("plain", store(t))
+		cs.DeleteStateStore("default")
+		a.convergeBoundStores(t.Context())
+		assert.Empty(t, *halts)
+	})
+
+	t.Run("removing a bound store deactivates its actor types", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-transactions")
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"AuditActor", "TransactionActor"}}, *halts)
+
+		// Converging again with no further change is a no-op.
+		a.convergeBoundStores(t.Context())
+		assert.Len(t, *halts, 1)
+	})
+
+	t.Run("reloading a bound store deactivates its actor types", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		// A hot reload closes the store and adds it again, possibly against
+		// different data.
+		cs.DeleteStateStore("wallet-balance")
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"BalanceActor"}}, *halts)
+	})
+
+	// No state call of the bound types succeeded while their store was not
+	// loaded, so adding it has nothing stale to drop.
+	t.Run("adding a missing bound store back deactivates nothing", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		a.convergeBoundStores(t.Context())
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"BalanceActor"}}, *halts)
+	})
+
+	t.Run("a bound store missing at startup and added later deactivates nothing", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		a.boundStores = a.currentBoundStores()
+		cs.AddStateStore("wallet-balance", store(t))
+		a.convergeBoundStores(t.Context())
+		assert.Empty(t, *halts)
+	})
+
+	t.Run("several bound stores changing are halted together", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+
+		cs.DeleteStateStore("wallet-balance")
+		cs.DeleteStateStore("wallet-transactions")
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"AuditActor", "BalanceActor", "TransactionActor"}}, *halts)
+	})
+}
+
 func TestOnActorStateStoreChanged(t *testing.T) {
 	t.Parallel()
 
@@ -226,4 +347,111 @@ func TestWaitForReady(t *testing.T) {
 		close(a.readyCh)
 		require.ErrorIs(t, a.waitForReady(context.Background()), errDisabled)
 	})
+}
+
+func TestNew_ActorStateStoreBindings(t *testing.T) {
+	newStore := func() contribstate.Store {
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	t.Run("bound actor type resolves to its state store", func(t *testing.T) {
+		cs := compstore.New()
+		cs.AddStateStore("wallet-transactions", newStore())
+		a := New(Options{
+			CompStore:        cs,
+			ActorStateStores: map[string]string{"TransactionActor": "wallet-transactions"},
+		}).(*actors)
+
+		name, _, err := a.stateResolver.Resolve("TransactionActor")
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-transactions", name)
+	})
+
+	t.Run("no bindings uses the default actor state store slot", func(t *testing.T) {
+		a := New(Options{CompStore: compstore.New()}).(*actors)
+
+		_, _, err := a.stateResolver.Resolve("TransactionActor")
+		require.ErrorIs(t, err, messages.ErrActorRuntimeNotFound)
+	})
+}
+
+func TestWarnUnusableStateStores(t *testing.T) {
+	newStore := func() contribstate.Store {
+		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
+	}
+
+	t.Run("warns for each binding whose store cannot be used", func(t *testing.T) {
+		var buf bytes.Buffer
+		l := logger.NewLogger(t.Name())
+		l.SetOutput(&buf)
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-balance", newStore())
+		cs.AddStateStore("wallet-audit", &daprt.MockStateStore{})
+		r := actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores: cs,
+			Bindings: map[string]string{
+				"TransactionActor": "wallet-transactions",
+				"AuditActor":       "wallet-audit",
+				"BalanceActor":     "wallet-balance",
+			},
+		})
+
+		warnUnusableStateStores(l, r)
+
+		out := buf.String()
+		assert.Contains(t, out, "level=warning")
+		assert.Contains(t, out, "State operations of actor type TransactionActor will fail: actor type TransactionActor is bound to state store wallet-transactions, which is not loaded")
+		assert.Contains(t, out, `State operations of actor type AuditActor will fail: actors: state store \"wallet-audit\" bound to actor type \"AuditActor\" must support both the ETag and transactional features`)
+		assert.NotContains(t, out, "BalanceActor")
+		// The gRPC code of the API error is not part of the log line.
+		assert.NotContains(t, out, "code =")
+		// Warnings are sorted by actor type, so the output is deterministic.
+		assert.Less(t, strings.Index(out, "AuditActor"), strings.Index(out, "TransactionActor"))
+	})
+
+	t.Run("no warning when every binding resolves", func(t *testing.T) {
+		var buf bytes.Buffer
+		l := logger.NewLogger(t.Name())
+		l.SetOutput(&buf)
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-transactions", newStore())
+		r := actorstate.NewResolver(actorstate.ResolverOptions{
+			Stores:   cs,
+			Bindings: map[string]string{"TransactionActor": "wallet-transactions"},
+		})
+
+		warnUnusableStateStores(l, r)
+		assert.Empty(t, buf.String())
+	})
+}
+
+func TestLogUnhostedBindings(t *testing.T) {
+	bindings := map[string]string{
+		"transactionactor": "wallet-transactions",
+		"OrphanActor":      "wallet-orphans",
+		"BalanceActor":     "wallet-balance",
+	}
+
+	var buf bytes.Buffer
+	l := logger.NewLogger(t.Name())
+	l.SetOutput(&buf)
+
+	var logged sync.Map
+	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor", "BalanceActor"})
+
+	out := buf.String()
+	assert.Contains(t, out, `level=warning msg="Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive"`)
+	assert.Contains(t, out, `level=info msg="Actor type OrphanActor is bound to state store wallet-orphans, but this app does not host it; actor state calls this app makes for that type use the bound store"`)
+	assert.NotContains(t, out, "BalanceActor is bound")
+	assert.Less(t, strings.Index(out, "OrphanActor"), strings.Index(out, "transactionactor"))
+
+	// Each actor type is logged once, however often the app registers.
+	buf.Reset()
+	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor", "BalanceActor"})
+	logUnhostedBindings(l, &logged, bindings, nil)
+	assert.Contains(t, buf.String(), "Actor type BalanceActor is bound")
+	assert.NotContains(t, buf.String(), "OrphanActor")
+	assert.NotContains(t, buf.String(), "transactionactor")
 }
