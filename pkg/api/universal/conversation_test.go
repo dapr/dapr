@@ -1,18 +1,119 @@
 package universal
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmc/langchaingo/llms"
 
+	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/echo"
+	"github.com/dapr/components-contrib/conversation/openai"
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/ptr"
 )
+
+func TestConverseAlpha2OpenAIToolMessageContent(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content []*runtimev1pb.ConversationMessageContent
+		want    string
+	}{
+		{
+			name:    "single part",
+			content: []*runtimev1pb.ConversationMessageContent{{Text: "first part"}},
+			want:    "first part",
+		},
+		{
+			name:    "multiple parts",
+			content: []*runtimev1pb.ConversationMessageContent{{Text: "first part"}, {Text: "second part"}},
+			want:    "first part\nsecond part",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := make(chan []byte, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read completion request: %v", err)
+					return
+				}
+				requests <- body
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"choices":[{"index":0,"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}`)
+			}))
+			t.Cleanup(server.Close)
+
+			component := openai.NewOpenAI(testLogger)
+			require.NoError(t, component.Init(t.Context(), conversation.Metadata{
+				Base: metadata.Base{Properties: map[string]string{
+					"key":      "test-key",
+					"endpoint": server.URL,
+					"model":    "gpt-4o-mini",
+				}},
+			}))
+			t.Cleanup(func() { require.NoError(t, component.Close()) })
+			store := compstore.New()
+			store.AddConversation("openai", component)
+			api := &Universal{
+				logger:     testLogger,
+				resiliency: resiliency.New(nil),
+				compStore:  store,
+			}
+
+			response, err := api.ConverseAlpha2(t.Context(), &runtimev1pb.ConversationRequestAlpha2{
+				Name: "openai",
+				Inputs: []*runtimev1pb.ConversationInputAlpha2{{
+					Messages: []*runtimev1pb.ConversationMessage{
+						{MessageTypes: &runtimev1pb.ConversationMessage_OfUser{
+							OfUser: &runtimev1pb.ConversationMessageOfUser{
+								Content: []*runtimev1pb.ConversationMessageContent{{Text: "look up the result"}},
+							},
+						}},
+						{MessageTypes: &runtimev1pb.ConversationMessage_OfAssistant{
+							OfAssistant: &runtimev1pb.ConversationMessageOfAssistant{
+								ToolCalls: []*runtimev1pb.ConversationToolCalls{{
+									Id: ptr.Of("call-1"),
+									ToolTypes: &runtimev1pb.ConversationToolCalls_Function{
+										Function: &runtimev1pb.ConversationToolCallsOfFunction{Name: "lookup", Arguments: "{}"},
+									},
+								}},
+							},
+						}},
+						{MessageTypes: &runtimev1pb.ConversationMessage_OfTool{
+							OfTool: &runtimev1pb.ConversationMessageOfTool{
+								ToolId:  ptr.Of("call-1"),
+								Name:    "lookup",
+								Content: tc.content,
+							},
+						}},
+					},
+				}},
+			})
+			require.NoError(t, err, "outbound completion requests: %d", len(requests))
+			require.Len(t, requests, 1)
+			var request struct {
+				Messages []map[string]any `json:"messages"`
+			}
+			require.NoError(t, json.Unmarshal(<-requests, &request))
+			require.Len(t, request.Messages, 3)
+			require.Equal(t, "tool", request.Messages[2]["role"])
+			require.Equal(t, "call-1", request.Messages[2]["tool_call_id"])
+			require.Equal(t, tc.want, request.Messages[2]["content"])
+			require.Len(t, response.GetOutputs(), 1)
+			require.Len(t, response.GetOutputs()[0].GetChoices(), 1)
+			require.Equal(t, "done", response.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		})
+	}
+}
 
 func TestMapRoleToChatMessageType(t *testing.T) {
 	testCases := []struct {

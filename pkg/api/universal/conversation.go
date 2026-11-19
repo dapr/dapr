@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -367,7 +368,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					toolID = msg.OfTool.GetToolId()
 				}
 
-				var parts []llms.ContentPart
+				textParts := make([]string, 0, len(msg.OfTool.GetContent()))
 				for _, content := range msg.OfTool.GetContent() {
 					text := content.GetText()
 
@@ -382,13 +383,16 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						text = scrubbed[0]
 					}
 
-					toolCallResponse := llms.ToolCallResponse{
-						ToolCallID: toolID,
-						Content:    text,
-						Name:       msg.OfTool.GetName(),
-					}
+					textParts = append(textParts, text)
+				}
 
-					parts = append(parts, toolCallResponse)
+				var parts []llms.ContentPart
+				if len(textParts) > 0 {
+					parts = []llms.ContentPart{llms.ToolCallResponse{
+						ToolCallID: toolID,
+						Content:    strings.Join(textParts, "\n"),
+						Name:       msg.OfTool.GetName(),
+					}}
 				}
 
 				// handle mistral edge case on handling tool call response message
