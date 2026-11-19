@@ -97,7 +97,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		}
 	}
 
-	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName)
+	return nil, a.createActivityReminder(ctx, a.actorID, invocation, dueTime, activityName, priorityFromMetadata(req.GetMetadata()))
 }
 
 // localFastPath reports whether an activity may be driven locally: never on
