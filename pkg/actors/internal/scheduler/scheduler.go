@@ -92,6 +92,16 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 	if reminder.Pull {
 		pull = new(true)
 	}
+	var priority *schedulerv1pb.JobPriority
+	if reminder.PriorityLevel != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED || reminder.FairnessWeight > 0 {
+		priority = new(schedulerv1pb.JobPriority)
+		if reminder.PriorityLevel != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
+			priority.Level = reminder.PriorityLevel.Enum()
+		}
+		if reminder.FairnessWeight > 0 {
+			priority.FairnessWeight = new(reminder.FairnessWeight)
+		}
+	}
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name:      reminder.Name,
@@ -109,6 +119,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			Namespace:      s.namespace,
 			ConcurrencyKey: reminder.ConcurrencyKey,
 			Pull:           pull,
+			Priority:       priority,
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{

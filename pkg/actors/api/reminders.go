@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -55,6 +56,10 @@ type CreateReminderRequest struct {
 	// the actor type that has a free per-stream slot, to be executed there
 	// rather than on the placement owner. Used by pull-dispatched activities.
 	Pull bool `json:"-"`
+
+	// Order among waiting pull triggers.
+	PriorityLevel  schedulerv1pb.PriorityLevel `json:"-"`
+	FairnessWeight uint32                      `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
