@@ -36,6 +36,9 @@ cluster:
   # cause helm upgrade to fail. To grow an existing PVC, expand it directly on
   # the cluster.
   storageSize: 16Gi
+  # Leave empty to omit the StatefulSet PVC retention policy and retain PVCs.
+  # Set whenDeleted and/or whenScaled to Retain or Delete.
+  persistentVolumeClaimRetentionPolicy: {}
   inMemoryStorage: false
 
 etcdSpaceQuota: 9.2E
