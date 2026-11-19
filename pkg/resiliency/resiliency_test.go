@@ -759,3 +759,54 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 	}
 	wg.Wait()
 }
+
+// A component target can name a circuit breaker that is not defined in
+// `spec.policies.circuitBreakers`. Looking up the policy must not panic: the
+// undefined circuit breaker is skipped, the other policies of the target still apply.
+func TestComponentPolicyWithUndefinedCircuitBreaker(t *testing.T) {
+	config := &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				Timeouts: map[string]string{
+					"myTimeout": "2s",
+				},
+			},
+			Targets: resiliencyV1alpha.Targets{
+				Components: map[string]resiliencyV1alpha.ComponentPolicyNames{
+					"statestore1": {
+						Inbound: resiliencyV1alpha.PolicyNames{
+							Timeout:        "myTimeout",
+							CircuitBreaker: "undefinedCB",
+						},
+						Outbound: resiliencyV1alpha.PolicyNames{
+							Timeout:        "myTimeout",
+							CircuitBreaker: "undefinedCB",
+						},
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+
+	tests := map[string]func() *PolicyDefinition{
+		"outbound": func() *PolicyDefinition { return r.ComponentOutboundPolicy("statestore1", "Statestore") },
+		"inbound":  func() *PolicyDefinition { return r.ComponentInboundPolicy("statestore1", "Statestore") },
+	}
+	for name, fn := range tests {
+		t.Run(name, func(t *testing.T) {
+			var policy *PolicyDefinition
+			require.NotPanics(t, func() { policy = fn() })
+			assert.Nil(t, policy.cb)
+			assert.Equal(t, 2*time.Second, policy.Timeout())
+
+			called := atomic.Bool{}
+			_, err := NewRunner[any](t.Context(), policy)(func(ctx context.Context) (any, error) {
+				called.Store(true)
+				return nil, nil
+			})
+			require.NoError(t, err)
+			assert.True(t, called.Load())
+		})
+	}
+}
