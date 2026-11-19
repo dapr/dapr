@@ -630,9 +630,11 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 		r.log.Debugf("Found Endpoint Policy for %s: %+v", app, policyNames)
 		if policyNames.Timeout != "" {
 			policyDef.t = r.timeouts[policyNames.Timeout]
+			policyDef.timeoutName = policyNames.Timeout
 		}
 		if policyNames.Retry != "" {
 			policyDef.r = r.retries[policyNames.Retry]
+			policyDef.retryName = policyNames.Retry
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -652,9 +654,11 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
+				policyDef.retryName = defaultNames.Retry
 			}
 			if defaultNames.Timeout != "" {
 				policyDef.t = r.timeouts[defaultNames.Timeout]
+				policyDef.timeoutName = defaultNames.Timeout
 			}
 
 			if defaultNames.CircuitBreaker != "" {
@@ -677,6 +681,7 @@ func (r *Resiliency) EndpointPolicy(app string, endpoint string) *PolicyDefiniti
 func newCB(cbName string, template *breaker.CircuitBreaker, l logger.Logger) *breaker.CircuitBreaker {
 	cb := &breaker.CircuitBreaker{
 		Name:        cbName,
+		PolicyName:  template.Name,
 		MaxRequests: template.MaxRequests,
 		Interval:    template.Interval,
 		Timeout:     template.Timeout,
@@ -767,6 +772,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Retry != "" {
 			policyDef.r = r.retries[policyNames.Retry]
+			policyDef.retryName = policyNames.Retry
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -793,6 +799,7 @@ func (r *Resiliency) ActorPreLockPolicy(actorType string, id string) *PolicyDefi
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
 			if defaultNames.Retry != "" {
 				policyDef.r = r.retries[defaultNames.Retry]
+				policyDef.retryName = defaultNames.Retry
 			}
 			if defaultNames.CircuitBreaker != "" {
 				template, ok := r.circuitBreakers[defaultNames.CircuitBreaker]
@@ -822,12 +829,14 @@ func (r *Resiliency) ActorPostLockPolicy(actorType string, id string) *PolicyDef
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Timeout != "" {
 			policyDef.t = r.timeouts[policyNames.Timeout]
+			policyDef.timeoutName = policyNames.Timeout
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.timeoutName = defaultPolicies.Timeout
 			}
 		}
 	}
@@ -848,9 +857,11 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies.Outbound)
 		if componentPolicies.Outbound.Timeout != "" {
 			policyDef.t = r.timeouts[componentPolicies.Outbound.Timeout]
+			policyDef.timeoutName = componentPolicies.Outbound.Timeout
 		}
 		if componentPolicies.Outbound.Retry != "" {
 			policyDef.r = r.retries[componentPolicies.Outbound.Retry]
+			policyDef.retryName = componentPolicies.Outbound.Retry
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
@@ -861,9 +872,11 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.timeoutName = defaultPolicies.Timeout
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
+				policyDef.retryName = defaultPolicies.Retry
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
@@ -888,9 +901,11 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies.Inbound)
 		if componentPolicies.Inbound.Timeout != "" {
 			policyDef.t = r.timeouts[componentPolicies.Inbound.Timeout]
+			policyDef.timeoutName = componentPolicies.Inbound.Timeout
 		}
 		if componentPolicies.Inbound.Retry != "" {
 			policyDef.r = r.retries[componentPolicies.Inbound.Retry]
+			policyDef.retryName = componentPolicies.Inbound.Retry
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
@@ -901,9 +916,11 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				policyDef.t = r.timeouts[defaultPolicies.Timeout]
+				policyDef.timeoutName = defaultPolicies.Timeout
 			}
 			if defaultPolicies.Retry != "" {
 				policyDef.r = r.retries[defaultPolicies.Retry]
+				policyDef.retryName = defaultPolicies.Retry
 			}
 			if defaultPolicies.CircuitBreaker != "" {
 				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]

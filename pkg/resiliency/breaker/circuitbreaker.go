@@ -29,6 +29,9 @@ import (
 type CircuitBreaker struct {
 	// Name is the circuit breaker name.
 	Name string
+	// PolicyName is the name of the circuit breaker policy in the Resiliency
+	// spec, for log lines. Defaults to Name.
+	PolicyName string
 	// The maximum number of requests allowed to pass through when
 	// the circuit breaker is half-open.
 	// Default is 1.
@@ -107,7 +110,15 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Infof("Circuit breaker %q changed state from %s to %s", name, from, to)
+			policyName := c.PolicyName
+			if policyName == "" {
+				policyName = name
+			}
+			if to == gobreaker.StateOpen {
+				log.Warnf("Resiliency circuit breaker (%s): %q changed state from %s to %s", policyName, name, from, to)
+			} else {
+				log.Infof("Resiliency circuit breaker (%s): %q changed state from %s to %s", policyName, name, from, to)
+			}
 		},
 	})
 }
