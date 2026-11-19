@@ -77,6 +77,18 @@ func TestClusterDomainFromCNAME(t *testing.T) {
 			cname:    "kubernetes.default.svc",
 			expected: "",
 		},
+		"unrelated canonical name": {
+			cname:    "api.example.com.",
+			expected: "",
+		},
+		"service prefix without label boundary": {
+			cname:    "kubernetes.default.svc-other.cluster.local.",
+			expected: "",
+		},
+		"mixed-case service labels": {
+			cname:    "Kubernetes.Default.SVC.cluster.local.",
+			expected: "cluster.local",
+		},
 	}
 
 	for name, tc := range testCases {
