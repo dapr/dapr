@@ -14,6 +14,7 @@ limitations under the License.
 package diagnostics
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -32,6 +33,7 @@ type pathMatching struct {
 //   - If legacy is false, we match the root path to an empty string.
 //
 // All other paths in the 'paths' slice are cleaned, sorted, and registered.
+// A path that cannot be registered is logged and ignored.
 func newPathMatching(paths []string, legacy bool) *pathMatching {
 	if len(paths) == 0 {
 		return nil
@@ -43,18 +45,36 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
 
 	for _, pattern := range cleanPaths {
-		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
+		if err := register(mux, pattern); err != nil {
+			log.Errorf("Ignoring an invalid entry in 'spec.metrics.http.pathMatching': %v", err)
+		}
 	}
 
 	// Handle Legacy Root Fallback
 	if !foundRootPath {
 		if legacy {
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			if err := register(mux, "/"); err != nil {
+				log.Errorf("Ignoring the legacy root path for 'spec.metrics.http.pathMatching': %v", err)
+			}
 			pm.returnRawPath = true
 		}
 	}
 
 	return pm
+}
+
+// register adds the pattern to the mux.
+// http.ServeMux panics on a pattern it cannot parse and on a pattern that
+// overlaps one registered before, so the panic is turned into an error.
+func register(mux *http.ServeMux, pattern string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("pattern %q: %v", pattern, r)
+		}
+	}()
+
+	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
+	return nil
 }
 
 // cleanAndSortPaths takes user input paths and returns a sorted, deduplicated list
