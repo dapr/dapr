@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -396,9 +397,19 @@ func ErrorFromHTTPResponseCode(code int, detail string) error {
 	httpStatusText := http.StatusText(code)
 	respStatus := grpcStatus.New(grpcCode, httpStatusText)
 
-	// Truncate detail string longer than 64 characters
-	if len(detail) >= maxMetadataValueLen {
-		detail = detail[:maxMetadataValueLen]
+	// The detail is the body of the app's response, so it can be any bytes.
+	// Protobuf strings must be valid UTF-8, otherwise adding the error info
+	// below fails and the error info (including the HTTP status code) is lost.
+	detail = strings.ToValidUTF8(detail, string(utf8.RuneError))
+
+	// Truncate detail string longer than 64 characters, without cutting a
+	// multi-byte character in half.
+	if len(detail) > maxMetadataValueLen {
+		cut := maxMetadataValueLen
+		for cut > 0 && !utf8.RuneStart(detail[cut]) {
+			cut--
+		}
+		detail = detail[:cut]
 	}
 
 	resps, err := respStatus.WithDetails(
