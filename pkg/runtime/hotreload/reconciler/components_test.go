@@ -171,6 +171,19 @@ func (failingSecretStore) GetSecret(context.Context, secretstores.GetSecretReque
 	return secretstores.GetSecretResponse{}, errors.New("secret store unavailable")
 }
 
+// passwordFailingSecretStore is a boolSecretStore whose reads of the secret
+// "password-secret" fail.
+type passwordFailingSecretStore struct {
+	boolSecretStore
+}
+
+func (s passwordFailingSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	if req.Name == "password-secret" {
+		return secretstores.GetSecretResponse{}, errors.New("secret store unavailable")
+	}
+	return s.boolSecretStore.GetSecret(ctx, req)
+}
+
 // countingSecretStore is a boolSecretStore which counts its secret reads.
 type countingSecretStore struct {
 	boolSecretStore
@@ -338,6 +351,11 @@ func Test_components_actorStateStore(t *testing.T) {
 			return nv
 		}
 
+		failingPassword := commonapi.NameValuePair{
+			Name:         "password",
+			SecretKeyRef: commonapi.SecretKeyRef{Name: "password-secret", Key: "true"},
+		}
+
 		t.Setenv("RECONCILER_TEST_ACTOR_STORE_FALSE", "false")
 		t.Setenv("RECONCILER_TEST_ACTOR_STORE_TRUE", "true")
 
@@ -347,6 +365,9 @@ func Test_components_actorStateStore(t *testing.T) {
 			secretStore bool
 			// failingSecretStore loads it as a store whose reads fail.
 			failingSecretStore bool
+			// passwordFailingSecretStore loads it as a store whose reads
+			// of the password secret fail.
+			passwordFailingSecretStore bool
 			// appID overrides the app ID an {appID} placeholder expands to.
 			appID   string
 			skipped bool
@@ -444,6 +465,20 @@ func Test_components_actorStateStore(t *testing.T) {
 				failingSecretStore: true,
 				skipped:            true,
 			},
+			// A failed read of another entry does not decide the value.
+			"envRef resolving to false next to a password whose read fails": {
+				metadata:                   []commonapi.NameValuePair{envRef("RECONCILER_TEST_ACTOR_STORE_FALSE"), failingPassword},
+				passwordFailingSecretStore: true,
+			},
+			"secretKeyRef resolving to false next to a password whose read fails": {
+				metadata:                   []commonapi.NameValuePair{failingPassword, secretRef("false")},
+				passwordFailingSecretStore: true,
+			},
+			"secretKeyRef resolving to true next to a password whose read fails": {
+				metadata:                   []commonapi.NameValuePair{failingPassword, secretRef("true")},
+				passwordFailingSecretStore: true,
+				skipped:                    true,
+			},
 			// The processor fails the init of metadata it cannot build, which
 			// would exit daprd.
 			"podName placeholder with no pod name": {
@@ -468,6 +503,9 @@ func Test_components_actorStateStore(t *testing.T) {
 				}
 				if test.failingSecretStore {
 					cs.AddSecretStore("actorstore-secrets", failingSecretStore{})
+				}
+				if test.passwordFailingSecretStore {
+					cs.AddSecretStore("actorstore-secrets", passwordFailingSecretStore{})
 				}
 				if test.appID != "" {
 					m.meta = meta.New(meta.Options{ID: test.appID, Namespace: "test", Mode: modes.StandaloneMode})

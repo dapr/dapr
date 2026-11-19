@@ -281,6 +281,17 @@ func TestResolveResourceReportsFailedReads(t *testing.T) {
 	assert.Contains(t, err.Error(), "error getting secret error-key")
 	assert.Empty(t, unready)
 
+	// The error names the entry whose read failed.
+	two := comp("good-key")
+	two.Spec.Metadata = append(two.Spec.Metadata, commonapi.NameValuePair{
+		Name:         "b",
+		SecretKeyRef: commonapi.SecretKeyRef{Name: "error-key"},
+	})
+	_, _, err = sec.ResolveResource(t.Context(), two)
+	var rerr *ReadError
+	require.ErrorAs(t, err, &rerr)
+	assert.Equal(t, 1, rerr.Index)
+
 	// ProcessResource keeps ignoring the failure.
 	updated, unready := sec.ProcessResource(t.Context(), comp("error-key"))
 	assert.False(t, updated)
