@@ -21,6 +21,11 @@ import (
 type Target interface {
 	Ready()
 	NotReady()
+	// SetNotReadyReason records why the target is not ready. The healthz
+	// endpoint reports the reason next to the target name. It does not change
+	// readiness, it has no effect while the target is ready, and Ready clears
+	// it.
+	SetNotReadyReason(reason string)
 }
 
 type target struct {
@@ -39,4 +44,8 @@ func (t *target) NotReady() {
 	if t.ready.CompareAndSwap(true, false) {
 		t.healthz.markUnhealthy(t.name)
 	}
+}
+
+func (t *target) SetNotReadyReason(reason string) {
+	t.healthz.setNotReadyReason(t.name, reason)
 }
