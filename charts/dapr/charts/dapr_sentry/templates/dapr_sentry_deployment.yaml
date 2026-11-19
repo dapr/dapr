@@ -180,6 +180,14 @@ spec:
         - "{{ .Values.mode }}"
         - "--log-level"
         - {{ .Values.logLevel }}
+{{- with .Values.logFile }}
+        - "--log-file"
+        - {{ . | quote }}
+{{- end }}
+{{- with .Values.logOutputs }}
+        - "--log-outputs"
+        - {{ . | quote }}
+{{- end }}
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

@@ -26,6 +26,8 @@ const (
 	KeyAppID                            = "dapr.io/app-id"
 	KeyEnableProfiling                  = "dapr.io/enable-profiling"
 	KeyLogLevel                         = "dapr.io/log-level"
+	KeyLogFile                          = "dapr.io/log-file"
+	KeyLogOutputs                       = "dapr.io/log-outputs"
 	KeyAPITokenSecret                   = "dapr.io/api-token-secret" /* #nosec */
 	KeyAppTokenSecret                   = "dapr.io/app-token-secret" /* #nosec */
 	KeyLogAsJSON                        = "dapr.io/log-as-json"
