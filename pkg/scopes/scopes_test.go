@@ -227,3 +227,94 @@ func TestGetScopedTopics(t *testing.T) {
 			item.Target)
 	}
 }
+
+func TestTopicMetadataWhitespace(t *testing.T) {
+	parsers := []struct {
+		name  string
+		parse func(string) []string
+	}{
+		{
+			name: "allowed",
+			parse: func(value string) []string {
+				return GetAllowedTopics(map[string]string{AllowedTopics: value})
+			},
+		},
+		{
+			name: "protected",
+			parse: func(value string) []string {
+				return GetProtectedTopics(map[string]string{ProtectedTopics: value})
+			},
+		},
+		{
+			name: "subscription",
+			parse: func(value string) []string {
+				return GetScopedTopics(SubscriptionScopes, "app2", map[string]string{
+					SubscriptionScopes: "app1=other;\n\t app2 \r\n= " + value + ";app3=other",
+				})
+			},
+		},
+		{
+			name: "publishing",
+			parse: func(value string) []string {
+				return GetScopedTopics(PublishingScopes, "app2", map[string]string{
+					PublishingScopes: "app1=other;\n\t app2 \r\n= " + value + ";app3=other",
+				})
+			},
+		},
+	}
+	tests := []struct {
+		name  string
+		value string
+		want  []string
+	}{
+		{name: "empty", value: "", want: []string{}},
+		{name: "spaces_only", value: "   ", want: []string{}},
+		{name: "whitespace_only", value: " \t\r\n\u00a0\u2003 ", want: []string{}},
+		{name: "empty_entries", value: ",, ,\t,\n,", want: []string{}},
+		{name: "trailing_and_consecutive_commas", value: ",topic1,, topic2, ", want: []string{"topic1", "topic2"}},
+		{name: "trim_whitespace", value: "\t topic1 \r\n,\n\ttopic2\u2003,\u00a0topic3\t", want: []string{"topic1", "topic2", "topic3"}},
+		{name: "deduplicate_after_trimming", value: "topic2,\ttopic1,\ntopic2,topic1\u2003", want: []string{"topic2", "topic1"}},
+		{name: "legacy_embedded_spaces", value: "top ic1,topic 2", want: []string{"topic1", "topic2"}},
+	}
+	for _, parser := range parsers {
+		t.Run(parser.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					want := tt.want
+					if len(want) == 0 && (parser.name == "subscription" || parser.name == "publishing") {
+						// An explicit app with no topics is denied, not unscoped.
+						want = []string{""}
+					}
+					assert.Equal(t, want, parser.parse(tt.value))
+				})
+			}
+		})
+	}
+
+	for _, scope := range []string{SubscriptionScopes, PublishingScopes} {
+		t.Run(scope+"_empty_topics", func(t *testing.T) {
+			for _, value := range []string{
+				"app1=other;app2=;app3=other",
+				"app1=other;app2=,, ,;app3=other",
+			} {
+				assert.Equal(t, []string{""}, GetScopedTopics(scope, "app2", map[string]string{scope: value}))
+			}
+		})
+		t.Run(scope+"_blank_then_real_topics", func(t *testing.T) {
+			assert.Equal(t, []string{"topic1", "topic2"}, GetScopedTopics(scope, "app2", map[string]string{
+				scope: "app1=other;app2=;app2=topic1,;app2=topic2",
+			}))
+		})
+		t.Run(scope+"_real_topics_then_blank", func(t *testing.T) {
+			assert.Equal(t, []string{"topic1"}, GetScopedTopics(scope, "app2", map[string]string{
+				scope: "app1=other;app2=topic1,;app2=;app3=other",
+			}))
+		})
+		t.Run(scope, func(t *testing.T) {
+			topics := GetScopedTopics(scope, "app2", map[string]string{
+				scope: "invalid;app1=other;\n\tapp2 = ;\napp2= topic1,;\napp2=\ttopic1,topic2\n;app3=other",
+			})
+			assert.Equal(t, []string{"topic1", "topic2"}, topics)
+		})
+	}
+}
