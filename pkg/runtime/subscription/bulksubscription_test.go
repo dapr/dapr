@@ -571,6 +571,121 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
+	t.Run("bulk Subscribe events matching no route are not delivered", func(t *testing.T) {
+		rule1, err := pubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		require.NoError(t, err)
+		rawRule1, err := pubsub.CreateRoutingRule(`event == '`+data1+`'`, orders1)
+		require.NoError(t, err)
+		otherRule, err := pubsub.CreateRoutingRule(`event.type == "other"`, orders1)
+		require.NoError(t, err)
+
+		rawEntries := []contribpubsub.BulkMessageEntry{
+			{EntryId: "1111111a", Event: []byte(data1)},
+			{EntryId: "2222222b", Event: []byte(data2)},
+		}
+
+		tests := map[string]struct {
+			rules    []*pubsub.Rule
+			metadata map[string]string
+			entries  []contribpubsub.BulkMessageEntry
+			// Entry delivered on each path.
+			expected map[string]string
+		}{
+			"no default route": {
+				rules:    []*pubsub.Rule{rule1},
+				entries:  getBulkMessageEntries(2),
+				expected: map[string]string{orders1: "1111111a"},
+			},
+			"no entry matches": {
+				rules:    []*pubsub.Rule{otherRule},
+				entries:  getBulkMessageEntries(2),
+				expected: map[string]string{},
+			},
+			"default route": {
+				rules:    []*pubsub.Rule{rule1, {Path: "orders2"}},
+				entries:  getBulkMessageEntries(2),
+				expected: map[string]string{orders1: "1111111a", "orders2": "2222222b"},
+			},
+			"raw payload and no default route": {
+				rules:    []*pubsub.Rule{rawRule1},
+				metadata: map[string]string{"rawPayload": "true"},
+				entries:  rawEntries,
+				expected: map[string]string{orders1: "1111111a"},
+			},
+		}
+
+		for name, tc := range tests {
+			t.Run(name, func(t *testing.T) {
+				comp := &mockSubscribePubSub{
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
+				}
+				require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+				mockAppChannel := new(channelt.MockAppChannel)
+				mockAppChannel.Init()
+
+				for path, entryID := range tc.expected {
+					resp, _ := json.Marshal(contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{
+						{EntryId: entryID, Status: contribpubsub.Success},
+					}})
+					respInvoke := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+						WithRawDataBytes(resp).
+						WithContentType("application/json")
+					defer respInvoke.Close()
+
+					mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod(path)).Return(respInvoke, nil)
+				}
+
+				// Any other path is a delivery that should not happen.
+				respOther := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+					WithRawDataBytes([]byte(`{}`)).
+					WithContentType("application/json")
+				defer respOther.Close()
+				mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(respOther, nil)
+
+				ps, err := New(Options{
+					Resiliency: resiliency.New(log),
+					Postman: http.New(http.Options{
+						Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+					}),
+					PubSub:     &pubsub.PubsubItem{Component: comp},
+					AppID:      TestRuntimeConfigID,
+					PubSubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Route: pubsub.Subscription{
+						Rules:    tc.rules,
+						Metadata: tc.metadata,
+						BulkSubscribe: &pubsub.BulkSubscribe{
+							Enabled: true,
+						},
+					},
+				})
+				require.NoError(t, err)
+				t.Cleanup(func() {
+					ps.Stop()
+				})
+
+				_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Entries:    tc.entries,
+				})
+				require.NoError(t, err)
+
+				mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", len(tc.expected))
+				assert.Empty(t, mockAppChannel.GetInvokedRequest()[""])
+
+				expectedResponse := BulkResponseExpectation{
+					Responses: []BulkResponseEntryExpectation{
+						{EntryId: "1111111a", IsError: false},
+						{EntryId: "2222222b", IsError: false},
+					},
+				}
+				assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
+			})
+		}
+	})
+
 	t.Run("verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
@@ -1069,6 +1184,111 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type2"],
 			getExpectedExtension()["type2"], mockServer.RequestsReceived["orders2"]))
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
+	})
+
+	t.Run("GRPC - bulk Subscribe events matching no route are not delivered", func(t *testing.T) {
+		rule1, err := pubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		require.NoError(t, err)
+
+		tests := map[string]struct {
+			rules         []*pubsub.Rule
+			expectedPaths []string
+		}{
+			"no default route": {
+				rules:         []*pubsub.Rule{rule1},
+				expectedPaths: []string{orders1},
+			},
+			"catch-all rule with blank path": {
+				rules:         []*pubsub.Rule{rule1, {}},
+				expectedPaths: []string{orders1, ""},
+			},
+		}
+
+		for name, tc := range tests {
+			t.Run(name, func(t *testing.T) {
+				port, err := freeport.GetFreePort()
+				require.NoError(t, err)
+
+				reg := registry.New(registry.NewOptions())
+
+				comp := &mockSubscribePubSub{
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
+				}
+				require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+				msgArr := getBulkMessageEntries(2)
+				mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+				for _, path := range tc.expectedPaths {
+					mapResp[path] = &runtimev1pb.TopicEventBulkResponse{
+						Statuses: setBulkResponseStatus([]*runtimev1pb.TopicEventBulkResponseEntry{
+							{EntryId: msgArr[0].EntryId},
+							{EntryId: msgArr[1].EntryId},
+						}, runtimev1pb.TopicEventResponse_SUCCESS, runtimev1pb.TopicEventResponse_SUCCESS),
+					}
+				}
+				mockServer := &channelt.MockServer{
+					BulkResponsePerPath: mapResp,
+					Error:               nil,
+				}
+
+				grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
+				if grpcServer != nil {
+					// properly stop the gRPC server
+					defer grpcServer.Stop()
+				}
+
+				// create a new AppChannel and gRPC client for every test
+				g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+				mockAppChannel := channels.New(channels.Options{
+					ComponentStore:      compstore.New(),
+					Registry:            reg,
+					GlobalConfig:        new(config.Configuration),
+					AppConnectionConfig: config.AppConnectionConfig{Port: port},
+					GRPC:                g,
+				})
+				require.NoError(t, mockAppChannel.Refresh())
+
+				ps, err := New(Options{
+					Resiliency: resiliency.New(log),
+					GRPC:       g,
+					Postman:    grpc.New(grpc.Options{Channel: g}),
+					PubSub:     &pubsub.PubsubItem{Component: comp},
+					AppID:      TestRuntimeConfigID,
+					PubSubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Route: pubsub.Subscription{
+						Rules: tc.rules,
+						BulkSubscribe: &pubsub.BulkSubscribe{
+							Enabled: true,
+						},
+					},
+				})
+				require.NoError(t, err)
+				t.Cleanup(func() {
+					ps.Stop()
+				})
+
+				_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Entries:    msgArr,
+				})
+				require.NoError(t, err)
+
+				assert.Len(t, mockServer.RequestsReceived, len(tc.expectedPaths))
+				for _, path := range tc.expectedPaths {
+					assert.Contains(t, mockServer.RequestsReceived, path)
+				}
+
+				expectedResponse := BulkResponseExpectation{
+					Responses: []BulkResponseEntryExpectation{
+						{EntryId: "1111111a", IsError: false},
+						{EntryId: "2222222b", IsError: false},
+					},
+				}
+				assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
+			})
+		}
 	})
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
