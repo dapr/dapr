@@ -70,14 +70,14 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	const reason = "Operator requested termination: maintenance window"
 	emptyReason := ""
 	tests := []struct {
-		name             string
-		reason           *string
-		wantPresent      bool
-		wantCustomStatus string
+		name              string
+		reason            *string
+		wantReasonPresent bool
+		wantReason        string
 	}{
-		{name: "reason supplied", reason: &reason, wantPresent: true, wantCustomStatus: reason},
-		{name: "explicit empty reason", reason: &emptyReason, wantPresent: true, wantCustomStatus: ""},
-		{name: "reason omitted", reason: nil, wantPresent: true, wantCustomStatus: "workflow status before termination"},
+		{name: "reason supplied", reason: &reason, wantReasonPresent: true, wantReason: reason},
+		{name: "explicit empty reason", reason: &emptyReason, wantReasonPresent: true},
+		{name: "reason omitted", reason: nil},
 	}
 
 	for i, tc := range tests {
@@ -102,8 +102,9 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.GetRuntimeStatus().String())
 
-			// A supplied reason is exposed as custom status; without a reason,
-			// the custom status set by the workflow remains unchanged.
+			// Termination reason is exposed independently from the workflow's
+			// custom status. An omitted reason must not create the property,
+			// while an explicitly empty reason must remain distinguishable.
 			metadataURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s", h.workflow.Dapr().HTTPPort(), id)
 			metadataReq, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 			require.NoError(t, err)
@@ -115,11 +116,13 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 			}
 			require.NoError(t, json.NewDecoder(metadataResp.Body).Decode(&workflowMetadata))
 			require.NoError(t, metadataResp.Body.Close())
-			value, present := workflowMetadata.Properties["dapr.workflow.custom_status"]
-			assert.Equal(t, tc.wantPresent, present)
-			if tc.wantPresent {
-				assert.Equal(t, tc.wantCustomStatus, value)
+			assert.Equal(t, "workflow status before termination", workflowMetadata.Properties["dapr.workflow.custom_status"])
+			value, present := workflowMetadata.Properties["terminate_reason"]
+			assert.Equal(t, tc.wantReasonPresent, present)
+			if tc.wantReasonPresent {
+				assert.Equal(t, tc.wantReason, value)
 			}
+			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.output")
 			assert.NotContains(t, workflowMetadata.Properties, "dapr.workflow.termination_reason")
 		})
 	}
