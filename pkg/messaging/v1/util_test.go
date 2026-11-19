@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -371,6 +372,37 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
 		assert.Len(t, errInfo.GetMetadata()[errorInfoHTTPErrorMetadata], 63)
+	})
+
+	t.Run("Truncate does not split a multi-byte character", func(t *testing.T) {
+		// 40 x "é" is 80 bytes, so the cut at 63 bytes falls inside a character.
+		longMessage := strings.Repeat("é", 40)
+
+		// act
+		err := ErrorFromHTTPResponseCode(500, longMessage)
+
+		// assert
+		s, _ := status.FromError(err)
+		require.Len(t, s.Details(), 1, "the error info must not be dropped")
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "500", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		detail := errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]
+		assert.True(t, utf8.ValidString(detail))
+		assert.Equal(t, strings.Repeat("é", 31), detail)
+	})
+
+	t.Run("Message that is not valid UTF-8 keeps the error info", func(t *testing.T) {
+		// An app can answer with a binary body, for example a gzip stream.
+		err := ErrorFromHTTPResponseCode(500, "bad \xff\xfe body")
+
+		// assert
+		s, _ := status.FromError(err)
+		require.Len(t, s.Details(), 1, "the error info must not be dropped")
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "500", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		detail := errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]
+		assert.True(t, utf8.ValidString(detail))
+		assert.Equal(t, "bad � body", detail)
 	})
 }
 
