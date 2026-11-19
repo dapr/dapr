@@ -108,7 +108,25 @@ func (t *Transport) Invoke(ctx context.Context, req *internalv1pb.InternalInvoke
 		},
 	)
 	imRes, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return t.appChannel.InvokeMethod(ctx, imReq, "")
+		res, err := t.appChannel.InvokeMethod(ctx, imReq, "")
+		if err != nil {
+			return nil, err
+		}
+		if res == nil {
+			return nil, errors.New("error from actor service: response object is nil")
+		}
+
+		// Read the body fully before returning so the context isn't canceled
+		// prematurely by policyRunner, which would drop the connection and cause context canceled errors.
+		// This also ensures that if the body read fails, the resiliency policy can retry it.
+		data, err := res.RawDataFull()
+		if err != nil {
+			res.Close()
+			return nil, fmt.Errorf("failed to read response data: %w", err)
+		}
+		res.WithRawDataBytes(data)
+
+		return res, nil
 	})
 	if err != nil {
 		return nil, err
