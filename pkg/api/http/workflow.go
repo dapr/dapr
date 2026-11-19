@@ -120,26 +120,6 @@ func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/raiseError/{eventName}",
-			Version: apiVersionV1beta1,
-			Group:   endpointGroupWorkflowV1Beta1,
-			Handler: a.onRaiseErrorWorkflowHandler(),
-			Settings: endpoints.EndpointSettings{
-				Name: "RaiseErrorWorkflow",
-			},
-		},
-		{
-			Methods: []string{http.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceID}/raiseError/{eventName}",
-			Version: apiVersionV1,
-			Group:   endpointGroupWorkflowV1,
-			Handler: a.onRaiseErrorWorkflowHandler(),
-			Settings: endpoints.EndpointSettings{
-				Name: "RaiseErrorWorkflow",
-			},
-		},
-		{
-			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupWorkflowV1Alpha1,
