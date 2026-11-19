@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -31,6 +32,12 @@ var cases []Case
 type Case interface {
 	Setup(*testing.T) []framework.Option
 	Run(*testing.T, context.Context)
+}
+
+// TimeoutCase is a Case which needs a different wall clock budget than the
+// default.
+type TimeoutCase interface {
+	Timeout() time.Duration
 }
 
 // NamedCase is a test case with a searchable name.
