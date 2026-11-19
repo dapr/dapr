@@ -245,6 +245,8 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
 	if in.TerminateReason != nil {
+		// Durable Task carries termination data in its existing input payload.
+		// GetWorkflow exposes this value as terminate_reason, not workflow output.
 		opts = append(opts, api.WithRawOutput(wrapperspb.String(in.GetTerminateReason())))
 	}
 	if targetAppID != "" {
