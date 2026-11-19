@@ -254,6 +254,48 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 	}
 }
 
+func TestTerminateWorkflowPassesReasonToEngine(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+	}{
+		{name: "non-empty reason", reason: "operator requested termination"},
+		{name: "explicit empty reason", reason: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured *protos.TerminateRequest
+
+			fakeAPI := &Universal{
+				logger:     logger.NewLogger("test"),
+				resiliency: resiliency.New(nil),
+				workflowEngine: fake.New().WithClient(func() backend.TaskHubClient {
+					return fake.NewClient().WithTerminateWorkflow(func(ctx context.Context, id api.InstanceID, opts ...api.TerminateOptions) error {
+						captured = new(protos.TerminateRequest)
+						for _, opt := range opts {
+							if err := opt(captured); err != nil {
+								return err
+							}
+						}
+						return nil
+					})
+				}),
+				actors: actorsfake.New(),
+			}
+
+			_, err := fakeAPI.TerminateWorkflow(t.Context(), &runtimev1pb.TerminateWorkflowRequest{
+				WorkflowComponent: fakeComponentName,
+				InstanceId:        fakeInstanceID,
+				TerminateReason:   &tc.reason,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, captured)
+			require.Equal(t, wrapperspb.String(tc.reason), captured.GetOutput())
+		})
+	}
+}
+
 func TestRaiseEventWorkflowApi(t *testing.T) {
 	fakeEventName := "fake_event_name"
 
@@ -515,6 +557,49 @@ func TestGetWorkflowOutputOnFailure(t *testing.T) {
 				// The failure message is still surfaced through the dedicated field.
 				assert.Equal(t, errMsg, res.GetProperties()["dapr.workflow.failure.error_message"])
 			}
+		})
+	}
+}
+
+func TestGetWorkflowExposesTerminationReasonWithoutOverwritingCustomStatus(t *testing.T) {
+	const customStatus = "workflow status before termination"
+
+	tests := map[string]struct {
+		output          *wrapperspb.StringValue
+		wantReason      bool
+		wantReasonValue string
+	}{
+		"reason supplied": {
+			output:          wrapperspb.String("operator requested termination"),
+			wantReason:      true,
+			wantReasonValue: "operator requested termination",
+		},
+		"explicit empty reason": {
+			output:     wrapperspb.String(""),
+			wantReason: true,
+		},
+		"reason omitted": {},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{
+				RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+				Output:        tc.output,
+				CustomStatus:  wrapperspb.String(customStatus),
+			}, nil)
+
+			res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+			require.NoError(t, err)
+
+			assert.Equal(t, customStatus, res.GetProperties()["dapr.workflow.custom_status"])
+			reason, present := res.GetProperties()["terminate_reason"]
+			assert.Equal(t, tc.wantReason, present)
+			if tc.wantReason {
+				assert.Equal(t, tc.wantReasonValue, reason)
+			}
+			assert.NotContains(t, res.GetProperties(), "dapr.workflow.output")
+			assert.NotContains(t, res.GetProperties(), "dapr.workflow.termination_reason")
 		})
 	}
 }

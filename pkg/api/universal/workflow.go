@@ -108,11 +108,18 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 		res.Properties["dapr.workflow.input"] = metadata.GetInput().GetValue()
 	}
 
-	// A failed workflow has no successful output: durabletask-go stores the
-	// failure message in the completed-event result (surfaced here as Output),
-	// but the failure is already reported via dapr.workflow.failure.* below, so
-	// it must not also be exposed as dapr.workflow.output.
-	if metadata.Output != nil && metadata.FailureDetails == nil {
+	// Termination input is carried through durabletask-go's completed output.
+	// It is workflow metadata, not a successful workflow result, so expose it
+	// separately and keep the workflow's custom status untouched.
+	if metadata.GetRuntimeStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED {
+		if metadata.GetOutput() != nil {
+			res.Properties["terminate_reason"] = metadata.GetOutput().GetValue()
+		}
+	} else if metadata.GetOutput() != nil && metadata.GetFailureDetails() == nil {
+		// A failed workflow has no successful output: durabletask-go stores the
+		// failure message in the completed-event result (surfaced here as Output),
+		// but the failure is already reported via dapr.workflow.failure.* below,
+		// so it must not also be exposed as dapr.workflow.output.
 		res.Properties["dapr.workflow.output"] = metadata.GetOutput().GetValue()
 	}
 
@@ -237,6 +244,11 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 	}
 
 	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
+	if in.TerminateReason != nil {
+		// Durable Task carries termination data in its existing input payload.
+		// GetWorkflow exposes this value as terminate_reason, not workflow output.
+		opts = append(opts, api.WithRawOutput(wrapperspb.String(in.GetTerminateReason())))
+	}
 	if targetAppID != "" {
 		opts = append(opts, api.WithTerminateAppID(targetAppID))
 	}
