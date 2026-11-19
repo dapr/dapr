@@ -56,6 +56,8 @@ const (
 	// on the execution-claim record so a body live on the previous owner is
 	// deferred to (WorkflowsFastPath). Ignored by older hosts.
 	MetadataActivityJanitorRedispatch = "janitorRedispatch"
+	MetadataActivityPriorityLevel     = "priorityLevel"
+	MetadataActivityFairnessWeight    = "fairnessWeight"
 	MetadataPurgeRetentionCall        = "PurgeRetentionCall"
 	MetadataPurgeForce                = "PurgeForce"
 	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
