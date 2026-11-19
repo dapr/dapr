@@ -254,7 +254,7 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 	}
 }
 
-func TestTerminateWorkflowPassesReasonAsOutput(t *testing.T) {
+func TestTerminateWorkflowPassesReasonToEngine(t *testing.T) {
 	tests := []struct {
 		name   string
 		reason string
@@ -561,19 +561,47 @@ func TestGetWorkflowOutputOnFailure(t *testing.T) {
 	}
 }
 
-func TestGetWorkflowExposesTerminationReasonAsCustomStatus(t *testing.T) {
-	const reason = "operator requested termination"
+func TestGetWorkflowExposesTerminationReasonWithoutOverwritingCustomStatus(t *testing.T) {
+	const customStatus = "workflow status before termination"
 
-	fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{
-		RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
-		CustomStatus:  wrapperspb.String(reason),
-	}, nil)
+	tests := map[string]struct {
+		output          *wrapperspb.StringValue
+		wantReason      bool
+		wantReasonValue string
+	}{
+		"reason supplied": {
+			output:          wrapperspb.String("operator requested termination"),
+			wantReason:      true,
+			wantReasonValue: "operator requested termination",
+		},
+		"explicit empty reason": {
+			output:     wrapperspb.String(""),
+			wantReason: true,
+		},
+		"reason omitted": {},
+	}
 
-	res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
-	require.NoError(t, err)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeAPI := newGetWorkflowAPI(&backend.WorkflowMetadata{
+				RuntimeStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+				Output:        tc.output,
+				CustomStatus:  wrapperspb.String(customStatus),
+			}, nil)
 
-	assert.Equal(t, reason, res.GetProperties()["dapr.workflow.custom_status"])
-	assert.NotContains(t, res.GetProperties(), "dapr.workflow.termination_reason")
+			res, err := fakeAPI.GetWorkflow(t.Context(), &runtimev1pb.GetWorkflowRequest{InstanceId: fakeInstanceID})
+			require.NoError(t, err)
+
+			assert.Equal(t, customStatus, res.GetProperties()["dapr.workflow.custom_status"])
+			reason, present := res.GetProperties()["terminate_reason"]
+			assert.Equal(t, tc.wantReason, present)
+			if tc.wantReason {
+				assert.Equal(t, tc.wantReasonValue, reason)
+			}
+			assert.NotContains(t, res.GetProperties(), "dapr.workflow.output")
+			assert.NotContains(t, res.GetProperties(), "dapr.workflow.termination_reason")
+		})
+	}
 }
 
 func TestGetWorkflowRuntimeStatus(t *testing.T) {
