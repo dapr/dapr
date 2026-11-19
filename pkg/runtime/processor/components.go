@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops"
 	"github.com/dapr/dapr/pkg/runtime/processor/loops/root"
+	procsecret "github.com/dapr/dapr/pkg/runtime/processor/secret"
 )
 
 // AddPendingComponent enqueues a component init and returns a buffered chan
@@ -87,6 +88,9 @@ func (p *Processor) Close(ctx context.Context, comp compapi.Component) error {
 // processor without calling Process. It mirrors the legacy
 // processComponentAndDependents + init dance.
 func (p *Processor) initInline(ctx context.Context, comp compapi.Component) error {
+	// Warn before secret resolution so envRef is still distinguishable from
+	// a plaintext value.
+	procsecret.WarnPlaintextCredentials(&comp)
 	_, unready := p.secret.ProcessResource(ctx, &comp)
 	if unready != "" {
 		return nil
