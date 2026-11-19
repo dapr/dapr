@@ -502,7 +502,7 @@ func (c *SidecarConfig) getEnvFromSecret() (envKeys []string, envVars []corev1.E
 }
 
 func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars []corev1.EnvVar) {
-	if envString == "" {
+	if strings.TrimSpace(envString) == "" {
 		return []string{}, []corev1.EnvVar{}
 	}
 
@@ -523,17 +523,22 @@ func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars 
 		if !found {
 			continue
 		}
-		envKeys = append(envKeys, k)
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
 
 		if fromSecret {
 			secretSource := createSecretSource(v)
 			if secretSource != nil {
+				envKeys = append(envKeys, k)
 				envVars = append(envVars, corev1.EnvVar{
 					Name:      k,
 					ValueFrom: secretSource,
 				})
 			}
 		} else {
+			envKeys = append(envKeys, k)
 			envVars = append(envVars, corev1.EnvVar{
 				Name:  k,
 				Value: v,
@@ -546,18 +551,26 @@ func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars 
 
 func createSecretSource(value string) *corev1.EnvVarSource {
 	cleanValue := strings.TrimSpace(value)
+	if cleanValue == "" {
+		return nil
+	}
 
 	if strings.Contains(cleanValue, ":") {
 		nameKeyPair := strings.Split(cleanValue, ":")
 		if len(nameKeyPair) != 2 {
 			return nil
 		}
+		secretName := strings.TrimSpace(nameKeyPair[0])
+		secretKey := strings.TrimSpace(nameKeyPair[1])
+		if secretName == "" || secretKey == "" {
+			return nil
+		}
 		return &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: strings.TrimSpace(nameKeyPair[0]),
+					Name: secretName,
 				},
-				Key: strings.TrimSpace(nameKeyPair[1]),
+				Key: secretKey,
 			},
 		}
 	}
