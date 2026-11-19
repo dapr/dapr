@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -588,33 +589,46 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 	var headers []commonapi.NameValuePair
 
-	uri := strings.Builder{}
+	var base string
 
 	if appID != "" {
 		// If appID includes http(s)://, use that as base URL
 		// Otherwise, use baseAddress if this is an internal endpoint, or the base URL from the external endpoint configuration if external
 		if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
-			uri.WriteString(appID)
+			base = appID
 		} else if endpoint, ok := h.compStore.GetHTTPEndpoint(appID); ok {
-			uri.WriteString(endpoint.Spec.BaseURL)
+			base = endpoint.Spec.BaseURL
 			headers = endpoint.Spec.Headers
 		} else {
-			uri.WriteString(h.baseAddress)
+			base = h.baseAddress
 		}
 	} else {
-		uri.WriteString(h.baseAddress)
+		base = h.baseAddress
 	}
 
-	if len(method) > 0 && method[0] != '/' {
-		uri.WriteRune('/')
+	uri, err := url.Parse(base)
+	if err != nil {
+		return nil, err
 	}
-	uri.WriteString(method)
 
-	qs := req.EncodeHTTPQueryString()
-	if qs != "" {
-		uri.WriteRune('?')
-		uri.WriteString(qs)
+	uri.Fragment = ""
+	uri.RawFragment = ""
+	uri.ForceQuery = false
+
+	if len(method) > 0 {
+		if method[0] != '/' {
+			method = "/" + method
+		}
+		// Escape the method as path data and retain escapes in the base path.
+		escapedMethod := (&url.URL{Path: method}).EscapedPath()
+		basePath := uri.EscapedPath()
+		uri.RawPath = strings.TrimSuffix(basePath, "/") + escapedMethod
+		if strings.HasSuffix(basePath, "/") {
+			uri.Path = strings.TrimSuffix(uri.Path, "/")
+		}
+		uri.Path += method
 	}
+	uri.RawQuery = req.EncodeHTTPQueryString()
 
 	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
 	if err != nil {

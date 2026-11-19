@@ -46,6 +46,58 @@ type testConcurrencyHandler struct {
 	testFailed   bool
 }
 
+func TestConstructRequestReservedCharactersInMethod(t *testing.T) {
+	h := &Channel{
+		baseAddress: "http://localhost:3000/base%2F/",
+	}
+
+	tests := []struct {
+		name             string
+		method           string
+		expectedPath     string
+		expectedRawPath  string
+		expectedRawQuery string
+	}{
+		{
+			name:             "quote in method",
+			method:           `test"stream`,
+			expectedPath:     `/base//test"stream`,
+			expectedRawPath:  "/base%2F/test%22stream",
+			expectedRawQuery: "q=a%23b",
+		},
+		{
+			name:             "percent in method",
+			method:           "test%stream",
+			expectedPath:     "/base//test%stream",
+			expectedRawPath:  "/base%2F/test%25stream",
+			expectedRawQuery: "q=a%23b",
+		},
+		{
+			name:             "asterisk in method",
+			method:           "test*stream",
+			expectedPath:     "/base//test*stream",
+			expectedRawPath:  "/base%2F/test%2Astream",
+			expectedRawQuery: "q=a%23b",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := invokev1.NewInvokeMethodRequest(tt.method)
+			req.WithHTTPExtension(http.MethodGet, tt.expectedRawQuery)
+			defer req.Close()
+
+			httpReq, err := h.constructRequest(t.Context(), req, "")
+			require.NoError(t, err)
+
+			require.Equal(t, tt.expectedPath, httpReq.URL.Path)
+			require.Equal(t, tt.expectedRawPath, httpReq.URL.EscapedPath())
+			require.Equal(t, tt.expectedRawQuery, httpReq.URL.RawQuery)
+			require.Empty(t, httpReq.URL.Fragment)
+		})
+	}
+}
+
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cur := t.currentCalls.Add(1)
 
