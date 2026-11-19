@@ -16,6 +16,7 @@ package disk
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -206,7 +207,10 @@ func (m *manifestSet[T]) Swap(i, j int) {
 }
 
 func (m *manifestSet[T]) Less(i, j int) bool {
-	return m.order[i].dirIndex < m.order[j].dirIndex ||
-		m.order[i].fileIndex < m.order[j].fileIndex ||
-		m.order[i].manifestIndex < m.order[j].manifestIndex
+	a, b := m.order[i], m.order[j]
+	return cmp.Or(
+		cmp.Compare(a.dirIndex, b.dirIndex),
+		cmp.Compare(a.fileIndex, b.fileIndex),
+		cmp.Compare(a.manifestIndex, b.manifestIndex),
+	) < 0
 }
