@@ -52,7 +52,7 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 		return nil, err
 	}
 
-	querier, ok := store.(state.Querier)
+	querier, ok := stateLoader.As[state.Querier](store)
 	if !ok {
 		err = errors.StateStore(in.GetStoreName()).QueryUnsupported()
 		a.logger.Debug(err)
