@@ -66,9 +66,11 @@ func pullTurnOrchestrator(t *testing.T, opts Options) (*orchestrator, func() []*
 	}
 }
 
+const paymentsName = "payments"
+
 func workflowPriorityOf(name string) (string, uint32) {
 	switch name {
-	case "payments":
+	case paymentsName:
 		return config.PriorityLevelCritical, 6
 	case "":
 		return config.PriorityLevelLow, 2
@@ -83,7 +85,7 @@ func Test_pullTurn(t *testing.T) {
 		t.Parallel()
 		o, creates := pullTurnOrchestrator(t, Options{WorkflowDispatchPull: true, WorkflowPriority: workflowPriorityOf})
 		own := o.actorTypeBuilder.Workflow("testapp")
-		payments := "payments"
+		payments := paymentsName
 
 		for _, name := range []string{"start-es-1", "new-event-es-1", reminderNameParentNotify} {
 			req, err := o.buildReminderRequest(name, nil, time.Now(), own, &payments)
@@ -94,9 +96,9 @@ func Test_pullTurn(t *testing.T) {
 		}
 
 		// A timer takes its workflow's priority.
-		require.NoError(t, o.createTimerReminder(t.Context(), "timer-1", wrapperspb.String("payload"), time.Now(), "payments"))
+		require.NoError(t, o.createTimerReminder(t.Context(), "timer-1", wrapperspb.String("payload"), time.Now(), paymentsName))
 		// A cascade terminate takes the child's priority.
-		require.NoError(t, o.createCascadeTerminateReminder(t.Context(), childRef{instanceID: "child-1", name: "payments"}, &protos.ExecutionTerminatedEvent{}))
+		require.NoError(t, o.createCascadeTerminateReminder(t.Context(), childRef{instanceID: "child-1", name: paymentsName}, &protos.ExecutionTerminatedEvent{}))
 		// A workflow without an entry takes the default.
 		require.NoError(t, o.createTimerReminder(t.Context(), "timer-2", wrapperspb.String("payload"), time.Now(), ""))
 		got := creates()
@@ -104,7 +106,7 @@ func Test_pullTurn(t *testing.T) {
 		for _, req := range got {
 			assert.True(t, req.Pull, req.Name)
 		}
-		assert.Equal(t, "payments", *got[0].ConcurrencyKey, "a pulled timer carries the workflow name")
+		assert.Equal(t, paymentsName, *got[0].ConcurrencyKey, "a pulled timer carries the workflow name")
 		assert.Nil(t, got[2].ConcurrencyKey)
 		for _, req := range got[:2] {
 			assert.Equal(t, schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL, req.PriorityLevel, req.Name)
@@ -118,7 +120,7 @@ func Test_pullTurn(t *testing.T) {
 		t.Parallel()
 		o, _ := pullTurnOrchestrator(t, Options{WorkflowDispatchPull: true, WorkflowPriority: workflowPriorityOf})
 		own := o.actorTypeBuilder.Workflow("testapp")
-		payments := "payments"
+		payments := paymentsName
 
 		for _, name := range []string{janitorReminderName, common.ReminderPrefixActivityResult + "-abc"} {
 			req, err := o.buildReminderRequest(name, nil, time.Now(), own, &payments)
@@ -132,7 +134,7 @@ func Test_pullTurn(t *testing.T) {
 	t.Run("another app's workflow keeps its regular routing", func(t *testing.T) {
 		t.Parallel()
 		o, _ := pullTurnOrchestrator(t, Options{WorkflowDispatchPull: true, WorkflowPriority: workflowPriorityOf})
-		payments := "payments"
+		payments := paymentsName
 		req, err := o.buildReminderRequest("start-es-1", nil, time.Now(), o.actorTypeBuilder.Workflow("otherapp"), &payments)
 		require.NoError(t, err)
 		assert.False(t, req.Pull)
@@ -142,12 +144,12 @@ func Test_pullTurn(t *testing.T) {
 	t.Run("off unless configured", func(t *testing.T) {
 		t.Parallel()
 		o, creates := pullTurnOrchestrator(t, Options{WorkflowPriority: workflowPriorityOf})
-		payments := "payments"
+		payments := paymentsName
 		req, err := o.buildReminderRequest("start-es-1", nil, time.Now(), o.actorTypeBuilder.Workflow("testapp"), &payments)
 		require.NoError(t, err)
 		assert.False(t, req.Pull)
 		assert.Equal(t, schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED, req.PriorityLevel)
-		require.NoError(t, o.createTimerReminder(t.Context(), "timer-1", wrapperspb.String("payload"), time.Now(), "payments"))
+		require.NoError(t, o.createTimerReminder(t.Context(), "timer-1", wrapperspb.String("payload"), time.Now(), paymentsName))
 		require.Len(t, creates(), 1)
 		assert.False(t, creates()[0].Pull)
 	})
@@ -155,7 +157,7 @@ func Test_pullTurn(t *testing.T) {
 	t.Run("pull without a priority block leaves priority unset", func(t *testing.T) {
 		t.Parallel()
 		o, _ := pullTurnOrchestrator(t, Options{WorkflowDispatchPull: true})
-		payments := "payments"
+		payments := paymentsName
 		req, err := o.buildReminderRequest("start-es-1", nil, time.Now(), o.actorTypeBuilder.Workflow("testapp"), &payments)
 		require.NoError(t, err)
 		assert.True(t, req.Pull)

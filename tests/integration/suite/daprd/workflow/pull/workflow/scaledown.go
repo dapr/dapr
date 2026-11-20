@@ -39,7 +39,7 @@ func init() {
 	suite.Register(new(scaledown))
 }
 
-// scaledown checks removing a replica that neither holds nor runs a workflow
+// scaledown checks removing a replica that neither holds nor runs a
 // workflow turn does not stall it or later workflow turns, which go only to the remaining replicas.
 type scaledown struct {
 	sched    *scheduler.Scheduler
@@ -69,11 +69,12 @@ spec:
 		"second": new([3]atomic.Int64),
 	}
 	s.sched = scheduler.New(t)
-	opts := []workflow.Option{
+	opts := make([]workflow.Option, 0, 6)
+	opts = append(opts,
 		workflow.WithSchedulerInstance(s.sched),
 		workflow.WithSigning(false),
 		workflow.WithDaprds(3),
-	}
+	)
 	// A proxy per daprd shows which sidecar holds a workflow turn. The removed replica
 	// must not hold it either: its death would cancel the workflow turn on the owner,
 	// which then waits the scheduler's reattach grace.
@@ -160,6 +161,7 @@ func (s *scaledown) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(2), held[remaining[0]].Load()+held[remaining[1]].Load())
 		assert.Equal(c, int64(1), second[remaining[0]].Load()+second[remaining[1]].Load())
 	}, time.Second*10, time.Millisecond*10)
+	//nolint:gosec // removed is one of the three replica indexes
 	assert.Equal(t, int64(0), held[removed].Load()+second[removed].Load(), "the removed replica must not get workflow turns")
 	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+scaledownAppID)
 

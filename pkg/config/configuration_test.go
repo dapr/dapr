@@ -1238,9 +1238,9 @@ func TestWorkflowPriority(t *testing.T) {
 
 	check := func(workflow, wantLevel string, wantWeight uint32, msg string) {
 		t.Helper()
-		level, weight := spec.WorkflowPriority(workflow)
-		require.Equal(t, wantLevel, level, msg)
-		require.Equal(t, wantWeight, weight, msg)
+		gotLevel, gotWeight := spec.WorkflowPriority(workflow)
+		require.Equal(t, wantLevel, gotLevel, msg)
+		require.Equal(t, wantWeight, gotWeight, msg)
 	}
 	check("other-wf", PriorityLevelHigh, 2, "nothing of its own: the default")
 	check("", PriorityLevelHigh, 2, "no name: the default")

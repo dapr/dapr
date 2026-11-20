@@ -92,7 +92,7 @@ func (o *override) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := schedClient.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+		jobs, lerr := schedClient.ListJobs(ctx, &schedulerv1.ListJobsRequest{
 			Metadata: &schedulerv1.JobMetadata{
 				Namespace: "default", AppId: appID,
 				Target: &schedulerv1.JobTargetMetadata{
@@ -102,7 +102,7 @@ func (o *override) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
-		if !assert.NoError(col, err) {
+		if !assert.NoError(col, lerr) {
 			return
 		}
 		var found bool

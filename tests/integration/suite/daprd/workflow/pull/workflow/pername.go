@@ -113,7 +113,8 @@ func (p *pername) Run(t *testing.T, ctx context.Context) {
 
 	client := p.workflow.BackendClient(t, ctx)
 
-	var capped, free []api.InstanceID
+	capped := make([]api.InstanceID, 0, 3)
+	free := make([]api.InstanceID, 0, 2)
 	errCh := make(chan error, 5)
 	start := func(name string, i int) api.InstanceID {
 		id := api.InstanceID(fmt.Sprintf("%s-%d", name, i))

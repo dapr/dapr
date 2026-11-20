@@ -124,8 +124,8 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 	for _, id := range ids {
-		meta, err := client.WaitForWorkflowCompletion(waitCtx, id)
-		require.NoError(t, err)
+		meta, werr := client.WaitForWorkflowCompletion(waitCtx, id)
+		require.NoError(t, werr)
 		assert.True(t, api.WorkflowMetadataIsComplete(meta), string(id))
 	}
 

@@ -88,7 +88,7 @@ func (h *hashed) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := schedClient.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+		jobs, lerr := schedClient.ListJobs(ctx, &schedulerv1.ListJobsRequest{
 			Metadata: &schedulerv1.JobMetadata{
 				Namespace: "default", AppId: appID,
 				Target: &schedulerv1.JobTargetMetadata{
@@ -98,7 +98,7 @@ func (h *hashed) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
-		if !assert.NoError(col, err) {
+		if !assert.NoError(col, lerr) {
 			return
 		}
 		var found bool
@@ -121,8 +121,8 @@ func (h *hashed) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 	for _, id := range ids {
-		meta, err := client.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err)
+		meta, werr := client.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, werr)
 		assert.True(t, api.WorkflowMetadataIsComplete(meta), string(id))
 	}
 

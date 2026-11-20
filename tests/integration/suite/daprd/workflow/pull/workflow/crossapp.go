@@ -35,7 +35,7 @@ func init() {
 	suite.Register(new(crossapp))
 }
 
-// crossapp checks each app's Configuration decides whether its own workflow
+// crossapp checks each app's Configuration decides whether its own
 // workflow turns are pull: a child on a pulling app pulls, its hashed caller does not.
 type crossapp struct {
 	workflow *workflow.Workflow
@@ -117,7 +117,8 @@ func (c *crossapp) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
-		if !assert.NoError(col, err) {
+		if err != nil {
+			col.Errorf("list jobs: %v", err)
 			return nil
 		}
 		for _, job := range jobs.GetJobs() {

@@ -144,7 +144,7 @@ func (f *fairness) Run(t *testing.T, ctx context.Context) {
 			require.Fail(t, "workflow start did not return")
 		}
 	}
-	for _, id := range append(ids, hold) {
+	for _, id := range append([]api.InstanceID{hold}, ids...) {
 		meta, err := client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		assert.True(t, api.WorkflowMetadataIsComplete(meta), string(id))
