@@ -8,6 +8,7 @@
 {{- fail "global.scheduler.placement.enabled requires global.actors.serviceName=placement: another placement authority cannot take part in the handoff" }}
 {{- end }}
 {{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") (ne (include "dapr.schedulerPlacementEnabled" .) "true") }}
+{{- $raftLogClaim := eq (include "dapr_placement.raftLogVolumeClaim" .) "true" }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -105,7 +106,7 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+  {{- if and (eq .Values.cluster.forceInMemoryLog false) $raftLogClaim }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: {{ .Values.cluster.logStoreWinPath }}
@@ -146,7 +147,7 @@ spec:
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
         - {{ template "dapr_placement.initialcluster" . }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+  {{- if and (eq .Values.cluster.forceInMemoryLog false) $raftLogClaim }}
         - "--raft-logstore-path"
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
         - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-nonroot-$(PLACEMENT_ID)"
@@ -285,8 +286,7 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
-  {{- if eq .Values.cluster.forceInMemoryLog false }}
+{{- if $raftLogClaim }}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -301,6 +301,5 @@ spec:
     {{- if .Values.volumeclaims.storageClassName }}
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
-  {{- end }}
 {{- end }}
 {{- end }}
