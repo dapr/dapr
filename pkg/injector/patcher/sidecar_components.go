@@ -36,7 +36,10 @@ func (c *SidecarConfig) splitContainers() (appContainers map[int]corev1.Containe
 	componentsNames := strings.Split(c.PluggableComponents, ",")
 	isComponent := make(map[string]bool, len(componentsNames))
 	for _, name := range componentsNames {
-		isComponent[name] = true
+		trimmed := strings.TrimSpace(name)
+		if trimmed != "" {
+			isComponent[trimmed] = true
+		}
 	}
 
 	for idx, container := range c.pod.Spec.Containers {
