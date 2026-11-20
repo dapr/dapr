@@ -112,3 +112,29 @@ func build(t *testing.T, target int32, history ...*backend.HistoryEvent) *state.
 
 	return forked
 }
+
+func TestBuildChildAsIndependentWorkflow(t *testing.T) {
+	old := state.NewState(state.Options{})
+	started := startedEvent()
+	started.GetExecutionStarted().ParentInstance = &protos.ParentInstanceInfo{
+		TaskScheduledId:  4,
+		WorkflowInstance: &protos.WorkflowInstance{InstanceId: "parent"},
+	}
+	old.AddToHistory(started)
+	old.AddToHistory(taskScheduledEvent(0))
+
+	// Repeated forks must detach only the copied start event; the source is
+	// still a child, including when another rerun is requested on this host.
+	for _, id := range []string{"first", "second"} {
+		forked, err := New(Options{
+			InstanceID: "parent:0004", NewInstanceID: id, OldState: old,
+			TargetEventID: 0,
+		}).Build()
+		require.NoError(t, err)
+		require.Len(t, forked.History, 1)
+		assert.Nil(t, forked.History[0].GetExecutionStarted().GetParentInstance())
+		require.NotNil(t, started.GetExecutionStarted().GetParentInstance())
+		assert.Equal(t, "parent", started.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
+		assert.Equal(t, int32(4), started.GetExecutionStarted().GetParentInstance().GetTaskScheduledId())
+	}
+}

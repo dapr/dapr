@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -137,6 +138,14 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 	// Track activities which have not been completed yet so they are also
 	// rerun.
 	switch his.GetEventType().(type) {
+	case *protos.HistoryEvent_ExecutionStarted:
+		// A rerun is an independent instance. It must not send another
+		// completion to the source child's parent. Clone before detaching
+		// so the source history keeps its original parent relationship.
+		started := proto.Clone(his).(*protos.HistoryEvent)
+		started.GetExecutionStarted().ParentInstance = nil
+		f.newState.AddToHistory(started)
+
 	case *protos.HistoryEvent_TaskScheduled:
 		f.unfinishedActivities[his.GetEventId()] = his
 

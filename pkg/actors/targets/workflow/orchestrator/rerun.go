@@ -59,10 +59,6 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return false, status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
-	if len(ometa.ParentInstanceId) > 0 {
-		return false, status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
-	}
-
 	defer o.deactivate(o)
 
 	fork := fork.New(fork.Options{
