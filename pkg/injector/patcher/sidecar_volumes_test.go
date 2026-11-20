@@ -77,6 +77,24 @@ func TestParseVolumeMountsString(t *testing.T) {
 			},
 		},
 		{
+			testName:     "volume mount string with whitespace around the separators",
+			mountStr:     "my-mount : /tmp/mount1,\n  mount2:\t/root/mount2",
+			readOnly:     true,
+			expMountsLen: 2,
+			expMounts: []corev1.VolumeMount{
+				{
+					Name:      "my-mount",
+					MountPath: "/tmp/mount1",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "mount2",
+					MountPath: "/root/mount2",
+					ReadOnly:  true,
+				},
+			},
+		},
+		{
 			testName:     "volume mount string with invalid mounts",
 			mountStr:     "my-mount:/tmp/mount1:rw,mount2:/root/mount2,mount3",
 			readOnly:     false,
@@ -179,6 +197,16 @@ func TestGetVolumeMounts(t *testing.T) {
 				{Name: "mount1", MountPath: "/tmp/mount1", ReadOnly: true},
 				{Name: "mount2", MountPath: "/tmp/mount2", ReadOnly: true},
 				{Name: "mount4", MountPath: "/tmp/mount4", ReadOnly: false},
+			},
+		},
+		{
+			"annotations with whitespace around the separators",
+			"mount1 : /tmp/mount1",
+			"mount2 :/tmp/mount2",
+			[]string{"mount1", "mount2"},
+			[]corev1.VolumeMount{
+				{Name: "mount1", MountPath: "/tmp/mount1", ReadOnly: true},
+				{Name: "mount2", MountPath: "/tmp/mount2", ReadOnly: false},
 			},
 		},
 	}
