@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -318,6 +319,60 @@ func TestSetIdentityMetadata(t *testing.T) {
 		assert.Equal(t, []string{"caller-ns"}, req.GetMetadata()[invokev1.CallerNamespaceHeader].GetValues())
 		assert.Equal(t, []string{"callee"}, req.GetMetadata()[invokev1.CalleeIDHeader].GetValues())
 	})
+}
+
+// A router error must reach the calling daprd with the same code from
+// CallActorStream as from CallActor, since the caller retries both on the
+// same codes. A plain "remote actor moved" left as Unknown is never retried.
+func TestCallActorStreamErrorCode(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err       error
+		code      codes.Code
+		retryable bool
+	}{
+		"actor moved":       {err: errors.New("remote actor moved"), code: codes.Internal, retryable: true},
+		"other error":       {err: errors.New("boom"), code: codes.Internal},
+		"deadline exceeded": {err: fmt.Errorf("failed to lookup actor: %w", context.DeadlineExceeded), code: codes.DeadlineExceeded},
+		"status error":      {err: status.Error(codes.Unavailable, "host gone"), code: codes.Unavailable, retryable: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fakeAPI := &api{
+				Universal: universal.New(universal.Options{
+					AppID: "fakeAPI",
+					Actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+						return routerfake.New().
+							WithCallFn(func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+								return nil, tc.err
+							}).
+							WithCallStreamFn(func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
+								return tc.err
+							}), nil
+					}),
+				}),
+			}
+			server, lis := startInternalServer(fakeAPI)
+			defer server.Stop()
+			clientConn := createTestClient(lis)
+			defer clientConn.Close()
+			client := internalv1pb.NewServiceInvocationClient(clientConn)
+
+			req := &internalv1pb.InternalInvokeRequest{
+				Ver:     internalv1pb.APIVersion_V1,
+				Actor:   &internalv1pb.Actor{ActorType: "mytype", ActorId: "1"},
+				Message: &commonv1pb.InvokeRequest{Method: "foo"},
+			}
+
+			_, err := client.CallActor(t.Context(), req)
+			assert.Equal(t, tc.code, status.Code(err), "CallActor: %v", err)
+			assert.Equal(t, tc.retryable, router.IsRetryableRemoteError(err), "CallActor: %v", err)
+
+			stream, err := client.CallActorStream(t.Context(), req)
+			require.NoError(t, err)
+			_, err = stream.Recv()
+			assert.Equal(t, tc.code, status.Code(err), "CallActorStream: %v", err)
+			assert.Equal(t, tc.retryable, router.IsRetryableRemoteError(err), "CallActorStream: %v", err)
+		})
+	}
 }
 
 func TestCallLocalStream(t *testing.T) {
