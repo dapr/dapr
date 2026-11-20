@@ -140,7 +140,7 @@ func (r *refused) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		assert.GreaterOrEqual(col, r.sched.Metrics(col, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_refused_total", "app_id:"+refusedAppID), 1.0)
+			"dapr_scheduler_workflow_refused_total", "app_id:"+refusedAppID), 1.0)
 	}, time.Second*10, time.Millisecond*10)
 	r.overstate.Store(false)
 

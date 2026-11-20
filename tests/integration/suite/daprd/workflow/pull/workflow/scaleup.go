@@ -89,11 +89,11 @@ func (s *scaleup) Run(t *testing.T, ctx context.Context) {
 
 	backlog := func() float64 {
 		return s.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog", "app_id:"+scaleupAppID)
+			"dapr_scheduler_workflow_backlog", "app_id:"+scaleupAppID)
 	}
 	inflight := func() float64 {
 		return s.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_inflight", "app_id:"+scaleupAppID)
+			"dapr_scheduler_workflow_inflight", "app_id:"+scaleupAppID)
 	}
 
 	// One slot in the fleet: one workflow turn runs, two wait in the scheduler.

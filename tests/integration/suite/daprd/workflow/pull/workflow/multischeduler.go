@@ -130,7 +130,7 @@ func (m *multischeduler) Run(t *testing.T, ctx context.Context) {
 		var sum float64
 		for i := range 3 {
 			sum += m.schedulers.SchedulerN(t, i).Metrics(col, ctx).SumWithLabels(
-				"dapr_scheduler_workflow_activity_"+name, "app_id:"+multischedulerAppID)
+				"dapr_scheduler_workflow_"+name, "app_id:"+multischedulerAppID)
 		}
 		return sum
 	}

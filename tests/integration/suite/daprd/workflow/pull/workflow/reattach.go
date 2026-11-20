@@ -121,7 +121,7 @@ func (r *reattach) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	gauge := func(name string) float64 {
-		return r.sched.Metrics(t, ctx).SumWithLabels("dapr_scheduler_workflow_activity_"+name, "app_id:"+reattachAppID)
+		return r.sched.Metrics(t, ctx).SumWithLabels("dapr_scheduler_workflow_"+name, "app_id:"+reattachAppID)
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), held.Load())

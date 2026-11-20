@@ -74,7 +74,11 @@ func (d *Dispatcher) repark(f *flight, cronFn func(api.TriggerResponseResult), g
 	}
 	d.opts.ReleaseGates(gateKeys)
 	meta := f.req.Job.GetMetadata()
-	monitoring.RecordWorkflowActivityRefused(meta.GetNamespace(), meta.GetAppId(), meta.GetConcurrencyKey())
+	if isWorkflowType(f.actorType) {
+		monitoring.RecordWorkflowRefused(meta.GetNamespace(), meta.GetAppId(), meta.GetConcurrencyKey())
+	} else {
+		monitoring.RecordWorkflowActivityRefused(meta.GetNamespace(), meta.GetAppId(), meta.GetConcurrencyKey())
+	}
 	// A fresh request: a closed stream may still hold the refused one, whose
 	// hooks are now no-ops.
 	req := &loops.TriggerRequest{Job: f.req.Job, ResultFn: cronFn}

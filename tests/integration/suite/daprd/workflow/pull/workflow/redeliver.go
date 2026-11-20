@@ -123,7 +123,7 @@ func (r *redeliver) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), held.Load())
 		assert.Equal(c, int64(1), r.delivered[0].Load()+r.delivered[1].Load())
 	}, time.Second*10, time.Millisecond*10)
-	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+redeliverAppID)
+	r.workflow.Scheduler().WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+redeliverAppID)
 
 	victim := 0
 	if r.delivered[1].Load() == 1 {
@@ -137,7 +137,7 @@ func (r *redeliver) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), r.delivered[survivor].Load(), "the scheduler must deliver the lost turn to the surviving sidecar")
 	}, time.Second*60, time.Millisecond*10)
-	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+redeliverAppID)
+	r.workflow.Scheduler().WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+redeliverAppID)
 
 	close(release)
 	meta, err := clients[survivor].WaitForWorkflowCompletion(ctx, "hold")

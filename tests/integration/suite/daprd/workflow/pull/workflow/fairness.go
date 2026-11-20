@@ -128,7 +128,7 @@ func (f *fairness) Run(t *testing.T, ctx context.Context) {
 		}()
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.InDelta(c, float64(i+1), f.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-				"dapr_scheduler_workflow_activity_backlog", "app_id:"+fairnessAppID), 0)
+				"dapr_scheduler_workflow_backlog", "app_id:"+fairnessAppID), 0)
 		}, time.Second*10, time.Millisecond*10)
 	}
 	lock.Lock()

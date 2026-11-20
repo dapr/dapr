@@ -102,7 +102,7 @@ func (a *allgone) Run(t *testing.T, ctx context.Context) {
 
 	backlog := func() float64 {
 		return a.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog", "app_id:"+allgoneAppID)
+			"dapr_scheduler_workflow_backlog", "app_id:"+allgoneAppID)
 	}
 
 	// The only slot is held, so plain's first turn waits. Its start fails

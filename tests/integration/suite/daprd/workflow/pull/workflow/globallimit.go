@@ -113,7 +113,7 @@ func (g *globallimit) Run(t *testing.T, ctx context.Context) {
 
 	backlog := func() float64 {
 		return g.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog", "app_id:"+globallimitAppID)
+			"dapr_scheduler_workflow_backlog", "app_id:"+globallimitAppID)
 	}
 
 	// Four slots on the sidecar, but the global cap admits two workflow turns.

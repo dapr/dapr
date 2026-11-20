@@ -128,7 +128,7 @@ func (h *hashed) Run(t *testing.T, ctx context.Context) {
 
 	// Hashed dispatch never parks a workflow turn in the scheduler.
 	for key := range h.workflow.Scheduler().Metrics(t, ctx).All() {
-		assert.NotContains(t, key, "workflow_activity_backlog")
+		assert.NotContains(t, key, "workflow_backlog")
 	}
 
 	require.NoError(t, client.TerminateWorkflow(ctx, waits))

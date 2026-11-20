@@ -112,7 +112,7 @@ func (s *slots) Run(t *testing.T, ctx context.Context) {
 
 	backlog := func() float64 {
 		return s.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog", "app_id:"+slotsAppID)
+			"dapr_scheduler_workflow_backlog", "app_id:"+slotsAppID)
 	}
 
 	// Two slots and four workflows: two hold a slot, two have a workflow turn waiting.

@@ -104,9 +104,9 @@ func (b *backlog) Run(t *testing.T, ctx context.Context) {
 
 	backlogGauge := func() float64 {
 		return b.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog",
+			"dapr_scheduler_workflow_backlog",
 			"app_id:"+backlogAppID,
-			"activity_name:hold",
+			"workflow_name:hold",
 		)
 	}
 

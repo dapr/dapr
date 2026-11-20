@@ -163,7 +163,7 @@ func (s *scaledown) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 	//nolint:gosec // removed is one of the three replica indexes
 	assert.Equal(t, int64(0), held[removed].Load()+second[removed].Load(), "the removed replica must not get workflow turns")
-	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+scaledownAppID)
+	s.workflow.Scheduler().WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+scaledownAppID)
 
 	close(release["second"])
 	meta, err = clients[remaining[0]].WaitForWorkflowCompletion(ctx, "second")

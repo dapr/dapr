@@ -110,7 +110,7 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
 			assert.InDelta(col, want, o.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-				"dapr_scheduler_workflow_activity_backlog", "app_id:"+orderAppID), 0)
+				"dapr_scheduler_workflow_backlog", "app_id:"+orderAppID), 0)
 		}, time.Second*10, time.Millisecond*10)
 	}
 	errCh := make(chan error, 2)

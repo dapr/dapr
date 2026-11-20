@@ -137,7 +137,7 @@ func (c *capabilityoff) Run(t *testing.T, ctx context.Context) {
 	}
 	inflight := func() float64 {
 		return c.sched.Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_inflight", "app_id:"+capabilityoffAppID)
+			"dapr_scheduler_workflow_inflight", "app_id:"+capabilityoffAppID)
 	}
 
 	client := c.workflow.BackendClient(t, ctx)
@@ -145,7 +145,7 @@ func (c *capabilityoff) Run(t *testing.T, ctx context.Context) {
 	first, err := client.ScheduleNewWorkflow(ctx, "hold")
 	require.NoError(t, err)
 	waitHeld(first)
-	c.sched.WaitUntilPullInflight(t, ctx, 1, "app_id:"+capabilityoffAppID)
+	c.sched.WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+capabilityoffAppID)
 	assert.False(t, c.logline.Contains(logLine))
 
 	c.off.Store(true)

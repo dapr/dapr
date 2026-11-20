@@ -105,7 +105,7 @@ func (w *workerdisconnect) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), held[0].Load())
 	}, time.Second*10, time.Millisecond*10)
-	w.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+workerdisconnectAppID)
+	w.workflow.Scheduler().WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+workerdisconnectAppID)
 
 	// Replica 0's only slot is held, so plain's first turn waits even though
 	// replica 1 is idle.
@@ -117,7 +117,7 @@ func (w *workerdisconnect) Run(t *testing.T, ctx context.Context) {
 	}()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, 1.0, w.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog", "app_id:"+workerdisconnectAppID), 0)
+			"dapr_scheduler_workflow_backlog", "app_id:"+workerdisconnectAppID), 0)
 	}, time.Second*10, time.Millisecond*10)
 	assert.Equal(t, int64(0), ran[0].Load()+ran[1].Load(), "plain must wait for replica 0's slot")
 

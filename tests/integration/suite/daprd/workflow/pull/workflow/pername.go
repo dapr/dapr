@@ -134,9 +134,9 @@ func (p *pername) Run(t *testing.T, ctx context.Context) {
 
 	backlog := func() float64 {
 		return p.workflow.Scheduler().Metrics(t, ctx).SumWithLabels(
-			"dapr_scheduler_workflow_activity_backlog",
+			"dapr_scheduler_workflow_backlog",
 			"app_id:"+pernameAppID,
-			"activity_name:capped",
+			"workflow_name:capped",
 		)
 	}
 

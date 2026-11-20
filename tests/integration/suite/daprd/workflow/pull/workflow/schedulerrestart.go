@@ -106,7 +106,7 @@ func (s *schedulerrestart) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 		assert.EventuallyWithT(t, func(col *assert.CollectT) {
 			assert.InDelta(col, want, s.workflow.Scheduler().Metrics(col, ctx).SumWithLabels(
-				"dapr_scheduler_workflow_activity_backlog", "app_id:"+schedulerrestartAppID), 0)
+				"dapr_scheduler_workflow_backlog", "app_id:"+schedulerrestartAppID), 0)
 		}, time.Second*10, time.Millisecond*10)
 	}
 

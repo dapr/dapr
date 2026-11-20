@@ -113,7 +113,7 @@ func (s *schedulerplacement) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 10):
 		require.Fail(t, "hold turn not held")
 	}
-	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:"+schedulerplacementAppID)
+	s.workflow.Scheduler().WaitUntilWorkflowPullInflight(t, ctx, 1, "app_id:"+schedulerplacementAppID)
 
 	// The other slots keep serving turns while hold has one.
 	ids := make([]api.InstanceID, 6)
