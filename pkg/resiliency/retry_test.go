@@ -53,9 +53,29 @@ func TestResiliencyFunctions(t *testing.T) {
 			expectedRetry: []bool{true, true, true, false, true, true, true},
 		},
 		{
+			name: "TestRetryOnHttpCodeWithWhitespace",
+			matching: &resiliencyv1alpha.RetryMatching{
+				HTTPStatusCodes: " 200, 201 , 202, 203, 204, 300 - 309 , 400 , 500, 505 - 509 ",
+			},
+			expectError:   false,
+			protocol:      protocolHTTP,
+			testCodes:     []int32{200, 204, 300, 310, 400, 500, 509},
+			expectedRetry: []bool{true, true, true, false, true, true, true},
+		},
+		{
 			name: "TestRetryOnGrpcCode",
 			matching: &resiliencyv1alpha.RetryMatching{
 				GRPCStatusCodes: "2,8-10,11,13-15",
+			},
+			expectError:   false,
+			protocol:      protocolGRPC,
+			testCodes:     []int32{2, 3, 4, 5, 6, 10, 11, 12, 13},
+			expectedRetry: []bool{true, false, false, false, false, true, true, false, true},
+		},
+		{
+			name: "TestRetryOnGrpcCodeWithWhitespace",
+			matching: &resiliencyv1alpha.RetryMatching{
+				GRPCStatusCodes: " 2, 8 - 10 , 11 , 13 - 15 ",
 			},
 			expectError:   false,
 			protocol:      protocolGRPC,
