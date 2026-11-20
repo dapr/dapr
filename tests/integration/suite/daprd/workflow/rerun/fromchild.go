@@ -63,6 +63,7 @@ func (f *fromchild) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, "abc")
 	require.NoError(t, err)
 
+	// Child instances are accepted, but a completion event is not replayable.
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("def"), 0)
-	assert.Equal(t, status.Error(codes.InvalidArgument, "'def': cannot rerun from child-workflows"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '0' is not an event that can be rerun"), err)
 }

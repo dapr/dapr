@@ -84,9 +84,13 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 
-	_, err = client.RerunWorkflowFromEvent(ctx, id, 1)
+	newID, err = client.RerunWorkflowFromEvent(ctx, id, 1)
 	require.NoError(t, err)
-	_, err = client.RerunWorkflowFromEvent(ctx, id, 2)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
+	require.NoError(t, err)
+	newID, err = client.RerunWorkflowFromEvent(ctx, id, 2)
+	require.NoError(t, err)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 3)
 	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '3' is not an event that can be rerun"), err)
@@ -96,25 +100,23 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 4)
 	assert.Equal(t, status.Error(codes.NotFound, "does not have history event with ID '4'"), err)
 
-	// Target the sub-orchestration instance IDs.
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001"), 0)
-	require.Error(t, err)
-	serr, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
-	assert.Equal(t, "'abc:0001': cannot rerun from child-workflows", serr.Message())
-
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0002"), 0)
-	require.Error(t, err)
-	serr, ok = status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
-	assert.Equal(t, "'abc:0002': cannot rerun from child-workflows", serr.Message())
-
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc:0001:0001"), 0)
-	require.Error(t, err)
-	serr, ok = status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument.String(), serr.Code().String())
-	assert.Equal(t, "'abc:0001:0001': cannot rerun from child-workflows", serr.Message())
+	// Target children and a grandchild directly. Only the chosen subtree
+	// executes; the original parent receives no second completion.
+	for _, tc := range []struct {
+		id         string
+		activities int64
+	}{
+		{"abc:0001", 2},
+		{"abc:0002", 1},
+		{"abc:0001:0001", 1},
+	} {
+		act.Store(0)
+		rerunID, rerunErr := client.RerunWorkflowFromEvent(ctx, api.InstanceID(tc.id), 0)
+		require.NoError(t, rerunErr)
+		meta, waitErr := client.WaitForWorkflowCompletion(ctx, rerunID)
+		require.NoError(t, waitErr)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+		assert.Empty(t, meta.GetParentInstanceId())
+		assert.Equal(t, tc.activities, act.Load())
+	}
 }
