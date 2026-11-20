@@ -730,8 +730,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}).(*outboxImpl)
 		o.cloudEventExtractorFn = extractCloudEventProperty
 
-		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
-			return psMock, true
+		o.getPubsubFn = func(s string) (*PubsubItem, bool) {
+			return &PubsubItem{Component: psMock}, true
 		}
 		o.getStateFn = func(s string) (state.Store, bool) {
 			return stateMock, true
@@ -848,8 +848,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			return psMock.Publish(ctx, pr)
 		}).(*outboxImpl)
 
-		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
-			return psMock, true
+		o.getPubsubFn = func(s string) (*PubsubItem, bool) {
+			return &PubsubItem{Component: psMock}, true
 		}
 		o.getStateFn = func(s string) (state.Store, bool) {
 			return nil, false
@@ -893,8 +893,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			return psMock.Publish(ctx, pr)
 		}).(*outboxImpl)
 
-		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
-			return psMock, true
+		o.getPubsubFn = func(s string) (*PubsubItem, bool) {
+			return &PubsubItem{Component: psMock}, true
 		}
 		o.getStateFn = func(s string) (state.Store, bool) {
 			return stateMock, true
@@ -1019,8 +1019,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			return psMock.Publish(ctx, pr)
 		}).(*outboxImpl)
 
-		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
-			return psMock, true
+		o.getPubsubFn = func(s string) (*PubsubItem, bool) {
+			return &PubsubItem{Component: psMock}, true
 		}
 		o.getStateFn = func(s string) (state.Store, bool) {
 			return stateMock, true
@@ -1160,7 +1160,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			published.Store(true)
 			return nil
 		}).(*outboxImpl)
-		o.getPubsubFn = func(string) (contribPubsub.PubSub, bool) { return psMock, true }
+		o.getPubsubFn = func(string) (*PubsubItem, bool) { return &PubsubItem{Component: psMock}, true }
 		o.getStateFn = func(string) (state.Store, bool) { return stateMock, true }
 		o.AddOrUpdateOutbox(outboxComp)
 		require.NoError(t, o.SubscribeToInternalTopics(t.Context(), "test"))
@@ -1186,7 +1186,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			contentType = pr.ContentType
 			return nil
 		}).(*outboxImpl)
-		o.getPubsubFn = func(string) (contribPubsub.PubSub, bool) { return psMock, true }
+		o.getPubsubFn = func(string) (*PubsubItem, bool) { return &PubsubItem{Component: psMock}, true }
 		o.getStateFn = func(string) (state.Store, bool) { return stateMock, true }
 		o.AddOrUpdateOutbox(outboxComp)
 		require.NoError(t, o.SubscribeToInternalTopics(t.Context(), "test"))
@@ -1198,6 +1198,20 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		require.NotNil(t, contentType)
 		assert.Equal(t, contribPubsub.DefaultCloudEventDataContentType, *contentType)
 		assert.Equal(t, id, <-stateMock.deletedKey)
+	})
+
+	t.Run("namespace scoped pubsub subscribes to the topic with the namespace prefix the adapter adds", func(t *testing.T) {
+		// The pubsub adapter publishes the internal message of a namespace
+		// scoped pubsub to the namespace prefixed topic.
+		psMock := &outboxPubsubMock{expectedOutboxTopic: "default" + outboxTopic("test", "1", "default"), t: t}
+		o := newTestOutbox(nil).(*outboxImpl)
+		o.namespace = "default"
+		o.getPubsubFn = func(string) (*PubsubItem, bool) {
+			return &PubsubItem{Component: psMock, NamespaceScoped: true}, true
+		}
+		o.AddOrUpdateOutbox(outboxComp)
+		require.NoError(t, o.SubscribeToInternalTopics(t.Context(), "test"))
+		assert.NotNil(t, psMock.handler)
 	})
 }
 
