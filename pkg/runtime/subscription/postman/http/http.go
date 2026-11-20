@@ -318,17 +318,17 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 				switch response.Status {
 				case "":
-					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
+					// Consider empty status field as success
 					fallthrough
+				case contribpubsub.Success:
+					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Success, 1)
+					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Retry:
 					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, 1)
 					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 
 					hasAnyError = true
-				case contribpubsub.Success:
-					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Success, 1)
-					todo.AddBulkResponseEntry(&bsrr.Entries, response.EntryId, nil)
 				case contribpubsub.Drop:
 					bscData.BulkSubDiag.AddStatusCount(contribpubsub.Drop, 1)
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
