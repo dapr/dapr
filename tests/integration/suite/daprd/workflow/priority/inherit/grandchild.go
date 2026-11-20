@@ -95,8 +95,8 @@ func (g *grandchild) Run(t *testing.T, ctx context.Context) {
 
 	sched := g.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := g.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := g.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// child and grandchild have no config entry, so parent's critical 6 is inherited by the grandchild.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())

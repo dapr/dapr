@@ -132,8 +132,8 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool { return activityAttempts.Load() == 2 }, time.Second*10, time.Millisecond*10)
 	sched := r.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := r.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
+		jobs, listErr := r.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
 			meta := jobs[0].GetMetadata()
 			// The retried flaky keeps parent's config entry critical 6.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())
@@ -153,8 +153,8 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool { return childAttempts.Load() >= 2 }, time.Second*10, time.Millisecond*10)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := r.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
+		jobs, listErr := r.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1, "only the retried attempt is scheduled") {
 			meta := jobs[0].GetMetadata()
 			// The retried flaky-child inherits parent's critical 6.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())

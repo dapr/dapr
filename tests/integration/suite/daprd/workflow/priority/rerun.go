@@ -125,8 +125,8 @@ func (r *rerun) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	for _, id := range []api.InstanceID{"entry", "start"} {
-		meta, err := client.WaitForWorkflowCompletion(ctx, id)
-		require.NoError(t, err)
+		meta, waitErr := client.WaitForWorkflowCompletion(ctx, id)
+		require.NoError(t, waitErr)
 		require.True(t, api.WorkflowMetadataIsComplete(meta), string(id))
 	}
 

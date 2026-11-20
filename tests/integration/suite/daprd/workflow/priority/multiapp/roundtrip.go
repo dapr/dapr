@@ -107,8 +107,8 @@ func (r *roundtrip) Run(t *testing.T, ctx context.Context) {
 
 	sched := r.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := r.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := r.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// grandchild is back on app 0, started by child on app 1, and parent's critical 6 is inherited.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_CRITICAL, meta.GetPriority().GetLevel())

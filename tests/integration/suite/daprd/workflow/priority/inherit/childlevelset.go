@@ -94,8 +94,8 @@ func (c *childlevelset) Run(t *testing.T, ctx context.Context) {
 
 	sched := c.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := c.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := c.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// child's config entry sets low but no weight, so parent's weight 6 is inherited instead of the default's 2.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriority().GetLevel())

@@ -86,8 +86,8 @@ func (s *weightonly) Run(t *testing.T, ctx context.Context) {
 
 	sched := s.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := s.workflow.ListActivityReminders(ctx, sched, 0)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := s.workflow.ListActivityReminders(ctx, sched, 0)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// The start value sets weight 4 but no level, so the default's high applies.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, meta.GetPriority().GetLevel())

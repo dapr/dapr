@@ -100,8 +100,8 @@ func (c *callerdefaultactivity) Run(t *testing.T, ctx context.Context) {
 
 	sched := c.workflow.SchedulerClientN(t, ctx, 1)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := c.workflow.ListActivityReminders(ctx, sched, 1)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := c.workflow.ListActivityReminders(ctx, sched, 1)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// parent has no config entry on app 0, so app 0's default high 3 is inherited and beats app 1's default.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_HIGH, meta.GetPriority().GetLevel())

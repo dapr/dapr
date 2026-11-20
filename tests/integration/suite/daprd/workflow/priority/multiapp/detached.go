@@ -109,8 +109,8 @@ func (d *detached) Run(t *testing.T, ctx context.Context) {
 	sched := d.workflow.SchedulerClientN(t, ctx, 1)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := d.workflow.ListActivityReminders(ctx, sched, 1)
-		if assert.NoError(col, err) && assert.Len(col, jobs, 1) {
+		jobs, listErr := d.workflow.ListActivityReminders(ctx, sched, 1)
+		if assert.NoError(col, listErr) && assert.Len(col, jobs, 1) {
 			meta := jobs[0].GetMetadata()
 			// A detached workflow has no parent, so app 1's default low 2 applies.
 			assert.Equal(col, schedulerv1.PriorityLevel_PRIORITY_LEVEL_LOW, meta.GetPriority().GetLevel())

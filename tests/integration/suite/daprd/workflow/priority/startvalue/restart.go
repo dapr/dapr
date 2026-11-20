@@ -114,8 +114,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	sched0 := r.workflow.SchedulerClientN(t, ctx, 0)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := r.workflow.ListActivityReminders(ctx, sched0, 0)
-		if !assert.NoError(col, err) {
+		jobs, listErr := r.workflow.ListActivityReminders(ctx, sched0, 0)
+		if !assert.NoError(col, listErr) {
 			return
 		}
 		got := make(map[string]string, len(jobs))
@@ -140,8 +140,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		jobs, err := r.workflow.ListActivityReminders(ctx, sched0, 0)
-		if !assert.NoError(col, err) {
+		jobs, listErr := r.workflow.ListActivityReminders(ctx, sched0, 0)
+		if !assert.NoError(col, listErr) {
 			return
 		}
 		got := make(map[string]string, len(jobs))
