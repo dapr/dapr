@@ -445,8 +445,6 @@ github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459/go.mod h1:CQthfP
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/cicoyle/durabletask-go v0.0.0-20261117225144-88380d20a80b h1:p9Tq3ck8JbHEpLMinCLmlqCy6laEA5x4V6c5XBb8MkM=
-github.com/cicoyle/durabletask-go v0.0.0-20261117225144-88380d20a80b/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/cinience/go_rocketmq v0.0.2 h1:HZkcQ2wfwZeigkpUs71Gojp/WRiBzkz2uezrOFquh08=
 github.com/cinience/go_rocketmq v0.0.2/go.mod h1:2YNY7emT546dcFpMEWLesmAEi4ndW7+tX5VfNf1Zsgs=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
@@ -525,8 +523,8 @@ github.com/dapr/components-contrib v1.19.1-0.20261118141753-ffdb9bfca6d6 h1:egjW
 github.com/dapr/components-contrib v1.19.1-0.20261118141753-ffdb9bfca6d6/go.mod h1:bqhLe5flhvy4n0jd0uns0RGHc0u5FyknHArjZBYNL+U=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.16.1-0.20261109153237-98658f38d8cb h1:7ZRhGooLkfaKKgnkWDl+Oc/KX6iatOTnvhP6zKuA1Xc=
-github.com/dapr/durabletask-go v0.16.1-0.20261109153237-98658f38d8cb/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
+github.com/dapr/durabletask-go v0.16.1-0.20261120153547-5b59a41fee4e h1:cqGtOa3CIW38IMkE5CT2+BiSrA7qry3/9iK3keRqTak=
+github.com/dapr/durabletask-go v0.16.1-0.20261120153547-5b59a41fee4e/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4 h1:VKGjNTbRKRSfhvDestGRoCmBa0zw53/oXNbP3HQp1PU=
 github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
