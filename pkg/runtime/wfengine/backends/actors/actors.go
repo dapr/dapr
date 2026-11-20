@@ -114,11 +114,15 @@ type Options struct {
 	// keeps its context.
 	GracefulShutdownDuration time.Duration
 	// ActivityDispatchPull resolves whether an activity name is
-	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
+	// pull-dispatched (Configuration spec.workflow dispatchMode and
 	// per-name overrides). Nil means never.
 	ActivityDispatchPull func(activityName string) bool
 	// ActivityPriority returns an activity's level name and weight. Nil means none.
 	ActivityPriority func(workflowName, activityName string) (string, uint32)
+	// WorkflowDispatchPull marks workflow turn reminders pull.
+	WorkflowDispatchPull bool
+	// WorkflowPriority returns a workflow's level name and weight. Nil means none.
+	WorkflowPriority func(workflowName string) (string, uint32)
 
 	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
 	// same value the engine's activity worker is limited to. 0 means no cap.
@@ -163,6 +167,8 @@ type Actors struct {
 	gracefulShutdownDuration        time.Duration
 	activityDispatchPull            func(activityName string) bool
 	activityPriority                func(workflowName, activityName string) (string, uint32)
+	workflowDispatchPull            bool
+	workflowPriority                func(workflowName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
 	// activityCommitted counts activity work items handed to the engine and
@@ -312,6 +318,8 @@ func New(opts Options) (*Actors, error) {
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		activityDispatchPull:            opts.ActivityDispatchPull,
 		activityPriority:                opts.ActivityPriority,
+		workflowDispatchPull:            opts.WorkflowDispatchPull,
+		workflowPriority:                opts.WorkflowPriority,
 		pendingCompletions:              pendingCompletions,
 		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
@@ -372,6 +380,8 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
 		ActivityPriority:       abe.activityPriority,
+		WorkflowDispatchPull:   abe.workflowDispatchPull,
+		WorkflowPriority:       abe.workflowPriority,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 

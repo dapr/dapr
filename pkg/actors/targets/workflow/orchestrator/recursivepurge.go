@@ -126,6 +126,7 @@ func (o *orchestrator) invokeRecursivePurge(ctx context.Context, actorType, inst
 type childRef struct {
 	instanceID  string
 	targetAppID string
+	name        string
 }
 
 // isRemoteApp reports whether appID names an app other than this one. An
@@ -158,7 +159,7 @@ func collectChildren(events []*backend.HistoryEvent) []childRef {
 			continue
 		}
 		seen[c.GetInstanceId()] = struct{}{}
-		ref := childRef{instanceID: c.GetInstanceId()}
+		ref := childRef{instanceID: c.GetInstanceId(), name: c.GetName()}
 		if r := e.GetRouter(); r != nil {
 			ref.targetAppID = r.GetTargetAppID()
 		}

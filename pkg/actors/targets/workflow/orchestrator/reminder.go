@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -331,7 +332,7 @@ func (o *orchestrator) buildReminderRequest(reminderName string, data proto.Mess
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
-	return &actorapi.CreateReminderRequest{
+	req := &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
@@ -340,7 +341,45 @@ func (o *orchestrator) buildReminderRequest(reminderName string, data proto.Mess
 		// One shot, retry forever, jittered interval.
 		FailurePolicy:  common.RetryForeverPolicy(),
 		ConcurrencyKey: concurrencyKey,
-	}, nil
+	}
+	var workflowName string
+	if concurrencyKey != nil {
+		workflowName = *concurrencyKey
+	}
+	o.pullTurn(req, workflowName)
+	return req, nil
+}
+
+// isTurnReminder reports whether the reminder runs a workflow turn.
+// The janitor shares the new-event prefix but runs no turn.
+func isTurnReminder(name string) bool {
+	if name == janitorReminderName {
+		return false
+	}
+	return strings.HasPrefix(name, reminderPrefixStart) ||
+		strings.HasPrefix(name, reminderPrefixNewEvent) ||
+		strings.HasPrefix(name, reminderPrefixTimer) ||
+		name == reminderCascadeTerminate ||
+		name == reminderNameParentNotify
+}
+
+// pullTurn marks a turn reminder pull, with the workflow's name and priority.
+// Another app's workflow keeps its regular routing.
+func (o *orchestrator) pullTurn(req *actorapi.CreateReminderRequest, workflowName string) {
+	if !o.workflowDispatchPull || req.ActorType != o.actorType || !isTurnReminder(req.Name) {
+		return
+	}
+	req.Pull = true
+	// The name is what the per-name limit, the fairness weight and the
+	// backlog gauge go by. Timers did not carry it before.
+	if req.ConcurrencyKey == nil && workflowName != "" {
+		req.ConcurrencyKey = &workflowName
+	}
+	if o.workflowPriority != nil {
+		level, weight := o.workflowPriority(workflowName)
+		req.PriorityLevel = common.PriorityLevels[level]
+		req.FairnessWeight = weight
+	}
 }
 
 // deleteAllReminders deletes all reminders for the workflow and its

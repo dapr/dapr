@@ -180,12 +180,15 @@ func New(opts Options) (Interface, error) {
 	// Pull dispatch executes activities on whichever host the scheduler
 	// selects, so the fast path's local drives and janitor re-dispatches (which
 	// target the placement owner) would race the scheduler's delivery.
-	if fastPath && opts.Spec.HasPullActivityDispatch() {
-		log.Info("WorkflowsFastPath is enabled but pull activity dispatch is configured; disabling the fast path so activities are dispatched through the scheduler")
+	if fastPath && opts.Spec.HasPullDispatch() {
+		log.Info("WorkflowsFastPath is enabled but pull dispatch is configured; disabling the fast path so activities and workflows are dispatched through the scheduler")
 		fastPath = false
 	}
 	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil && opts.Spec.HasPullActivityDispatch() {
 		log.Infof("Pull activity dispatch is configured with %d activity slots per sidecar", *v)
+	}
+	if v := opts.Spec.GetMaxConcurrentWorkflowInvocations(); v != nil && opts.Spec.HasPullWorkflowDispatch() {
+		log.Infof("Pull workflow dispatch is configured with %d workflow slots per sidecar", *v)
 	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
@@ -208,6 +211,8 @@ func New(opts Options) (Interface, error) {
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
 		ActivityPriority:                opts.Spec.ActivityPriority,
+		WorkflowDispatchPull:            opts.Spec.HasPullWorkflowDispatch(),
+		WorkflowPriority:                opts.Spec.WorkflowPriority,
 	}
 	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil {
 		bopts.MaxConcurrentActivityInvocations = *v

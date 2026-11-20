@@ -27,7 +27,6 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	"github.com/dapr/dapr/pkg/config"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -41,19 +40,11 @@ type priority struct {
 	weight uint32
 }
 
-var priorityLevels = map[string]schedulerv1pb.PriorityLevel{
-	config.PriorityLevelCritical:   schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL,
-	config.PriorityLevelHigh:       schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_HIGH,
-	config.PriorityLevelNormal:     schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL,
-	config.PriorityLevelLow:        schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_LOW,
-	config.PriorityLevelBackground: schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND,
-}
-
 // Unknown values stay unset.
 func priorityFromMetadata(md map[string]*internalsv1pb.ListStringValue) priority {
 	var p priority
 	if v := md[todo.MetadataActivityPriorityLevel].GetValues(); len(v) > 0 {
-		p.level = priorityLevels[v[0]]
+		p.level = common.PriorityLevels[v[0]]
 	}
 	if v := md[todo.MetadataActivityFairnessWeight].GetValues(); len(v) > 0 {
 		if w, err := strconv.ParseUint(v[0], 10, 32); err == nil && w > 0 {

@@ -92,7 +92,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 		childRef{instanceID: "child-1"}, &protos.ExecutionTerminatedEvent{}))
 
 	require.NoError(t, o.createTimerReminder(t.Context(), "timer",
-		wrapperspb.String("payload"), time.Now()))
+		wrapperspb.String("payload"), time.Now(), ""))
 
 	mu.Lock()
 	require.Len(t, creates, 3)

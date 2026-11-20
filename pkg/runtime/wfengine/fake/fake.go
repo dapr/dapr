@@ -36,6 +36,8 @@ type Fake struct {
 	clientFn             func() backend.TaskHubClient
 	runtimeMetadataFn    func() *runtimev1pb.MetadataWorkflows
 	activityFreeSlotsFn  func() (uint32, <-chan struct{})
+	workflowActorType    string
+	activityActorType    string
 }
 
 func New() *Fake {
@@ -99,12 +101,18 @@ func (f *Fake) Client() backend.TaskHubClient {
 	return f.clientFn()
 }
 
+func (f *Fake) WithActorTypes(workflowActorType, activityActorType string) *Fake {
+	f.workflowActorType = workflowActorType
+	f.activityActorType = activityActorType
+	return f
+}
+
 func (f *Fake) ActivityActorType() string {
-	return ""
+	return f.activityActorType
 }
 
 func (f *Fake) WorkflowActorType() string {
-	return ""
+	return f.workflowActorType
 }
 
 func (f *Fake) WithActivityFreeSlots(fn func() (uint32, <-chan struct{})) *Fake {

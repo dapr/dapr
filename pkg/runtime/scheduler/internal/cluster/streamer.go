@@ -46,13 +46,10 @@ type streamer struct {
 
 	// addr is the address of the scheduler this stream is connected to.
 	addr string
-	// pull is set when this sidecar pull-dispatches activities of
-	// pullActorType and every scheduler supports it. A pull-flagged job then
-	// executes here, and only then: the scheduler falls back to regular
-	// routing when no sidecar offers slots, and that delivery must forward to
-	// the placement owner like any other reminder.
-	pull          *Pull
-	pullActorType string
+	// pull is nil unless every scheduler supports pull. A pull-flagged job
+	// can still arrive by regular routing and must go to the placement owner.
+	pull      *Pull
+	pullTypes map[string]pullType
 
 	// pullCh carries pull messages to outgoing, which reports whether Send
 	// succeeded. done is closed when outgoing stops sending.
@@ -96,47 +93,74 @@ func (s *streamer) send(msg *schedulerv1pb.WatchJobsRequest) bool {
 	}
 }
 
-// isPull reports whether job is a pull delivery this sidecar executes itself.
-func (s *streamer) isPull(job *schedulerv1pb.WatchJobsResponse) bool {
-	return s.pull != nil && job.GetPull() &&
-		job.GetMetadata().GetTarget().GetActor().GetType() == s.pullActorType
+// pullTypeOf returns the pull type of a pull delivery.
+func (s *streamer) pullTypeOf(job *schedulerv1pb.WatchJobsResponse) (pullType, bool) {
+	if s.pull == nil || !job.GetPull() {
+		return pullType{}, false
+	}
+	pt, ok := s.pullTypes[job.GetMetadata().GetTarget().GetActor().GetType()]
+	return pt, ok
 }
 
 // pullReportInterval is how often the reporting stream repeats the free slots
-// when nothing changed. The scheduler overwrites its count with a stream's
-// initial request and zeroes it on a refusal, and neither is ordered with the
-// reports of another stream, so a stale value can land last. The repeat
-// bounds how long work then stays parked.
+// of every type. A stale count from another stream can land last, and the
+// repeat bounds how long work then stays parked.
 const pullReportInterval = 5 * time.Second
 
 // reportPull sends the results of pull reminders that finished while no
-// stream to this scheduler was connected, then reports free slots on every
-// change, and every pullReportInterval, while this stream is the scheduler's
-// reporting stream. Every change is sent even when the count looks the same:
-// the scheduler takes a slot off its count for each delivery, and an activity
-// that starts and finishes between two reports must still give it back.
+// stream to this scheduler was connected, then reports free slots. Every change
+// is sent even when the count looks the same, so a delivery that starts and
+// finishes between two reports still gives its slot back. Only the changed
+// type is sent, so a count the scheduler lowered is not overwritten.
 func (s *streamer) reportPull(ctx context.Context) error {
 	if !s.pull.flush(s) {
 		return nil
 	}
 
+	ticker := time.NewTicker(pullReportInterval)
+	defer ticker.Stop()
+
+	types := sortedTypes(s.pullTypes)
+	all := true
+	// seen is the change channel last taken per type. A new one means the
+	// count changed since, however close together the changes came.
+	seen := make(map[string]<-chan struct{}, len(types))
 	for {
-		free, freeChanged := s.wfengine.ActivityFreeSlots()
 		reporter, reporterChanged := s.pull.reporter(s)
+		var activityChanged, workflowChanged <-chan struct{}
+		var slots []*schedulerv1pb.PullSlots
+		for _, actorType := range types {
+			pt := s.pullTypes[actorType]
+			free, changed := pt.slots()
+			last, ok := seen[actorType]
+			seen[actorType] = changed
+			if pt.workflow != nil {
+				workflowChanged = changed
+			} else {
+				activityChanged = changed
+			}
+			if all || !ok || last != changed {
+				slots = append(slots, &schedulerv1pb.PullSlots{ActorType: actorType, Free: free})
+			}
+		}
+		all = false
 		if reporter {
-			if !s.send(&schedulerv1pb.WatchJobsRequest{
-				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_PullSlots{
-					PullSlots: &schedulerv1pb.PullSlots{ActorType: s.pullActorType, Free: free},
-				},
-			}) {
-				return nil
+			for _, sl := range slots {
+				if !s.send(&schedulerv1pb.WatchJobsRequest{
+					WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_PullSlots{PullSlots: sl},
+				}) {
+					return nil
+				}
 			}
 		}
 
 		select {
-		case <-freeChanged:
+		case <-activityChanged:
+		case <-workflowChanged:
 		case <-reporterChanged:
-		case <-time.After(pullReportInterval):
+			all = true
+		case <-ticker.C:
+			all = true
 		case <-s.done:
 			return nil
 		case <-ctx.Done():
@@ -171,9 +195,9 @@ func (s *streamer) receive(ctx context.Context) error {
 
 		// A pull reminder outlives this stream: it keeps running and its
 		// result goes back on whichever stream to this scheduler is live.
-		if s.isPull(resp) {
+		if pt, ok := s.pullTypeOf(resp); ok {
 			s.pull.run(s, resp.GetId(), resp.GetMetadata().GetTarget().GetActor(), resp.GetName(), func(ctx context.Context) schedulerv1pb.WatchJobsRequestResultStatus {
-				return s.handleJob(ctx, resp)
+				return s.handlePullJob(ctx, resp, pt)
 			})
 			continue
 		}
@@ -231,6 +255,21 @@ func (s *streamer) outgoing(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// handlePullJob runs a pull delivery. A workflow turn holds a workflow slot
+// until it finishes, and is refused when none is free.
+func (s *streamer) handlePullJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse, pt pullType) schedulerv1pb.WatchJobsRequestResultStatus {
+	if pt.workflow != nil {
+		// Turns of one workflow run one at a time on its owner, so they share a slot.
+		key := job.GetMetadata().GetTarget().GetActor().GetId()
+		if !pt.workflow.reserve(key) {
+			log.Debugf("Refused pull reminder %s for actor %s: every workflow slot is held", job.GetName(), job.GetMetadata().GetTarget().GetActor().GetId())
+			return schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY
+		}
+		defer pt.workflow.release(key)
+	}
+	return s.handleJob(ctx, job)
 }
 
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
@@ -354,6 +393,12 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	}
 }
 
+// executeLocally reports whether job runs on this sidecar's own actor table.
+func (s *streamer) executeLocally(job *schedulerv1pb.WatchJobsResponse) bool {
+	pt, ok := s.pullTypeOf(job)
+	return ok && pt.local()
+}
+
 // invokeActorReminder calls the actor ID with the given reminder data. The
 // actor target metadata has already been validated by handleJob.
 func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse, actor *schedulerv1pb.TargetActorReminder) error {
@@ -370,7 +415,7 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		// Verified by the scheduler against the creator's SPIFFE ID at
 		// schedule time and echoed back on trigger.
 		SourceAppID:    job.GetMetadata().GetAppId(),
-		ExecuteLocally: s.isPull(job),
+		ExecuteLocally: s.executeLocally(job),
 	})
 	// A refused pull delivery ran nothing, so it is not a failed fire.
 	if !errors.Is(err, actorerrors.ErrNoCapacity) {

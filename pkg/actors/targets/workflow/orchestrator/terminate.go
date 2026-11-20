@@ -83,7 +83,7 @@ func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child
 		return err
 	}
 
-	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+	req := &actorapi.CreateReminderRequest{
 		ActorType: o.actorType,
 		ActorID:   child.instanceID,
 		Name:      reminderCascadeTerminate,
@@ -91,7 +91,9 @@ func (o *orchestrator) createCascadeTerminateReminder(ctx context.Context, child
 		DueTime:   time.Now().UTC().Format(time.RFC3339Nano),
 		// One shot, retry forever, jittered interval.
 		FailurePolicy: common.RetryForeverPolicy(),
-	})
+	}
+	o.pullTurn(req, child.name)
+	return common.CreateReminderWithRetry(ctx, o.reminders, req)
 }
 
 // terminateRemoteChild delivers the ExecutionTerminated to a cross-app child

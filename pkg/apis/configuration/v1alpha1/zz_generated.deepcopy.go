@@ -975,8 +975,8 @@ func (in *WorkflowSpec) DeepCopyInto(out *WorkflowSpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.ActivityDispatchMode != nil {
-		in, out := &in.ActivityDispatchMode, &out.ActivityDispatchMode
+	if in.DispatchMode != nil {
+		in, out := &in.DispatchMode, &out.DispatchMode
 		*out = new(string)
 		**out = **in
 	}

@@ -173,11 +173,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case reminder.Name == janitorReminderName:
 		return o.runJanitor(ctx, reminder)
 
-	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
-		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
-		strings.HasPrefix(reminder.Name, reminderPrefixTimer),
-		reminder.Name == reminderCascadeTerminate,
-		reminder.Name == reminderNameParentNotify:
+	case isTurnReminder(reminder.Name):
 		return o.runWorkflowFromReminder(ctx, reminder)
 
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
