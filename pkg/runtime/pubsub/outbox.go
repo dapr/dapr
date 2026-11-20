@@ -53,7 +53,7 @@ type outboxConfig struct {
 
 type outboxImpl struct {
 	cloudEventExtractorFn func(map[string]any, string) string
-	getPubsubFn           func(string) (contribPubsub.PubSub, bool)
+	getPubsubFn           func(string) (*PubsubItem, bool)
 	getStateFn            func(string) (state.Store, bool)
 	publisher             Adapter
 	outboxStores          map[string]outboxConfig
@@ -69,7 +69,7 @@ type outboxImpl struct {
 
 type OptionsOutbox struct {
 	Publisher             Adapter
-	GetPubsubFn           func(string) (contribPubsub.PubSub, bool)
+	GetPubsubFn           func(string) (*PubsubItem, bool)
 	GetStateFn            func(string) (state.Store, bool)
 	CloudEventExtractorFn func(map[string]any, string) string
 	Namespace             string
@@ -289,8 +289,16 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			continue
 		}
 
-		outboxPubsub.Subscribe(o.componentContext(ctx), contribPubsub.SubscribeRequest{
-			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
+		topic := outboxTopic(appID, c.publishTopic, o.namespace)
+		if outboxPubsub.NamespaceScoped {
+			// PublishInternal publishes through the pubsub adapter, which
+			// prefixes the namespace to every topic of a namespace scoped
+			// pubsub, so subscribe to that same topic.
+			topic = o.namespace + topic
+		}
+
+		outboxPubsub.Component.Subscribe(o.componentContext(ctx), contribPubsub.SubscribeRequest{
+			Topic: topic,
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
 			// The per-message context originates from the pubsub component, so
 			// re-attach the workload's SPIFFE identity for the state operations
