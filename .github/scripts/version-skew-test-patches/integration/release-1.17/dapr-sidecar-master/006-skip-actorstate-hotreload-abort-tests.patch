@@ -1,0 +1,36 @@
+diff --git a/tests/integration/suite/daprd/hotreload/operator/actorstate.go b/tests/integration/suite/daprd/hotreload/operator/actorstate.go
+index 2b3aebe6f..8f3891b57 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/actorstate.go
++++ b/tests/integration/suite/daprd/hotreload/operator/actorstate.go
+@@ -32,13 +32,8 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+-func init() {
+-	suite.Register(new(actorstate))
+-}
+-
+ type actorstate struct {
+ 	daprdCreate *daprd.Daprd
+ 	daprdUpdate *daprd.Daprd
+diff --git a/tests/integration/suite/daprd/hotreload/selfhosted/actorstate.go b/tests/integration/suite/daprd/hotreload/selfhosted/actorstate.go
+index 797d45124..624f6aa65 100644
+--- a/tests/integration/suite/daprd/hotreload/selfhosted/actorstate.go
++++ b/tests/integration/suite/daprd/hotreload/selfhosted/actorstate.go
+@@ -27,13 +27,8 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+-func init() {
+-	suite.Register(new(actorstate))
+-}
+-
+ type actorstate struct {
+ 	daprdCreate *daprd.Daprd
+ 	daprdUpdate *daprd.Daprd
