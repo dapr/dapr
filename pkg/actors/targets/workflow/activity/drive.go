@@ -212,7 +212,7 @@ func (f *factory) escalateActivity(actorID string, invocation *protos.ActivityIn
 		ctx, cancel := context.WithTimeout(rootCtx, escalateTimeout)
 		defer cancel()
 
-		if err := f.createActivityReminder(ctx, actorID, invocation, time.Now(), activityName); err != nil {
+		if err := f.createActivityReminder(ctx, actorID, invocation, time.Now(), activityName, priority{}); err != nil {
 			log.Warnf("Activity actor '%s': failed to escalate to a durable run-activity reminder; the workflow janitor re-dispatches within one period: %v", actorID, err)
 			diag.DefaultWorkflowMonitoring.WorkflowLocalActivity(context.Background(), diag.StatusEscalateFailed)
 			return
