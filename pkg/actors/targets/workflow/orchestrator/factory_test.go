@@ -18,9 +18,12 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
@@ -30,6 +33,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
@@ -239,4 +243,87 @@ func mapLen(ff *factory) int {
 		return true
 	})
 	return i
+}
+
+func Test_Deactivate_streamDeactivationReasons(t *testing.T) {
+	t.Run("actor-lifecycle deactivation closes active streams with Unavailable", func(t *testing.T) {
+		const instanceID = "lifecycle-stream-wf"
+		h := newWakeHarness(t, instanceID, true)
+		h.primeRunning(t, instanceID, 0)
+
+		req := &internalsv1pb.InternalInvokeRequest{
+			Message: &commonv1pb.InvokeRequest{
+				Method: todo.WaitForRuntimeStatus,
+			},
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			err := h.orch.InvokeStream(t.Context(), req, func(*internalsv1pb.InternalInvokeResponse) (bool, error) {
+				return false, nil
+			})
+			errCh <- err
+		}()
+
+		assert.Eventually(t, func() bool {
+			unlock, err := h.orch.lock.ContextLock(t.Context())
+			if err != nil {
+				return false
+			}
+			defer unlock()
+			return len(h.orch.streamFns) == 1
+		}, time.Second*5, time.Millisecond*10)
+
+		require.NoError(t, h.orch.Deactivate(t.Context()))
+
+		select {
+		case err := <-errCh:
+			require.Error(t, err)
+			assert.Equal(t, codes.Unavailable, status.Code(err))
+			assert.Contains(t, err.Error(), "actor is closed, cannot handle deactivated")
+		case <-time.After(time.Second * 5):
+			t.Fatal("timed out waiting for stream to close")
+		}
+	})
+
+	t.Run("workflow-driven deactivation preserves existing closed actor behavior", func(t *testing.T) {
+		const instanceID = "workflow-driven-stream-wf"
+		h := newWakeHarness(t, instanceID, true)
+		h.primeRunning(t, instanceID, 0)
+
+		req := &internalsv1pb.InternalInvokeRequest{
+			Message: &commonv1pb.InvokeRequest{
+				Method: todo.WaitForRuntimeStatus,
+			},
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			err := h.orch.InvokeStream(t.Context(), req, func(*internalsv1pb.InternalInvokeResponse) (bool, error) {
+				return false, nil
+			})
+			errCh <- err
+		}()
+
+		assert.Eventually(t, func() bool {
+			unlock, err := h.orch.lock.ContextLock(t.Context())
+			if err != nil {
+				return false
+			}
+			defer unlock()
+			return len(h.orch.streamFns) == 1
+		}, time.Second*5, time.Millisecond*10)
+
+		require.NoError(t, h.orch.deactivateWithReason(t.Context(), deactivationReasonWorkflowDriven))
+
+		select {
+		case err := <-errCh:
+			require.Error(t, err)
+			assert.True(t, targeterrors.IsClosed(err))
+			assert.Equal(t, codes.Unknown, status.Code(err))
+			assert.Contains(t, err.Error(), "actor is closed, cannot handle deactivated")
+		case <-time.After(time.Second * 5):
+			t.Fatal("timed out waiting for stream to close")
+		}
+	})
 }
