@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -35,6 +36,33 @@ func (w *Workflow) WorkflowActorType(index int) string {
 // at the given index (default namespace).
 func (w *Workflow) ActivityActorType(index int) string {
 	return "dapr.internal.default." + w.daprds[index].AppID() + ".activity"
+}
+
+// SchedulerClientN returns a scheduler client for the app of the daprd at the
+// given index, over mTLS when signing is enabled.
+func (w *Workflow) SchedulerClientN(t *testing.T, ctx context.Context, index int) schedulerv1pb.SchedulerClient {
+	t.Helper()
+	if w.Signing() {
+		return w.sched.ClientMTLS(t, ctx, w.daprds[index].AppID())
+	}
+	return w.sched.Client(t, ctx)
+}
+
+// ListActivityReminders returns the activity reminders the scheduler holds for
+// the app of the daprd at the given index.
+func (w *Workflow) ListActivityReminders(ctx context.Context, client schedulerv1pb.SchedulerClient, index int) ([]*schedulerv1pb.NamedJob, error) {
+	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: "default",
+			AppId:     w.daprds[index].AppID(),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{Type: w.ActivityActorType(index)},
+				},
+			},
+		},
+	})
+	return resp.GetJobs(), err
 }
 
 // WriteWorkflowState writes a fabricated durable workflow state for the given

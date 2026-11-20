@@ -92,8 +92,9 @@ type Options struct {
 	// bounded by ctx.
 	Detached *detached.Runner
 
-	// ActivityPriority returns an activity's level name and weight. Nil means none.
-	ActivityPriority func(workflowName, activityName string) (string, uint32)
+	// ActivityPriority and WorkflowPriority resolve a level and weight.
+	ActivityPriority func(workflowName, activityName, startLevel string, startWeight uint32) (string, uint32)
+	WorkflowPriority func(workflowName, startLevel string, startWeight uint32) (string, uint32)
 }
 
 type factory struct {
@@ -129,7 +130,8 @@ type factory struct {
 	// the Wait.
 	fastPath         bool
 	fallback         func() bool
-	activityPriority func(workflowName, activityName string) (string, uint32)
+	activityPriority func(workflowName, activityName, startLevel string, startWeight uint32) (string, uint32)
+	workflowPriority func(workflowName, startLevel string, startWeight uint32) (string, uint32)
 	wakeLock         sync.Mutex
 	wakeCtx          context.Context
 	wakeCancel       context.CancelFunc
@@ -219,6 +221,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		fastPath:               opts.FastPath,
 		fallback:               opts.Fallback,
 		activityPriority:       opts.ActivityPriority,
+		workflowPriority:       opts.WorkflowPriority,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,
