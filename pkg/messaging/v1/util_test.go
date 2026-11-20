@@ -314,6 +314,77 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, string(keyBinValue), convertedMD["key-bin"][1])
 		assert.Equal(t, string(traceBinValue), convertedMD["grpc-trace-bin"][0])
 	})
+
+	t.Run("with empty and nil list values", func(t *testing.T) {
+		metadataWithEmptyValues := map[string]*internalv1pb.ListStringValue{
+			"traceparent": {
+				Values: []string{},
+			},
+			"tracestate": {
+				Values: []string{},
+			},
+			"grpc-trace-bin": {
+				Values: []string{},
+			},
+			"content-type": {
+				Values: []string{},
+			},
+			"nil-header":   nil,
+			"empty-header": {Values: []string{}},
+			"valid-header": {Values: []string{"valid-value"}},
+		}
+
+		require.NotPanics(t, func() {
+			convertedMD := InternalMetadataToGrpcMetadata(ctx, metadataWithEmptyValues, false)
+			assert.Equal(t, 2, convertedMD.Len()) // trace context + valid-header
+			assert.Equal(t, "valid-value", convertedMD["valid-header"][0])
+		})
+	})
+}
+
+func TestIsGRPCProtocol(t *testing.T) {
+	t.Run("empty metadata", func(t *testing.T) {
+		assert.False(t, IsGRPCProtocol(DaprInternalMetadata{}))
+	})
+
+	t.Run("grpc content-type lowercase", func(t *testing.T) {
+		md := DaprInternalMetadata{
+			"content-type": &internalv1pb.ListStringValue{Values: []string{"application/grpc"}},
+		}
+		assert.True(t, IsGRPCProtocol(md))
+	})
+
+	t.Run("grpc content-type case-insensitive", func(t *testing.T) {
+		md := DaprInternalMetadata{
+			"Content-Type": &internalv1pb.ListStringValue{Values: []string{"application/grpc; charset=utf-8"}},
+		}
+		assert.True(t, IsGRPCProtocol(md))
+	})
+
+	t.Run("non-grpc content-type", func(t *testing.T) {
+		md := DaprInternalMetadata{
+			"content-type": &internalv1pb.ListStringValue{Values: []string{"application/json"}},
+		}
+		assert.False(t, IsGRPCProtocol(md))
+	})
+
+	t.Run("empty content-type values does not panic", func(t *testing.T) {
+		md := DaprInternalMetadata{
+			"content-type": &internalv1pb.ListStringValue{Values: []string{}},
+		}
+		require.NotPanics(t, func() {
+			assert.False(t, IsGRPCProtocol(md))
+		})
+	})
+
+	t.Run("nil content-type value does not panic", func(t *testing.T) {
+		md := DaprInternalMetadata{
+			"content-type": nil,
+		}
+		require.NotPanics(t, func() {
+			assert.False(t, IsGRPCProtocol(md))
+		})
+	})
 }
 
 func TestErrorFromHTTPResponseCode(t *testing.T) {

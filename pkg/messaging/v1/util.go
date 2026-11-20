@@ -187,6 +187,10 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	md := metadata.MD{}
 	for k, listVal := range internalMD {
+		if len(listVal.GetValues()) == 0 {
+			continue
+		}
+
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
@@ -232,8 +236,11 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 // IsGRPCProtocol checks if metadata is originated from gRPC API.
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	originContentType := ""
-	if val, ok := internalMD[ContentTypeHeader]; ok {
-		originContentType = val.GetValues()[0]
+	for k, val := range internalMD {
+		if strings.EqualFold(k, ContentTypeHeader) && len(val.GetValues()) > 0 {
+			originContentType = val.GetValues()[0]
+			break
+		}
 	}
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
