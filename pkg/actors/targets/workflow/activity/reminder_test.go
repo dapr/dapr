@@ -269,7 +269,7 @@ func Test_createActivityReminder_pullFlag(t *testing.T) {
 			reminders:    sched,
 			dispatchPull: resolver,
 		}
-		require.NoError(t, f.createActivityReminder(t.Context(), "wf::1::0", invocation, time.Now(), activityName))
+		require.NoError(t, f.createActivityReminder(t.Context(), "wf::1::0", invocation, time.Now(), activityName, priority{}))
 		sched.mu.Lock()
 		defer sched.mu.Unlock()
 		require.Len(t, sched.creates, 1)
@@ -306,7 +306,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil, priority{}))
 
 	result := &backend.HistoryEvent{
 		EventId: -1,
@@ -318,7 +318,7 @@ func Test_reminderRetryPoliciesAreJittered(t *testing.T) {
 
 	// Repeated creates so the decorrelation assertion below has enough draws.
 	for range 50 {
-		require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil))
+		require.NoError(t, f.createActivityReminder(t.Context(), actorID, invocation, time.Now(), nil, priority{}))
 	}
 
 	sched.mu.Lock()
@@ -364,10 +364,10 @@ func Test_createReminderClampsPastDueTime(t *testing.T) {
 	}
 
 	start := time.Now()
-	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, start.Add(-time.Hour), nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, start.Add(-time.Hour), nil, priority{}))
 
 	future := start.Add(time.Hour)
-	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, future, nil))
+	require.NoError(t, f.createActivityReminder(t.Context(), "activity-1", invocation, future, nil, priority{}))
 
 	sched.mu.Lock()
 	defer sched.mu.Unlock()

@@ -132,6 +132,15 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	if executionID != "" {
 		meta[todo.MetadataParentExecutionID] = []string{executionID}
 	}
+	if o.activityPriority != nil {
+		level, weight := o.activityPriority(workflowName, ts.GetName())
+		if level != "" {
+			meta[todo.MetadataActivityPriorityLevel] = []string{level}
+		}
+		if weight > 0 {
+			meta[todo.MetadataActivityFairnessWeight] = []string{strconv.FormatUint(uint64(weight), 10)}
+		}
+	}
 
 	if o.fastPath {
 		var cancel context.CancelFunc

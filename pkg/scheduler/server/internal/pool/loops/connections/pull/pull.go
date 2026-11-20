@@ -56,8 +56,10 @@ type Options struct {
 	// Idle is called when the last unresolved pull trigger has resolved.
 	Idle func()
 
-	// MaxParked bounds the parked pull triggers per actor type. A trigger
-	// beyond it is resolved FAILED, so its failure policy retries it later.
+	// MaxParked bounds the parked pull triggers per actor type. At the bound a
+	// new trigger is resolved FAILED, unless it outranks a parked trigger of a
+	// lower level, which is evicted and resolved FAILED in its place. The
+	// failure policy retries either one later.
 	MaxParked int
 }
 

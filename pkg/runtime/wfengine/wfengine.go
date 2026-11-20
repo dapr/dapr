@@ -207,6 +207,7 @@ func New(opts Options) (Interface, error) {
 		WorkflowsStagedOperations:       opts.WorkflowsStagedOperations,
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
+		ActivityPriority:                opts.Spec.ActivityPriority,
 	}
 	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil {
 		bopts.MaxConcurrentActivityInvocations = *v
