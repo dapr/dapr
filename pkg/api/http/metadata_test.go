@@ -58,5 +58,30 @@ func TestOnPutMetadataBodyReadError(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
+
+	// The HTTP error code and message keep their legacy values for backwards
+	// compatibility.
 	assert.Equal(t, "ERR_BODY_READ", body["errorCode"])
+	assert.Equal(t, "failed to read request body: simulated read error", body["message"])
+
+	// The legacy messages.ErrBodyRead response carried no details. The
+	// standardized error must include an ErrorInfo with the metadata-specific
+	// reason and the underlying error.
+	details, ok := body["details"].([]any)
+	require.True(t, ok, "expected rich error details in response: %v", body)
+
+	var errorInfo map[string]any
+	for _, d := range details {
+		if m, isMap := d.(map[string]any); isMap && m["reason"] == "DAPR_METADATA_BODY_READ" {
+			errorInfo = m
+			break
+		}
+	}
+	require.NotNil(t, errorInfo, "expected ErrorInfo with reason DAPR_METADATA_BODY_READ in %v", details)
+	assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", errorInfo["@type"])
+	assert.Equal(t, "dapr.io", errorInfo["domain"])
+
+	errMeta, ok := errorInfo["metadata"].(map[string]any)
+	require.True(t, ok, "expected ErrorInfo metadata: %v", errorInfo)
+	assert.Equal(t, "simulated read error", errMeta["error"])
 }

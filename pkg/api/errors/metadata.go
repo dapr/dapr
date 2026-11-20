@@ -26,7 +26,8 @@ import (
 // MetadataBodyRead returns a standardized rich error for when reading
 // the PUT /v1.0/metadata/{key} request body fails.
 func MetadataBodyRead(err error) error {
-	msg := fmt.Sprintf("error reading metadata request body: %s", err)
+	// Keep the legacy messages.ErrBodyRead wording for backwards compatibility.
+	msg := fmt.Sprintf("failed to read request body: %v", err)
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
