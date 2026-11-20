@@ -4,7 +4,7 @@ This includes dashboard templates to monitor Dapr system services and sidecars. 
 
 ## Grafana
 
-You can set up [Prometheus](https://docs.dapr.io/operations/monitoring/prometheus/) and [Grafana](https://docs.dapr.io/operations/monitoring/grafana/) and import the templates to your Grafana dashboard to monitor Dapr.
+You can set up [Prometheus](https://docs.dapr.io/operations/observability/metrics/prometheus/) and [Grafana](https://docs.dapr.io/operations/observability/metrics/grafana/) and import the templates to your Grafana dashboard to monitor Dapr.
 
 1. [Dapr System Service Dashboard](./grafana-system-services-dashboard.json)
     - Shows Dapr system service status - dapr-operator, dapr-sidecar-injector, dapr-sentry, and dapr-placement
@@ -25,5 +25,5 @@ You can set up [Prometheus](https://docs.dapr.io/operations/monitoring/prometheu
 
 * [Supported Dapr metrics](../docs/development/dapr-metrics.md)
 * [Dapr Observability](https://docs.dapr.io/concepts/observability-concept)
-* [Setup Prometheus](https://docs.dapr.io/operations/monitoring/prometheus/)
-* [Setup Grafana](https://docs.dapr.io/operations/monitoring/grafana/)
+* [Setup Prometheus](https://docs.dapr.io/operations/observability/metrics/prometheus/)
+* [Setup Grafana](https://docs.dapr.io/operations/observability/metrics/grafana/)
