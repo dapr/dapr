@@ -661,6 +661,105 @@ spec:
                       If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
+                  priority:
+                    description: |-
+                      Priority orders this application's activities while they wait for a free
+                      sidecar slot under pull dispatch.
+                    properties:
+                      activities:
+                        description: Activities lists per-activity-name values.
+                        items:
+                          description: NamedPriorityValues is the PriorityValues of
+                            one workflow or activity name.
+                          properties:
+                            fairnessWeight:
+                              description: |-
+                                FairnessWeight shares slots between activity names at the same level in
+                                proportion to their weights, 1 to 1000.
+                              format: int32
+                              maximum: 1000
+                              minimum: 1
+                              type: integer
+                            name:
+                              description: Name is the workflow or activity name the
+                                entry applies to.
+                              type: string
+                            priorityLevel:
+                              description: |-
+                                PriorityLevel is the strict order between waiting activities: critical,
+                                high, normal, low or background.
+                              enum:
+                              - critical
+                              - high
+                              - normal
+                              - low
+                              - background
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      default:
+                        description: |-
+                          Default applies to every workflow and activity without an entry of its
+                          own or of its calling workflow.
+                        properties:
+                          fairnessWeight:
+                            description: |-
+                              FairnessWeight shares slots between activity names at the same level in
+                              proportion to their weights, 1 to 1000. Unset means 1.
+                            format: int32
+                            maximum: 1000
+                            minimum: 1
+                            type: integer
+                          priorityLevel:
+                            description: |-
+                              PriorityLevel is the strict order between waiting activities: critical,
+                              high, normal, low or background. Unset means normal.
+                            enum:
+                            - critical
+                            - high
+                            - normal
+                            - low
+                            - background
+                            type: string
+                        type: object
+                      workflows:
+                        description: |-
+                          Workflows lists per-workflow-name values, inherited by the activities
+                          the workflow calls.
+                        items:
+                          description: NamedPriorityValues is the PriorityValues of
+                            one workflow or activity name.
+                          properties:
+                            fairnessWeight:
+                              description: |-
+                                FairnessWeight shares slots between activity names at the same level in
+                                proportion to their weights, 1 to 1000.
+                              format: int32
+                              maximum: 1000
+                              minimum: 1
+                              type: integer
+                            name:
+                              description: Name is the workflow or activity name the
+                                entry applies to.
+                              type: string
+                            priorityLevel:
+                              description: |-
+                                PriorityLevel is the strict order between waiting activities: critical,
+                                high, normal, low or background.
+                              enum:
+                              - critical
+                              - high
+                              - normal
+                              - low
+                              - background
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                    type: object
                   stateRetentionPolicy:
                     description: |-
                       StateRetentionPolicy defines the retention configuration for workflow
