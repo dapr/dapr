@@ -37,6 +37,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	stateUtils "github.com/dapr/components-contrib/state/utils"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/api/universal"
@@ -1048,8 +1049,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 
 		if encryption.EncryptedStateStore(storeName) {
-			data := fmt.Appendf(nil, "%v", r.Value)
-			val, encErr := encryption.TryEncryptValue(storeName, data)
+			val, encErr := encryptStateValue(storeName, r.Value)
 			if encErr != nil {
 				statusCode, errMsg := a.stateErrorResponse(encErr)
 				apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
@@ -1082,6 +1082,16 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	respondWithEmpty(w)
+}
+
+// encryptStateValue encrypts the same bytes that the state store would persist
+// for value if the store was not encrypted.
+func encryptStateValue(storeName string, value any) ([]byte, error) {
+	data, err := stateUtils.Marshal(value, json.Marshal)
+	if err != nil {
+		return nil, err
+	}
+	return encryption.TryEncryptValue(storeName, data)
 }
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
@@ -1655,8 +1665,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
-				data := fmt.Appendf(nil, "%v", req.Value)
-				val, err := encryption.TryEncryptValue(storeName, data)
+				val, err := encryptStateValue(storeName, req.Value)
 				if err != nil {
 					resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()), errorcodes.StateSave, nethttp.StatusBadRequest)
 					respondWithError(w, resp)

@@ -42,6 +42,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	stateUtils "github.com/dapr/components-contrib/state/utils"
 	workflowacl "github.com/dapr/dapr/pkg/acl/workflow"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -1084,15 +1085,17 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
-				data := fmt.Appendf(nil, "%v", req.Value)
-				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
+				data, err := stateUtils.Marshal(req.Value, json.Marshal)
+				if err == nil {
+					data, err = encryption.TryEncryptValue(in.GetStoreName(), data)
+				}
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
 					apiServerLogger.Debug(err)
 					return &emptypb.Empty{}, err
 				}
 
-				req.Value = val
+				req.Value = data
 				operations[i] = req
 			}
 		}
