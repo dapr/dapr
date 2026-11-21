@@ -67,3 +67,24 @@ global.scheduler.placement is absent from values of releases installed before
 {{- $placement := $scheduler.placement | default dict -}}
 {{- $placement.enabled | default false | toString -}}
 {{- end -}}
+
+{{/*
+Renders topologySpreadConstraints for a control plane pod from
+global.topologySpreadConstraints. A constraint without a labelSelector is
+scoped to the pods of the calling component (app: <app>).
+Usage: include "dapr.topologySpreadConstraints" (dict "constraints" .Values.global.topologySpreadConstraints "app" "dapr-operator")
+*/}}
+{{- define "dapr.topologySpreadConstraints" -}}
+{{- $constraints := list -}}
+{{- range .constraints -}}
+{{- $constraint := deepCopy . -}}
+{{- if not (hasKey $constraint "labelSelector") -}}
+{{- $_ := set $constraint "labelSelector" (dict "matchLabels" (dict "app" $.app)) -}}
+{{- end -}}
+{{- $constraints = append $constraints $constraint -}}
+{{- end -}}
+{{- with $constraints -}}
+topologySpreadConstraints:
+{{ toYaml . }}
+{{- end -}}
+{{- end -}}
