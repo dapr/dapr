@@ -1289,6 +1289,144 @@ func (o *outboxStateMock) Get(ctx context.Context, req *state.GetRequest) (*stat
 	return nil, nil
 }
 
+func TestPublishInternalProjectionFiltering(t *testing.T) {
+	configureOutbox := func(o *outboxImpl) {
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{Name: outboxPublishPubsubKey, Value: common.DynamicValue{JSON: v1.JSON{Raw: []byte("a")}}},
+					{Name: outboxPublishTopicKey, Value: common.DynamicValue{JSON: v1.JSON{Raw: []byte("1")}}},
+				},
+			},
+		})
+	}
+
+	nonOutboxSets := func(ops []state.TransactionalStateOperation) []state.SetRequest {
+		var out []state.SetRequest
+		for _, op := range ops {
+			if sr, ok := op.(state.SetRequest); ok && !isOutboxStateKey(sr.Key) {
+				out = append(out, sr)
+			}
+		}
+		return out
+	}
+
+	t.Run("projection_operation_excluded_from_returned_operations", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+			assert.Equal(t, "projection-value", cloudEvent["data"])
+			return nil
+		}).(*outboxImpl)
+		configureOutbox(o)
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{Key: "key", Value: "original-value"},
+			state.SetRequest{Key: "key", Value: "projection-value", Metadata: map[string]string{"outbox.projection": "true"}},
+		}, "testapp", "", "")
+		require.NoError(t, err)
+		require.Len(t, trs, 2, "expected 1 original op + 1 transaction marker")
+
+		setReq, ok := trs[0].(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "key", setReq.Key)
+		assert.Equal(t, "original-value", setReq.Value, "returned op should have the original value, not the projection value")
+		_, hasProj := setReq.Metadata["outbox.projection"]
+		assert.False(t, hasProj)
+	})
+
+	t.Run("multiple_projections_in_same_batch_excluded_from_returned_operations", func(t *testing.T) {
+		var publishedData []any
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+			publishedData = append(publishedData, cloudEvent["data"])
+			return nil
+		}).(*outboxImpl)
+		configureOutbox(o)
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{Key: "keyA", Value: "valA"},
+			state.SetRequest{Key: "keyA", Value: "projA", Metadata: map[string]string{"outbox.projection": "true"}},
+			state.SetRequest{Key: "keyB", Value: "valB"},
+			state.SetRequest{Key: "keyB", Value: "projB", Metadata: map[string]string{"outbox.projection": "true"}},
+		}, "testapp", "", "")
+		require.NoError(t, err)
+
+		originals := nonOutboxSets(trs)
+		require.Len(t, originals, 2)
+		assert.Equal(t, []any{"projA", "projB"}, publishedData)
+		for _, sr := range originals {
+			assert.Contains(t, []string{"keyA", "keyB"}, sr.Key)
+			assert.Contains(t, []string{"valA", "valB"}, sr.Value)
+			_, hasProj := sr.Metadata["outbox.projection"]
+			assert.False(t, hasProj, "returned operation should not have outbox.projection metadata")
+		}
+	})
+
+	t.Run("no_projection_preserves_original_value_in_returned_operations", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]any
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+			assert.Equal(t, "my-value", cloudEvent["data"])
+			return nil
+		}).(*outboxImpl)
+		configureOutbox(o)
+
+		trs, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{Key: "key", Value: "my-value"},
+		}, "testapp", "", "")
+		require.NoError(t, err)
+		require.Len(t, trs, 2, "expected 1 original op + 1 transaction marker")
+
+		setReq, ok := trs[0].(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "my-value", setReq.Value)
+	})
+
+	t.Run("consecutive_projections_are_excluded_from_returned_ops", func(t *testing.T) {
+		var publishes atomic.Int32
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			publishes.Add(1)
+			return nil
+		}).(*outboxImpl)
+		configureOutbox(o)
+
+		ops, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{Key: "p1", Value: "a", Metadata: map[string]string{"outbox.projection": "true"}},
+			state.SetRequest{Key: "p2", Value: "b", Metadata: map[string]string{"outbox.projection": "true"}},
+			state.SetRequest{Key: "real", Value: "keep"},
+		}, "testapp", "", "")
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), publishes.Load())
+		originals := nonOutboxSets(ops)
+		require.Len(t, originals, 1)
+		assert.Equal(t, "real", originals[0].Key)
+		assert.Equal(t, "keep", originals[0].Value)
+	})
+
+	t.Run("three_consecutive_projections_does_not_panic", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			return nil
+		}).(*outboxImpl)
+		configureOutbox(o)
+
+		require.NotPanics(t, func() {
+			ops, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
+				state.SetRequest{Key: "a", Value: "1", Metadata: map[string]string{"outbox.projection": "true"}},
+				state.SetRequest{Key: "b", Value: "2", Metadata: map[string]string{"outbox.projection": "true"}},
+				state.SetRequest{Key: "c", Value: "3", Metadata: map[string]string{"outbox.projection": "true"}},
+			}, "testapp", "", "")
+			require.NoError(t, err)
+			assert.Empty(t, nonOutboxSets(ops))
+		})
+	})
+}
+
 func TestOutboxTopic(t *testing.T) {
 	t.Run("not namespaced", func(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
