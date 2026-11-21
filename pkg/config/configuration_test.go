@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
@@ -970,7 +972,7 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 	require.True(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 
 	// Entries the scheduler ignores must not disable the fast path.
@@ -981,9 +983,279 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name}},
 	}).HasSchedulerConcurrencyLimits(), "nil max is not enforced")
 	require.False(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
 	}).HasSchedulerConcurrencyLimits(), "non-positive max is not enforced")
 	require.True(t, (&WorkflowSpec{
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).HasSchedulerConcurrencyLimits(), "a dispatch-only entry is not a scheduler-enforced limit")
+}
+
+func TestActivityDispatchPull(t *testing.T) {
+	email := "SendEmail"
+	transcode := "Transcode"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.ActivityDispatchPull(email))
+	require.False(t, nilSpec.HasPullActivityDispatch())
+	require.False(t, (&WorkflowSpec{}).ActivityDispatchPull(email))
+	require.False(t, (&WorkflowSpec{}).HasPullActivityDispatch())
+
+	appPull := &WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}
+	require.True(t, appPull.ActivityDispatchPull(email))
+	require.True(t, appPull.HasPullActivityDispatch())
+
+	appPullOptOut := &WorkflowSpec{
+		ActivityDispatchMode:      new(ActivityDispatchModePull),
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(ActivityDispatchModeHashed)}},
+	}
+	require.False(t, appPullOptOut.ActivityDispatchPull(email), "per-name hashed overrides app-wide pull")
+	require.True(t, appPullOptOut.ActivityDispatchPull(transcode))
+	require.True(t, appPullOptOut.HasPullActivityDispatch())
+
+	perName := &WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{
+			{Name: &email, MaxConcurrent: new(int32(5))},
+			{Name: &transcode, DispatchMode: new(ActivityDispatchModePull)},
+		},
+	}
+	require.False(t, perName.ActivityDispatchPull(email), "an entry without dispatchMode inherits the app default")
+	require.True(t, perName.ActivityDispatchPull(transcode))
+	require.False(t, perName.ActivityDispatchPull("other"))
+	require.True(t, perName.HasPullActivityDispatch())
+}
+
+func TestValidateWorkflowSpec(t *testing.T) {
+	name := "SendEmail"
+	conf := func(w *WorkflowSpec) *Configuration {
+		c := LoadDefaultConfiguration()
+		c.Spec.WorkflowSpec = w
+		return c
+	}
+
+	require.NoError(t, conf(nil).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModeHashed)}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 2,
+		ActivityDispatchMode:             new(ActivityDispatchModePull),
+	}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec())
+
+	err := conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new("push")}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid dispatchMode "push"`)
+
+	require.NoError(t, conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name}, {Name: &name}},
+	}).validateWorkflowSpec(), "duplicate limits without a dispatchMode load as before")
+
+	for _, limits := range [][]ActivityConcurrencyLimit{
+		{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}, {Name: &name}},
+		{{Name: &name}, {Name: &name, DispatchMode: new(ActivityDispatchModeHashed)}},
+	} {
+		err = conf(&WorkflowSpec{
+			MaxConcurrentActivityInvocations: 1,
+			ActivityConcurrencyLimits:        limits,
+		}).validateWorkflowSpec()
+		require.ErrorContains(t, err, `duplicate activity name "SendEmail" with a dispatchMode`)
+	}
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `dispatchMode "pull" in workflow activityConcurrencyLimits requires a name`)
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+	}).HasPullActivityDispatch(), "a nameless entry can never match an activity")
+
+	err = conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 0,
+		ActivityDispatchMode:             new(ActivityDispatchModePull),
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations", "zero means unset")
+}
+
+func TestLoadStandaloneConfigurationRejectsPullWithoutSlots(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    activityDispatchMode: pull
+`), 0o600))
+	_, err := LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 3
+    activityDispatchMode: pull
+    activityConcurrencyLimits:
+      - name: SendEmail
+        maxConcurrent: 5
+        dispatchMode: hashed
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	require.True(t, c.Spec.WorkflowSpec.ActivityDispatchPull("Transcode"))
+	require.False(t, c.Spec.WorkflowSpec.ActivityDispatchPull("SendEmail"))
+	require.Equal(t, int32(5), *c.Spec.WorkflowSpec.ActivityConcurrencyLimits[0].MaxConcurrent)
+}
+
+func TestActivityPriority(t *testing.T) {
+	var nilSpec *WorkflowSpec
+	level, weight := nilSpec.ActivityPriority("wf", "act")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+	level, weight = (&WorkflowSpec{}).ActivityPriority("wf", "act")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+		Workflows: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelCritical)},
+			{Name: new("heavy-wf"), FairnessWeight: new(uint32(7))},
+		},
+		Activities: []NamedPriorityValues{
+			{Name: new("weighted"), FairnessWeight: new(uint32(3))},
+			{Name: new("background"), PriorityLevel: new(PriorityLevelBackground), FairnessWeight: new(uint32(5))},
+		},
+	}}
+
+	check := func(workflow, activity, wantLevel string, wantWeight uint32, msg string) {
+		t.Helper()
+		level, weight := spec.ActivityPriority(workflow, activity)
+		require.Equal(t, wantLevel, level, msg)
+		require.Equal(t, wantWeight, weight, msg)
+	}
+	check("other-wf", "other", PriorityLevelHigh, 2, "nothing of its own: the default")
+	check("critical-wf", "other", PriorityLevelCritical, 2, "level from the calling workflow, weight from the default")
+	check("critical-wf", "weighted", PriorityLevelCritical, 3, "own weight, level from the calling workflow")
+	check("heavy-wf", "weighted", PriorityLevelHigh, 3, "own weight beats the workflow's weight")
+	check("heavy-wf", "other", PriorityLevelHigh, 7, "weight from the calling workflow")
+	check("critical-wf", "background", PriorityLevelBackground, 5, "own values beat the workflow's")
+}
+
+func TestValidateWorkflowPriority(t *testing.T) {
+	conf := func(p *WorkflowPriority) *Configuration {
+		c := LoadDefaultConfiguration()
+		c.Spec.WorkflowSpec = &WorkflowSpec{Priority: p}
+		return c
+	}
+
+	require.NoError(t, conf(nil).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowPriority{}).validateWorkflowSpec())
+	require.Equal(t, []string{"critical", "high", "normal", "low", "background"}, PriorityLevels)
+	for _, level := range PriorityLevels {
+		require.NoError(t, conf(&WorkflowPriority{
+			Default:    &PriorityValues{PriorityLevel: new(level)},
+			Workflows:  []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(level)}},
+			Activities: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(level)}},
+		}).validateWorkflowSpec(), level)
+	}
+	require.NoError(t, conf(&WorkflowPriority{
+		Default:    &PriorityValues{PriorityLevel: new(PriorityLevelLow), FairnessWeight: new(uint32(MaxFairnessWeight))},
+		Workflows:  []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(PriorityLevelCritical)}, {Name: new("b"), FairnessWeight: new(uint32(1))}},
+		Activities: []NamedPriorityValues{{Name: new("a")}},
+	}).validateWorkflowSpec(), "the same name may appear in workflows and activities")
+
+	err := conf(&WorkflowPriority{Default: &PriorityValues{PriorityLevel: new("urgent")}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid priorityLevel "urgent" in workflow priority default: must be one of critical, high, normal, low, background`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new("Critical")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid priorityLevel "Critical" in workflow priority workflows entry "a"`)
+
+	err = conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(uint32(0))}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "invalid fairnessWeight 0 in workflow priority default: must be between 1 and 1000")
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("a"), FairnessWeight: new(uint32(1001))}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid fairnessWeight 1001 in workflow priority activities entry "a"`)
+
+	for _, w := range []uint32{1, 2, 500, 1000} {
+		require.NoError(t, conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(w)}}).validateWorkflowSpec(), w)
+	}
+	for _, w := range []uint32{0, 1001, 100000} {
+		require.ErrorContains(t, conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(w)}}).validateWorkflowSpec(), "invalid fairnessWeight", w)
+	}
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("a")}, {Name: new("a")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `duplicate name "a" in workflow priority activities`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a")}, {Name: new("a"), FairnessWeight: new(uint32(2))}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `duplicate name "a" in workflow priority workflows`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{PriorityLevel: new(PriorityLevelHigh)}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "workflow priority workflows entry requires a name")
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "workflow priority activities entry requires a name")
+}
+
+func TestLoadStandaloneConfigurationPriority(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: priority
+spec:
+  workflow:
+    priority:
+      default:
+        priorityLevel: high
+      workflows:
+        - name: PaymentTransfer
+          priorityLevel: critical
+      activities:
+        - name: SendReceipt
+          fairnessWeight: 3
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	level, weight := c.Spec.WorkflowSpec.ActivityPriority("PaymentTransfer", "SendReceipt")
+	require.Equal(t, PriorityLevelCritical, level)
+	require.InDelta(t, 3, weight, 1e-6)
+	level, weight = c.Spec.WorkflowSpec.ActivityPriority("Other", "Other")
+	require.Equal(t, PriorityLevelHigh, level)
+	require.Zero(t, weight)
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: priority
+spec:
+  workflow:
+    priority:
+      activities:
+        - name: SendReceipt
+          fairnessWeight: 0
+`), 0o600))
+	_, err = LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "invalid fairnessWeight 0")
 }

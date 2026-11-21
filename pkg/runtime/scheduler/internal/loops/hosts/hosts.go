@@ -43,7 +43,8 @@ type hosts struct {
 	// the streams' inflight triggers, which the scheduler then redelivers.
 	// A single-instance flap at startup is enough to double-deliver a
 	// due-now job.
-	lastAddresses []string
+	lastAddresses    []string
+	lastSupportsPull bool
 
 	security  security.Handler
 	streamN   uint
@@ -72,7 +73,7 @@ func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClients) error {
 	addrs := slices.Clone(event.Addresses)
 	slices.Sort(addrs)
-	if slices.Equal(addrs, h.lastAddresses) {
+	if slices.Equal(addrs, h.lastAddresses) && event.SupportsPullSlots == h.lastSupportsPull {
 		log.Debugf("Scheduler host addresses unchanged, keeping existing connections: %v", event.Addresses)
 		return nil
 	}
@@ -80,6 +81,7 @@ func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClie
 	var (
 		clients    []schedulerv1pb.SchedulerClient
 		closeConns []context.CancelFunc
+		addresses  []string
 	)
 
 	for range h.streamN {
@@ -94,11 +96,18 @@ func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClie
 
 			clients = append(clients, client)
 			closeConns = append(closeConns, closeCon)
+			addresses = append(addresses, addr)
 		}
 	}
 
-	h.connector.Enqueue(&loops.Connect{Clients: clients, CloseConns: closeConns})
+	h.connector.Enqueue(&loops.Connect{
+		Clients:           clients,
+		CloseConns:        closeConns,
+		Addresses:         addresses,
+		SupportsPullSlots: event.SupportsPullSlots,
+	})
 	h.lastAddresses = addrs
+	h.lastSupportsPull = event.SupportsPullSlots
 
 	return nil
 }

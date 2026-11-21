@@ -58,7 +58,7 @@ func (f *forward) Setup(t *testing.T) []framework.Option {
 	appID := uuid.NewString()
 	f.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		// Daprd 0 never turns into a fallback host: daprd 1 is the only host
 		// until the worker connects.
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID), daprd.WithWorkflowFallbackSettle(t, time.Hour)),

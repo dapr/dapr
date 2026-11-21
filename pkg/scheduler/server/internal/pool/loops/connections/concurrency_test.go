@@ -372,6 +372,7 @@ func TestHandleConcurrencyRelease_ReleasesAllGatesBeforeDraining(t *testing.T) {
 		streamGateKeys: make(map[uint64][]string),
 		schedulerCount: 1,
 	}
+	c.pull = c.newPull()
 
 	waiting := makeTriggerRequest(actorType, "a2", "act")
 	require.True(t, primary.enqueue(waiting))

@@ -456,9 +456,7 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 		entries[i].Event = entry.GetEvent()
 		// Populate entry metadata with request level metadata. Entry level metadata keys
 		// override request level metadata.
-		if entry.GetMetadata() != nil {
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
-		}
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(in.GetMetadata(), entry.GetMetadata())
 
 		if !rawPayload {
 			// Extract trace context from context.
@@ -503,11 +501,17 @@ func (a *api) bulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishR
 	}
 	if rawPayload {
 		baggage := baggageFromContext(ctx)
-		if baggage != "" {
-			for i := range entries {
-				if entries[i].Metadata == nil {
-					entries[i].Metadata = map[string]string{}
-				}
+		for i := range entries {
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, spanName)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			spanMap[i] = childSpan
+
+			if entries[i].Metadata == nil {
+				entries[i].Metadata = map[string]string{}
+			}
+			entries[i].Metadata[pubsub.TraceIDField] = traceID
+			entries[i].Metadata[pubsub.TraceStateField] = traceState
+			if baggage != "" {
 				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
 			}
 		}

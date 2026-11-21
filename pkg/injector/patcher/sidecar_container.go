@@ -92,11 +92,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--app-port", strconv.FormatInt(int64(c.AppPort), 10))
 	}
 
+	// daprd enables metrics by default, so false has to be passed explicitly.
+	args = append(args, "--enable-metrics="+strconv.FormatBool(c.EnableMetrics))
 	if c.EnableMetrics {
-		args = append(args,
-			"--enable-metrics",
-			"--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10),
-		)
+		args = append(args, "--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10))
 	}
 
 	if c.Config != "" {

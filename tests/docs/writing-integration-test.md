@@ -177,8 +177,18 @@ own plaintext scheduler or inject unsigned history must opt out) and branch
 assertions on `workflow.Signing()`; it is the `signing` leg of the matrix
 job.
 
+Setting `DAPR_INTEGRATION_WORKFLOW_STAGED=true` does the same for the
+`WorkflowsStagedOperations` preview feature, with
+`workflow.WithStagedOperations(bool)` as the per-test override,
+`workflow.WithStagedOperationsN(index, bool)` as the per-daprd override, and
+`workflow.StagedOperations()` for mode-specific assertions; it is the `staged`
+leg of the matrix job. A test about the behaviour without the feature (an
+operation failing because no worker is connected, a daprd giving up the
+workflow actor types once its last worker leaves) must pin it off.
+
 The matrix job has one boolean axis per mode and runs every combination
-except all-off (the default integration job), seven legs in total: the env
+except all-off (the default integration job) and scheduler-placement-only
+(the extended focus job), thirty legs in total: the env
 vars compose because all harness-driven feature flags share one feature
 manifest per daprd (`daprd.WithFeatureEnabled` calls accumulate into it). A
 test that starts extra daprds to join the harness cluster must pass

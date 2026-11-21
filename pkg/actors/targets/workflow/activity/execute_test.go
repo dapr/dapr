@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity/inflight"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/detached"
@@ -272,4 +273,86 @@ func Test_claimStaleEviction(t *testing.T) {
 		assert.False(t, owner)
 		assert.Same(t, call, follower)
 	})
+}
+
+// Test_executeActivity_pullNoCapacity pins that a pull delivery the engine
+// refuses for lack of a slot surfaces actorerrors.ErrNoCapacity unwrapped, so the
+// scheduler stream can queue it again, and leaves nothing cached: the next
+// delivery executes.
+func Test_executeActivity_followerOfRefusedPullOwnerRuns(t *testing.T) {
+	t.Parallel()
+	f, scheduled := newExecHarness(t)
+	entered, refuse := make(chan struct{}), make(chan struct{})
+	f.scheduler = func(_ context.Context, wi *backend.ActivityWorkItem) error {
+		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
+			close(entered)
+			<-refuse
+			return actorerrors.ErrNoCapacity
+		}
+		scheduled <- wi
+		return nil
+	}
+
+	a := f.GetOrCreate("wf::3::0").(*activity)
+	pullReminder := testReminder()
+	pullReminder.ExecuteLocally = true
+	ownerErr := make(chan error, 1)
+	go func() {
+		ownerErr <- a.executeActivity(t.Context(), pullReminder, testInvocation())
+	}()
+	<-entered
+
+	// A regular delivery of the same activity parks behind the pull owner,
+	// which is then refused a slot.
+	followerErr := make(chan error, 1)
+	go func() {
+		followerErr <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+	}()
+	time.Sleep(100 * time.Millisecond)
+	close(refuse)
+	require.ErrorIs(t, <-ownerErr, actorerrors.ErrNoCapacity)
+
+	// The follower runs the activity itself instead of reporting the
+	// owner's refusal.
+	completeWorkItem(t, recvWorkItem(t, scheduled))
+	select {
+	case err := <-followerErr:
+		require.NoError(t, err)
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the follower")
+	}
+}
+
+func Test_executeActivity_pullNoCapacity(t *testing.T) {
+	t.Parallel()
+	f, scheduled := newExecHarness(t)
+	f.scheduler = func(_ context.Context, wi *backend.ActivityWorkItem) error {
+		if pull, _ := wi.Properties[todo.PullProperty].(bool); pull {
+			return actorerrors.ErrNoCapacity
+		}
+		scheduled <- wi
+		return nil
+	}
+
+	a := f.GetOrCreate("wf::3::0").(*activity)
+	pullReminder := testReminder()
+	pullReminder.ExecuteLocally = true
+
+	err := a.executeActivity(t.Context(), pullReminder, testInvocation())
+	require.ErrorIs(t, err, actorerrors.ErrNoCapacity)
+	assert.Equal(t, actorerrors.ErrNoCapacity, err, "returned unwrapped, not as a recoverable error")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- a.executeActivity(t.Context(), testReminder(), testInvocation())
+	}()
+	wi := recvWorkItem(t, scheduled)
+	assert.Equal(t, false, wi.Properties[todo.PullProperty])
+	completeWorkItem(t, wi)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for the execution")
+	}
 }

@@ -49,7 +49,7 @@ type placementrestart struct {
 
 func (p *placementrestart) Setup(t *testing.T) []framework.Option {
 	p.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
+		workflow.WithStagedOperations(true),
 		workflow.WithPlacementService(),
 		workflow.WithFallbackSettleN(t, 0),
 	)
