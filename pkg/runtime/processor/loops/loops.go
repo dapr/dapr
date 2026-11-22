@@ -72,10 +72,12 @@ type InstanceInitDone struct {
 }
 
 // Barrier resolves once it has been processed by the root loop. Used to flush
-// outstanding events without blocking on a per-resource result.
+// outstanding events without blocking on a per-resource result. The error is
+// non-nil if, at flush time, a non-ignored component is still parked behind
+// an unready secret store or a deferred component failed to init.
 type Barrier struct {
 	*rootbase
-	Done chan struct{}
+	Done chan error
 }
 
 // Shutdown is the sentinel passed to loop.Close at every level.

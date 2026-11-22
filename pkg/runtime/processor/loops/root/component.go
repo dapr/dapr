@@ -182,9 +182,10 @@ func (r *Root) decInFlight() {
 	if r.inFlight > 0 {
 		r.inFlight--
 	}
-	if r.inFlight == 0 {
+	if r.inFlight == 0 && len(r.pendingBarriers) > 0 {
+		err := r.barrierError()
 		for _, done := range r.pendingBarriers {
-			close(done)
+			done <- err
 		}
 		r.pendingBarriers = nil
 	}

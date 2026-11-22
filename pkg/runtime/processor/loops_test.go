@@ -14,6 +14,7 @@ limitations under the License.
 package processor
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,6 +30,17 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
+
+func parkedPubsubComp(name string, ignoreErrors bool) componentsapi.Component {
+	comp := inlinePubsubComp(name)
+	comp.SecretStore = "mystore"
+	comp.Spec.IgnoreErrors = ignoreErrors
+	comp.Spec.Metadata = append(comp.Spec.Metadata, commonapi.NameValuePair{
+		Name:         "password",
+		SecretKeyRef: commonapi.SecretKeyRef{Name: "mysecret", Key: "key1"},
+	})
+	return comp
+}
 
 // TestProcessorFlushBarrier drives several component inits through the full
 // root -> category -> instance loop hierarchy and asserts that Flush only
@@ -105,4 +117,67 @@ func TestProcessorSecretStoreDependentReenqueue(t *testing.T) {
 
 	_, ok = proc.compStore.GetComponent("needs-secret")
 	assert.True(t, ok, "dependent must be processed once its secret store initialises")
+}
+
+// TestProcessorFlushParkedDependent: a component parked behind a secret
+// store that never loads must fail Flush (dapr/dapr#7326), so initRuntime
+// does not mark the sidecar Ready with the component missing.
+func TestProcessorFlushParkedDependent(t *testing.T) {
+	t.Run("unready secret store fails flush", func(t *testing.T) {
+		proc, reg := newTestProc()
+		startProc(t, proc)
+		mockPubSub := new(daprt.MockPubSub)
+		reg.PubSubs().RegisterComponent(func(logger.Logger) pubsub.PubSub { return mockPubSub }, "mockPubSub")
+		mockPubSub.On("Init", mock.Anything).Return(nil)
+
+		ch := proc.AddPendingComponent(t.Context(), parkedPubsubComp("needs-secret", false))
+		require.NotNil(t, ch)
+		require.NoError(t, <-ch)
+
+		err := proc.Flush(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "needs-secret")
+		assert.Contains(t, err.Error(), "mystore")
+		_, ok := proc.compStore.GetComponent("needs-secret")
+		assert.False(t, ok)
+	})
+
+	t.Run("ignoreErrors parked component does not fail flush", func(t *testing.T) {
+		proc, reg := newTestProc()
+		startProc(t, proc)
+		mockPubSub := new(daprt.MockPubSub)
+		reg.PubSubs().RegisterComponent(func(logger.Logger) pubsub.PubSub { return mockPubSub }, "mockPubSub")
+		mockPubSub.On("Init", mock.Anything).Return(nil)
+
+		ch := proc.AddPendingComponent(t.Context(), parkedPubsubComp("needs-secret", true))
+		require.NotNil(t, ch)
+		require.NoError(t, <-ch)
+		require.NoError(t, proc.Flush(t.Context()))
+	})
+
+	t.Run("deferred dependent init failure fails flush", func(t *testing.T) {
+		proc, reg := newTestProc()
+		startProc(t, proc)
+		mockPubSub := new(daprt.MockPubSub)
+		reg.PubSubs().RegisterComponent(func(logger.Logger) pubsub.PubSub { return mockPubSub }, "mockPubSub")
+		mockPubSub.On("Init", mock.Anything).Return(errors.New("boom"))
+		reg.SecretStores().RegisterComponent(
+			func(logger.Logger) secretstores.SecretStore { return rtmock.NewMockKubernetesStore() },
+			"mockSecret",
+		)
+
+		ch := proc.AddPendingComponent(t.Context(), parkedPubsubComp("needs-secret", false))
+		require.NotNil(t, ch)
+		require.NoError(t, <-ch)
+		require.NoError(t, proc.Init(t.Context(), componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+			Spec:       componentsapi.ComponentSpec{Type: "secretstores.mockSecret", Version: "v1"},
+		}))
+
+		err := proc.Flush(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "needs-secret")
+		_, ok := proc.compStore.GetComponent("needs-secret")
+		assert.False(t, ok)
+	})
 }

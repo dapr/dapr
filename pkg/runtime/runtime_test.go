@@ -453,6 +453,33 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
 	})
+	// #7326: a component parked behind a secret store that never loads must
+	// fail flushOutstandingComponents, so initRuntime never marks the
+	// sidecar Ready with the component missing.
+	t.Run("flushOutstandingComponents fails for a component behind an unready secret store", func(t *testing.T) {
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, err)
+		defer stopRuntime(t, rt)
+
+		go rt.processor.Process(t.Context())
+
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "needs-secret"},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "pubsub.mockPubSub",
+				Version: "v1",
+				Metadata: []commonapi.NameValuePair{
+					{Name: "a", SecretKeyRef: commonapi.SecretKeyRef{Key: "key1", Name: "name1"}},
+				},
+			},
+			Auth: componentsV1alpha1.Auth{SecretStore: "never-loaded"}, //nolint:gosec
+		})
+
+		err = rt.flushOutstandingComponents(t.Context())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "needs-secret")
+		assert.Contains(t, err.Error(), "never-loaded")
+	})
 }
 
 func TestInitNameResolution(t *testing.T) {

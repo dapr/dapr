@@ -481,18 +481,21 @@ func (p *Processor) Process(ctx context.Context) error {
 // completed. It is a no-op when the processor has already shut down. The
 // Barrier event is queued unconditionally, so it is safe to call Flush
 // concurrently with Process; the call simply waits until the root loop has
-// processed every event queued ahead of the Barrier.
+// processed every event queued ahead of the Barrier. It returns an error if
+// a non-ignored component is still parked behind an unready secret store or
+// a deferred component failed to init, so daprd startup fails instead of
+// reporting Ready with components missing (#7326).
 func (p *Processor) Flush(ctx context.Context) error {
 	if p.closed.Load() {
 		return nil
 	}
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	p.rootLoop.Loop().Enqueue(&loops.Barrier{Done: done})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-done:
-		return nil
+	case err := <-done:
+		return err
 	}
 }
 
