@@ -88,10 +88,14 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 
 		return bsrr, err
 	})
-	// setting error if any entry has not been yet touched - only use case that seems possible is of timeout
-	for eId, ind := range *bscData.EntryIdIndexMap { //nolint:stylecheck
-		if (*bscData.BulkResponses)[ind].EntryId == "" {
-			(*bscData.BulkResponses)[ind].EntryId = eId
+	// Set the error on every entry of this delivery that no attempt answered,
+	// which only a timeout leaves. The call data covers the whole bulk message,
+	// whose other routes are delivered by calls of their own: marking their
+	// entries here would leave them looking answered, with this call's error,
+	// or none, after their own delivery timed out.
+	for _, msg := range psm.PubSubMessages {
+		if ind, ok := (*bscData.EntryIdIndexMap)[msg.Entry.EntryId]; ok && (*bscData.BulkResponses)[ind].EntryId == "" {
+			(*bscData.BulkResponses)[ind].EntryId = msg.Entry.EntryId
 			(*bscData.BulkResponses)[ind].Error = err
 		}
 	}
