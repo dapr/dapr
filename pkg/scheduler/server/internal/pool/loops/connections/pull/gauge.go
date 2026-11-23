@@ -15,26 +15,26 @@ package pull
 
 import "github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 
-// gauge counts pull triggers by app and activity name (the trigger's
-// concurrency key) and publishes each count as it changes.
+// gauge counts pull triggers by app, activity name and priority level and
+// publishes each count as it changes.
 type gauge struct {
-	record func(namespace, appID, activityName string, count int64)
+	record func(namespace, appID, activityName, priorityLevel string, count int64)
 	counts map[gaugeKey]int64
 }
 
 type gaugeKey struct {
-	appID, name string
+	appID, name, level string
 }
 
-func newGauge(record func(namespace, appID, activityName string, count int64)) *gauge {
+func newGauge(record func(namespace, appID, activityName, priorityLevel string, count int64)) *gauge {
 	return &gauge{record: record, counts: make(map[gaugeKey]int64)}
 }
 
 func (g *gauge) add(req *loops.TriggerRequest, delta int64) {
 	meta := req.Job.GetMetadata()
-	key := gaugeKey{appID: meta.GetAppId(), name: meta.GetConcurrencyKey()}
+	key := gaugeKey{appID: meta.GetAppId(), name: meta.GetConcurrencyKey(), level: levelName(levelOf(req))}
 	g.counts[key] += delta
-	g.record(meta.GetNamespace(), key.appID, key.name, g.counts[key])
+	g.record(meta.GetNamespace(), key.appID, key.name, key.level, g.counts[key])
 	if g.counts[key] == 0 {
 		delete(g.counts, key)
 	}
