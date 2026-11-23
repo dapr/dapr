@@ -18,7 +18,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
 )
@@ -27,12 +26,10 @@ type Options struct {
 	Orchestrator orchestrator.Options
 	Activity     activity.Options
 	Retentioner  retentioner.Options
-	Executor     *executor.Options
 
 	WorkflowActorType  string
 	ActivityActorType  string
 	RetentionActorType string
-	ExecutorActorType  string
 }
 
 func Factories(ctx context.Context, opts Options) ([]table.ActorTypeFactory, error) {
@@ -51,7 +48,7 @@ func Factories(ctx context.Context, opts Options) ([]table.ActorTypeFactory, err
 		return nil, err
 	}
 
-	factories := []table.ActorTypeFactory{
+	return []table.ActorTypeFactory{
 		{
 			Factory: orchFactory,
 			Type:    opts.WorkflowActorType,
@@ -64,18 +61,5 @@ func Factories(ctx context.Context, opts Options) ([]table.ActorTypeFactory, err
 			Factory: retentionerFactory,
 			Type:    opts.RetentionActorType,
 		},
-	}
-
-	if opts.Executor != nil {
-		executorFactory, err := executor.New(ctx, *opts.Executor)
-		if err != nil {
-			return nil, err
-		}
-		factories = append(factories, table.ActorTypeFactory{
-			Factory: executorFactory,
-			Type:    opts.ExecutorActorType,
-		})
-	}
-
-	return factories, nil
+	}, nil
 }

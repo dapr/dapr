@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/fork"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -36,28 +37,30 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) error {
+// forkWorkflowHistory forks this instance's history into the rerun's new
+// instance, and reports whether a fallback host staged the rerun there.
+func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) (bool, error) {
 	var rerunReq backend.RerunWorkflowFromEventRequest
 	if err := proto.Unmarshal(request, &rerunReq); err != nil {
-		return fmt.Errorf("failed to unmarshal rerun workflow request: %w", err)
+		return false, fmt.Errorf("failed to unmarshal rerun workflow request: %w", err)
 	}
 
 	state, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if state == nil {
 		defer o.deactivate(o)
-		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
+		return false, status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
 	if !api.WorkflowMetadataIsComplete(ometa) {
-		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
+		return false, status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
 	if len(ometa.ParentInstanceId) > 0 {
-		return status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
+		return false, status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
 	}
 
 	defer o.deactivate(o)
@@ -80,23 +83,23 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 
 	newState, err := fork.Build()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	data, err := proto.Marshal(newState.ToWorkflowState())
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Call target instance ID to execute workflow rerun.
-	_, err = o.router.Call(ctx, internalsv1pb.
+	res, err := o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(todo.RerunWorkflowInstance).
 		WithActor(o.actorType, rerunReq.GetNewInstanceID()).
 		WithData(data).
 		WithContentType(invokev1.ProtobufContentType),
 	)
 
-	return err
+	return common.IsFallback(res), err
 }
 
 func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request []byte) error {
@@ -196,11 +199,26 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 	}
 
-	if err = errors.Join(
-		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+	var actErr error
+	switch {
+	case len(activities) == 0:
+	case o.isFallback():
+		// No local executor can run the activities, and a fallback host
+		// does not advertise the activity actor type to the scheduler. Arm
+		// the janitor due at once instead: it fires on a daprd with an
+		// executor, which forwards it to the instance's owner until the
+		// instance moves to such a daprd, where its re-dispatch of the
+		// unresolved tasks sends the activities.
+		actErr = o.createJanitor(ctx, newState, time.Now())
+	default:
 		// Rerun always dispatches with durable reminders: the new instance
 		// has no janitor yet, so the elision cannot be certified here.
-		o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err,
+		actErr = o.callActivities(ctx, activities, newState, rerunRS, outgoingActPropHist, false).Err
+	}
+
+	if err = errors.Join(
+		o.callChildWorkflows(ctx, startedEvent.GetName(), startedEvent.GetWorkflowInstance().GetExecutionId().GetValue(), childWFs, outgoingChildPropHist),
+		actErr,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err

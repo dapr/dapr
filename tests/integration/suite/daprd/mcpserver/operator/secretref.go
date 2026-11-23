@@ -27,6 +27,7 @@ import (
 	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
@@ -59,6 +60,7 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{"test-app": "mcpconfig"}),
 		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
@@ -76,11 +78,11 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "secreted-mcp", Namespace: "default"},
 					Spec: mcpapi.MCPServerSpec{
-						// example.com is unreachable; ignoreErrors keeps daprd up.
+						// The URL answers 404; ignoreErrors keeps daprd up.
 						IgnoreErrors: true,
 						Endpoint: mcpapi.MCPEndpoint{
 							StreamableHTTP: &mcpapi.MCPStreamableHTTP{
-								URL: "http://example.com/mcp",
+								URL: prochttp.NotFoundURL(t) + "/mcp",
 								Headers: []commonapi.NameValuePair{
 									{
 										Name: "Authorization",

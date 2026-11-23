@@ -24,6 +24,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
+	"github.com/dapr/dapr/pkg/runtime/processor/loops/httpendpoint"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
 )
@@ -39,6 +40,12 @@ type SIGHUPReconciler[T differ.Resource] struct {
 	// name. Used to detect whether a resource has actually changed.
 	getExisting func(name string) (T, bool)
 
+	// resolve, when set, returns a copy of an incoming resource with its
+	// secrets resolved the way the processor resolved the stored copy, so the
+	// two compare equal when nothing changed.
+	resolve func(context.Context, T) T
+	signal  func() error
+
 	loop loop.Interface[Event]
 }
 
@@ -51,6 +58,7 @@ func NewSIGHUPConfigurations(opts Options[configapi.Configuration]) *SIGHUPRecon
 		htarget:     opts.Healthz.AddTarget("configuration-sighup-reconciler"),
 		loader:      opts.Loader.Configurations(),
 		getExisting: opts.CompStore.GetConfigurationResource,
+		signal:      sendSIGHUP,
 	}
 	r.loop = loopFactory.NewLoop(r)
 	return r
@@ -65,6 +73,15 @@ func NewSIGHUPHTTPEndpoints(opts Options[httpendpointapi.HTTPEndpoint]) *SIGHUPR
 		htarget:     opts.Healthz.AddTarget("httpendpoint-sighup-reconciler"),
 		loader:      opts.Loader.HTTPEndpoints(),
 		getExisting: opts.CompStore.GetHTTPEndpoint,
+		signal:      sendSIGHUP,
+	}
+	if opts.Processor != nil {
+		secret := opts.Processor.Secret()
+		r.resolve = func(ctx context.Context, e httpendpointapi.HTTPEndpoint) httpendpointapi.HTTPEndpoint {
+			e = *e.DeepCopy()
+			httpendpoint.ResolveSecrets(ctx, secret, &e)
+			return e
+		}
 	}
 	r.loop = loopFactory.NewLoop(r)
 	return r
@@ -79,6 +96,7 @@ func NewSIGHUPResiliencies(opts Options[resiliencyapi.Resiliency]) *SIGHUPReconc
 		htarget:     opts.Healthz.AddTarget("resiliency-sighup-reconciler"),
 		loader:      opts.Loader.Resiliencies(),
 		getExisting: opts.CompStore.GetResiliencyResource,
+		signal:      sendSIGHUP,
 	}
 	r.loop = loopFactory.NewLoop(r)
 	return r
@@ -126,7 +144,7 @@ func (r *SIGHUPReconciler[T]) watchConn(ctx context.Context, conn *loader.Stream
 func (r *SIGHUPReconciler[T]) Handle(ctx context.Context, event Event) error {
 	switch e := event.(type) {
 	case *resourceEvent[T]:
-		r.handleResourceEvent(e.Event)
+		r.handleResourceEvent(ctx, e.Event)
 	case *shutdown:
 		r.handleShutdown(e)
 	default:
@@ -136,7 +154,7 @@ func (r *SIGHUPReconciler[T]) Handle(ctx context.Context, event Event) error {
 	return nil
 }
 
-func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
+func (r *SIGHUPReconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) {
 	name := event.Resource.GetName()
 
 	switch event.Type {
@@ -149,7 +167,11 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 
 	case operatorv1pb.ResourceEventType_CREATED, operatorv1pb.ResourceEventType_UPDATED:
 		if existing, exists := r.getExisting(name); exists {
-			if differ.AreSame(existing, event.Resource) {
+			incoming := event.Resource
+			if r.resolve != nil {
+				incoming = r.resolve(ctx, incoming)
+			}
+			if differ.AreSame(existing, incoming) {
 				log.Debugf("Ignoring %s %s event for %s: resource has not changed",
 					r.kind, event.Type, event.Resource.LogName())
 				return
@@ -164,7 +186,7 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 		r.kind, event.Type, event.Resource.LogName())
 
 	// Send SIGHUP to ourselves to trigger runtime restart
-	if err := sendSIGHUP(); err != nil {
+	if err := r.signal(); err != nil {
 		log.Errorf("Failed to send SIGHUP signal: %s", err)
 	}
 }

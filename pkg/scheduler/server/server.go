@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring/scaling"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
@@ -42,6 +43,12 @@ import (
 )
 
 var log = logger.NewLogger("dapr.scheduler.server")
+
+// ErrListen is returned by Run when the server cannot bind its port. The
+// default port lies inside the default ephemeral port range, so one of the
+// process's own outbound connections can hold it; a new process gets new
+// sockets.
+var ErrListen = errors.New("could not listen")
 
 // Controller is a long-lived k8s controller that must only be created
 // once per process because controller-runtime registers controller names globally in the metrics registry.
@@ -63,6 +70,10 @@ type Options struct {
 	Mode                      modes.DaprMode
 	KubeConfig                *string
 	Controller                *controller.Controller
+
+	// Scaling, when non-nil, is pointed at this server's cron so it reports
+	// its queue state.
+	Scaling *scaling.Collector
 
 	Workers uint32
 
@@ -198,6 +209,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Host: &schedulerv1pb.Host{
 			Address:                   broadcastAddr,
 			SchedulerPlacementEnabled: opts.PlacementEnabled,
+			SupportsPullSlots:         true,
 		},
 		Etcd:          etcdServer,
 		Backend:       opts.Backend,
@@ -206,6 +218,10 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Placement:     place,
 		Handoff:       hoff,
 	})
+
+	if opts.Scaling != nil {
+		opts.Scaling.SetSource(cron)
+	}
 
 	if opts.Controller != nil {
 		opts.Controller.SetCron(cron)
@@ -295,7 +311,7 @@ func (s *Server) runServer(ctx context.Context) error {
 	defer s.hzAPIServer.NotReady()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+		return fmt.Errorf("%w on port %d: %w", ErrListen, s.port, err)
 	}
 
 	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)

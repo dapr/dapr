@@ -91,10 +91,9 @@ func (s *Serializer) KeyFromMetadata(ctx context.Context, req *schedulerv1pb.Job
 			}
 		}
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		str = joinStrings("app", req.GetNamespace(), req.GetAppId())
-		if !asPrefix {
-			str += "||"
-		}
+		// asPrefix only applies to actor IDs. An undelimited app ID would
+		// match every other app in the namespace whose ID it prefixes.
+		str = joinStrings("app", req.GetNamespace(), req.GetAppId()) + "||"
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
@@ -161,12 +160,17 @@ func buildJobName(req Request) (string, error) {
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()
-		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
+		return ActorReminderKey(meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
+}
+
+// ActorReminderKey returns the stored job key of an actor reminder.
+func ActorReminderKey(namespace, actorType, actorID, name string) string {
+	return joinStrings("actorreminder", namespace, actorType, actorID, name)
 }
 
 func joinStrings(ss ...string) string {

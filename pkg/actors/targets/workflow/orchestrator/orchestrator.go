@@ -48,6 +48,20 @@ type orchestrator struct {
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
+	// cachedExecutionID is the execution ID of the instance the cache last
+	// held as the store held it, nil when it held none, so a load after the
+	// cache was dropped can tell whether the store still holds that instance.
+	// See cacheDurable and releaseReplacedInstance.
+	cachedExecutionID *string
+	// pinnedFallback holds the fallback state read once at the start of an
+	// invoked method, nil outside one (see pinFallback).
+	pinnedFallback atomic.Pointer[bool]
+	// settled lets a wake-up of a completed instance ack after one read of
+	// its metadata, parent-notify and first history rows (see
+	// settledTerminal). Any save rewrites the metadata row and fails that
+	// check, including the paths that bypass executeMethod (fold submits,
+	// activity-result reminders). Only touched under the turn lock.
+	settled *settledTerminal
 	// janitorAsserted tracks whether the per-instance janitor backstop
 	// reminder was ensured this actor residency (WorkflowsFastPath).
 	janitorAsserted atomic.Bool
@@ -67,6 +81,8 @@ type orchestrator struct {
 	// lastActive alone cannot show that once a turn (an app roundtrip of
 	// arbitrary length) outlives the idle TTL.
 	inTurn atomic.Int32
+	// lockWaiters counts invocations blocked on the turn lock.
+	lockWaiters atomic.Int32
 	// foldPending holds sender-retried completions awaiting their folding
 	// turn (WorkflowsFastPath; see fold.go). INVARIANT: only touched
 	// while holding the per-actor turn lock (submit, turn, janitor,
@@ -123,6 +139,12 @@ type streamFn struct {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	// An eviction deactivates this actor, which waits for every registered
+	// invocation to finish, so it must not register itself as one.
+	if req.GetMessage().GetMethod() == todo.EvictWorkflowMethod {
+		return o.evict(ctx, req)
+	}
+
 	if err := o.enter("method"); err != nil {
 		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
 	}
@@ -130,7 +152,7 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 	// The completions fold manages its own lock lifecycle (early release
 	// before waiting on the folding turn's commit; see fold.go).
-	if o.fastPath && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
+	if o.localFastPath() && req.GetMessage().GetMethod() == todo.AddWorkflowEventMethod {
 		return o.invokeAddEventFold(ctx, req)
 	}
 
@@ -156,6 +178,7 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 	}
 	defer unlock()
 
+	o.dropFallbackCache(ctx)
 	return o.handleReminder(ctx, reminder)
 }
 
@@ -166,6 +189,8 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 func (o *orchestrator) contextLockMeasured(ctx context.Context, kind string) (context.CancelFunc, error) {
 	diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(o.actorType, -1)
+	o.lockWaiters.Add(1)
+	defer o.lockWaiters.Add(-1)
 
 	if o.lockWaitSample.Add(1)%16 != 0 {
 		unlock, err := o.lock.ContextLock(ctx)
@@ -213,6 +238,8 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
 
+	o.dropFallbackCache(ctx)
+
 	var ok bool
 	ok, err = o.handleStream(ctx, req, stream, unlock)
 	if !ok {
@@ -233,6 +260,13 @@ func (o *orchestrator) enter(kind string) error {
 	return nil
 }
 
+// isRetired reports whether Deactivate has run.
+func (o *orchestrator) isRetired() bool {
+	o.retireLock.Lock()
+	defer o.retireLock.Unlock()
+	return o.retired
+}
+
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
 	unlock, err := o.lock.ContextLock(ctx)
@@ -242,17 +276,30 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 		o.lock.ReleaseStall()
 		unlock, err = o.lock.ContextLock(ctx)
 	}
+	// A retired object's lock is closed but free, so a second caller either
+	// takes it or is refused as closed, at random. Either way the teardown
+	// ran already, and the table may hold a fresh actor under this ID by
+	// now: deactivating again is a no-op.
 	if err != nil {
+		if o.isRetired() {
+			return nil
+		}
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
 
+	if o.isRetired() {
+		return nil
+	}
+
 	o.table.Delete(o.actorID)
 	o.invalidateCachedState()
-	o.lock.Close()
+	// Mark retired before closing the lock: a concurrent Deactivate refused
+	// as closed must see the actor as retired, not report a failure.
 	o.retireLock.Lock()
 	o.retired = true
 	o.retireLock.Unlock()
+	o.lock.Close()
 	o.foldFlush()
 	for _, stream := range o.streamFns {
 		stream.errCh <- targeterrors.NewClosed("deactivated")

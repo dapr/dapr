@@ -81,3 +81,7 @@ func (f *Fake) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, srv schedul
 func (f *Fake) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return f.hostsWatchFn(stream)
 }
+
+func (f *Fake) GetQueueState() *api.QueueState {
+	return api.NewQueueState()
+}

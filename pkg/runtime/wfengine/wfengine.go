@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/wfregistrar"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
@@ -50,8 +51,8 @@ var (
 )
 
 // ReservedWorkflowNamePrefix is the prefix daprd uses for managed (in-process)
-// workflow names. The Universal API rejects user-supplied names with this prefix
-// and the gRPC executor routes names with this prefix to the in-process executor.
+// workflow names. The gRPC executor routes names with this prefix to the
+// in-process executor.
 const ReservedWorkflowNamePrefix = "dapr.internal."
 
 type Interface interface {
@@ -66,6 +67,9 @@ type Interface interface {
 	InProcessExecutor() *inprocess.Executor
 	ActivityActorType() string
 	WorkflowActorType() string
+	// ActivityFreeSlots returns how many more activities this sidecar can take
+	// before its activity cap, and a channel closed on the next change.
+	ActivityFreeSlots() (free uint32, changed <-chan struct{})
 }
 
 type Options struct {
@@ -86,6 +90,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 	WorkflowsFastPath               bool
 	WorkflowHistorySigning          bool
+
+	// WorkflowsStagedOperations is the WorkflowsStagedOperations preview feature:
+	// see fallback.go.
+	WorkflowsStagedOperations bool
 
 	// GracefulShutdownDuration is daprd's --dapr-graceful-shutdown-seconds.
 	GracefulShutdownDuration time.Duration
@@ -115,6 +123,15 @@ type engine struct {
 	// or unregister while another path believes actors are still live.
 	actorRegLock     sync.Mutex
 	actorsRegistered bool
+	// sweeping counts the sweeps started by startSweep which have not
+	// settled. The caller which started one releases the types once it has;
+	// until then runFallback and stopFallback leave them alone, so no halt
+	// gets ahead of the cancels it would wait on. Guarded by actorRegLock.
+	sweeping int
+
+	// fallback is the WorkflowsStagedOperations preview; nil when it is off.
+	// Its registration state is guarded by actorRegLock.
+	fallback *fallback
 
 	// closedDisconnectContexts counts DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT
 	// injections.
@@ -160,9 +177,19 @@ func New(opts Options) (Interface, error) {
 		log.Info("WorkflowsFastPath is enabled but scheduler-enforced workflow concurrency limits are configured; disabling the fast path so the limits are enforced")
 		fastPath = false
 	}
+	// Pull dispatch executes activities on whichever host the scheduler
+	// selects, so the fast path's local drives and janitor re-dispatches (which
+	// target the placement owner) would race the scheduler's delivery.
+	if fastPath && opts.Spec.HasPullActivityDispatch() {
+		log.Info("WorkflowsFastPath is enabled but pull activity dispatch is configured; disabling the fast path so activities are dispatched through the scheduler")
+		fastPath = false
+	}
+	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil && opts.Spec.HasPullActivityDispatch() {
+		log.Infof("Pull activity dispatch is configured with %d activity slots per sidecar", *v)
+	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
-	abackend, err := backendactors.New(backendactors.Options{
+	bopts := backendactors.Options{
 		AppID:                  opts.AppID,
 		Namespace:              opts.Namespace,
 		Actors:                 opts.Actors,
@@ -177,8 +204,15 @@ func New(opts Options) (Interface, error) {
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 		WorkflowsFastPath:               fastPath,
+		WorkflowsStagedOperations:       opts.WorkflowsStagedOperations,
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
-	})
+		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
+		ActivityPriority:                opts.Spec.ActivityPriority,
+	}
+	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil {
+		bopts.MaxConcurrentActivityInvocations = *v
+	}
+	abackend, err := backendactors.New(bopts)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +231,9 @@ func New(opts Options) (Interface, error) {
 		compStore:        opts.ComponentStore,
 		streamShutdownCh: make(chan any),
 	}
+	if opts.WorkflowsStagedOperations {
+		wfe.fallback = newFallback(abackend.WatchExecutorPresence)
+	}
 
 	// Keep the actor refcount balanced when Executor.Run tears holders down
 	// during shutdown: each torn-down holder represents one outstanding
@@ -209,6 +246,12 @@ func New(opts Options) (Interface, error) {
 			// UnRegisterActors' HaltAll waits on the actor turn locks those
 			// completions hold, and with no executor nothing can deliver them.
 			wfe.syncExecutorAvailable()
+			if wfe.fallback != nil {
+				if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
+					log.Warnf("Failed to unregister workflow actors during shutdown: %s", err)
+				}
+				return
+			}
 			err := abackend.UnRegisterActors(context.Background())
 			wfe.actorsRegistered = false
 			if err != nil {
@@ -223,7 +266,12 @@ func New(opts Options) (Interface, error) {
 		backend.WithStreamSendTimeout(time.Second*10),
 		backend.WithStreamShutdownChannel(wfe.streamShutdownCh),
 		backend.WithHealthPingInterval(common.EnvDurationOr("DAPR_WORKFLOW_HEALTH_PING_INTERVAL", 0)),
+		backend.WithWorkflowScheduleHandler(schedule.NewHandler(abackend, opts.Namespace, opts.AppID)),
 	)
+	// Installed whatever this app's flag: the target app's flag decides
+	// whether an operation is staged, and a cross-app one may be staged on
+	// another app's fallback host.
+	registerGrpcServerFn = registerFallbackAware(registerGrpcServerFn)
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
@@ -273,6 +321,15 @@ func (wfe *engine) EnsureActorsRegistered(ctx context.Context) error {
 	defer wfe.actorRegLock.Unlock()
 
 	wfe.mcpRegistrationCount.Add(1)
+	if wfe.fallback != nil {
+		// registerLocalExecutor marks the executor available once registered.
+		if err := wfe.registerLocalExecutor(ctx); err != nil {
+			wfe.mcpRegistrationCount.Add(-1)
+			wfe.syncExecutorAvailable()
+			return err
+		}
+		return nil
+	}
 	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors for internal workflows")
@@ -291,6 +348,11 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 	defer wfe.actorRegLock.Unlock()
 
 	wfe.getWorkItemsCount.Add(1)
+	if wfe.fallback != nil {
+		// No compensating decrement on error either; see below.
+		// registerLocalExecutor marks the executor available once registered.
+		return wfe.registerLocalExecutor(ctx)
+	}
 	wfe.syncExecutorAvailable()
 	if !wfe.actorsRegistered {
 		log.Debug("Registering workflow actors")
@@ -307,9 +369,6 @@ func (wfe *engine) onWorkItemConnection(ctx context.Context) error {
 }
 
 func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
-	wfe.actorRegLock.Lock()
-	defer wfe.actorRegLock.Unlock()
-
 	if wfe.closeDisconnectContextForTest() {
 		log.Warn("TEST INJECTION: closing the work-item stream context during the disconnect callback")
 		done := make(chan struct{})
@@ -323,17 +382,37 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	// advertising the workflow actor types with no worker to run them.
 	ctx = context.WithoutCancel(ctx)
 
-	last := wfe.getWorkItemsCount.Add(-1) == 0 && wfe.mcpRegistrationCount.Load() == 0
-	if last {
-		// Cancel parked work-item completions BEFORE unregistering:
-		// UnRegisterActors' HaltAll waits on the actor turn locks
-		// those completions hold, and with no executor connected
-		// nothing can ever deliver them. A turn racing in after the
-		// sweep is cancelled at registration by the tracker.
-		wfe.syncExecutorAvailable()
+	wfe.actorRegLock.Lock()
+	wfe.getWorkItemsCount.Add(-1)
+	settled := wfe.startSweep()
+	wfe.actorRegLock.Unlock()
+	if settled == nil {
+		return nil
 	}
 
-	if last && wfe.actorsRegistered {
+	// The sweep is waited for without actorRegLock: it cancels the waiters
+	// on other daprds with calls to the executor actor, which take seconds
+	// while no daprd hosts its type, and a worker reconnecting meanwhile
+	// would wait on the lock for all of them.
+	settled()
+	if hold := testSweepHold(); hold > 0 {
+		time.Sleep(hold)
+	}
+
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+	wfe.sweeping--
+
+	if wfe.localExecutor() {
+		// An executor connected during the sweep, and keeps the types.
+		return nil
+	}
+
+	if wfe.fallback != nil {
+		return wfe.releaseLocalExecutor(ctx)
+	}
+
+	if wfe.actorsRegistered {
 		log.Debug("Unregistering workflow actors")
 		// Reset unconditionally. A HaltAll error comes after the types left
 		// the table, so they are gone. A Table error means they are not:
@@ -350,6 +429,25 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 	return nil
 }
 
+// startSweep starts cancelling every parked work-item completion when this
+// daprd has no executor left, by marking the executor unavailable, and
+// returns the function that waits for those cancellations; nil otherwise.
+// They are cancelled BEFORE the types are unregistered: UnRegisterActors'
+// HaltAll waits on the actor turn locks those completions hold, and with no
+// executor connected nothing can ever deliver them. A turn racing in after
+// the sweep is cancelled at registration by the tracker. A connection during
+// the sweep marks the executor available again, which ends its retries. The
+// sweep counts in sweeping until the caller, which waits for it without the
+// lock, takes the lock again and counts it out. Must be called with
+// actorRegLock held.
+func (wfe *engine) startSweep() (settled func()) {
+	if wfe.localExecutor() {
+		return nil
+	}
+	wfe.sweeping++
+	return wfe.backend.StartSweep()
+}
+
 // testCloseDisconnectContext is a test-only fault injection: the first N
 // work-item disconnect callbacks run with a stream context whose Done channel
 // is already closed while Err still reports nil, the state the callback sees
@@ -357,6 +455,14 @@ func (wfe *engine) onWorkItemDisconnection(ctx context.Context) error {
 // supported production knob.
 var testCloseDisconnectContext = sync.OnceValue(func() int64 {
 	return common.EnvInt64Or("DAPR_WORKFLOW_TEST_CLOSE_DISCONNECT_CONTEXT", 0)
+})
+
+// testSweepHold is a test-only fault injection: the disconnect of the last
+// executor keeps actorRegLock released for this long after its sweep settled,
+// as a sweep whose cancellations reach executor actors on other daprds can
+// take seconds. Not a supported production knob.
+var testSweepHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_SWEEP_HOLD", 0)
 })
 
 // closeDisconnectContextForTest reports whether this disconnect callback runs
@@ -410,17 +516,40 @@ func (wfe *engine) UnregisterMCPServer(serverName string) {
 	}
 
 	wfe.actorRegLock.Lock()
-	defer wfe.actorRegLock.Unlock()
+	wfe.mcpRegistrationCount.Add(-1)
+	var settled func()
+	if wfe.actorsRegistered {
+		settled = wfe.startSweep()
+	}
+	wfe.actorRegLock.Unlock()
+	if settled == nil {
+		return
+	}
 
-	if wfe.mcpRegistrationCount.Add(-1) == 0 && wfe.getWorkItemsCount.Load() == 0 && wfe.actorsRegistered {
-		// Sweep parked completions before HaltAll; see the disconnect callback.
-		wfe.syncExecutorAvailable()
-		log.Debug("Unregistering workflow actors")
-		err := wfe.backend.UnRegisterActors(context.Background())
-		wfe.actorsRegistered = false
-		if err != nil {
+	// Sweep parked completions before HaltAll, waiting for them without
+	// actorRegLock; see the disconnect callback.
+	settled()
+
+	wfe.actorRegLock.Lock()
+	defer wfe.actorRegLock.Unlock()
+	wfe.sweeping--
+
+	if wfe.localExecutor() || !wfe.actorsRegistered {
+		// An executor connected during the sweep and keeps the types, or
+		// another release already gave them up.
+		return
+	}
+	if wfe.fallback != nil {
+		if err := wfe.releaseLocalExecutor(context.Background()); err != nil {
 			log.Warnf("Failed to unregister workflow actors: %s", err)
 		}
+		return
+	}
+	log.Debug("Unregistering workflow actors")
+	err := wfe.backend.UnRegisterActors(context.Background())
+	wfe.actorsRegistered = false
+	if err != nil {
+		log.Warnf("Failed to unregister workflow actors: %s", err)
 	}
 }
 
@@ -444,8 +573,19 @@ func (wfe *engine) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
 
+	if wfe.fallback != nil {
+		go wfe.runFallback(ctx)
+	}
+
 	log.Info("Workflow engine started")
 	<-ctx.Done()
+
+	if wfe.fallback != nil {
+		wfe.stopFallback()
+		// After the worker shut down: the factories stay registered until
+		// the actor runtime halts them.
+		defer wfe.fallback.factoryCancel()
+	}
 
 	// Signal all connected GetWorkItems streams to terminate before draining the
 	// worker, so the gRPC API server's GracefulStop does not block on them during
@@ -471,6 +611,10 @@ func (wfe *engine) ActivityActorType() string {
 
 func (wfe *engine) WorkflowActorType() string {
 	return wfe.backend.WorkflowActorType()
+}
+
+func (wfe *engine) ActivityFreeSlots() (uint32, <-chan struct{}) {
+	return wfe.backend.ActivityFreeSlots()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

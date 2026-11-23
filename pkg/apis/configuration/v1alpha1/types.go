@@ -160,14 +160,32 @@ type WorkflowSpec struct {
 	// +optional
 	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty"`
 
+	// activityDispatchMode selects how activities of this application are
+	// dispatched to its replicas. Unset means "hashed". "hashed" runs each
+	// activity on the replica its ID hashes to. "pull" lets the scheduler
+	// deliver each activity to any replica with a free slot, where a replica
+	// offers maxConcurrentActivityInvocations slots; that field is required
+	// when any activity uses pull. Per-name entries in activityConcurrencyLimits
+	// override this value. Changing it requires a sidecar restart. A replica's
+	// free slots count every activity it runs, pull or hashed.
+	// +kubebuilder:validation:Enum=hashed;pull
+	// +optional
+	ActivityDispatchMode *string `json:"activityDispatchMode,omitempty"`
+
 	// workflowConcurrencyLimits defines per-workflow-name concurrency limits
 	// enforced globally across all replicas by the scheduler.
 	// +optional
 	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty"`
-	// activityConcurrencyLimits defines per-activity-name concurrency limits
-	// enforced globally across all replicas by the scheduler.
+	// activityConcurrencyLimits defines per-activity-name settings: a
+	// concurrency limit enforced globally across all replicas by the scheduler,
+	// and an optional dispatch mode override.
 	// +optional
-	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
+	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty"`
+
+	// Priority orders this application's activities while they wait for a free
+	// sidecar slot under pull dispatch.
+	// +optional
+	Priority *WorkflowPriority `json:"priority,omitempty"`
 
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
@@ -186,6 +204,71 @@ type NamedConcurrencyLimit struct {
 	// replicas.
 	// +optional
 	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+}
+
+// ActivityConcurrencyLimit defines per-name settings for a specific activity
+// name.
+type ActivityConcurrencyLimit struct {
+	// Name is the activity name the entry applies to.
+	// +optional
+	Name *string `json:"name,omitempty"`
+	// MaxConcurrent is the maximum number of concurrent invocations across all
+	// replicas. It is not the per-replica slot count used by pull dispatch;
+	// that is maxConcurrentActivityInvocations.
+	// +optional
+	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+	// DispatchMode overrides the application's activityDispatchMode for this
+	// activity name: "hashed" or "pull". Unset inherits the application value.
+	// +kubebuilder:validation:Enum=hashed;pull
+	// +optional
+	DispatchMode *string `json:"dispatchMode,omitempty"`
+}
+
+// WorkflowPriority is the level and weight of the application's workflows and activities.
+type WorkflowPriority struct {
+	// Default applies to every workflow and activity without an entry of its
+	// own or of its calling workflow.
+	// +optional
+	Default *PriorityValues `json:"default,omitempty"`
+	// Workflows lists per-workflow-name values, inherited by the activities
+	// the workflow calls.
+	// +optional
+	Workflows []NamedPriorityValues `json:"workflows,omitempty"`
+	// Activities lists per-activity-name values.
+	// +optional
+	Activities []NamedPriorityValues `json:"activities,omitempty"`
+}
+
+// PriorityValues is a priority level and a fairness weight, either optional.
+type PriorityValues struct {
+	// PriorityLevel is the strict order between waiting activities: critical,
+	// high, normal, low or background. Unset means normal.
+	// +kubebuilder:validation:Enum=critical;high;normal;low;background
+	// +optional
+	PriorityLevel *string `json:"priorityLevel,omitempty"`
+	// FairnessWeight shares slots between activity names at the same level in
+	// proportion to their weights, 1 to 1000. Unset means 1.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +optional
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty"`
+}
+
+// NamedPriorityValues is the PriorityValues of one workflow or activity name.
+type NamedPriorityValues struct {
+	// Name is the workflow or activity name the entry applies to.
+	Name *string `json:"name"`
+	// PriorityLevel is the strict order between waiting activities: critical,
+	// high, normal, low or background.
+	// +kubebuilder:validation:Enum=critical;high;normal;low;background
+	// +optional
+	PriorityLevel *string `json:"priorityLevel,omitempty"`
+	// FairnessWeight shares slots between activity names at the same level in
+	// proportion to their weights, 1 to 1000.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +optional
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -387,9 +470,8 @@ type WorkflowMetrics struct {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-	// TODO: [MetricsCardinality] Change default in 1.15+
+	// If true (default), metrics for the HTTP server are collected with increased cardinality.
+	// Set to false, or use pathMatching, to reduce cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 	// +optional

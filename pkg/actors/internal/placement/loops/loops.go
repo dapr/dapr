@@ -142,6 +142,49 @@ type UpdateTypes struct {
 	ActorTypes []string
 }
 
+// ReloadReminderTypes reloads the actor types advertised to the scheduler for
+// reminder delivery, after the actor table changed them in place.
+type ReloadReminderTypes struct {
+	*placebase
+	*dissbase
+}
+
+// WatchRemoteHosts asks the placement loop for a channel which receives
+// whether a daprd other than this one hosts ActorType. The loop creates the
+// channel and replies with it on Resp, which must have room for the reply.
+// The loop is the only sender on the channel and its only closer: it closes
+// it once Ctx is done, or at shutdown.
+type WatchRemoteHosts struct {
+	*placebase
+	ActorType string
+	Ctx       context.Context
+	Resp      chan<- chan bool
+}
+
+// UnwatchRemoteHosts ends the WatchRemoteHosts subscription of Ch and closes
+// Ch. The placement loop enqueues it itself once the Ctx of the watch is done.
+type UnwatchRemoteHosts struct {
+	*placebase
+	ActorType string
+	Ch        chan bool
+}
+
+// RoundCompleted tells the placement loop what the installed tables show
+// once a dissemination round completed.
+type RoundCompleted struct {
+	*placebase
+
+	// Remote holds the actor types a daprd other than this one hosts. A type
+	// missing from it has no remote host, unless it is pending.
+	Remote map[string]bool
+
+	// Pending are the actor types a round still in progress covers: their
+	// installed tables are not final, so Remote says nothing about them.
+	// PendingAll is set when such a round covers every type.
+	Pending    map[string]struct{}
+	PendingAll bool
+}
+
 type ReportHost struct {
 	*dissbase
 	Report *Report

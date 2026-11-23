@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/pubsub-subscriber-streaming
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/dapr/dapr v1.15.14

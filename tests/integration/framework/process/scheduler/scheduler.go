@@ -323,6 +323,18 @@ func (s *Scheduler) WaitUntilSidecarsConnected(t *testing.T, ctx context.Context
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
+// WaitUntilPullInflight waits until the scheduler has want activities
+// delivered by pull dispatch and not yet resolved. A delivery on the regular
+// path is never counted.
+func (s *Scheduler) WaitUntilPullInflight(t *testing.T, ctx context.Context, want float64, labels ...string) {
+	t.Helper()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, want, s.Metrics(c, ctx).SumWithLabels(
+			"dapr_scheduler_workflow_activity_inflight", labels...), 0)
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
 func (s *Scheduler) ID() string {
 	return s.id
 }
@@ -463,6 +475,30 @@ func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Met
 	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
+// ScalingMetrics returns the metrics scraped from the scaling metrics
+// endpoint.
+func (s *Scheduler) ScalingMetrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
+	return metrics.New(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics/scaling", s.MetricsAddress()))
+}
+
+// ScalingGauges returns the in-flight and undeliverable job gauges for an
+// app from the scaling metrics endpoint, and fails if the endpoint serves
+// anything else.
+func (s *Scheduler) ScalingGauges(t assert.TestingT, ctx context.Context, namespace, appID string) (inFlight, undeliverable float64) {
+	const (
+		inFlightMetric      = "dapr_scheduler_inflight_jobs"
+		undeliverableMetric = "dapr_scheduler_undeliverable_jobs"
+	)
+
+	all := s.ScalingMetrics(t, ctx).All()
+	for name := range all {
+		metric, _, _ := strings.Cut(name, "|")
+		assert.Contains(t, []string{inFlightMetric, undeliverableMetric}, metric)
+	}
+	labels := "|app_id:" + appID + "|namespace:" + namespace
+	return all[inFlightMetric+labels], all[undeliverableMetric+labels]
+}
+
 func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
 	return metrics.NewWithLabels(t, ctx, s.httpClient, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
@@ -595,6 +631,13 @@ func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID strin
 	}
 }
 
+// JobNowPull is an actor reminder due now, flagged for pull dispatch.
+func (s *Scheduler) JobNowPull(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
+	req := s.JobNowActor(name, namespace, appID, actorType, actorID)
+	req.Metadata.Pull = new(true)
+	return req
+}
+
 func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
 	t.Helper()
 	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
@@ -653,6 +696,27 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 	require.NoError(t, err)
 
 	return resp
+}
+
+// JobKeysLookup returns a lookup of the stored job keys containing substr,
+// for polls. It dials etcd once, here on the test goroutine, and a poll
+// reports a failed lookup to its collector, which retries it.
+func (s *Scheduler) JobKeysLookup(t *testing.T, ctx context.Context) func(c *assert.CollectT, substr string) []string {
+	t.Helper()
+	etcd := s.ETCDClient(t, ctx)
+	return func(c *assert.CollectT, substr string) []string {
+		resp, err := etcd.Get(ctx, "dapr/jobs", clientv3.WithPrefix(), clientv3.WithKeysOnly())
+		if !assert.NoError(c, err) {
+			return nil
+		}
+		var keys []string
+		for _, kv := range resp.Kvs {
+			if strings.Contains(string(kv.Key), substr) {
+				keys = append(keys, string(kv.Key))
+			}
+		}
+		return keys
+	}
 }
 
 // WaitJobKeyCount polls the number of job keys containing substr until cond

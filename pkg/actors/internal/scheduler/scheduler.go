@@ -88,6 +88,21 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		overwrite = *reminder.Overwrite
 	}
 
+	var pull *bool
+	if reminder.Pull {
+		pull = new(true)
+	}
+	var priority *schedulerv1pb.JobPriority
+	if reminder.PriorityLevel != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED || reminder.FairnessWeight > 0 {
+		priority = new(schedulerv1pb.JobPriority)
+		if reminder.PriorityLevel != schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_UNSPECIFIED {
+			priority.Level = reminder.PriorityLevel.Enum()
+		}
+		if reminder.FairnessWeight > 0 {
+			priority.FairnessWeight = new(reminder.FairnessWeight)
+		}
+	}
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name:      reminder.Name,
 		Overwrite: overwrite,
@@ -103,6 +118,8 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			AppId:          s.appID,
 			Namespace:      s.namespace,
 			ConcurrencyKey: reminder.ConcurrencyKey,
+			Pull:           pull,
+			Priority:       priority,
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{
@@ -292,13 +309,22 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 
 		job := named.GetJob()
 
+		var expirationTime time.Time
+		if job.Ttl != nil {
+			expirationTime, err = time.Parse(time.RFC3339Nano, job.GetTtl())
+			if err != nil {
+				log.Debugf("Error parsing expiration time for reminder job %s due to: %s", named.GetName(), err)
+			}
+		}
+
 		reminders[i] = &api.Reminder{
-			Name:      named.GetName(),
-			ActorID:   actor.GetId(),
-			ActorType: actor.GetType(),
-			Data:      job.GetData(),
-			Period:    api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
-			DueTime:   job.GetDueTime(),
+			Name:           named.GetName(),
+			ActorID:        actor.GetId(),
+			ActorType:      actor.GetType(),
+			Data:           job.GetData(),
+			Period:         api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
+			DueTime:        job.GetDueTime(),
+			ExpirationTime: expirationTime,
 		}
 	}
 	return reminders, nil

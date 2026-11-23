@@ -32,6 +32,9 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	schedule "github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/schedule/v1"
 	"github.com/dapr/durabletask-go/api"
 )
 
@@ -148,6 +151,10 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
+	if err := schedule.CheckCreate(ctx, in.GetWorkflowName(), in.GetInstanceId()); err != nil {
+		a.logger.Debug(err)
+		return &runtimev1pb.StartWorkflowResponse{}, err
+	}
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
 		a.logger.Debug(err)
@@ -176,6 +183,10 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		opts = append(opts, api.WithStartTime(startTime))
 	}
 
+	// The marker records whether a fallback host served the start, which the
+	// response reports as staged. Every retry shares it, and the last attempt
+	// overwrites it.
+	ctx = backendactors.WithFallbackMarker(ctx)
 	policyRunner := resiliency.NewRunner[api.InstanceID](ctx,
 		a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
 	)
@@ -185,6 +196,11 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 			werr := fmt.Errorf("unable to start workflow: %w", serr)
 			// A retry mints a new ExecutionId that recreates a completed instance.
 			if status.Code(serr) == codes.AlreadyExists {
+				return id, backoff.Permanent(werr)
+			}
+			// No workflow worker is connected: the backend has already waited
+			// out the actor not found retries.
+			if errors.Is(serr, wferrors.ErrNoWorkerConnected) {
 				return id, backoff.Permanent(werr)
 			}
 			return id, werr
@@ -199,30 +215,32 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 
 	return &runtimev1pb.StartWorkflowResponse{
 		InstanceId: string(workflowID),
+		Staged:     backendactors.ServedByFallback(ctx),
 	}, nil
 }
 
 // TerminateWorkflow is the API handler for terminating a workflow
-func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
-	emptyResponse := &emptypb.Empty{}
+	res := &runtimev1pb.TerminateWorkflowResponse{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	opts := []api.TerminateOptions{api.WithRecursiveTerminate(true)}
 	if targetAppID != "" {
 		opts = append(opts, api.WithTerminateAppID(targetAppID))
 	}
+	ctx = backendactors.WithFallbackMarker(ctx)
 	if err := a.workflowEngine.Client().TerminateWorkflow(ctx, api.InstanceID(in.GetInstanceId()), opts...); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId())
@@ -231,33 +249,34 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 				fmt.Errorf("failed to terminate workflow %s: %w", in.GetInstanceId(), err))
 		}
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
-	return emptyResponse, nil
+	res.Staged = backendactors.ServedByFallback(ctx)
+	return res, nil
 }
 
 // RaiseEventWorkflow is the API handler for raising an event to a workflow
-func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
-	emptyResponse := &emptypb.Empty{}
+	res := &runtimev1pb.RaiseEventWorkflowResponse{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	if in.GetEventName() == "" {
 		err := messages.ErrMissingWorkflowEventName
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	// Event data is optional; when set, it is expected to be an unprocessed
@@ -270,75 +289,81 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 		opts = append(opts, api.WithRawEventData(wrapperspb.String(string(in.GetEventData()))))
 	}
 
+	ctx = backendactors.WithFallbackMarker(ctx)
 	if err := a.workflowEngine.Client().RaiseEvent(ctx, api.InstanceID(in.GetInstanceId()), in.GetEventName(), opts...); err != nil {
 		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to raise event %s on workflow %s: %w", in.GetEventName(), in.GetInstanceId(), err))
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
-	return emptyResponse, nil
+	res.Staged = backendactors.ServedByFallback(ctx)
+	return res, nil
 }
 
 // PauseWorkflow is the API handler for pausing a workflow
-func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
-	emptyResponse := &emptypb.Empty{}
+	res := &runtimev1pb.PauseWorkflowResponse{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	var opts []api.SuspendOptions
 	if targetAppID != "" {
 		opts = append(opts, api.WithSuspendAppID(targetAppID))
 	}
+	ctx = backendactors.WithFallbackMarker(ctx)
 	if err := a.workflowEngine.Client().SuspendWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to pause workflow %s: %w", in.GetInstanceId(), err))
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
-	return emptyResponse, nil
+	res.Staged = backendactors.ServedByFallback(ctx)
+	return res, nil
 }
 
 // ResumeWorkflow is the API handler for resuming a workflow
-func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowResponse, error) {
 	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
-	emptyResponse := &emptypb.Empty{}
+	res := &runtimev1pb.ResumeWorkflowResponse{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	targetAppID, err := a.targetAppID(in.GetAppId())
 	if err != nil {
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
 	var opts []api.ResumeOptions
 	if targetAppID != "" {
 		opts = append(opts, api.WithResumeAppID(targetAppID))
 	}
+	ctx = backendactors.WithFallbackMarker(ctx)
 	if err := a.workflowEngine.Client().ResumeWorkflow(ctx, api.InstanceID(in.GetInstanceId()), "", opts...); err != nil {
 		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(),
 			fmt.Errorf("failed to resume workflow %s: %w", in.GetInstanceId(), err))
 		a.logger.Debug(err)
-		return emptyResponse, err
+		return res, err
 	}
 
-	return emptyResponse, nil
+	res.Staged = backendactors.ServedByFallback(ctx)
+	return res, nil
 }
 
 // PurgeWorkflow is the API handler for purging a workflow
@@ -387,22 +412,22 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 }
 
 // TerminateWorkflowBeta1 is the API handler for terminating a workflow
-func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
 	return a.TerminateWorkflow(ctx, in)
 }
 
 // RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
-func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	return a.RaiseEventWorkflow(ctx, in)
 }
 
 // PauseWorkflowBeta1 is the API handler for pausing a workflow
-func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowResponse, error) {
 	return a.PauseWorkflow(ctx, in)
 }
 
 // ResumeWorkflowBeta1 is the API handler for resuming a workflow
-func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowResponse, error) {
 	return a.ResumeWorkflow(ctx, in)
 }
 
@@ -428,28 +453,28 @@ func (a *Universal) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Sta
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
 //
 // Deprecated: Use TerminateWorkflow instead.
-func (a *Universal) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
 	return a.TerminateWorkflow(ctx, in)
 }
 
 // RaiseEventWorkflowAlpha1 is the API handler for raising an event to a workflow
 //
 // Deprecated: Use RaiseEventWorkflow instead.
-func (a *Universal) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowResponse, error) {
 	return a.RaiseEventWorkflow(ctx, in)
 }
 
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
 //
 // Deprecated: Use PauseWorkflow instead.
-func (a *Universal) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowResponse, error) {
 	return a.PauseWorkflow(ctx, in)
 }
 
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
 //
 // Deprecated: Use ResumeWorkflow instead.
-func (a *Universal) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+func (a *Universal) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowResponse, error) {
 	return a.ResumeWorkflow(ctx, in)
 }
 

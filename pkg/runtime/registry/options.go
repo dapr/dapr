@@ -14,6 +14,7 @@ limitations under the License.
 package registry
 
 import (
+	"github.com/dapr/dapr/pkg/components/binarystore"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
@@ -22,8 +23,10 @@ import (
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
+	compsearch "github.com/dapr/dapr/pkg/components/search"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
+	compvector "github.com/dapr/dapr/pkg/components/vector"
 )
 
 // Options is the options to configure the registries
@@ -38,6 +41,9 @@ type Options struct {
 	httpMiddleware     *http.Registry
 	crypto             *crypto.Registry
 	conversation       *conversation.Registry
+	search             *compsearch.Registry
+	vector             *compvector.Registry
+	binaryStore        *binarystore.Registry
 	componentsCallback ComponentsCallback
 	reporter           Reporter
 }
@@ -54,6 +60,9 @@ func NewOptions() *Options {
 		httpMiddleware: http.DefaultRegistry,
 		crypto:         crypto.DefaultRegistry,
 		conversation:   conversation.DefaultRegistry,
+		search:         compsearch.DefaultRegistry,
+		vector:         compvector.DefaultRegistry,
+		binaryStore:    binarystore.DefaultRegistry,
 	}
 }
 
@@ -114,6 +123,24 @@ func (o *Options) WithCryptoProviders(registry *crypto.Registry) *Options {
 // WithConversations adds conversation components to the runtime.
 func (o *Options) WithConversations(registry *conversation.Registry) *Options {
 	o.conversation = registry
+	return o
+}
+
+// WithSearches adds search components to the runtime.
+func (o *Options) WithSearches(registry *compsearch.Registry) *Options {
+	o.search = registry
+	return o
+}
+
+// WithVectors adds vector components to the runtime.
+func (o *Options) WithVectors(registry *compvector.Registry) *Options {
+	o.vector = registry
+	return o
+}
+
+// WithBinaryStores adds binary store components to the runtime.
+func (o *Options) WithBinaryStores(registry *binarystore.Registry) *Options {
+	o.binaryStore = registry
 	return o
 }
 

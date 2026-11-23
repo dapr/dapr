@@ -24,6 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 )
 
 // Tests that all requests messages include the "AppendSpanAttribute" method.
@@ -155,4 +157,30 @@ func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 	assert.True(t, hasConversationRequest)
 	assert.True(t, hasConversationRequestAlpha2)
 	assert.Equal(t, allRequests, haveMethods, "Some Request structs are missing the `AppendSpanAttributes(rpcMethod string, m map[string]string)` method")
+}
+
+func TestSearchAndVectorSpanAttributes(t *testing.T) {
+	for want, reqs := range map[string][]diagConsts.GrpcAppendSpanAttributesFn{
+		diagConsts.SearchBuildingBlockType: {
+			&CreateIndexRequestAlpha1{StoreName: "s"}, &GetIndexRequestAlpha1{StoreName: "s"},
+			&ListIndexesRequestAlpha1{StoreName: "s"}, &DeleteIndexRequestAlpha1{StoreName: "s"},
+			&IndexDocumentsRequestAlpha1{StoreName: "s"}, &GetDocumentsRequestAlpha1{StoreName: "s"},
+			&DeleteDocumentsRequestAlpha1{StoreName: "s"}, &SearchRequestAlpha1{StoreName: "s"},
+		},
+		diagConsts.VectorBuildingBlockType: {
+			&CreateCollectionRequestAlpha1{StoreName: "s"}, &GetCollectionRequestAlpha1{StoreName: "s"},
+			&ListCollectionsRequestAlpha1{StoreName: "s"}, &DeleteCollectionRequestAlpha1{StoreName: "s"},
+			&UpsertVectorsRequestAlpha1{StoreName: "s"}, &GetVectorsRequestAlpha1{StoreName: "s"},
+			&DeleteVectorsRequestAlpha1{StoreName: "s"}, &QueryVectorsRequestAlpha1{StoreName: "s"},
+			&BatchQueryVectorsRequestAlpha1{StoreName: "s"},
+		},
+	} {
+		for _, req := range reqs {
+			m := map[string]string{}
+			req.AppendSpanAttributes("/dapr.proto.runtime.v1.Dapr/Method", m)
+			assert.Equal(t, want, m[diagConsts.DBSystemSpanAttributeKey])
+			assert.Equal(t, "s", m[diagConsts.DBNameSpanAttributeKey])
+			assert.Equal(t, "/dapr.proto.runtime.v1.Dapr/Method", m[diagConsts.DBStatementSpanAttributeKey])
+		}
+	}
 }

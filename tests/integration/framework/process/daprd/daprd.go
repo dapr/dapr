@@ -94,6 +94,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		fopt(&opts)
 	}
 
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
+	}
+
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
@@ -166,6 +172,9 @@ spec:
 	if len(opts.sentryRequestJwtAudiences) > 0 {
 		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
 	}
+	if opts.workloadKeyAlgorithm != "" {
+		args = append(args, "--workload-key-algorithm="+opts.workloadKeyAlgorithm)
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
@@ -193,11 +202,17 @@ spec:
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
+	if opts.schedulerJobStreams != nil {
+		args = append(args, "--scheduler-job-streams="+strconv.FormatUint(uint64(*opts.schedulerJobStreams), 10))
+	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
+	if opts.readBufferSize != nil {
+		args = append(args, "--read-buffer-size="+*opts.readBufferSize)
 	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
@@ -554,6 +569,17 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
+// PlacementStatus returns the placement connection status the daprd reports,
+// such as "placement: connected". A failed metadata read fails t and returns
+// "".
+func (d *Daprd) PlacementStatus(t assert.TestingT, ctx context.Context) string {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return ""
+	}
+	return rt.Placement
+}
+
 func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {
 	return d.meta(t, ctx).Resiliencies
 }
@@ -715,9 +741,14 @@ func (d *Daprd) SignalHUP(t *testing.T) {
 }
 
 // ActiveActorCount returns the number of live actors of actorType reported by
-// the actor runtime, and whether the type is hosted at all.
+// the actor runtime, and whether the type is hosted at all. A failed metadata
+// read fails t and reports the type as not hosted.
 func (d *Daprd) ActiveActorCount(t assert.TestingT, ctx context.Context, actorType string) (int, bool) {
-	for _, a := range d.GetMetaActorRuntime(t, ctx).ActiveActors {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return 0, false
+	}
+	for _, a := range rt.ActiveActors {
 		if a.Type == actorType {
 			return a.Count, true
 		}

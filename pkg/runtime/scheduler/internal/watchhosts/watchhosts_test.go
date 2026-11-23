@@ -14,8 +14,12 @@ limitations under the License.
 package watchhosts
 
 import (
+	"net"
+	"runtime"
+	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,6 +32,45 @@ import (
 	"github.com/dapr/dapr/pkg/security/fake"
 	loopfake "github.com/dapr/kit/events/loop/fake"
 )
+
+// TestConnSchedulerHostsNoLeak asserts a failed WatchHosts call closes the
+// connection, as Run retries every second.
+// Not parallel, so other tests' goroutines do not skew the count.
+func TestConnSchedulerHostsNoLeak(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	require.NoError(t, lis.Close())
+
+	w := New(Options{
+		Addresses: []string{addr},
+		Healthz:   healthz.New(),
+		Security:  fake.New(),
+		Clients:   clients.New(clients.Options{Security: fake.New()}),
+		HostLoop:  loopfake.New[loops.EventHost](),
+	})
+
+	connect := func() {
+		stream, closeCon, err := w.connSchedulerHosts(t.Context())
+		require.Error(t, err)
+		assert.Nil(t, stream)
+		assert.Nil(t, closeCon)
+	}
+
+	// Warm up gRPC's lazily started global goroutines.
+	connect()
+	baseline := runtime.NumGoroutine()
+
+	for range 20 {
+		connect()
+	}
+
+	// Poll by hand: EventuallyWithT starts its own goroutine, skewing the count.
+	for start := time.Now(); runtime.NumGoroutine() > baseline && time.Since(start) < time.Second*5; {
+		time.Sleep(time.Millisecond * 10)
+	}
+	assert.LessOrEqual(t, runtime.NumGoroutine(), baseline)
+}
 
 // TestHandleHostsReloadDedup asserts client connections are only reloaded
 // when the address list changes: reloading on identical broadcasts cycles
@@ -66,6 +109,47 @@ func TestHandleHostsReloadDedup(t *testing.T) {
 
 	require.NoError(t, w.handleHosts(t.Context(), resp("127.0.0.1:1", "127.0.0.1:2")))
 	assert.Equal(t, int64(2), reloads.Load(), "a changed list must reload")
+}
+
+// TestHandleHostsPullSupport asserts pull dispatch is reported only while
+// every scheduler supports it, and that a change in that support reconnects
+// even when the addresses stay the same (an in-place scheduler upgrade).
+func TestHandleHostsPullSupport(t *testing.T) {
+	t.Parallel()
+
+	var reloads []*loops.ReloadClients
+	hostLoop := loopfake.New[loops.EventHost]().WithEnqueue(func(e loops.EventHost) {
+		if r, ok := e.(*loops.ReloadClients); ok {
+			reloads = append(reloads, r)
+		}
+	})
+	w := New(Options{
+		Addresses: []string{"127.0.0.1:1"},
+		Healthz:   healthz.New(),
+		Security:  fake.New(),
+		Clients:   clients.New(clients.Options{Security: fake.New()}),
+		HostLoop:  hostLoop,
+	})
+
+	resp := func(leader string, pull ...bool) *schedulerv1pb.WatchHostsResponse {
+		hosts := make([]*schedulerv1pb.Host, len(pull))
+		for i, p := range pull {
+			addr := "127.0.0.1:" + strconv.Itoa(i+1)
+			hosts[i] = &schedulerv1pb.Host{Address: addr, SupportsPullSlots: p, Leader: addr == leader}
+		}
+		return &schedulerv1pb.WatchHostsResponse{Hosts: hosts}
+	}
+
+	require.NoError(t, w.handleHosts(t.Context(), resp("", true, false)))
+	require.Len(t, reloads, 1)
+	assert.False(t, reloads[0].SupportsPullSlots, "one older scheduler disables pull dispatch")
+
+	require.NoError(t, w.handleHosts(t.Context(), resp("", true, true)))
+	require.Len(t, reloads, 2, "the last scheduler upgrading in place reconnects")
+	assert.True(t, reloads[1].SupportsPullSlots)
+
+	require.NoError(t, w.handleHosts(t.Context(), resp("127.0.0.1:2", true, true)))
+	assert.Len(t, reloads, 2, "a leader change alone does not reconnect")
 }
 
 // TestHandleHostsLeadership asserts only a broadcast with no capable host

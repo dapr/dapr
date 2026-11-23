@@ -149,3 +149,8 @@ func (s Subscription) ClientObject() client.Object {
 func (s Subscription) GetScopes() []string {
 	return s.Scopes
 }
+
+// IsAppScoped returns true if the appID is allowed in the scopes for the subscription.
+func (s Subscription) IsAppScoped(appID string) bool {
+	return (&common.Scoped{Scopes: s.Scopes}).IsAppScoped(appID)
+}

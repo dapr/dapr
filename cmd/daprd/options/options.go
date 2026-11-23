@@ -33,7 +33,9 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -86,6 +88,7 @@ type Options struct {
 	AppHealthCheckPath            string
 	AppChannelAddress             string
 	SentryRequestJwtAudiences     []string
+	WorkloadKeyAlgorithm          *spiffe.KeyAlgorithm
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
 	DisableInitEndpoints          []string
@@ -100,10 +103,11 @@ func New(origArgs []string) (*Options, error) {
 		ReadBufferSize:            runtime.DefaultReadBufferSize,
 	}
 	var (
-		maxRequestSizeMB int
-		maxBodySize      string
-		readBufferSizeKB int
-		readBufferSize   string
+		maxRequestSizeMB     int
+		maxBodySize          string
+		readBufferSizeKB     int
+		readBufferSize       string
+		workloadKeyAlgorithm string
 	)
 
 	// We are using pflag to parse the CLI flags
@@ -146,6 +150,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
 	fs.StringSliceVar(&opts.SentryRequestJwtAudiences, "sentry-request-jwt-audiences", nil, "JWT audience list for certificate signing requests. If not specified, the trust domain will be used")
+	fs.MarkDeprecated("sentry-request-jwt-audiences", "components now mint JWT SVIDs for any audience on demand")
+	fs.StringVar(&workloadKeyAlgorithm, "workload-key-algorithm", "ed25519", "Algorithm of the private key of the workload's X.509 SVID: 'ed25519' or 'ecdsa'. Set 'ecdsa' for components that authenticate with AWS IAM Roles Anywhere")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
@@ -278,6 +284,21 @@ func New(origArgs []string) (*Options, error) {
 		if ok {
 			opts.SchedulerAddress = strings.Split(addr, ",")
 		}
+	}
+
+	if !fs.Changed("workload-key-algorithm") {
+		alg, ok := os.LookupEnv(consts.WorkloadKeyAlgorithmEnvVar)
+		if ok {
+			workloadKeyAlgorithm = alg
+		}
+	}
+
+	switch strings.ToLower(workloadKeyAlgorithm) {
+	case "ed25519":
+	case "ecdsa":
+		opts.WorkloadKeyAlgorithm = ptr.Of(spiffe.KeyAlgorithmECDSA)
+	default:
+		return nil, fmt.Errorf("invalid value for 'workload-key-algorithm' option: must be 'ed25519' or 'ecdsa', got %q", workloadKeyAlgorithm)
 	}
 
 	if opts.ActorsDisseminationTimeout <= 0 {

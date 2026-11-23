@@ -32,6 +32,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	CA_SignCertificate_FullMethodName = "/dapr.proto.sentry.v1.CA/SignCertificate"
+	CA_FetchJWTSVID_FullMethodName    = "/dapr.proto.sentry.v1.CA/FetchJWTSVID"
 )
 
 // CAClient is the client API for CA service.
@@ -43,6 +44,10 @@ type CAClient interface {
 	// The requesting side must provide an id for both loosely based
 	// And strong based identities.
 	SignCertificate(ctx context.Context, in *SignCertificateRequest, opts ...grpc.CallOption) (*SignCertificateResponse, error)
+	// Mints a fresh JWT SVID for the caller. The caller is authenticated by the
+	// X.509 SVID it presents as the mTLS client certificate, and the JWT subject
+	// is that SVID's SPIFFE ID.
+	FetchJWTSVID(ctx context.Context, in *FetchJWTSVIDRequest, opts ...grpc.CallOption) (*FetchJWTSVIDResponse, error)
 }
 
 type cAClient struct {
@@ -62,6 +67,15 @@ func (c *cAClient) SignCertificate(ctx context.Context, in *SignCertificateReque
 	return out, nil
 }
 
+func (c *cAClient) FetchJWTSVID(ctx context.Context, in *FetchJWTSVIDRequest, opts ...grpc.CallOption) (*FetchJWTSVIDResponse, error) {
+	out := new(FetchJWTSVIDResponse)
+	err := c.cc.Invoke(ctx, CA_FetchJWTSVID_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CAServer is the server API for CA service.
 // All implementations should embed UnimplementedCAServer
 // for forward compatibility
@@ -71,6 +85,10 @@ type CAServer interface {
 	// The requesting side must provide an id for both loosely based
 	// And strong based identities.
 	SignCertificate(context.Context, *SignCertificateRequest) (*SignCertificateResponse, error)
+	// Mints a fresh JWT SVID for the caller. The caller is authenticated by the
+	// X.509 SVID it presents as the mTLS client certificate, and the JWT subject
+	// is that SVID's SPIFFE ID.
+	FetchJWTSVID(context.Context, *FetchJWTSVIDRequest) (*FetchJWTSVIDResponse, error)
 }
 
 // UnimplementedCAServer should be embedded to have forward compatible implementations.
@@ -79,6 +97,9 @@ type UnimplementedCAServer struct {
 
 func (UnimplementedCAServer) SignCertificate(context.Context, *SignCertificateRequest) (*SignCertificateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignCertificate not implemented")
+}
+func (UnimplementedCAServer) FetchJWTSVID(context.Context, *FetchJWTSVIDRequest) (*FetchJWTSVIDResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FetchJWTSVID not implemented")
 }
 
 // UnsafeCAServer may be embedded to opt out of forward compatibility for this service.
@@ -110,6 +131,24 @@ func _CA_SignCertificate_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CA_FetchJWTSVID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchJWTSVIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CAServer).FetchJWTSVID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CA_FetchJWTSVID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CAServer).FetchJWTSVID(ctx, req.(*FetchJWTSVIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CA_ServiceDesc is the grpc.ServiceDesc for CA service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -120,6 +159,10 @@ var CA_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SignCertificate",
 			Handler:    _CA_SignCertificate_Handler,
+		},
+		{
+			MethodName: "FetchJWTSVID",
+			Handler:    _CA_FetchJWTSVID_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

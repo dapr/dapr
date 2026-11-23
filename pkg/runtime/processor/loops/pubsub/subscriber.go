@@ -34,5 +34,6 @@ type Subscriber interface {
 	StartStreamerSubscription(sub *subapi.Subscription, connID rtpubsub.ConnectionID) error
 	StopStreamerSubscription(sub *subapi.Subscription, connID rtpubsub.ConnectionID)
 	ReloadDeclaredAppSubscription(name, pubsubName string) error
+	AddDeclaredAppSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) error
 	InitProgramaticSubscriptions(ctx context.Context) error
 }

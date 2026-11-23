@@ -300,3 +300,40 @@ func Test_streamer_parentCancel_bufconn(t *testing.T) {
 		cleanup()
 	}
 }
+
+// A job blocked on something only a reconnected stream can provide must not
+// stop the streamer from returning once the stream ends.
+func Test_streamer_streamEnd_cancelsBlockedJob(t *testing.T) {
+	t.Parallel()
+
+	streamCtx, endStream := context.WithCancel(t.Context())
+	started := make(chan struct{})
+	var sent atomic.Bool
+	stream := &grpcLikeStream{
+		ctx: streamCtx,
+		recvFn: func(context.Context) (*schedulerv1pb.WatchJobsResponse, error) {
+			if !sent.Swap(true) {
+				return actorJob(1), nil
+			}
+			<-started
+			endStream()
+			return nil, status.Error(codes.Unavailable, "scheduler is shutting down")
+		},
+	}
+
+	s := newTestStreamer(stream, func(ctx context.Context, _ *actorapi.Reminder) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.run(t.Context()) }()
+
+	select {
+	case err := <-errCh:
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "streamer did not return after the stream ended while a job was blocked")
+	}
+}

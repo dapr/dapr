@@ -44,23 +44,38 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
+	opts := options{
+		signCertificateFn: func(context.Context, *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
+			return nil, nil
+		},
+	}
 
-	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
-		X509RootKey:      rootKey,
-		TrustDomain:      "integration.test.dapr.io",
-		AllowedClockSkew: time.Second * 20,
-		OverrideCATTL:    nil,
-	})
-	require.NoError(t, err)
-	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
-		JWTRootKey:  jwtKey,
-		TrustDomain: "integration.test.dapr.io",
-	})
-	require.NoError(t, err)
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
+	if opts.bundle == nil {
+		_, rootKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+
+		jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+			X509RootKey:      rootKey,
+			TrustDomain:      "integration.test.dapr.io",
+			AllowedClockSkew: time.Second * 20,
+			OverrideCATTL:    nil,
+		})
+		require.NoError(t, err)
+		jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+			JWTRootKey:  jwtKey,
+			TrustDomain: "integration.test.dapr.io",
+		})
+		require.NoError(t, err)
+
+		opts.bundle = &bundle.Bundle{X509: x509bundle, JWT: jwtbundle}
+	}
+	x509bundle := opts.bundle.X509
 
 	_, leafKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -84,22 +99,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		},
 	}
 
-	s := &Sentry{
-		bundle: bundle.Bundle{
-			X509: x509bundle,
-			JWT:  jwtbundle,
-		},
-	}
-
-	opts := options{
-		signCertificateFn: func(context.Context, *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
-			return nil, nil
-		},
-	}
-
-	for _, fopt := range fopts {
-		fopt(&opts)
-	}
+	s := &Sentry{bundle: *opts.bundle}
 
 	s.grpc = procgrpc.New(t,
 		procgrpc.WithServerOption(func(t *testing.T, ctx context.Context) grpc.ServerOption {

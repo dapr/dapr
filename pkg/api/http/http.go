@@ -22,6 +22,7 @@ import (
 	"io"
 	"maps"
 	nethttp "net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -92,12 +93,15 @@ const (
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
 	storeNameParam           = "storeName"
+	indexParam               = "index"
+	collectionParam          = "collection"
 	stateKeyParam            = "key"
 	configurationKeyParam    = "key"
 	configurationSubscribeID = "configurationSubscribeID"
 	secretStoreNameParam     = "secretStoreName"
 	secretNameParam          = "key"
 	nameParam                = "name"
+	binaryStoreFileNameParam = "fileName"
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
@@ -161,9 +165,16 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConversationEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSearchEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructVectorEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructBinaryStoreEndpoints()...)
 
-	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
-	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
+	// The public port has no API token auth, so it only serves read-only endpoints.
+	for _, e := range slices.Concat(metadataEndpoints, healthEndpoints) {
+		if slices.Equal(e.Methods, []string{nethttp.MethodGet}) {
+			api.publicEndpoints = append(api.publicEndpoints, e)
+		}
+	}
 
 	return api
 }
@@ -1171,8 +1182,14 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			log.Debug(nerr)
 			return
 		}
-	} else if baggage := baggageFromRequest(r); baggage != "" {
-		metadata[diagConsts.BaggageHeader] = baggage
+	} else {
+		span := diagUtils.SpanFromContext(r.Context())
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		metadata[pubsub.TraceIDField] = traceID
+		metadata[pubsub.TraceStateField] = traceState
+		if baggage := baggageFromRequest(r); baggage != "" {
+			metadata[diagConsts.BaggageHeader] = baggage
+		}
 	}
 
 	req := pubsub.PublishRequest{
@@ -1282,11 +1299,9 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			Event:       dBytes,
 			ContentType: entry.ContentType,
 		}
-		if entry.Metadata != nil {
-			// Populate entry metadata with request level metadata. Entry level metadata keys
-			// override request level metadata.
-			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
-		}
+		// Populate entry metadata with request level metadata. Entry level metadata keys
+		// override request level metadata.
+		entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(),
@@ -1358,8 +1373,21 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				return
 			}
 		}
-	} else if baggage != "" {
-		metadata[diagConsts.BaggageHeader] = baggage
+	} else {
+		for i := range entries {
+			childSpan := diag.StartProducerSpanChildFromParent(r, span)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			spanMap[i] = childSpan
+
+			if entries[i].Metadata == nil {
+				entries[i].Metadata = map[string]string{}
+			}
+			entries[i].Metadata[pubsub.TraceIDField] = traceID
+			entries[i].Metadata[pubsub.TraceStateField] = traceState
+			if baggage != "" {
+				entries[i].Metadata[diagConsts.BaggageHeader] = baggage
+			}
+		}
 	}
 
 	req := pubsub.BulkPublishRequest{
@@ -1666,7 +1694,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		Metadata:   req.Metadata,
 	}
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(r.Context(), storeReq)
+		return nil, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 

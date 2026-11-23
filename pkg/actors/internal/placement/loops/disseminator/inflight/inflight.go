@@ -267,6 +267,47 @@ func (i *Inflight) HasTables(types []string) bool {
 	return true
 }
 
+// HasLocalHost returns whether the installed placement table of actorType
+// places it on this host.
+func (i *Inflight) HasLocalHost(actorType string) bool {
+	return i.hasHost(actorType, true)
+}
+
+// RemoteHostTypes returns the actor types whose installed placement table has
+// a host other than this one.
+func (i *Inflight) RemoteHostTypes() map[string]bool {
+	remote := make(map[string]bool)
+	for actorType := range i.hashTable.Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	for actorType := range i.v2Entries {
+		if i.hasHost(actorType, false) {
+			remote[actorType] = true
+		}
+	}
+	return remote
+}
+
+// hasHost returns whether the installed placement table of actorType has a
+// host which is this one (local) or another one (!local).
+func (i *Inflight) hasHost(actorType string, local bool) bool {
+	var hosts []string
+	if entry, ok := i.v2Entries[actorType]; ok {
+		hosts = entry.table.Hosts()
+	} else if table, ok := i.hashTable.Entries[actorType]; ok {
+		hosts = table.Hosts()
+	}
+
+	for _, host := range hosts {
+		if loops.IsActorLocal(host, i.hostname, i.port) == local {
+			return true
+		}
+	}
+	return false
+}
+
 // ResetSession clears the tables and versions of both protocols on stream
 // loss: a new session starts from its authoritative snapshot, which carries
 // no tombstones for types deleted while disconnected, and a session under

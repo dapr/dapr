@@ -1462,13 +1462,13 @@ func TestGetSaveRequest_ParentNotify(t *testing.T) {
 		s.AddToHistory(testEvent(0))
 		s.SetParentNotifyPending(true)
 		upserts, _ := ops(t, s)
-		assert.True(t, upserts[parentNotifyKey])
+		assert.True(t, upserts[ParentNotifyKey])
 
 		s.ResetChangeTracking()
 		assert.True(t, s.parentNotifyPersisted)
 		s.SetParentNotifyPending(false)
 		_, deletes := ops(t, s)
-		assert.True(t, deletes[parentNotifyKey], "clearing a persisted marker deletes the row")
+		assert.True(t, deletes[ParentNotifyKey], "clearing a persisted marker deletes the row")
 	})
 
 	t.Run("clearing an absent marker writes nothing", func(t *testing.T) {
@@ -1477,8 +1477,8 @@ func TestGetSaveRequest_ParentNotify(t *testing.T) {
 		s.AddToHistory(testEvent(0))
 		s.SetParentNotifyPending(false)
 		upserts, deletes := ops(t, s)
-		assert.False(t, upserts[parentNotifyKey])
-		assert.False(t, deletes[parentNotifyKey])
+		assert.False(t, upserts[ParentNotifyKey])
+		assert.False(t, deletes[ParentNotifyKey])
 	})
 
 	t.Run("reset clears a persisted marker", func(t *testing.T) {
@@ -1489,7 +1489,7 @@ func TestGetSaveRequest_ParentNotify(t *testing.T) {
 		s.Reset()
 		assert.False(t, s.ParentNotifyPending)
 		_, deletes := ops(t, s)
-		assert.True(t, deletes[parentNotifyKey])
+		assert.True(t, deletes[ParentNotifyKey])
 	})
 
 	t.Run("purge deletes a persisted marker only", func(t *testing.T) {
@@ -1504,7 +1504,7 @@ func TestGetSaveRequest_ParentNotify(t *testing.T) {
 		req, err = s.GetPurgeRequest("actor1")
 		require.NoError(t, err)
 		assert.Len(t, req.Operations, 2)
-		assert.Equal(t, parentNotifyKey, req.Operations[0].Request.(api.TransactionalDelete).Key)
+		assert.Equal(t, ParentNotifyKey, req.Operations[0].Request.(api.TransactionalDelete).Key)
 	})
 }
 

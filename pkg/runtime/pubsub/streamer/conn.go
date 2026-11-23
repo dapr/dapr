@@ -22,10 +22,12 @@ import (
 )
 
 type conn struct {
-	lock             sync.RWMutex
-	streamLock       sync.Mutex
-	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	closeCh          chan struct{}
+	lock       sync.RWMutex
+	streamLock sync.Mutex
+	stream     rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
+	closeCh    chan struct{}
+	// ready is closed once the initial response is sent.
+	ready            chan struct{}
 	closed           atomic.Bool
 	connectionID     rtpubsub.ConnectionID
 	publishResponses PublishResponses
@@ -54,13 +56,8 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 		}
 
 		c.lock.Unlock()
-		// Ensure channel is closed to prevent goroutine leaks
-		select {
-		case <-ch: // drain if there's a value
-		default:
-		}
-
-		close(ch)
+		// ch is not closed: the receive loop may still hold it from a lookup
+		// it made before this cleanup, and a send on a closed channel panics.
 	}
 }
 
@@ -74,5 +71,11 @@ func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestPro
 		return
 	}
 
-	ch <- resp
+	// ch holds the one response its publish reads, so a full ch means the
+	// client sent a second response for the same id.
+	select {
+	case ch <- resp:
+	default:
+		log.Warnf("dropping a duplicate publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
+	}
 }

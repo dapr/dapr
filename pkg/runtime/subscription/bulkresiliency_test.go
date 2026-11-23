@@ -1359,15 +1359,15 @@ func assertRetryCount(t *testing.T, expectedIDRetryCountMap map[string]int, actu
 // slowFirstAppChannel answers the first bulk delivery only after the policy
 // timeout has elapsed, so that the abandoned attempt is still running when the
 // attempt that replaced it completes and is accumulated. Later deliveries are
-// answered straight away, with half of the entries asking for a retry so that
+// answered straight away, with every other entry asking for a retry so that
 // the accumulator narrows the set of messages between attempts.
 type slowFirstAppChannel struct {
 	channel.AppChannel
 
 	delay time.Duration
 
-	lock  sync.Mutex
-	calls int
+	lock       sync.Mutex
+	deliveries [][]string
 
 	// firstDone is closed once the abandoned first delivery has finished, so
 	// that the test does not end while it is still writing.
@@ -1375,23 +1375,9 @@ type slowFirstAppChannel struct {
 }
 
 func (c *slowFirstAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	c.lock.Lock()
-	c.calls++
-	first := c.calls == 1
-	c.lock.Unlock()
-
 	body, err := req.RawDataFull()
 	if err != nil {
 		return nil, err
-	}
-
-	if first {
-		// Deliberately outlive the policy timeout, and ignore the cancelled
-		// context, the way an app that is slow to answer does.
-		defer close(c.firstDone)
-		time.Sleep(c.delay)
-
-		return nil, errors.New("app took too long to answer")
 	}
 
 	var bulkReq struct {
@@ -1403,18 +1389,37 @@ func (c *slowFirstAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		return nil, err
 	}
 
-	appResp := contribpubsub.AppBulkResponse{
-		AppResponses: make([]contribpubsub.AppBulkResponseEntry, len(bulkReq.Entries)),
+	entryIDs := make([]string, len(bulkReq.Entries))
+	for i, entry := range bulkReq.Entries {
+		entryIDs[i] = entry.EntryID
 	}
 
-	for i, entry := range bulkReq.Entries {
+	c.lock.Lock()
+	c.deliveries = append(c.deliveries, entryIDs)
+	first := len(c.deliveries) == 1
+	c.lock.Unlock()
+
+	if first {
+		// Deliberately outlive the policy timeout, and ignore the cancelled
+		// context, the way an app that is slow to answer does.
+		defer close(c.firstDone)
+		time.Sleep(c.delay)
+
+		return nil, errors.New("app took too long to answer")
+	}
+
+	appResp := contribpubsub.AppBulkResponse{
+		AppResponses: make([]contribpubsub.AppBulkResponseEntry, len(entryIDs)),
+	}
+
+	for i, entryID := range entryIDs {
 		status := contribpubsub.Success
 		if i%2 == 1 {
 			status = contribpubsub.Retry
 		}
 
 		appResp.AppResponses[i] = contribpubsub.AppBulkResponseEntry{
-			EntryId: entry.EntryID,
+			EntryId: entryID,
 			Status:  status,
 		}
 	}
@@ -1434,14 +1439,11 @@ func (c *slowFirstAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 // the same BulkSubscribeCallData, so anything they share has to be safe for
 // concurrent use.
 func TestBulkSubscribeResiliencyAbandonedAttempt(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
-
 	comp := inmemory.New(log)
-	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+	require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 	appChannel := &slowFirstAppChannel{
-		delay:     3 * time.Second,
+		delay:     time.Second,
 		firstDone: make(chan struct{}),
 	}
 
@@ -1454,17 +1456,15 @@ func TestBulkSubscribeResiliencyAbandonedAttempt(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	retry := resiliencyV1alpha.Retry{Policy: "constant", Duration: "1s"}
+	retry := resiliencyV1alpha.Retry{Policy: "constant", Duration: "100ms"}
 	retry.MaxRetries = new(3)
 
-	policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, retry)
+	policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "300ms", retry)
 	policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 
 	in := getInput()
 	b, err := ps.applyBulkSubscribeResiliency(t.Context(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
-
 	require.Error(t, err)
-	assert.Len(t, *b, 10)
 
 	// Wait for the abandoned first attempt, so that its writes land inside the
 	// test rather than after it.
@@ -1472,5 +1472,31 @@ func TestBulkSubscribeResiliencyAbandonedAttempt(t *testing.T) {
 	case <-appChannel.firstDone:
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for the abandoned attempt to finish")
+	}
+
+	// The timed out attempt is never accumulated, so the second attempt gets
+	// every entry again, and each later attempt only the ones asked to retry.
+	ids := make([]string, len(in.pbsm.PubSubMessages))
+	for i, msg := range in.pbsm.PubSubMessages {
+		ids[i] = msg.Entry.EntryId
+	}
+
+	appChannel.lock.Lock()
+	defer appChannel.lock.Unlock()
+	assert.Equal(t, [][]string{
+		ids,
+		ids,
+		{ids[1], ids[3], ids[5], ids[7], ids[9]},
+		{ids[3], ids[7]},
+	}, appChannel.deliveries)
+
+	require.Len(t, *b, 10)
+	for i, resp := range *b {
+		assert.Equal(t, ids[i], resp.EntryId)
+		if i == 7 {
+			require.Error(t, resp.Error, "entry %s was still asking for a retry after the last attempt", ids[i])
+		} else {
+			require.NoError(t, resp.Error, "entry %s", ids[i])
+		}
 	}
 }

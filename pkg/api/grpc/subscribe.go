@@ -82,23 +82,12 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 		return err
 	}
 
-	if err = a.processor.Subscriber().StartStreamerSubscription(sub, connectionID); err != nil {
-		a.Universal.CompStore().DeleteStreamSubscription(sub)
-		return err
-	}
-
 	defer func() {
 		a.processor.Subscriber().StopStreamerSubscription(sub, connectionID)
 		a.Universal.CompStore().DeleteStreamSubscription(sub)
 	}()
 
-	if err = stream.Send(&runtimev1pb.SubscribeTopicEventsResponseAlpha1{
-		SubscribeTopicEventsResponseType: &runtimev1pb.SubscribeTopicEventsResponseAlpha1_InitialResponse{
-			InitialResponse: new(runtimev1pb.SubscribeTopicEventsResponseInitialAlpha1),
-		},
-	}); err != nil {
-		return err
-	}
-
-	return a.pubsubAdapterStreamer.Subscribe(stream, req, connectionID)
+	return a.pubsubAdapterStreamer.Subscribe(stream, req, connectionID, func() error {
+		return a.processor.Subscriber().StartStreamerSubscription(sub, connectionID)
+	})
 }

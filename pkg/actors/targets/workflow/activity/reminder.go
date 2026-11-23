@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,11 +27,41 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/config"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/ptr"
 )
+
+type priority struct {
+	level  schedulerv1pb.PriorityLevel
+	weight uint32
+}
+
+var priorityLevels = map[string]schedulerv1pb.PriorityLevel{
+	config.PriorityLevelCritical:   schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_CRITICAL,
+	config.PriorityLevelHigh:       schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_HIGH,
+	config.PriorityLevelNormal:     schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_NORMAL,
+	config.PriorityLevelLow:        schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_LOW,
+	config.PriorityLevelBackground: schedulerv1pb.PriorityLevel_PRIORITY_LEVEL_BACKGROUND,
+}
+
+// Unknown values stay unset.
+func priorityFromMetadata(md map[string]*internalsv1pb.ListStringValue) priority {
+	var p priority
+	if v := md[todo.MetadataActivityPriorityLevel].GetValues(); len(v) > 0 {
+		p.level = priorityLevels[v[0]]
+	}
+	if v := md[todo.MetadataActivityFairnessWeight].GetValues(); len(v) > 0 {
+		if w, err := strconv.ParseUint(v[0], 10, 32); err == nil && w > 0 {
+			p.weight = uint32(w)
+		}
+	}
+	return p
+}
 
 // activityReminderName is the constant name of the per-activity-actor
 // execution reminder. One reminder per actor: retries and the drive-failure
@@ -40,7 +71,7 @@ const activityReminderName = todo.ActivityReminderName
 // createActivityReminder lives on the factory (with an explicit actorID)
 // rather than the *activity because the drive-failure escalation path may
 // outlive the actor object (HaltAll recycles it).
-func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string) error {
+func (f *factory) createActivityReminder(ctx context.Context, actorID string, invocation *protos.ActivityInvocation, dueTime time.Time, activityName *string, prio priority) error {
 	// Clamp a past dueTime to now: the scheduler paces failure retries from
 	// the scheduled time, so a stale dueTime replays the whole elapsed
 	// backlog as a burst on every failed trigger.
@@ -48,7 +79,12 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 		dueTime = now
 	}
 
-	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", f.actorType, actorID, activityReminderName, dueTime)
+	var pull bool
+	if f.dispatchPull != nil && activityName != nil {
+		pull = f.dispatchPull(*activityName)
+	}
+
+	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s pull=%t", f.actorType, actorID, activityReminderName, dueTime, pull)
 
 	anydata, err := anypb.New(invocation)
 	if err != nil {
@@ -66,6 +102,9 @@ func (f *factory) createActivityReminder(ctx context.Context, actorID string, in
 		FailurePolicy:  common.RetryForeverPolicy(),
 		Data:           anydata,
 		ConcurrencyKey: activityName,
+		Pull:           pull,
+		PriorityLevel:  prio.level,
+		FairnessWeight: prio.weight,
 	})
 }
 

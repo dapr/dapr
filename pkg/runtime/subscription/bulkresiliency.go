@@ -70,8 +70,8 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 		pendingLock.Lock()
 		attempt := psm
 		attempt.PubSubMessages = pending
+		attempt.Length = len(pending)
 		pendingLock.Unlock()
-		attempt.Length = len(attempt.PubSubMessages)
 
 		bsrr := &todo.BulkSubscribeResiliencyRes{
 			Entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(attempt.PubSubMessages)),

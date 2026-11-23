@@ -32,6 +32,8 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -44,6 +46,7 @@ func init() {
 type expiry struct {
 	notGiven *procsentry.Sentry
 	given    *procsentry.Sentry
+	logline  *logline.LogLine
 }
 
 func (e *expiry) Setup(t *testing.T) []framework.Option {
@@ -69,17 +72,25 @@ func (e *expiry) Setup(t *testing.T) []framework.Option {
 		JWT:  jwtbundle,
 	}
 
+	e.logline = logline.New(t,
+		logline.WithStdoutLineContains("metrics server started on 127.0.0.1:"),
+	)
+
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
-	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))
+	e.given = procsentry.New(t,
+		procsentry.WithCABundle(bundle),
+		procsentry.WithExecOptions(exec.WithStdout(e.logline.Stdout())),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.notGiven, e.given),
+		framework.WithProcesses(e.logline, e.notGiven, e.given),
 	}
 }
 
 func (e *expiry) Run(t *testing.T, ctx context.Context) {
 	e.notGiven.WaitUntilRunning(t, ctx)
 	e.given.WaitUntilRunning(t, ctx)
+	e.logline.EventuallyFoundAll(t)
 
 	client := client.HTTP(t)
 

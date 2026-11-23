@@ -84,7 +84,10 @@ func (h *haltparked) Setup(t *testing.T) []framework.Option {
 func (h *haltparked) Run(t *testing.T, ctx context.Context) {
 	h.workflow.WaitUntilRunning(t, ctx)
 
-	const instances = 12
+	// Which executor keys move depends on the daprd ports, which change every
+	// run. With 12 instances, about 4 runs in 10,000 kept every executor key
+	// on daprd 0, so nothing was handed off. With 24 that does not happen.
+	const instances = 24
 
 	var ran atomic.Int32
 	for i := range 2 {
@@ -110,9 +113,13 @@ func (h *haltparked) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Every activity ran, and its completion is parked on the executor actor
-	// because its watch stream is not open yet.
+	// because its watch stream is not open yet. The route metric counts a
+	// completion only once the executor actor took it, so a rebalance
+	// started before then cannot route it straight to the new owner.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, ran.Load(), int32(instances))
+		assert.GreaterOrEqual(c, h.workflow.DaprN(0).Metrics(c, ctx).SumWithLabels(
+			"dapr_runtime_workflow_completion_route_count", "route:complete_actor", "task_type:activity"), float64(instances))
 	}, time.Second*10, time.Millisecond*10)
 
 	// The worker on daprd 1 adds daprd 1 to the placement ring of every

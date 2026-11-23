@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/client"
 )
 
@@ -87,6 +88,17 @@ func ChildCompletions(t *testing.T, ctx context.Context, client *client.TaskHubG
 		}
 	}
 	return completed, failed
+}
+
+// WaitForCompleted waits for the instance to complete, asserts that it
+// reached COMPLETED, and returns its metadata.
+func WaitForCompleted(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID) *backend.WorkflowMetadata {
+	t.Helper()
+
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
+	require.NoError(t, err, id)
+	assert.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus(), id)
+	return meta
 }
 
 // WaitForAllCompleted waits for every instance to reach COMPLETED and fails

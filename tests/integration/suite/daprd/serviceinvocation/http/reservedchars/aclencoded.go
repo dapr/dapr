@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,8 @@ func init() {
 // '/', '\' or '.' after the caller daprd decodes the URL once is rejected.
 // The callee ACL treats such a sequence as a literal character, but the
 // callee's HTTP app decodes it, so it would see a path the ACL never checked.
+// Other escapes and ";" path parameters reach the app, so a deny rule must
+// match them in the form the app decodes and routes on.
 type aclencoded struct {
 	caller    *procdaprd.Daprd
 	denyList  *procdaprd.Daprd
@@ -80,13 +83,14 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 
 	a.caller = procdaprd.New(t)
 	callerAppID := a.caller.AppID()
+	denyListAppID, allowListAppID := uuid.New().String(), uuid.New().String()
 
 	config := func(name, defaultAction string, ops ...configapi.AppOperationAction) configapi.Configuration {
 		return configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
 			Spec: configapi.ConfigurationSpec{
-				NameResolutionSpec: &configapi.NameResolutionSpec{Component: "mdns"},
+				NameResolutionSpec: procdaprd.NameResolutionSpec(t),
 				MTLSSpec: &configapi.MTLSSpec{
 					ControlPlaneTrustDomain: "localhost",
 					SentryAddress:           sen.Address(),
@@ -114,6 +118,7 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 			"default",
 			sen.Port(),
 		),
+		kubernetes.WithDaprPods(t, "default", map[string]string{callerAppID: "deny-list", denyListAppID: "deny-list", allowListAppID: "allow-list"}),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
 			Items: []configapi.Configuration{
@@ -150,8 +155,8 @@ func (a *aclencoded) Setup(t *testing.T) []framework.Option {
 		}, extra...)
 	}
 
-	a.denyList = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppPort(srv.Port()))...)
-	a.allowList = procdaprd.New(t, daprdOpts("allow-list", procdaprd.WithAppPort(srv.Port()))...)
+	a.denyList = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppID(denyListAppID), procdaprd.WithAppPort(srv.Port()))...)
+	a.allowList = procdaprd.New(t, daprdOpts("allow-list", procdaprd.WithAppID(allowListAppID), procdaprd.WithAppPort(srv.Port()))...)
 	a.caller = procdaprd.New(t, daprdOpts("deny-list", procdaprd.WithAppID(callerAppID))...)
 
 	return []framework.Option{
@@ -203,6 +208,12 @@ func (a *aclencoded) Run(t *testing.T, ctx context.Context) {
 	}{
 		{name: "deny-list: denied method", target: a.denyList, method: "admin/secret"},
 		{name: "deny-list: single-encoded slash", target: a.denyList, method: "admin%2Fsecret"},
+		{name: "deny-list: double-encoded letter", target: a.denyList, method: "%2561dmin/secret"},
+		{name: "deny-list: path parameter", target: a.denyList, method: "admin;x/secret"},
+		{name: "deny-list: double-encoded path parameter", target: a.denyList, method: "admin%253Bx/secret"},
+		{name: "deny-list: double-encoded invalid escape", target: a.denyList, method: "%2561dmin/secret%25zz"},
+		{name: "deny-list: dot segment with path parameter", target: a.denyList, method: "public/..;x/admin"},
+		{name: "allow-list: path parameter", target: a.allowList, method: "public;x/admin"},
 		{name: "allow-list: denied method", target: a.allowList, method: "admin/secret"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

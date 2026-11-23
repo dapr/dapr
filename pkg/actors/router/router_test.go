@@ -16,6 +16,7 @@ package router_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	targetsfake "github.com/dapr/dapr/pkg/actors/targets/fake"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -244,6 +246,22 @@ func TestCallCancelledClaimDoesNotCreateActor(t *testing.T) {
 	}
 }
 
+// TestCallWithoutRetriesReturnsLookupError covers the handoff's use of the
+// router: with no address for the actor, the call makes one lookup and returns
+// its error, instead of retrying it as Call does.
+func TestCallWithoutRetriesReturnsLookupError(t *testing.T) {
+	t.Parallel()
+
+	r := newLocalTimerRouter(t, func(context.Context, int) (context.Context, error) {
+		return nil, messages.ErrActorNoAddress.WithFormat("abc||foo")
+	}, nil)
+	_, err := r.CallWithoutRetries(t.Context(), internalv1pb.NewInternalInvokeRequest("method").WithActor("abc", "foo"))
+	require.ErrorIs(t, err, messages.ErrActorNoAddress)
+	assert.Equal(t, 1, r.lookups, "the call retried its lookup")
+	assert.Equal(t, 0, r.creates)
+	assert.Equal(t, 0, r.invokes)
+}
+
 func TestCallReminderNonLocalTimerDropped(t *testing.T) {
 	var lookups int
 	plc := placementfake.New().WithLookupActor(func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
@@ -266,6 +284,62 @@ func TestCallReminderNonLocalTimerDropped(t *testing.T) {
 	})
 	require.ErrorIs(t, err, actorerrors.ErrTimerFireNotLocal)
 	assert.Equal(t, 1, lookups)
+}
+
+func TestCallReminderExecuteLocallySkipsPlacement(t *testing.T) {
+	plc := placementfake.New().WithLookupActor(func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+		t.Fatal("a pull-dispatched reminder must not consult placement")
+		return nil, nil, nil, nil
+	})
+
+	var invoked *api.Reminder
+	target := targetsfake.New("dapr.internal.default.app.activity").(*targetsfake.Fake).WithInvokeReminder(func(_ context.Context, rem *api.Reminder) error {
+		invoked = rem
+		return nil
+	})
+	var created []string
+	tbl := tablefake.New().WithGetOrCreate(func(_ context.Context, actorType, actorID string) (targets.Interface, error) {
+		created = append(created, actorType+"/"+actorID)
+		return target, nil
+	})
+
+	r := router.New(router.Options{
+		Placement:  plc,
+		Table:      tbl,
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+	})
+
+	rem := &api.Reminder{
+		ActorType:      "dapr.internal.default.app.activity",
+		ActorID:        "wf::1::0",
+		Name:           "run-activity",
+		SkipLock:       true,
+		ExecuteLocally: true,
+	}
+	require.NoError(t, r.CallReminder(t.Context(), rem))
+	assert.Equal(t, []string{"dapr.internal.default.app.activity/wf::1::0"}, created)
+	assert.Same(t, rem, invoked)
+}
+
+func TestCallReminderExecuteLocallyRefusesOnlyAnUnregisteredType(t *testing.T) {
+	call := func(cause error) error {
+		tbl := tablefake.New().WithGetOrCreate(func(context.Context, string, string) (targets.Interface, error) {
+			return nil, cause
+		})
+		r := router.New(router.Options{
+			Placement:  placementfake.New(),
+			Table:      tbl,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+		})
+		return r.CallReminder(t.Context(), &api.Reminder{ActorType: "a", ActorID: "1", Name: "n", ExecuteLocally: true})
+	}
+
+	err := call(fmt.Errorf("%w: actor type a %w", actorerrors.ErrCreatingActor, actorerrors.ErrNotRegistered))
+	require.ErrorIs(t, err, actorerrors.ErrNoCapacity)
+
+	err = call(fmt.Errorf("%w: actor hosting is suspended", actorerrors.ErrCreatingActor))
+	require.ErrorIs(t, err, actorerrors.ErrCreatingActor)
+	require.NotErrorIs(t, err, actorerrors.ErrNoCapacity)
 }
 
 func TestCallReminderNonLocalRemoteReminderErrors(t *testing.T) {

@@ -205,7 +205,7 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	})
 	store.AddMCPServer(server)
 
-	fetcher := fakesecurity.New().WithFetchJWT(func(_ context.Context, _ string) (string, error) {
+	fetcher := fakesecurity.New().WithMintJWT(func(_ context.Context, _ string) (string, error) {
 		return "svid-12345", nil
 	})
 

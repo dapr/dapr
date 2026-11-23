@@ -43,6 +43,9 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 
 	r.workflow = workflow.New(t,
 		workflow.WithDaprds(3),
+		// Asserts the workflow actor types are unregistered once the workers
+		// leave, which the staged operations preview does not do.
+		workflow.WithStagedOperations(false),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(uuid.String())),
 		workflow.WithDaprdOptions(1, daprd.WithAppID(uuid.String())),
 		workflow.WithDaprdOptions(2, daprd.WithAppID(uuid.String())),

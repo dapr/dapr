@@ -14,10 +14,62 @@ limitations under the License.
 package runtime
 
 import (
+	"context"
+	"sync"
+	"sync/atomic"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/embedded"
+	"go.opentelemetry.io/otel/trace/noop"
 )
+
+var (
+	globalTracerProvider     forwardingTracerProvider
+	globalTracerProviderOnce sync.Once
+	noopTracer               = noop.NewTracerProvider().Tracer("")
+)
+
+type forwardingTracerProvider struct {
+	embedded.TracerProvider
+	current atomic.Pointer[sdktrace.TracerProvider]
+}
+
+func (p *forwardingTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
+	return &forwardingTracer{provider: p, name: name, opts: opts}
+}
+
+type forwardingTracer struct {
+	embedded.Tracer
+	provider *forwardingTracerProvider
+	name     string
+	opts     []trace.TracerOption
+	bound    atomic.Pointer[boundTracer]
+}
+
+// boundTracer caches the SDK tracer for one SDK provider, so the provider's
+// lock is only taken when the provider changes rather than on every span.
+type boundTracer struct {
+	provider *sdktrace.TracerProvider
+	tracer   trace.Tracer
+}
+
+func (t *forwardingTracer) Start(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	tp := t.provider.current.Load()
+	if tp == nil {
+		//nolint:spancheck
+		return noopTracer.Start(ctx, name, opts...)
+	}
+	b := t.bound.Load()
+	if b == nil || b.provider != tp {
+		b = &boundTracer{provider: tp, tracer: tp.Tracer(t.name, t.opts...)}
+		t.bound.Store(b)
+	}
+	//nolint:spancheck
+	return b.tracer.Start(ctx, name, opts...)
+}
 
 // tracerProviderStore allows us to capture the trace provider options
 // and set a trace provider as per those settings
@@ -68,28 +120,32 @@ func (s *opentelemetryTracerProviderStore) RegisterSampler(sampler sdktrace.Samp
 
 // RegisterTracerProvider registers a trace provider as per the tracer options in the store
 func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() *sdktrace.TracerProvider {
-	if len(s.exporters) != 0 {
-		tracerOptions := []sdktrace.TracerProviderOption{}
-		for _, exporter := range s.exporters {
-			tracerOptions = append(tracerOptions, sdktrace.WithBatcher(exporter))
-		}
-
-		if s.res != nil {
-			tracerOptions = append(tracerOptions, sdktrace.WithResource(s.res))
-		}
-
-		if s.sampler != nil {
-			tracerOptions = append(tracerOptions, sdktrace.WithSampler(s.sampler))
-		}
-
-		tp := sdktrace.NewTracerProvider(tracerOptions...)
-
-		otel.SetTracerProvider(tp)
-
-		return tp
+	if len(s.exporters) == 0 {
+		globalTracerProvider.current.Store(nil)
+		return nil
 	}
 
-	return nil
+	tracerOptions := []sdktrace.TracerProviderOption{}
+	for _, exporter := range s.exporters {
+		tracerOptions = append(tracerOptions, sdktrace.WithBatcher(exporter))
+	}
+
+	if s.res != nil {
+		tracerOptions = append(tracerOptions, sdktrace.WithResource(s.res))
+	}
+
+	if s.sampler != nil {
+		tracerOptions = append(tracerOptions, sdktrace.WithSampler(s.sampler))
+	}
+
+	tp := sdktrace.NewTracerProvider(tracerOptions...)
+
+	globalTracerProviderOnce.Do(func() {
+		otel.SetTracerProvider(&globalTracerProvider)
+	})
+	globalTracerProvider.current.Store(tp)
+
+	return tp
 }
 
 // fakeTracerOptionsStore implements tracerOptionsStore by merely record the exporters

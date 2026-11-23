@@ -55,7 +55,6 @@ type BulkSubIngressDiagnostics struct {
 	lock           sync.Mutex
 	statusWiseDiag map[string]int64
 	elapsed        float64
-	retryReported  bool
 }
 
 // AddStatusCount adds count to the number of entries recorded against status.
@@ -72,41 +71,6 @@ func (b *BulkSubIngressDiagnostics) SetElapsed(elapsed float64) {
 	defer b.lock.Unlock()
 
 	b.elapsed = elapsed
-}
-
-// SetRetryReported marks the entries of this delivery as already counted as
-// retries, so that a subsequent dead letter of those entries moves them out of
-// the retry count instead of counting them twice.
-func (b *BulkSubIngressDiagnostics) SetRetryReported() {
-	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	b.retryReported = true
-}
-
-// AddRetriesIfNotReported records count entries as retries, unless the
-// entries of this delivery have already been counted as retries.
-func (b *BulkSubIngressDiagnostics) AddRetriesIfNotReported(count int64) {
-	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	if b.retryReported {
-		return
-	}
-
-	b.statusWiseDiag[string(contribpubsub.Retry)] += count
-}
-
-// AddDeadLettered records count entries as dropped to the dead letter topic,
-// taking them back out of the retry count if they were reported as retries.
-func (b *BulkSubIngressDiagnostics) AddDeadLettered(count int64) {
-	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	b.statusWiseDiag[string(contribpubsub.Drop)] += count
-	if b.retryReported {
-		b.statusWiseDiag[string(contribpubsub.Retry)] -= count
-	}
 }
 
 // snapshot returns a consistent copy of the counters for reporting.

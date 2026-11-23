@@ -30,10 +30,11 @@ type Endpoint struct {
 
 // EndpointSettings contains settings for the endpoint.
 type EndpointSettings struct {
-	Name          string // Method name, used in logging and for other purposes
-	IsFallback    bool   // Endpoint is used as fallback when the method or URL isn't found
-	AlwaysAllowed bool   // Endpoint is always allowed regardless of API access rules
-	IsHealthCheck bool   // Mark endpoint as healthcheck - for API logging purposes
+	Name                     string // Method name, used in logging and for other purposes
+	IsFallback               bool   // Endpoint is used as fallback when the method or URL isn't found
+	AlwaysAllowed            bool   // Endpoint is always allowed regardless of API access rules
+	IsHealthCheck            bool   // Mark endpoint as healthcheck - for API logging purposes
+	SkipRequestBodySizeLimit bool   // Endpoint accepts streaming request bodies without the server size limit
 }
 
 // IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.

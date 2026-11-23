@@ -33,11 +33,20 @@ import (
 
 const reminderNameParentNotify = "parent-notify"
 
-// parentNotifyTimeout bounds one delivery of the completion to the parent.
-// The env override exists for integration tests that cannot wait the
-// production bound; it is not a supported production knob.
+// defaultParentNotifyTimeout bounds one delivery of the completion to the
+// parent. The child sends it holding its own turn lock, so a parent turn
+// blocked dispatching into this child (a replayed child creation) waits for
+// the child while the child waits for the parent; this bound is what breaks
+// that cycle, and both workflows stall for its full length. A parent that is
+// merely slow loses nothing: the failed send arms the parent-notify reminder,
+// which re-sends.
+const defaultParentNotifyTimeout = 5 * time.Second
+
+// parentNotifyTimeout is defaultParentNotifyTimeout unless overridden. The env
+// override exists for integration tests; it is not a supported production
+// knob.
 var parentNotifyTimeout = sync.OnceValue(func() time.Duration {
-	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PARENT_NOTIFY_TIMEOUT", detachedReminderTimeout)
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_PARENT_NOTIFY_TIMEOUT", defaultParentNotifyTimeout)
 })
 
 // parentNotify is a completion notification ready to deliver. It is built

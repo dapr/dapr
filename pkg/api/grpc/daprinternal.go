@@ -330,6 +330,9 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}
 
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = status.FromContextError(err).Err()
+		}
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
@@ -458,7 +461,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
 		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()
-		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		if appProtocolIsHTTP {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()

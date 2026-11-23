@@ -83,11 +83,16 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 				case <-ctx.Done():
 				case <-closeCh:
 				}
+				var statuses map[string]rtv1.TopicEventResponse_TopicEventResponseStatus
+				if opts.bulkStatusFn != nil {
+					statuses = opts.bulkStatusFn(ctx, bulkEntryIDs(in))
+				}
 				stats := make([]*rtv1.TopicEventBulkResponseEntry, len(in.GetEntries()))
 				for i, e := range in.GetEntries() {
 					stats[i] = &rtv1.TopicEventBulkResponseEntry{
 						EntryId: e.GetEntryId(),
-						Status:  rtv1.TopicEventResponse_SUCCESS,
+						// A missing status is SUCCESS, the zero value.
+						Status: statuses[e.GetEntryId()],
 					}
 				}
 				return &rtv1.TopicEventBulkResponse{Statuses: stats}, nil
@@ -142,6 +147,27 @@ func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *rtv1.TopicE
 	case in := <-s.inBulkCh:
 		return in
 	}
+}
+
+// ReceiveBulkEventIDs returns the cloud event IDs of the entries of the next
+// bulk delivery, in the order they were delivered.
+func (s *Subscriber) ReceiveBulkEventIDs(t *testing.T, ctx context.Context) []string {
+	t.Helper()
+
+	in := s.ReceiveBulk(t, ctx)
+	ids := make([]string, len(in.GetEntries()))
+	for i, e := range in.GetEntries() {
+		ids[i] = e.GetCloudEvent().GetId()
+	}
+	return ids
+}
+
+func bulkEntryIDs(in *rtv1.TopicEventBulkRequest) []string {
+	ids := make([]string, len(in.GetEntries()))
+	for i, e := range in.GetEntries() {
+		ids[i] = e.GetEntryId()
+	}
+	return ids
 }
 
 func (s *Subscriber) AssertEventChanLen(t *testing.T, l int) {

@@ -28,6 +28,8 @@ type ListOptions struct {
 	ComponentStore *compstore.ComponentStore
 	Namespace      string
 	AppID          string
+	// IDPrefix, when set, lists only the instance IDs starting with it.
+	IDPrefix string
 
 	PageSize          *uint32
 	ContinuationToken *string
@@ -49,7 +51,14 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 		return nil, fmt.Errorf("state store %T does not support listing keys", store)
 	}
 
-	like := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||%||metadata"
+	// The pattern holds the prefix only up to its first LIKE metacharacter,
+	// as stores escape them differently; the filter below drops the extra
+	// matches. A page can come back short as a result.
+	likePrefix := opts.IDPrefix
+	if i := strings.IndexAny(likePrefix, `%_\`); i >= 0 {
+		likePrefix = likePrefix[:i]
+	}
+	like := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||" + likePrefix + "%||metadata"
 
 	resp, err := ks.KeysLike(ctx, &state.KeysLikeRequest{
 		Pattern:           like,
@@ -67,7 +76,9 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 			return nil, fmt.Errorf("invalid key format: %s", key)
 		}
 
-		keys = append(keys, split[2])
+		if strings.HasPrefix(split[2], opts.IDPrefix) {
+			keys = append(keys, split[2])
+		}
 	}
 
 	return &ListInstanceIDsResult{
