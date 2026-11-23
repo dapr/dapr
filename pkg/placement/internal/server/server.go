@@ -120,6 +120,12 @@ func (s *Server) Run(ctx context.Context) error {
 	gserver := grpc.NewServer(
 		s.sec.GRPCServerOptionMTLS(),
 		grpc.KeepaliveParams(keepaliveParams),
+		// Sidecars ping their placement stream every 10s to detect a dropped or
+		// partitioned placement leader.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Second * 5,
+			PermitWithoutStream: true,
+		}),
 	)
 
 	v1pb.RegisterPlacementServer(gserver, s)
