@@ -255,6 +255,11 @@ func (r *router) callLocalReminder(ctx context.Context, req *api.Reminder) error
 		if ctx.Err() != nil {
 			return err
 		}
+		// The type left this host, such as when its worker disconnected:
+		// another host can take it. Any other failure is a real one.
+		if errors.Is(err, actorerrors.ErrNotRegistered) {
+			err = fmt.Errorf("%w: %w", actorerrors.ErrNoCapacity, err)
+		}
 		return backoff.Permanent(err)
 	}
 

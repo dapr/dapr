@@ -117,6 +117,8 @@ type Options struct {
 	// pull-dispatched (Configuration spec.workflow activityDispatchMode and
 	// per-name overrides). Nil means never.
 	ActivityDispatchPull func(activityName string) bool
+	// ActivityPriority returns an activity's level name and weight. Nil means none.
+	ActivityPriority func(workflowName, activityName string) (string, uint32)
 
 	// MaxConcurrentActivityInvocations is the per-sidecar activity cap, the
 	// same value the engine's activity worker is limited to. 0 means no cap.
@@ -160,6 +162,7 @@ type Actors struct {
 	fallbackHosts                   bool
 	gracefulShutdownDuration        time.Duration
 	activityDispatchPull            func(activityName string) bool
+	activityPriority                func(workflowName, activityName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
 	// activityCommitted counts activity work items handed to the engine and
@@ -308,6 +311,7 @@ func New(opts Options) (*Actors, error) {
 		fallbackHosts:                   opts.WorkflowsStagedOperations,
 		gracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		activityDispatchPull:            opts.ActivityDispatchPull,
+		activityPriority:                opts.ActivityPriority,
 		pendingCompletions:              pendingCompletions,
 		activityCap:                     int64(opts.MaxConcurrentActivityInvocations),
 	}, nil
@@ -367,6 +371,7 @@ func (abe *Actors) factoryOptions() workflow.Options {
 		FastPath:               abe.workflowsFastPath,
 		Fallback:               abe.fallbackFunc(),
 		Detached:               abe.detachedRunner(),
+		ActivityPriority:       abe.activityPriority,
 		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -403,12 +408,12 @@ func (abe *Actors) factoryOptions() workflow.Options {
 				if pull {
 					// Nothing here can run it: the scheduler picks another
 					// sidecar instead of failing the trigger.
-					return activity.ErrNoCapacity
+					return actorerrors.ErrNoCapacity
 				}
 				return err
 			}
 			if !abe.reserveActivity(pull) {
-				return activity.ErrNoCapacity
+				return actorerrors.ErrNoCapacity
 			}
 
 			select {
@@ -1504,11 +1509,12 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	}
 
 	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
+		AppID:               abe.appID,
+		Namespace:           abe.namespace,
+		WorkflowActorType:   abe.workflowActorType,
+		ActivityActorType:   abe.activityActorType,
+		Signer:              abe.signer,
+		AllowMissingEntries: true,
 	})
 	if err != nil {
 		// Force purge is the escape hatch for instances that cannot be

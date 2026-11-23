@@ -67,6 +67,9 @@ type Interface interface {
 	InProcessExecutor() *inprocess.Executor
 	ActivityActorType() string
 	WorkflowActorType() string
+	// ActivityFreeSlots returns how many more activities this sidecar can take
+	// before its activity cap, and a channel closed on the next change.
+	ActivityFreeSlots() (free uint32, changed <-chan struct{})
 }
 
 type Options struct {
@@ -204,6 +207,7 @@ func New(opts Options) (Interface, error) {
 		WorkflowsStagedOperations:       opts.WorkflowsStagedOperations,
 		GracefulShutdownDuration:        opts.GracefulShutdownDuration,
 		ActivityDispatchPull:            opts.Spec.ActivityDispatchPull,
+		ActivityPriority:                opts.Spec.ActivityPriority,
 	}
 	if v := opts.Spec.GetMaxConcurrentActivityInvocations(); v != nil {
 		bopts.MaxConcurrentActivityInvocations = *v
@@ -607,6 +611,10 @@ func (wfe *engine) ActivityActorType() string {
 
 func (wfe *engine) WorkflowActorType() string {
 	return wfe.backend.WorkflowActorType()
+}
+
+func (wfe *engine) ActivityFreeSlots() (uint32, <-chan struct{}) {
+	return wfe.backend.ActivityFreeSlots()
 }
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {

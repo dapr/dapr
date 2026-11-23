@@ -267,12 +267,14 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			if err != nil {
 				return nil, err
 			}
-			// The JWT request function dials Sentry with sec's X.509 SVID, which
-			// is only read once the identity has been fetched.
-			jwtReqFn, err = newJWTRequestFn(opts, sec, cptd)
-			if err != nil {
-				return nil, err
-			}
+		}
+		// The JWT request function dials Sentry with sec's X.509 SVID, which
+		// is only read once the identity has been fetched. It is built even
+		// when the certificate request is overridden, because the minted JWT
+		// SVID only depends on that identity.
+		jwtReqFn, err = newJWTRequestFn(opts, sec, cptd)
+		if err != nil {
+			return nil, err
 		}
 		sec.spiffe = spiffe.New(spiffe.Options{
 			Log:                 log,
