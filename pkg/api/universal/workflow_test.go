@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -65,21 +66,21 @@ func TestStartWorkflowAPI(t *testing.T) {
 			workflowComponent: fakeComponentName,
 			workflowName:      "",
 			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowNameMissing,
+			expectedError:     apierrors.WorkflowNameMissing(),
 		},
 		{
 			testName:          "Invalid instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
 			instanceID:        "invalid#12",
-			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid#12"),
+			expectedError:     apierrors.WorkflowInstanceIDInvalid("invalid#12"),
 		},
 		{
 			testName:          "Too long instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
 			instanceID:        "this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed",
-			expectedError:     messages.ErrInstanceIDTooLong.WithFormat(64),
+			expectedError:     apierrors.WorkflowInstanceIDTooLong(64),
 		},
 		{
 			testName:          "No instance ID provided in start request",
@@ -158,7 +159,7 @@ func TestStartWorkflowRetries(t *testing.T) {
 				InstanceId:        fakeInstanceID,
 				WorkflowName:      "fakeWorkflow",
 			})
-			require.ErrorIs(t, err, messages.ErrStartWorkflow)
+			require.ErrorIs(t, err, apierrors.WorkflowStartFailed("fakeWorkflow", fmt.Errorf("start failed")))
 			assert.Equal(t, tc.wantAttempts, attempts.Load())
 		})
 	}
@@ -175,7 +176,7 @@ func TestGetWorkflowAPI(t *testing.T) {
 			testName:          "No instance ID provided in get request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.WorkflowInstanceIDMissing(),
 		},
 		{
 			testName:          "All is well in get request",
@@ -220,7 +221,7 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 			testName:          "No instance ID provided in terminate request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.WorkflowInstanceIDMissing(),
 		},
 		{
 			testName:          "All is well in terminate request",
@@ -269,14 +270,14 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			eventName:         fakeEventName,
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.WorkflowInstanceIDMissing(),
 		},
 		{
 			testName:          "No event name provided in raise event request",
 			workflowComponent: fakeComponentName,
 			instanceID:        fakeInstanceID,
 			eventName:         "",
-			expectedError:     messages.ErrMissingWorkflowEventName,
+			expectedError:     apierrors.WorkflowEventNameMissing(),
 		},
 		{
 			testName:          "All is well in raise event request",
@@ -324,7 +325,7 @@ func TestPauseWorkflowApi(t *testing.T) {
 			testName:          "No instance ID provided in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.WorkflowInstanceIDMissing(),
 		},
 		{
 			testName:          "All is well in pause request",
@@ -369,7 +370,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 			testName:          "No instance ID provided in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			expectedError:     apierrors.WorkflowInstanceIDMissing(),
 		},
 		{
 			testName:          "All is well in resume request",
@@ -404,13 +405,13 @@ func TestResumeWorkflowApi(t *testing.T) {
 }
 
 // TestWorkflowInstanceNotFoundError verifies that the Terminate and Purge
-// handlers format ErrWorkflowInstanceNotFound with a single argument. The
-// message template has one verb, so passing the sentinel error as an extra
-// argument used to append a "%!(EXTRA ...)" formatting marker to the message.
-// ErrorIs cannot catch this because APIError.Is ignores the message, so the
-// exact message is asserted here.
+// handlers format the not-found error with a single argument. The message
+// template has one verb, so passing the sentinel error as an extra argument
+// used to append a "%!(EXTRA ...)" formatting marker to the message.
+// ErrorIs cannot catch this because the error comparison ignores the message,
+// so the exact message is asserted through the gRPC status.
 func TestWorkflowInstanceNotFoundError(t *testing.T) {
-	expectedMessage := messages.ErrWorkflowInstanceNotFound.WithFormat(fakeInstanceID).Message()
+	expectedMessage := "unable to find workflow with the provided instance ID: " + fakeInstanceID
 
 	fakeAPI := &Universal{
 		logger:     logger.NewLogger("test"),
@@ -432,11 +433,9 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 			WorkflowComponent: fakeComponentName,
 			InstanceId:        fakeInstanceID,
 		})
-		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
-		var apiErr messages.APIError
-		require.ErrorAs(t, err, &apiErr)
-		require.Equal(t, expectedMessage, apiErr.Message())
-		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+		require.ErrorIs(t, err, apierrors.WorkflowInstanceNotFound(fakeInstanceID))
+		require.Equal(t, expectedMessage, status.Convert(err).Message())
+		require.NotContains(t, status.Convert(err).Message(), "%!(EXTRA")
 	})
 
 	t.Run("Purge returns the not-found error without extra formatting", func(t *testing.T) {
@@ -444,11 +443,9 @@ func TestWorkflowInstanceNotFoundError(t *testing.T) {
 			WorkflowComponent: fakeComponentName,
 			InstanceId:        fakeInstanceID,
 		})
-		require.ErrorIs(t, err, messages.ErrWorkflowInstanceNotFound)
-		var apiErr messages.APIError
-		require.ErrorAs(t, err, &apiErr)
-		require.Equal(t, expectedMessage, apiErr.Message())
-		require.NotContains(t, apiErr.Message(), "%!(EXTRA")
+		require.ErrorIs(t, err, apierrors.WorkflowInstanceNotFound(fakeInstanceID))
+		require.Equal(t, expectedMessage, status.Convert(err).Message())
+		require.NotContains(t, status.Convert(err).Message(), "%!(EXTRA")
 	})
 }
 

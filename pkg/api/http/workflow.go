@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -302,7 +303,7 @@ func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 			InModifier: workflowInModifier[*runtimev1pb.GetWorkflowRequest],
 			OutModifier: func(out *runtimev1pb.GetWorkflowResponse) (any, error) {
 				if out.GetProperties() == nil {
-					return nil, messages.ErrWorkflowInstanceNotFound.WithFormat(out.GetInstanceId())
+					return nil, apierrors.WorkflowInstanceNotFound(out.GetInstanceId())
 				}
 				return out, nil
 			},
