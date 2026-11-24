@@ -30,6 +30,7 @@ import (
 	contribstate "github.com/dapr/components-contrib/state"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/pendingstart"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfengerrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -250,6 +251,12 @@ func executionIDOf(es *protos.ExecutionStartedEvent) string {
 func (o *orchestrator) primeCachedState(state *wfenginestate.State, startEvent *protos.ExecutionStartedEvent) {
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, resolutionsAfterScheduling(state.History))
 	o.ometa = o.ometaFromState(o.rstate, startEvent)
+	// startEvent has no timestamp: the timestamp is on the history event
+	// that holds it. A PENDING instance has that history event in the inbox
+	// until its first turn commits it to the history.
+	if pending := pendingstart.Event(state); pending != nil {
+		o.ometa.CreatedAt = timestamppb.New(pending.GetTimestamp().AsTime())
+	}
 }
 
 // confirmCachedState re-reads the metadata row before a message is acked off
@@ -556,7 +563,11 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 	}
 	createdAt, _ := runtimestate.CreatedTime(rstate)
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
-	completedAt, _ := runtimestate.CompletedTime(rstate)
+	// An instance that did not complete has no completion time.
+	var completedAt *timestamppb.Timestamp
+	if t, err := runtimestate.CompletedTime(rstate); err == nil {
+		completedAt = timestamppb.New(t)
+	}
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
@@ -579,7 +590,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, star
 		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),
 		CreatedAt:        timestamppb.New(createdAt),
 		LastUpdatedAt:    timestamppb.New(lastUpdated),
-		CompletedAt:      timestamppb.New(completedAt),
+		CompletedAt:      completedAt,
 		Input:            input,
 		Output:           output,
 		CustomStatus:     rstate.GetCustomStatus(),
