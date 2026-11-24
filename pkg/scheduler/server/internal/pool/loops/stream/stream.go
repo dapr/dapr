@@ -172,14 +172,19 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 var errStreamShutdown = errors.New("stream shutdown")
 
 // handleShutdown handles a shutdown request from the scheduler. It closes
-// the stream and calls all inflight result functions with an undeliverable
-// result.
+// the stream and resolves every inflight trigger undeliverable, except pull
+// triggers, which are orphaned so the sidecar can reattach to them.
 func (s *stream) handleShutdown() {
 	log.Infof("Closing connection to %s/%s", s.ns, s.appID)
 	s.cancel(errStreamShutdown)
 	s.wg.Wait()
 	s.inflight.Range(func(_, inf any) bool {
-		inf.(*loops.TriggerRequest).ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+		req := inf.(*loops.TriggerRequest)
+		if req.Orphan != nil {
+			req.Orphan()
+		} else {
+			req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+		}
 		return true
 	})
 	s.inflight.Clear()

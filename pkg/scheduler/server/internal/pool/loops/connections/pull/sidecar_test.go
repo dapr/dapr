@@ -119,10 +119,13 @@ func TestDispatcher_LastStreamClosingReturnsPending(t *testing.T) {
 	h.closeStream(t, 0, running)
 
 	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, parked), "parked triggers go back to the cron for retry")
-	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, running), "the running trigger goes back with its stream")
+	assert.NotContains(t, h.results, running, "the running trigger waits for its sidecar to reattach")
 	assert.Empty(t, h.d.pending)
 	assert.Empty(t, h.d.pools)
-	assert.Empty(t, h.d.sidecars, "a sidecar with no streams and no flights is forgotten")
+	f := h.d.sidecars[sidecarOf(0)].flights[key("wf::1::0")]
+	require.NotNil(t, f)
+	assert.True(t, f.orphaned)
+	assert.NotNil(t, f.timer)
 }
 
 func TestDispatcher_ReportsApplyPerSidecar(t *testing.T) {
@@ -136,6 +139,34 @@ func TestDispatcher_ReportsApplyPerSidecar(t *testing.T) {
 	assert.Equal(t, uint32(1), h.pool(0).credit)
 	h.report(0, 3)
 	assert.Equal(t, uint32(3), h.pool(0).credit)
+}
+
+func TestDispatcher_ResultForUnknownReminderIsDropped(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 1)
+
+	running := h.trigger("wf::1::0", "act")
+	h.handle(running)
+	h.result(0, ref("wf::9::0"), schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS)
+	h.d.HandleResult(&loops.PullResult{Namespace: "default", AppID: "otherapp", ActorAddress: addr(0), Reminder: ref("wf::1::0"), Status: schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS})
+	h.pump(t)
+	assert.Empty(t, h.results)
+}
+
+func TestDispatcher_ResultAfterItsStreamClosed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 1)
+
+	running := h.trigger("wf::1::0", "act")
+	h.handle(running)
+	require.Len(t, h.dispatched[0], 1)
+
+	// The stream closes while its receive loop still holds a result by
+	// reference, which reaches the connections loop afterwards.
+	h.closeStream(t, 0, running)
+	h.result(0, ref("wf::1::0"), schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS)
+	h.pump(t)
+	assert.Equal(t, api.TriggerResponseResult_SUCCESS, h.resultOf(t, running), "the sidecar still holds the flight")
 }
 
 func TestDispatcher_ReportFromClosedStreamIsIgnored(t *testing.T) {

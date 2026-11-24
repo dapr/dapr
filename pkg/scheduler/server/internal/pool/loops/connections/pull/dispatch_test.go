@@ -154,7 +154,7 @@ func TestDispatcher_FallsBackWithoutSlots(t *testing.T) {
 	h.handle(req)
 
 	assert.Equal(t, []*loops.TriggerRequest{req}, h.routed, "with no sidecar reporting slots the trigger takes the regular route")
-	assert.Nil(t, req.Repark, "a regularly routed trigger is not tracked as a pull delivery")
+	assert.Nil(t, req.Orphan, "a regularly routed trigger is not reattachable")
 	assert.Empty(t, h.d.pending)
 }
 

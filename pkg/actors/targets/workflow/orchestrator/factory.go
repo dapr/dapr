@@ -91,6 +91,9 @@ type Options struct {
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
 	Detached *detached.Runner
+
+	// ActivityPriority returns an activity's level name and weight. Nil means none.
+	ActivityPriority func(workflowName, activityName string) (string, uint32)
 }
 
 type factory struct {
@@ -124,12 +127,13 @@ type factory struct {
 	// recreates the context for subsequent activations. wakeLock serializes
 	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
 	// the Wait.
-	fastPath   bool
-	fallback   func() bool
-	wakeLock   sync.Mutex
-	wakeCtx    context.Context
-	wakeCancel context.CancelFunc
-	wakeWG     sync.WaitGroup
+	fastPath         bool
+	fallback         func() bool
+	activityPriority func(workflowName, activityName string) (string, uint32)
+	wakeLock         sync.Mutex
+	wakeCtx          context.Context
+	wakeCancel       context.CancelFunc
+	wakeWG           sync.WaitGroup
 
 	// In-place drive retry schedule; nil selects the default jittered
 	// schedule. A field only so unit tests can compress it per factory.
@@ -214,6 +218,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
 		fallback:               opts.Fallback,
+		activityPriority:       opts.ActivityPriority,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,

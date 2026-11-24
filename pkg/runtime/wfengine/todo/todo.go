@@ -23,6 +23,10 @@ import (
 const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
+	// PullProperty marks an activity work item delivered by pull dispatch. The
+	// backend refuses it, instead of queueing it, when the sidecar has no free
+	// activity slot.
+	PullProperty = "dapr.pull"
 
 	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
 	AddWorkflowEventMethod            = "AddWorkflowEvent"
@@ -50,6 +54,8 @@ const (
 	// on the execution-claim record so a body live on the previous owner is
 	// deferred to (WorkflowsFastPath). Ignored by older hosts.
 	MetadataActivityJanitorRedispatch = "janitorRedispatch"
+	MetadataActivityPriorityLevel     = "priorityLevel"
+	MetadataActivityFairnessWeight    = "fairnessWeight"
 	MetadataPurgeRetentionCall        = "PurgeRetentionCall"
 	MetadataPurgeForce                = "PurgeForce"
 	// Set on a WaitForRuntimeStatus call to request that a terminal workflow

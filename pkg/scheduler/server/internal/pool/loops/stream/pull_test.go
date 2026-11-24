@@ -21,6 +21,7 @@ import (
 	"github.com/diagridio/go-etcd-cron/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -41,6 +42,17 @@ func (s *suite) result(t *testing.T, res *schedulerv1pb.WatchJobsRequestResult) 
 	require.NoError(t, s.clientstream.Send(&schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{Result: res},
 	}))
+}
+
+func (s *suite) nextEvent(t *testing.T) loops.EventNS {
+	t.Helper()
+	select {
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timeout")
+		return nil
+	case ev := <-s.nsLoop.Events():
+		return ev
+	}
 }
 
 func (s *suite) shutdown(t *testing.T) {
@@ -89,5 +101,48 @@ func Test_StreamPull(t *testing.T) {
 
 		suite.roundTrip(t, "alive", 1, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, api.TriggerResponseResult_SUCCESS)
 		suite.shutdown(t)
+	})
+
+	t.Run("a result by reminder reference is forwarded", func(t *testing.T) {
+		t.Parallel()
+		suite := newSuite(t)
+
+		ref := &schedulerv1pb.ActorReminderRef{ActorType: "activity", ActorId: "wf::1::0", Name: "run-activity"}
+		suite.result(t, &schedulerv1pb.WatchJobsRequestResult{Reminder: ref, Status: schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS})
+
+		ev, ok := suite.nextEvent(t).(*loops.PullResult)
+		require.True(t, ok)
+		assert.Equal(t, "ns", ev.Namespace)
+		assert.Equal(t, uint64(123), ev.StreamIDx)
+		assert.Equal(t, "app-id", ev.AppID)
+		assert.True(t, proto.Equal(ref, ev.Reminder))
+		assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, ev.Status)
+
+		suite.roundTrip(t, "alive", 1, schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS, api.TriggerResponseResult_SUCCESS)
+		suite.shutdown(t)
+	})
+
+	t.Run("shutdown orphans pull triggers and resolves the rest", func(t *testing.T) {
+		t.Parallel()
+		suite := newSuite(t)
+
+		var orphaned atomic.Bool
+		var pullResolved, plainResolved atomic.Pointer[api.TriggerResponseResult]
+		suite.deliver(t, &loops.TriggerRequest{
+			Job:      &internalsv1pb.JobEvent{Name: "pulled"},
+			ResultFn: func(r api.TriggerResponseResult) { pullResolved.Store(&r) },
+			Orphan:   func() { orphaned.Store(true) },
+		})
+		suite.deliver(t, &loops.TriggerRequest{
+			Job:      &internalsv1pb.JobEvent{Name: "plain"},
+			ResultFn: func(r api.TriggerResponseResult) { plainResolved.Store(&r) },
+		})
+
+		suite.shutdown(t)
+		assert.True(t, orphaned.Load())
+		assert.Nil(t, pullResolved.Load())
+		ptr := plainResolved.Load()
+		require.NotNil(t, ptr)
+		assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, *ptr)
 	})
 }

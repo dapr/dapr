@@ -118,6 +118,34 @@ message JobMetadata {
   // scheduler without pull dispatch, or with no connected sidecar reporting
   // slots for the actor type, routes the trigger as a regular actor reminder.
   optional bool pull = 5;
+
+  // priority orders a pull-dispatched trigger while it waits for a free slot
+  // on the scheduler instance. Unset means NORMAL and weight 1.
+  optional JobPriority priority = 6;
+}
+
+// JobPriority orders pull-dispatched triggers waiting for a free slot on the
+// same scheduler instance.
+message JobPriority {
+  // level is the strict order between waiting triggers: a higher level is
+  // delivered first. Unset means NORMAL.
+  optional PriorityLevel level = 1;
+
+  // fairness_weight shares deliveries between the names (concurrency_key)
+  // waiting at the same level, in proportion to their weights, 1 to 1000.
+  // Unset means 1. A name is charged at the weight of its newest trigger.
+  optional uint32 fairness_weight = 2;
+}
+
+// PriorityLevel is the strict order between pull-dispatched triggers waiting
+// for a free slot, highest first. Unspecified is treated as normal.
+enum PriorityLevel {
+  PRIORITY_LEVEL_UNSPECIFIED = 0;
+  PRIORITY_LEVEL_CRITICAL = 1;
+  PRIORITY_LEVEL_HIGH = 2;
+  PRIORITY_LEVEL_NORMAL = 3;
+  PRIORITY_LEVEL_LOW = 4;
+  PRIORITY_LEVEL_BACKGROUND = 5;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -179,6 +207,21 @@ message WatchJobsRequestInitial {
   // actor type only when it reports slots for it and lists it in actor_types.
   // Later changes are sent as WatchJobsRequest.pull_slots.
   repeated PullSlots pull_slots = 9;
+
+  // inflight_reminders are the pull-dispatched actor reminders an earlier
+  // stream of this sidecar to this scheduler delivered which are still
+  // executing, or whose result has not been sent yet. The scheduler keeps
+  // waiting for their results instead of delivering them again, and their
+  // results are sent with WatchJobsRequestResult.reminder.
+  repeated ActorReminderRef inflight_reminders = 10;
+}
+
+// ActorReminderRef identifies an actor reminder job of the stream's
+// namespace and app.
+message ActorReminderRef {
+  string actor_type = 1;
+  string actor_id = 2;
+  string name = 3;
 }
 
 // PullSlots reports the number of pull-dispatched actor reminder triggers of
@@ -254,6 +297,11 @@ message WatchJobsRequestResult {
 
   // status is the status of the job processing.
   WatchJobsRequestResultStatus status = 2;
+
+  // reminder identifies the job instead of id for the result of a
+  // pull-dispatched reminder delivered on an earlier stream (see
+  // WatchJobsRequestInitial.inflight_reminders). id is 0 when it is set.
+  optional ActorReminderRef reminder = 3;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
@@ -376,8 +424,9 @@ message Host {
   bool scheduler_placement_enabled = 3;
 
   // supports_pull_slots is true when this scheduler accepts
-  // WatchJobsRequest.pull_slots and the NO_CAPACITY result status. Sidecars
-  // only use pull dispatch while every scheduler host advertises it.
+  // WatchJobsRequest.pull_slots, the NO_CAPACITY result status and
+  // reattachment of in-flight jobs. Sidecars only use pull dispatch while
+  // every scheduler host advertises it.
   bool supports_pull_slots = 4;
 }
 
