@@ -217,7 +217,10 @@ type Actors struct {
 	hostedWakes interface{ CancelWakes() }
 }
 
-var _ backend.Backend = (*Actors)(nil)
+var (
+	_ backend.Backend        = (*Actors)(nil)
+	_ backend.InstanceLister = (*Actors)(nil)
+)
 
 const pendingStartRedriveTimeout = 30 * time.Second
 
@@ -1209,6 +1212,18 @@ func (abe *Actors) String() string {
 	return "dapr.actors/v1"
 }
 
+// stateOptions returns the options for a load of the workflow state of an
+// instance of this app.
+func (abe *Actors) stateOptions() state.Options {
+	return state.Options{
+		AppID:             abe.appID,
+		Namespace:         abe.namespace,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
+	}
+}
+
 func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*state.State, error) {
 	astate, err := abe.actors.State(ctx)
 	if err != nil {
@@ -1222,13 +1237,7 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	// terminal failed event) is the orchestrator actor's responsibility, not
 	// the read path's — readers surface the verification error to clients
 	// and let them detect it.
-	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
-	})
+	wstate, err := state.LoadWorkflowState(ctx, astate, string(id), abe.stateOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -1457,6 +1466,36 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 	}, nil
 }
 
+// ListInstances implements backend.InstanceLister. It reads the summary that
+// each save writes into the metadata row of an instance. A row that a daprd
+// without summaries wrote is derived from a full load, and is not written.
+func (abe *Actors) ListInstances(ctx context.Context, req *protos.ListInstancesRequest) (*protos.ListInstancesResponse, error) {
+	return list.ListInstances(ctx, list.ListInstancesOptions{
+		ComponentStore: abe.compStore,
+		Namespace:      abe.namespace,
+		AppID:          abe.appID,
+		Request:        req,
+		Derive:         abe.deriveSummary,
+	})
+}
+
+// deriveSummary loads the full state of an instance, as loadInternalState
+// does, and returns its summary. It returns a nil summary and a nil error
+// when the list skips the instance: the instance does not exist any more, or
+// its state cannot be read for a reason that a retry cannot change (see
+// state.LoadSummary). Any other load error fails the list call.
+func (abe *Actors) deriveSummary(ctx context.Context, instanceID string) (*backend.BackendWorkflowSummary, error) {
+	astate, err := abe.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if astate == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
+
+	return state.LoadSummary(ctx, astate, instanceID, abe.stateOptions())
+}
+
 func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
 	ss, err := abe.actors.State(ctx)
 	if err != nil {
@@ -1466,13 +1505,7 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
-	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
-		AppID:             abe.appID,
-		Namespace:         abe.namespace,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Signer:            abe.signer,
-	})
+	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), abe.stateOptions())
 	if err != nil {
 		return nil, err
 	}

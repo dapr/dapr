@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,16 +37,34 @@ const (
 	testNamespace = "default"
 )
 
-// fakeStore is an in-memory state store with KeysLike. KeysLike matches a
-// pattern as SQLite matches LIKE: "%" matches any run of characters, "_"
-// matches one character, and ASCII letters match without case. It pages by
-// key: the token is the last key of the page, and the next page starts after
-// it, as the SQL stores page by row ID or by key. A delete between two pages
-// does not move the next page.
+// fakeStore is an in-memory state store with KeysLike and BulkGet. KeysLike
+// matches a pattern as SQLite matches LIKE: "%" matches any run of
+// characters, "_" matches one character, and ASCII letters match without
+// case. It pages by key: the token is the last key of the page, and the next
+// page starts after it, as the SQL stores page by row ID or by key. A delete
+// between two pages does not move the next page. The store counts every
+// write.
 type fakeStore struct {
 	mu   sync.Mutex
 	keys []string
 	data map[string][]byte
+
+	writes        atomic.Int64
+	keysLikeCalls atomic.Int64
+	bulkGetCalls  atomic.Int64
+	rowsRead      atomic.Int64
+	badBulkOpts   atomic.Int64
+	badPartition  atomic.Int64
+	// maxKeysLikePage is the largest page size of a KeysLike request.
+	maxKeysLikePage atomic.Int64
+
+	// getErr, when set, returns the error of a Get of key. Tests set it
+	// before the first read.
+	getErr func(key string) error
+	// bulkItemErr, when set, returns the error that BulkGet reports for
+	// key, as a native BulkGet reports a row that it failed to read. Tests
+	// set it before the first read.
+	bulkItemErr func(key string) string
 }
 
 func newFakeStore() *fakeStore {
@@ -62,6 +81,27 @@ func (f *fakeStore) put(key string, value []byte) {
 	f.data[key] = value
 }
 
+// remove deletes the rows of an instance, as a purge does.
+func (f *fakeStore) remove(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.keys = slices.DeleteFunc(f.keys, func(k string) bool {
+		if strings.Contains(k, "||"+id+"||") {
+			delete(f.data, k)
+			return true
+		}
+		return false
+	})
+}
+
+// addGhostKey lists key without a value, as a row deleted after KeysLike.
+func (f *fakeStore) addGhostKey(key string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	i, _ := slices.BinarySearch(f.keys, key)
+	f.keys = slices.Insert(f.keys, i, key)
+}
+
 func (f *fakeStore) Init(context.Context, state.Metadata) error { return nil }
 func (f *fakeStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional, state.FeatureKeysLike}
@@ -72,6 +112,12 @@ func (f *fakeStore) GetComponentMetadata() metadata.MetadataMap { return nil }
 func (f *fakeStore) Get(_ context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.rowsRead.Add(1)
+	if f.getErr != nil {
+		if err := f.getErr(req.Key); err != nil {
+			return nil, err
+		}
+	}
 	v, ok := f.data[req.Key]
 	if !ok {
 		return &state.GetResponse{}, nil
@@ -79,16 +125,34 @@ func (f *fakeStore) Get(_ context.Context, req *state.GetRequest) (*state.GetRes
 	return &state.GetResponse{Data: v, ETag: ptr.Of("1")}, nil
 }
 
-func (f *fakeStore) BulkGet(ctx context.Context, reqs []state.GetRequest, _ state.BulkGetOpts) ([]state.BulkGetResponse, error) {
+func (f *fakeStore) BulkGet(_ context.Context, reqs []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
+	f.bulkGetCalls.Add(1)
+	if opts.Parallelism <= 0 || opts.Parallelism > bulkGetParallelism {
+		f.badBulkOpts.Add(1)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	out := make([]state.BulkGetResponse, 0, len(reqs))
 	for _, r := range reqs {
-		resp, _ := f.Get(ctx, &r)
-		out = append(out, state.BulkGetResponse{Key: r.Key, Data: resp.Data})
+		f.rowsRead.Add(1)
+		if r.Metadata["partitionKey"]+"||metadata" != r.Key {
+			f.badPartition.Add(1)
+		}
+		if f.bulkItemErr != nil {
+			if e := f.bulkItemErr(r.Key); e != "" {
+				out = append(out, state.BulkGetResponse{Key: r.Key, Error: e})
+				continue
+			}
+		}
+		out = append(out, state.BulkGetResponse{Key: r.Key, Data: f.data[r.Key]})
 	}
+	// A native BulkGet can return the rows in any order.
+	slices.Reverse(out)
 	return out, nil
 }
 
 func (f *fakeStore) KeysLike(_ context.Context, req *state.KeysLikeRequest) (*state.KeysLikeResponse, error) {
+	f.keysLikeCalls.Add(1)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -107,11 +171,25 @@ func (f *fakeStore) KeysLike(_ context.Context, req *state.KeysLikeRequest) (*st
 	limit := len(f.keys)
 	if req.PageSize != nil && *req.PageSize > 0 {
 		limit = int(*req.PageSize)
+		for {
+			m := f.maxKeysLikePage.Load()
+			if int64(limit) <= m || f.maxKeysLikePage.CompareAndSwap(m, int64(limit)) {
+				break
+			}
+		}
 	}
+
+	// Most keys are not metadata rows. A check of the literal end of the
+	// pattern rejects them before the slower regular expression.
+	suffix := req.Pattern[strings.LastIndexAny(req.Pattern, `%_\`)+1:]
 
 	resp := &state.KeysLikeResponse{Keys: []string{}}
 	for ; i < len(f.keys) && len(resp.Keys) < limit; i++ {
-		if like.MatchString(f.keys[i]) {
+		k := f.keys[i]
+		if len(k) < len(suffix) || !strings.EqualFold(k[len(k)-len(suffix):], suffix) {
+			continue
+		}
+		if like.MatchString(k) {
 			resp.Keys = append(resp.Keys, f.keys[i])
 		}
 	}
@@ -122,18 +200,27 @@ func (f *fakeStore) KeysLike(_ context.Context, req *state.KeysLikeRequest) (*st
 }
 
 func (f *fakeStore) Set(context.Context, *state.SetRequest) error {
+	f.writes.Add(1)
 	return errors.New("write not allowed")
 }
 
 func (f *fakeStore) Delete(context.Context, *state.DeleteRequest) error {
+	f.writes.Add(1)
 	return errors.New("write not allowed")
 }
 
 func (f *fakeStore) BulkSet(context.Context, []state.SetRequest, state.BulkStoreOpts) error {
+	f.writes.Add(1)
 	return errors.New("write not allowed")
 }
 
 func (f *fakeStore) BulkDelete(context.Context, []state.DeleteRequest, state.BulkStoreOpts) error {
+	f.writes.Add(1)
+	return errors.New("write not allowed")
+}
+
+func (f *fakeStore) Multi(context.Context, *state.TransactionalStateRequest) error {
+	f.writes.Add(1)
 	return errors.New("write not allowed")
 }
 

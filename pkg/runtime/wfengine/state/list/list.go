@@ -42,37 +42,92 @@ type ListInstanceIDsResult struct {
 }
 
 func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsResult, error) {
-	store, _, ok := opts.ComponentStore.GetStateStoreActor()
+	_, ks, err := actorStore(opts.ComponentStore)
+	if err != nil {
+		return nil, err
+	}
+
+	page, err := keysPage(ctx, ks, scope{
+		namespace: opts.Namespace,
+		appID:     opts.AppID,
+		idPrefix:  opts.IDPrefix,
+	}, opts.ContinuationToken, opts.PageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]string, len(page.entries))
+	for i, e := range page.entries {
+		keys[i] = e.id
+	}
+
+	return &ListInstanceIDsResult{
+		Keys:              keys,
+		ContinuationToken: page.token,
+	}, nil
+}
+
+// actorStore returns the actor state store, which must support KeysLike.
+func actorStore(cs *compstore.ComponentStore) (state.Store, state.KeysLiker, error) {
+	store, _, ok := cs.GetStateStoreActor()
 	if !ok {
-		return nil, errors.New("no state store with actor support found")
+		return nil, nil, errors.New("no state store with actor support found")
 	}
 
 	ks, ok := store.(state.KeysLiker)
 	if !ok {
-		return nil, fmt.Errorf("state store %T does not support listing keys", store)
+		return nil, nil, fmt.Errorf("state store %T does not support listing keys", store)
 	}
 
+	return store, ks, nil
+}
+
+// scope is the set of workflow instances that a list call covers.
+type scope struct {
+	namespace string
+	appID     string
+	idPrefix  string
+}
+
+// keyEntry is the metadata row key of one instance in a page of keys.
+type keyEntry struct {
+	key string
+	id  string
+}
+
+// keyPage is one page of metadata row keys, after the filters below.
+type keyPage struct {
+	entries []keyEntry
+	token   *string
+}
+
+// keysPage reads one page of metadata row keys from the store. It keeps the
+// keys of the instances of this app whose ID starts with the prefix.
+func keysPage(ctx context.Context, ks state.KeysLiker, sc scope, token *string, pageSize *uint32) (*keyPage, error) {
 	// The pattern holds the prefix only up to its first LIKE metacharacter,
 	// as stores escape them differently; the filter below drops the extra
 	// matches. A page can come back short as a result.
-	likePrefix := opts.IDPrefix
+	likePrefix := sc.idPrefix
 	if i := strings.IndexAny(likePrefix, `%_\`); i >= 0 {
 		likePrefix = likePrefix[:i]
 	}
-	keyPrefix := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||"
+	keyPrefix := sc.appID + "||" + todo.ActorTypePrefix + sc.namespace + "." + sc.appID + ".workflow||"
 	keySuffix := "||" + wfstate.MetadataKey
 	like := keyPrefix + likePrefix + "%" + keySuffix
 
 	resp, err := ks.KeysLike(ctx, &state.KeysLikeRequest{
 		Pattern:           like,
-		ContinuationToken: opts.ContinuationToken,
-		PageSize:          opts.PageSize,
+		ContinuationToken: token,
+		PageSize:          pageSize,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	keys := make([]string, 0, len(resp.Keys))
+	page := &keyPage{
+		entries: make([]keyEntry, 0, len(resp.Keys)),
+		token:   resp.ContinuationToken,
+	}
 	for _, key := range resp.Keys {
 		// The app ID and the namespace are not escaped in the pattern either.
 		// An "_" in them matches any character, so the store can return the
@@ -88,13 +143,10 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 			return nil, fmt.Errorf("invalid key format: %s", key)
 		}
 
-		if strings.HasPrefix(split[2], opts.IDPrefix) {
-			keys = append(keys, split[2])
+		if strings.HasPrefix(split[2], sc.idPrefix) {
+			page.entries = append(page.entries, keyEntry{key: key, id: split[2]})
 		}
 	}
 
-	return &ListInstanceIDsResult{
-		Keys:              keys,
-		ContinuationToken: resp.ContinuationToken,
-	}, nil
+	return page, nil
 }
