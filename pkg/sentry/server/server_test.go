@@ -696,6 +696,34 @@ func TestFetchJWTSVID(t *testing.T) {
 				}
 			})
 		}
+
+		t.Run("ttl is capped again after the hook", func(t *testing.T) {
+			var gotReq *jwt.Request
+			s := New(Options{
+				CA: cafake.New().WithGenerateJWT(func(_ context.Context, req *jwt.Request) (string, error) {
+					gotReq = req
+					return "my-jwt", nil
+				}),
+				Healthz:    healthz.New(),
+				JWTEnabled: true,
+				JWTTTL:     time.Hour,
+				AuthorizeJWTSVID: func(context.Context, *x509.Certificate, spiffeid.ID, []string) error {
+					return nil
+				},
+			})
+
+			// certRemaining was measured before the hook ran; the certificate
+			// now has less than that left.
+			leaf := &x509.Certificate{NotAfter: time.Now().Add(time.Minute)}
+			_, err := s.fetchJWTSVID(t.Context(), leaf, appID, time.Hour, &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}})
+			require.NoError(t, err)
+			require.NotNil(t, gotReq)
+			assert.LessOrEqual(t, gotReq.TTL, time.Minute)
+
+			leaf = &x509.Certificate{NotAfter: time.Now().Add(-time.Second)}
+			_, err = s.fetchJWTSVID(t.Context(), leaf, appID, time.Hour, &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}})
+			assert.Equal(t, codes.Unauthenticated, status.Code(err), "%v", err)
+		})
 	})
 
 	t.Run("rejects clients without a certificate", func(t *testing.T) {

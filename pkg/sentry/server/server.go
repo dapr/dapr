@@ -396,6 +396,12 @@ func (s *Server) fetchJWTSVID(ctx context.Context, leaf *x509.Certificate, id sp
 			log.Debugf("Refused FetchJWTSVID request for %s: %s", id, err)
 			return nil, status.Error(codes.PermissionDenied, err.Error())
 		}
+		// The hook may take a while, so cap the TTL again at what is left of
+		// the certificate now.
+		ttl = min(ttl, time.Until(leaf.NotAfter))
+		if ttl <= 0 {
+			return nil, status.Error(codes.Unauthenticated, "client certificate has expired")
+		}
 	}
 
 	tkn, err := s.ca.Generate(ctx, &jwt.Request{
