@@ -428,6 +428,11 @@ func TestSignCertificateCertTTL(t *testing.T) {
 				},
 				jwtEnabled: true,
 				jwtTTL:     24 * time.Hour,
+				// SignCertificate never calls the FetchJWTSVID hook.
+				authorizeJWTSVID: func(context.Context, *x509.Certificate, spiffeid.ID, []string) error {
+					t.Error("authorizeJWTSVID called from SignCertificate")
+					return errors.New("not allowed")
+				},
 				ca: cafake.New().WithSignIdentity(func(_ context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 					gotSignTTL = req.TTLOverride
 					ttl := 24 * time.Hour
