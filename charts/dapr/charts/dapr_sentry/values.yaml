@@ -79,6 +79,8 @@ debug:
   initialDelaySeconds: 30000
 
 runAsNonRoot: true
+# Overrides for global.securityContext on the control plane container.
+securityContext: {}
 resources: {}
 
 extraEnvVars: {}

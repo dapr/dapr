@@ -24,6 +24,8 @@ webhookService:
   annotations: {}
 
 runAsNonRoot: true
+# Overrides for global.securityContext on the control plane container.
+securityContext: {}
 
 serviceReconciler:
   enabled: true

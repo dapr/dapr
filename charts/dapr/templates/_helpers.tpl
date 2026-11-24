@@ -67,3 +67,38 @@ global.scheduler.placement is absent from values of releases installed before
 {{- $placement := $scheduler.placement | default dict -}}
 {{- $placement.enabled | default false | toString -}}
 {{- end -}}
+
+{{/*
+Render optional container security settings, preferring component values per field.
+*/}}
+{{- define "dapr.containerSecurityContext" -}}
+{{- $global := .Values.global.securityContext | default dict -}}
+{{- $component := .Values.securityContext | default dict -}}
+{{- $context := dict -}}
+{{- range $key := list "runAsUser" "runAsGroup" "seLinuxOptions" -}}
+  {{- $value := index $global $key -}}
+  {{- if hasKey $component $key -}}
+    {{- $value = index $component $key -}}
+  {{- end -}}
+  {{- if not (kindIs "invalid" $value) -}}
+    {{- $_ := set $context $key $value -}}
+  {{- end -}}
+{{- end -}}
+{{- with $context -}}
+  {{- toYaml . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Apply the fsGroup default at render time so Helm can preserve an explicit null.
+*/}}
+{{- define "dapr.podFSGroup" -}}
+{{- $fsGroup := 65532 -}}
+{{- if hasKey . "fsGroup" -}}
+  {{- $fsGroup = .fsGroup -}}
+{{- end -}}
+{{- if not (kindIs "invalid" $fsGroup) -}}
+securityContext:
+  fsGroup: {{ $fsGroup }}
+{{- end -}}
+{{- end -}}

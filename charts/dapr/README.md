@@ -72,6 +72,30 @@ dapr_operator:
 
 The Helm chart has the follow configuration options that can be supplied:
 
+### Control plane security context
+
+Set `global.securityContext.runAsUser`, `runAsGroup` or `seLinuxOptions` to
+configure the main Linux control plane containers. These fields are omitted
+by default. Each field can be overridden under the `securityContext` of
+`dapr_operator`, `dapr_placement`, `dapr_scheduler`, `dapr_sentry` or
+`dapr_sidecar_injector`. An override of `null` omits that field for the
+component. A component's `seLinuxOptions` replaces the entire global value,
+and an explicit `{}` renders an empty options object.
+
+```yaml
+global:
+  securityContext:
+    runAsUser: 30000
+    runAsGroup: 30000
+dapr_sentry:
+  securityContext:
+    runAsUser: 30001
+```
+
+Placement and scheduler use `dapr_placement.fsGroup` and
+`dapr_scheduler.securityContext.fsGroup` for their pod-level filesystem group.
+Both default to `65532`. Set either to `null` to let the platform assign it.
+
 ### Global options:
 | Parameter                                     | Description                                                                                                                                                                                             | Default                 |
 |-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
@@ -159,7 +183,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.minActorApiLevel`                  | Sets the `min-api-level` flag, which enforces a minimum value for the Actor API level in the cluster. | `0` |
 | `dapr_placement.scaleZero` | If true, the StatefulSet is deployed with a zero scale, regardless of the values of `global.ha.enabled` or `dapr_placement.ha` | `false` |
 | `dapr_placement.runAsNonRoot`                  | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `true`                 |
-| `dapr_placement.fsGroup` | Integer value for `fsGroup`. Useful for adding the Placement process to the file system group that can write to the mounted database volume. | `65532`
+| `dapr_placement.fsGroup` | Integer value for `fsGroup`. Adds the Placement process to the file system group that can write to the mounted database volume. Set to `null` to omit it. | `65532`
 | `dapr_placement.resources`                     | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                         | `{}`                    |
 | `dapr_placement.debug.enabled`                 | Boolean value for enabling debug mode                                                                                                                                     | `{}`                    |
 | `dapr_placement.metadataEnabled`               | Boolean value for enabling placement tables metadata HTTP API                                                                                                             | `false`                 |

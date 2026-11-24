@@ -52,10 +52,9 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
-      {{- if .Values.securityContext.fsGroup }}
-      securityContext:
-        fsGroup: {{ .Values.securityContext.fsGroup }}
-      {{- end }}
+    {{- with include "dapr.podFSGroup" .Values.securityContext }}
+      {{- . | nindent 6 }}
+    {{- end }}
     {{- with .Values.global.initContainers.scheduler }}
       initContainers:
         {{- toYaml . | nindent 8 }}
@@ -204,6 +203,9 @@ spec:
 {{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
+  {{- with include "dapr.containerSecurityContext" . }}
+    {{- . | nindent 10 }}
+  {{- end }}
           runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
           allowPrivilegeEscalation: false
   {{- if eq .Values.debug.enabled true }}
