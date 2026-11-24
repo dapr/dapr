@@ -81,6 +81,14 @@ type Options struct {
 	// JWTTTL is the time to live for the JWT token.
 	JWTTTL time.Duration
 
+	// AuthorizeJWTSVID, if set, is called by FetchJWTSVID once the client
+	// certificate is verified and the request is valid, before the JWT is
+	// issued. audiences is a copy. Returning an error refuses the request with
+	// PermissionDenied, and the error message is returned to the client. It is
+	// not called for the JWTs SignCertificate issues. It must be safe for
+	// concurrent use.
+	AuthorizeJWTSVID func(ctx context.Context, leaf *x509.Certificate, id spiffeid.ID, audiences []string) error
+
 	TLD string
 }
 
@@ -96,6 +104,7 @@ type Server struct {
 	jwtEnabled       bool
 	jwtTTL           time.Duration
 	tld              string
+	authorizeJWTSVID func(ctx context.Context, leaf *x509.Certificate, id spiffeid.ID, audiences []string) error
 }
 
 func New(opts Options) *Server {
@@ -110,6 +119,7 @@ func New(opts Options) *Server {
 		jwtEnabled:       opts.JWTEnabled,
 		jwtTTL:           opts.JWTTTL,
 		tld:              opts.TLD,
+		authorizeJWTSVID: opts.AuthorizeJWTSVID,
 	}
 }
 
@@ -307,7 +317,7 @@ func (s *Server) FetchJWTSVID(ctx context.Context, req *sentryv1pb.FetchJWTSVIDR
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 
-	return s.fetchJWTSVID(ctx, id, time.Until(leaf.NotAfter), req)
+	return s.fetchJWTSVID(ctx, leaf, id, time.Until(leaf.NotAfter), req)
 }
 
 // peerID returns the SPIFFE ID and the leaf certificate of the X.509 SVID the
@@ -343,9 +353,10 @@ func (s *Server) peerID(ctx context.Context) (spiffeid.ID, *x509.Certificate, er
 	return id, certs[0], nil
 }
 
-// fetchJWTSVID issues a JWT SVID for id. certRemaining is the remaining
-// lifetime of the client certificate, which the JWT must not outlive.
-func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, certRemaining time.Duration, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
+// fetchJWTSVID issues a JWT SVID for id, the identity of the leaf
+// certificate the client presented. certRemaining is the remaining lifetime of
+// that certificate, which the JWT must not outlive.
+func (s *Server) fetchJWTSVID(ctx context.Context, leaf *x509.Certificate, id spiffeid.ID, certRemaining time.Duration, req *sentryv1pb.FetchJWTSVIDRequest) (*sentryv1pb.FetchJWTSVIDResponse, error) {
 	if !s.jwtEnabled {
 		return nil, status.Error(codes.FailedPrecondition, "JWT issuing is not enabled")
 	}
@@ -378,6 +389,13 @@ func (s *Server) fetchJWTSVID(ctx context.Context, id spiffeid.ID, certRemaining
 	// longer path would be issued a JWT for a different identity.
 	if id.Path() != "/ns/"+parsed.Namespace()+"/"+parsed.AppID() {
 		return nil, status.Errorf(codes.PermissionDenied, "SPIFFE ID %s is not a Dapr app identity", id)
+	}
+
+	if s.authorizeJWTSVID != nil {
+		if err = s.authorizeJWTSVID(ctx, leaf, id, slices.Clone(req.GetAudiences())); err != nil {
+			log.Debugf("Refused FetchJWTSVID request for %s: %s", id, err)
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
 	}
 
 	tkn, err := s.ca.Generate(ctx, &jwt.Request{

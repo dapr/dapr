@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -608,11 +609,90 @@ func TestFetchJWTSVID(t *testing.T) {
 				if certRemaining == 0 {
 					certRemaining = 48 * time.Hour
 				}
-				resp, err := s.fetchJWTSVID(t.Context(), test.id, certRemaining, test.req)
+				resp, err := s.fetchJWTSVID(t.Context(), nil, test.id, certRemaining, test.req)
 				assert.Equal(t, test.expCode, status.Code(err), "%v", err)
 				assert.Equal(t, test.expReq, gotReq)
 				if test.expCode == codes.OK {
 					assert.Equal(t, "my-jwt", resp.GetJwt())
+				}
+			})
+		}
+	})
+
+	t.Run("authorizeJWTSVID", func(t *testing.T) {
+		withLeaf := peer.NewContext(t.Context(), &peer.Peer{AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{PeerCertificates: []*x509.Certificate{pki.LeafCert}},
+		}})
+
+		tests := map[string]struct {
+			ctx       context.Context
+			req       *sentryv1pb.FetchJWTSVIDRequest
+			hookErr   error
+			expCode   codes.Code
+			expCalled bool
+		}{
+			"allowed": {
+				ctx:       withLeaf,
+				req:       &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a", "b"}},
+				expCalled: true,
+			},
+			"refused": {
+				ctx:       withLeaf,
+				req:       &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a", "b"}},
+				hookErr:   errors.New("not allowed"),
+				expCode:   codes.PermissionDenied,
+				expCalled: true,
+			},
+			"not called without a client certificate": {
+				ctx:     t.Context(),
+				req:     &sentryv1pb.FetchJWTSVIDRequest{Audiences: []string{"a"}},
+				expCode: codes.Unauthenticated,
+			},
+			"not called for an invalid request": {
+				ctx:     withLeaf,
+				req:     &sentryv1pb.FetchJWTSVIDRequest{},
+				expCode: codes.InvalidArgument,
+			},
+		}
+
+		for name, test := range tests {
+			t.Run(name, func(t *testing.T) {
+				var called, generated bool
+				var gotLeaf *x509.Certificate
+				var gotID spiffeid.ID
+				var gotAudiences, issuedAudiences []string
+				s := New(Options{
+					CA: cafake.New().
+						WithTrustAnchors(func() []byte { return pki.RootCertPEM }).
+						WithGenerateJWT(func(_ context.Context, req *jwt.Request) (string, error) {
+							generated = true
+							issuedAudiences = req.Audiences
+							return "my-jwt", nil
+						}),
+					Healthz:    healthz.New(),
+					JWTEnabled: true,
+					JWTTTL:     time.Hour,
+					AuthorizeJWTSVID: func(_ context.Context, leaf *x509.Certificate, id spiffeid.ID, audiences []string) error {
+						called = true
+						gotLeaf, gotID, gotAudiences = leaf, id, slices.Clone(audiences)
+						// The hook gets a copy, so this must not reach the JWT.
+						audiences[0] = "changed"
+						return test.hookErr
+					},
+				})
+
+				resp, err := s.FetchJWTSVID(test.ctx, test.req)
+				assert.Equal(t, test.expCode, status.Code(err), "%v", err)
+				assert.Equal(t, test.expCalled, called)
+				assert.Equal(t, test.expCode == codes.OK, generated)
+				if test.expCalled {
+					assert.Equal(t, pki.LeafCert, gotLeaf)
+					assert.Equal(t, appID, gotID)
+					assert.Equal(t, test.req.GetAudiences(), gotAudiences)
+				}
+				if test.expCode == codes.OK {
+					assert.Equal(t, "my-jwt", resp.GetJwt())
+					assert.Equal(t, test.req.GetAudiences(), issuedAudiences)
 				}
 			})
 		}
