@@ -47,6 +47,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/noworker"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/patching"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/payloadsize"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/priority"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation/signed"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge"
