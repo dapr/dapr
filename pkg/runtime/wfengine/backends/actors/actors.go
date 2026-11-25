@@ -867,6 +867,13 @@ func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Acti
 func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
+	// A result whose processing failed ends here rather than in
+	// CompleteWorkflowWorkItem; the completion call then waits to see the
+	// turn settle unsaved.
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		durable.Consume()
+	}
+
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
 	// TODO: @joshvanl: remove
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
@@ -1322,6 +1329,10 @@ func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.Wo
 	})
 }
 
+func isUnknownTask(err error) bool {
+	return api.IsUnknownTaskIDError(err) || api.IsUnknownInstanceIDError(err)
+}
+
 func ignoreUnknownTask(err error) error {
 	if isUnknownTask(err) {
 		log.Warnf("Ignoring complete task which no longer exists: %s", err)
@@ -1340,10 +1351,7 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		case err == nil:
 			return nil
 
-		case isUnknownTask(err):
-			return backoff.Permanent(err)
-
-		case errors.Is(err, local.ErrAmbiguousCompletion):
+		case isUnknownTask(err), errors.Is(err, local.ErrAmbiguousCompletion):
 			return backoff.Permanent(err)
 
 		case abe.stopped.Load():

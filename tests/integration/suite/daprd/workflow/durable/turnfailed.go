@@ -22,16 +22,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/client"
 )
 
 func init() {
@@ -46,11 +41,7 @@ type turnfailed struct {
 }
 
 func (r *turnfailed) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t,
-		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES", "1",
-		))),
-	)
+	r.workflow = newWorkflow(t, "DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES", "1")
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
@@ -58,18 +49,10 @@ func (r *turnfailed) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *turnfailed) Run(t *testing.T, ctx context.Context) {
-	r.workflow.WaitUntilRunning(t, ctx)
-
-	conn := r.workflow.Dapr().GRPCConn(t, ctx)
-	thub := protos.NewTaskHubSidecarServiceClient(conn)
-	_, err := thub.Hello(ctx, new(emptypb.Empty))
-	require.NoError(t, err)
-	items := openStream(t, ctx, thub)
-
-	cl := client.NewTaskHubGrpcClient(conn, logger.New(t))
+	thub, items, cl := connect(t, ctx, r.workflow)
 	id := schedule(t, ctx, cl, "durable-turn-failed")
 
-	_, err = thub.CompleteWorkflowTask(ctx, completeResponse(nextWorkflowItem(t, items)))
+	_, err := thub.CompleteWorkflowTask(ctx, completeResponse(nextWorkflowItem(t, items)))
 	require.Error(t, err, "a turn that was not saved must not be answered as a success")
 	assert.Equal(t, codes.Aborted, status.Code(err))
 

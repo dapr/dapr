@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -174,13 +175,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// nil after the turn's save below, the turn's error on any other return.
 	durable := todo.NewDurable()
 	wi.Properties[todo.DurableProperty] = durable
-	defer func() {
-		serr := err
-		if serr == nil {
-			serr = errTurnNotSaved
-		}
-		durable.Settle(serr)
-	}()
+	defer func() { durable.Settle(cmp.Or(err, errTurnNotSaved)) }()
 	// A turn that returns before its save commits is retried, so it is recorded
 	// as recoverable. The terminal status is set only once the save commits.
 	diagnoseStatus := diag.StatusRecoverable

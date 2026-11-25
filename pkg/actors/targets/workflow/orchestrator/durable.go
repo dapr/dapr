@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -28,18 +27,15 @@ import (
 // an error and without saving the worker's response.
 var errTurnNotSaved = errors.New("the workflow turn ended without saving the response")
 
-// testTurnSaveHold and testFailTurnSaves are test-only fault injections on
+// testTurnSaveHold and failTurnSaveForTest are test-only fault injections on
 // the save at the end of a turn: the save waits testTurnSaveHold first, and
-// the first testFailTurnSaves saves fail with a recoverable error. Not
-// supported production knobs.
+// the first DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES saves fail with a recoverable
+// error. Not supported production knobs.
 var (
 	testTurnSaveHold = sync.OnceValue(func() time.Duration {
 		return common.EnvDurationOr("DAPR_WORKFLOW_TEST_TURN_SAVE_HOLD", 0)
 	})
-	testFailTurnSaves = sync.OnceValue(func() int64 {
-		return common.EnvInt64Or("DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES", 0)
-	})
-	failedTurnSaves atomic.Int64
+	failTurnSaveForTest = common.TestBudget("DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES")
 )
 
 func holdOrFailTurnSaveForTest(ctx context.Context) error {
@@ -51,7 +47,7 @@ func holdOrFailTurnSaveForTest(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
-	if budget := testFailTurnSaves(); budget > 0 && failedTurnSaves.Add(1) <= budget {
+	if failTurnSaveForTest() {
 		log.Warn("TEST INJECTION: failing the turn save")
 		return wferrors.NewRecoverable(errors.New("test injection: turn save failed"))
 	}

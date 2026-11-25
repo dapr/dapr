@@ -30,7 +30,6 @@ type Durable struct {
 	consumed atomic.Bool
 
 	lock     sync.Mutex
-	settled  bool
 	err      error
 	done     chan struct{}
 	onSettle func()
@@ -55,11 +54,10 @@ func (d *Durable) Consumed() bool {
 // that stopped the save. Only the first call counts.
 func (d *Durable) Settle(err error) {
 	d.lock.Lock()
-	if d.settled {
+	if d.isSettled() {
 		d.lock.Unlock()
 		return
 	}
-	d.settled = true
 	d.err = err
 	close(d.done)
 	fn := d.onSettle
@@ -87,11 +85,20 @@ func (d *Durable) Err() error {
 // Only the last fn given is run.
 func (d *Durable) OnSettle(fn func()) {
 	d.lock.Lock()
-	if d.settled {
+	if d.isSettled() {
 		d.lock.Unlock()
 		fn()
 		return
 	}
 	d.onSettle = fn
 	d.lock.Unlock()
+}
+
+func (d *Durable) isSettled() bool {
+	select {
+	case <-d.done:
+		return true
+	default:
+		return false
+	}
 }

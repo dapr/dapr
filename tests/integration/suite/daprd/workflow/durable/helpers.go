@@ -20,16 +20,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 )
 
-// workItems receives the work items of stream until it ends, skipping health
-// pings.
-func workItems(stream protos.TaskHubSidecarService_GetWorkItemsClient) <-chan *protos.WorkItem {
+// newWorkflow runs one daprd with a test-only fault injection variable set.
+// newWorkflow runs one daprd with the test hook env set to value. Clustered
+// deployment is off: a completion forwarded to another daprd is answered at
+// once, so it would not exercise the wait.
+func newWorkflow(t *testing.T, env, value string) *workflow.Workflow {
+	return workflow.New(t,
+		workflow.WithClusteredDeployment(false),
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t, env, value))),
+	)
+}
+
+// connect waits for wf, opens a worker stream on it and returns the task hub
+// client, the work items the stream receives (health pings skipped) until it
+// ends, and a management client.
+func connect(t *testing.T, ctx context.Context, wf *workflow.Workflow) (protos.TaskHubSidecarServiceClient, <-chan *protos.WorkItem, *client.TaskHubGrpcClient) {
+	t.Helper()
+	wf.WaitUntilRunning(t, ctx)
+
+	thub := protos.NewTaskHubSidecarServiceClient(wf.Dapr().GRPCConn(t, ctx))
+	_, err := thub.Hello(ctx, new(emptypb.Empty))
+	require.NoError(t, err)
+	stream, err := thub.GetWorkItems(ctx, new(protos.GetWorkItemsRequest))
+	require.NoError(t, err)
+
 	items := make(chan *protos.WorkItem, 8)
 	go func() {
 		defer close(items)
@@ -43,7 +68,7 @@ func workItems(stream protos.TaskHubSidecarService_GetWorkItemsClient) <-chan *p
 			}
 		}
 	}()
-	return items
+	return thub, items, wf.ManagementClient(t, ctx)
 }
 
 // nextWorkflowItem returns the next workflow work item.
@@ -75,14 +100,6 @@ func completeResponse(wi *protos.WorkItem) *protos.WorkflowResponse {
 			},
 		}},
 	}
-}
-
-// openStream connects a worker and returns the work items it receives.
-func openStream(t *testing.T, ctx context.Context, thub protos.TaskHubSidecarServiceClient) <-chan *protos.WorkItem {
-	t.Helper()
-	stream, err := thub.GetWorkItems(ctx, new(protos.GetWorkItemsRequest))
-	require.NoError(t, err)
-	return workItems(stream)
 }
 
 // schedule starts a workflow without waiting for the answer: daprd answers

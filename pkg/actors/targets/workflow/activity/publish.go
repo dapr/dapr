@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -104,7 +105,7 @@ func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 // invocation context is cancelled before the result is published, making the
 // placement-drain race deterministic. Execution stays at-least-once either
 // way; the point is that a result already in hand is not thrown away.
-var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PUBLISH")
+var cancelBeforePublishForTest = common.TestBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PUBLISH")
 
 // abandonPublish gives up on an execution's result at shutdown: the outcome
 // dies with this host and the parent workflow's janitor re-dispatches the
