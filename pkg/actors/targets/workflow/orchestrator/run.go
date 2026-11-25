@@ -170,6 +170,17 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
+	// The backend answers the worker's completion call once this is settled:
+	// nil after the turn's save below, the turn's error on any other return.
+	durable := todo.NewDurable()
+	wi.Properties[todo.DurableProperty] = durable
+	defer func() {
+		serr := err
+		if serr == nil {
+			serr = errTurnNotSaved
+		}
+		durable.Settle(serr)
+	}()
 	// A turn that returns before its save commits is retried, so it is recorded
 	// as recoverable. The terminal status is set only once the save commits.
 	diagnoseStatus := diag.StatusRecoverable
@@ -440,11 +451,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.SetParentNotifyPending(true)
 	}
 
+	if err = holdOrFailTurnSaveForTest(ctx); err != nil {
+		return todo.RunCompletedFalse, err
+	}
 	err = o.signAndSaveState(ctx, state)
 	cacheSettled = true
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
+	durable.Settle(nil)
 	// The turn's single Multi is durable: folded completions are now in
 	// history and their senders are acked (see the deferred fold handling).
 	foldedCommitted = true

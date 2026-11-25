@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"k8s.io/utils/clock"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
@@ -165,6 +166,10 @@ type Actors struct {
 	activityPriority                func(workflowName, activityName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
+	// durables holds the work items whose result the answer to the worker
+	// waits to see saved; see completeDurably.
+	durables *durables
+
 	// activityCommitted counts activity work items handed to the engine and
 	// not yet completed or abandoned, against activityCap. See credits.go.
 	activityCap       int64
@@ -296,6 +301,7 @@ func New(opts Options) (*Actors, error) {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
+		durables:                  newDurables(clock.RealClock{}),
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
@@ -377,6 +383,10 @@ func (abe *Actors) factoryOptions() workflow.Options {
 
 			if err := abe.requireLocalExecutor(); err != nil {
 				return err
+			}
+
+			if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+				abe.durables.track(string(wi.InstanceID), durable)
 			}
 
 			select {
@@ -957,6 +967,9 @@ func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Act
 
 // CompleteWorkflowWorkItem implements backend.Backend
 func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		durable.Consume()
+	}
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -1278,36 +1291,47 @@ func (abe *Actors) StartSweep() (settled func()) {
 
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
-	return abe.callWithBackoff(ctx, func() error {
+	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
-	})
+	}))
 }
 
 // CancelWorkflowTask implements backend.Backend.
 func (abe *Actors) CancelWorkflowTask(ctx context.Context, instanceID api.InstanceID) error {
-	return abe.callWithBackoff(ctx, func() error {
+	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CancelWorkflowTask(ctx, instanceID)
-	})
+	}))
 }
 
 // CompleteActivityTask implements backend.Backend.
 func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
-	return abe.callWithBackoff(ctx, func() error {
+	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+	}))
+}
+
+// CompleteWorkflowTask implements backend.Backend. It answers only once the
+// workflow turn computed from the response is saved; see completeDurably.
+func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
+	return abe.completeDurably(ctx, response.GetInstanceId(), response.GetCompletionToken(), func() error {
+		err := abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
+		if err == nil {
+			abe.maybeDuplicateTurnCompletionForTest(response)
+		}
+		return err
 	})
 }
 
-// CompleteWorkflowTask implements backend.Backend.
-func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
-	err := abe.callWithBackoff(ctx, func() error {
-		return abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
-	})
-	if err == nil {
-		abe.maybeDuplicateTurnCompletionForTest(response)
+func ignoreUnknownTask(err error) error {
+	if isUnknownTask(err) {
+		log.Warnf("Ignoring complete task which no longer exists: %s", err)
+		return nil
 	}
 	return err
 }
 
+// callWithBackoff retries fn until it succeeds, or fails with an error that
+// a retry cannot fix. An unknown task is returned as is.
 func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 	return backoff.Retry(func() error {
 		err := fn()
@@ -1316,9 +1340,8 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		case err == nil:
 			return nil
 
-		case api.IsUnknownTaskIDError(err), api.IsUnknownInstanceIDError(err):
-			log.Warnf("Ignoring complete task which no longer exists: %s", err)
-			return nil
+		case isUnknownTask(err):
+			return backoff.Permanent(err)
 
 		case errors.Is(err, local.ErrAmbiguousCompletion):
 			return backoff.Permanent(err)
