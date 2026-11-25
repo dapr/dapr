@@ -1,11 +1,14 @@
 package universal
 
 import (
+	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmc/langchaingo/llms"
 
+	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/echo"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -136,4 +139,106 @@ func TestConverseAlpha2InvalidParams(t *testing.T) {
 			require.Contains(t, msg, tc.expectedReason)
 		})
 	}
+}
+
+type mockConversationComponent struct {
+	conversation.Conversation
+	response *conversation.Response
+	err      error
+}
+
+func (m *mockConversationComponent) Converse(ctx context.Context, request *conversation.Request) (*conversation.Response, error) {
+	return m.response, m.err
+}
+
+func TestConverseAlpha1_EmptyChoices(t *testing.T) {
+	const componentName = "test-mock"
+	compStore := compstore.New()
+	compStore.AddConversation(componentName, &mockConversationComponent{
+		Conversation: echo.NewEcho(testLogger),
+		response: &conversation.Response{
+			Outputs: []conversation.Result{
+				{
+					Choices: []conversation.Choice{}, // empty choices slice
+				},
+			},
+		},
+	})
+
+	fakeAPI := &Universal{
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
+	}
+
+	req := &runtimev1pb.ConversationRequest{
+		Name: componentName,
+		Inputs: []*runtimev1pb.ConversationInput{{
+			Content: "hello",
+			Role:    ptr.Of("user"),
+		}},
+	}
+
+	resp, err := fakeAPI.ConverseAlpha1(t.Context(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.GetOutputs(), 1)
+	assert.Equal(t, "", resp.GetOutputs()[0].GetResult())
+}
+
+func TestConverseAlpha2_NilFunctionCall(t *testing.T) {
+	const componentName = "test-mock"
+	toolCallID := "call-1"
+	compStore := compstore.New()
+	compStore.AddConversation(componentName, &mockConversationComponent{
+		Conversation: echo.NewEcho(testLogger),
+		response: &conversation.Response{
+			Outputs: []conversation.Result{
+				{
+					Choices: []conversation.Choice{
+						{
+							Message: conversation.Message{
+								ToolCallRequest: &[]llms.ToolCall{
+									{
+										ID:           toolCallID,
+										Type:         "custom",
+										FunctionCall: nil, // nil function call
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	fakeAPI := &Universal{
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
+	}
+
+	req := &runtimev1pb.ConversationRequestAlpha2{
+		Name: componentName,
+		Inputs: []*runtimev1pb.ConversationInputAlpha2{{
+			Messages: []*runtimev1pb.ConversationMessage{{
+				MessageTypes: &runtimev1pb.ConversationMessage_OfUser{
+					OfUser: &runtimev1pb.ConversationMessageOfUser{
+						Content: []*runtimev1pb.ConversationMessageContent{{Text: "hello"}},
+					},
+				},
+			}},
+		}},
+	}
+
+	resp, err := fakeAPI.ConverseAlpha2(t.Context(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.GetOutputs(), 1)
+	require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+	choice := resp.GetOutputs()[0].GetChoices()[0]
+	require.Len(t, choice.GetMessage().GetToolCalls(), 1)
+	assert.Equal(t, toolCallID, choice.GetMessage().GetToolCalls()[0].GetId())
+	assert.Nil(t, choice.GetMessage().GetToolCalls()[0].GetToolTypes())
 }
