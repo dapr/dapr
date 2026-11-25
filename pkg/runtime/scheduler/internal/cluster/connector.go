@@ -33,11 +33,12 @@ type connector struct {
 	actors   router.Interface
 	wfengine wfengine.Interface
 
-	// addr is the scheduler address of client. pull and pullActorType are
-	// handed to each streamer; see streamer.pull.
-	addr          string
-	pull          *Pull
-	pullActorType string
+	// addr is the scheduler address of client. pull, pullActorType and
+	// supportsPullSlots are handed to each streamer; see streamer.pull.
+	addr              string
+	pull              *Pull
+	pullActorType     string
+	supportsPullSlots bool
 }
 
 // run starts the scheduler connector, retrying on failures so that a single
@@ -97,9 +98,10 @@ func (c *connector) run(ctx context.Context) error {
 			actors:   c.actors,
 			wfengine: c.wfengine,
 
-			addr:          c.addr,
-			pull:          c.pull,
-			pullActorType: c.pullActorType,
+			addr:              c.addr,
+			pull:              c.pull,
+			pullActorType:     c.pullActorType,
+			supportsPullSlots: c.supportsPullSlots,
 		}).run(ctx)
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")
