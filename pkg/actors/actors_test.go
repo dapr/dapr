@@ -200,11 +200,36 @@ func TestConvergeBoundStores(t *testing.T) {
 			table: tablefake.New().WithHaltActorTypes(func(_ context.Context, actorTypes ...string) error {
 				halts = append(halts, actorTypes)
 				return nil
+			}).WithRegistered(func() []string {
+				return []string{"TransactionActor", "AuditActor", "BalanceActor"}
 			}),
 		}
 		a.boundStores = a.currentBoundStores()
 		return a, cs, &halts
 	}
+
+	// A sidecar which only calls a bound actor type has no actors of it to
+	// deactivate, and draining it would cancel its calls to the host.
+	t.Run("only the hosted actor types are deactivated", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+		a.table.(*tablefake.Fake).WithRegistered(func() []string { return []string{"AuditActor"} })
+
+		cs.DeleteStateStore("wallet-transactions")
+		a.convergeBoundStores(t.Context())
+		assert.Equal(t, [][]string{{"AuditActor"}}, *halts)
+	})
+
+	t.Run("no hosted actor type deactivates nothing", func(t *testing.T) {
+		t.Parallel()
+		a, cs, halts := newConverge(t)
+		a.table.(*tablefake.Fake).WithRegistered(func() []string { return []string{"OtherActor"} })
+
+		cs.DeleteStateStore("wallet-transactions")
+		cs.DeleteStateStore("wallet-balance")
+		a.convergeBoundStores(t.Context())
+		assert.Empty(t, *halts)
+	})
 
 	t.Run("no change is a no-op", func(t *testing.T) {
 		t.Parallel()

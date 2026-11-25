@@ -734,8 +734,8 @@ type boundStore struct {
 	loaded bool
 }
 
-// convergeBoundStores deactivates the actors of the actor types bound to a
-// state store that was removed or reloaded since the last call. Unlike the
+// convergeBoundStores deactivates the actors of the hosted actor types bound
+// to a state store that was removed or reloaded since the last call. Unlike the
 // default actor state store, a same-name reload is not assumed to keep the
 // same data: the actors' in-memory state, and any state an SDK caches, may no
 // longer match the store, so they are deactivated and reactivated on demand
@@ -753,6 +753,10 @@ func (a *actors) convergeBoundStores(ctx context.Context) {
 		typesOf[storeName] = append(typesOf[storeName], actorType)
 	}
 
+	// Only the actor types this sidecar hosts have actors to deactivate. A
+	// sidecar which only calls a bound type keeps its calls to the host.
+	registered := a.table.Registered()
+
 	var changed, halt []string
 	for _, storeName := range slices.Sorted(maps.Keys(typesOf)) {
 		was, now := previous[storeName], current[storeName]
@@ -763,16 +767,27 @@ func (a *actors) convergeBoundStores(ctx context.Context) {
 		slices.Sort(actorTypes)
 		changed = append(changed, actorTypes...)
 
-		switch {
-		case !was.loaded:
+		if !was.loaded {
 			log.Infof("Bound actor state store %s added - actor types %v now use it", storeName, actorTypes)
 			continue
-		case !now.loaded:
-			log.Warnf("Bound actor state store %s removed - deactivating actors of types %v", storeName, actorTypes)
-		default:
-			log.Infof("Bound actor state store %s reloaded - deactivating actors of types %v", storeName, actorTypes)
 		}
-		halt = append(halt, actorTypes...)
+
+		hosted := slices.DeleteFunc(slices.Clone(actorTypes), func(actorType string) bool {
+			return !slices.Contains(registered, actorType)
+		})
+		change := "reloaded"
+		if !now.loaded {
+			change = "removed"
+		}
+		switch {
+		case len(hosted) == 0:
+			log.Infof("Bound actor state store %s %s - this app hosts none of its actor types %v", storeName, change, actorTypes)
+		case !now.loaded:
+			log.Warnf("Bound actor state store %s removed - deactivating actors of types %v", storeName, hosted)
+		default:
+			log.Infof("Bound actor state store %s reloaded - deactivating actors of types %v", storeName, hosted)
+		}
+		halt = append(halt, hosted...)
 	}
 
 	if len(changed) > 0 {
