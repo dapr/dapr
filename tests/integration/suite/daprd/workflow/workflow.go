@@ -15,7 +15,6 @@ package workflow
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/accesspolicy"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/activitydispatch"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/admission"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/attestation"
@@ -50,6 +49,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/priority"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/propagation/signed"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/pull"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/force/stale"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/raise/deletetimer"

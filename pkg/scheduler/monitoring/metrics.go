@@ -78,6 +78,18 @@ var (
 		"scheduler/workflow_activity_refused_total",
 		"Total number of pull-dispatched workflow activities a sidecar refused with NO_CAPACITY, by namespace, app_id and activity_name.",
 		stats.UnitDimensionless)
+	workflowBacklogGauge = stats.Int64(
+		"scheduler/workflow_backlog",
+		"Current number of pull-dispatched workflow turns waiting for a free sidecar slot on this scheduler instance, by namespace, app_id, workflow_name and priority_level.",
+		stats.UnitDimensionless)
+	workflowInflightGauge = stats.Int64(
+		"scheduler/workflow_inflight",
+		"Current number of pull-dispatched workflow turns this scheduler instance handed to a sidecar and that have not finished, by namespace, app_id, workflow_name and priority_level.",
+		stats.UnitDimensionless)
+	workflowRefusedTotal = stats.Int64(
+		"scheduler/workflow_refused_total",
+		"Total number of pull-dispatched workflow turns a sidecar refused with NO_CAPACITY, by namespace, app_id and workflow_name.",
+		stats.UnitDimensionless)
 	jobsDeletedTotal = stats.Int64(
 		"scheduler/jobs_deleted_total",
 		"The total number of deleted jobs.",
@@ -126,6 +138,7 @@ var (
 	tagActorType      = tag.MustNewKey("actor_type")
 	tagAppID          = tag.MustNewKey("app_id")
 	tagActivityName   = tag.MustNewKey("activity_name")
+	tagWorkflowName   = tag.MustNewKey("workflow_name")
 	tagPriorityLevel  = tag.MustNewKey("priority_level")
 )
 
@@ -338,22 +351,36 @@ func RecordConcurrencyThrottled(key string) {
 // activities of one name waiting for a free sidecar slot on this scheduler
 // instance.
 func RecordWorkflowActivityBacklog(namespace, appID, activityName, priorityLevel string, count int64) {
-	recordWorkflowActivityLevel(workflowActivityBacklogGauge, namespace, appID, activityName, priorityLevel, count)
+	recordPullLevel(workflowActivityBacklogGauge, tagActivityName, namespace, appID, activityName, priorityLevel, count)
+}
+
+// RecordWorkflowBacklog records the number of pull-dispatched workflow turns
+// of one workflow name waiting for a free sidecar slot on this scheduler
+// instance.
+func RecordWorkflowBacklog(namespace, appID, workflowName, priorityLevel string, count int64) {
+	recordPullLevel(workflowBacklogGauge, tagWorkflowName, namespace, appID, workflowName, priorityLevel, count)
 }
 
 // RecordWorkflowActivityInflight records the number of pull-dispatched
 // activities of one name this scheduler instance handed to a sidecar and that
 // have not finished.
 func RecordWorkflowActivityInflight(namespace, appID, activityName, priorityLevel string, count int64) {
-	recordWorkflowActivityLevel(workflowActivityInflightGauge, namespace, appID, activityName, priorityLevel, count)
+	recordPullLevel(workflowActivityInflightGauge, tagActivityName, namespace, appID, activityName, priorityLevel, count)
 }
 
-func recordWorkflowActivityLevel(measure *stats.Int64Measure, namespace, appID, activityName, priorityLevel string, count int64) {
+// RecordWorkflowInflight records the number of pull-dispatched workflow turns
+// of one workflow name this scheduler instance handed to a sidecar and that
+// have not finished.
+func RecordWorkflowInflight(namespace, appID, workflowName, priorityLevel string, count int64) {
+	recordPullLevel(workflowInflightGauge, tagWorkflowName, namespace, appID, workflowName, priorityLevel, count)
+}
+
+func recordPullLevel(measure *stats.Int64Measure, nameTag tag.Key, namespace, appID, name, priorityLevel string, count int64) {
 	stats.RecordWithTags(context.Background(),
 		utils.WithTags(measure.Name(),
 			tagNamespace, namespace,
 			tagAppID, appID,
-			tagActivityName, activityName,
+			nameTag, name,
 			tagPriorityLevel, priorityLevel,
 		),
 		measure.M(count),
@@ -363,15 +390,21 @@ func recordWorkflowActivityLevel(measure *stats.Int64Measure, namespace, appID, 
 // RecordWorkflowActivityRefused counts a pull-dispatched activity a sidecar
 // refused with NO_CAPACITY because another scheduler took its last slot.
 func RecordWorkflowActivityRefused(namespace, appID, activityName string) {
-	recordWorkflowActivity(workflowActivityRefusedTotal, namespace, appID, activityName, 1)
+	recordPull(workflowActivityRefusedTotal, tagActivityName, namespace, appID, activityName, 1)
 }
 
-func recordWorkflowActivity(measure *stats.Int64Measure, namespace, appID, activityName string, count int64) {
+// RecordWorkflowRefused counts a pull-dispatched workflow turn a sidecar
+// refused with NO_CAPACITY because every workflow slot was held.
+func RecordWorkflowRefused(namespace, appID, workflowName string) {
+	recordPull(workflowRefusedTotal, tagWorkflowName, namespace, appID, workflowName, 1)
+}
+
+func recordPull(measure *stats.Int64Measure, nameTag tag.Key, namespace, appID, name string, count int64) {
 	stats.RecordWithTags(context.Background(),
 		utils.WithTags(measure.Name(),
 			tagNamespace, namespace,
 			tagAppID, appID,
-			tagActivityName, activityName,
+			nameTag, name,
 		),
 		measure.M(count),
 	)
@@ -462,6 +495,9 @@ func InitMetrics() error {
 		utils.NewMeasureView(workflowActivityBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName, tagPriorityLevel}, view.LastValue()),
 		utils.NewMeasureView(workflowActivityInflightGauge, []tag.Key{tagNamespace, tagAppID, tagActivityName, tagPriorityLevel}, view.LastValue()),
 		utils.NewMeasureView(workflowActivityRefusedTotal, []tag.Key{tagNamespace, tagAppID, tagActivityName}, view.Count()),
+		utils.NewMeasureView(workflowBacklogGauge, []tag.Key{tagNamespace, tagAppID, tagWorkflowName, tagPriorityLevel}, view.LastValue()),
+		utils.NewMeasureView(workflowInflightGauge, []tag.Key{tagNamespace, tagAppID, tagWorkflowName, tagPriorityLevel}, view.LastValue()),
+		utils.NewMeasureView(workflowRefusedTotal, []tag.Key{tagNamespace, tagAppID, tagWorkflowName}, view.Count()),
 		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),

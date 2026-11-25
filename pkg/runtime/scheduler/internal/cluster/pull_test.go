@@ -39,14 +39,17 @@ func testStreamer(p *Pull, addr string) *streamer {
 
 func testStreamerSending(p *Pull, addr string, sendOK bool) *streamer {
 	s := &streamer{
-		addr:          addr,
-		pull:          p,
-		pullActorType: testActivityType,
-		resultCh:      make(chan *schedulerv1pb.WatchJobsRequest, 16),
-		pullCh:        make(chan pullSend),
-		done:          make(chan struct{}),
-		wfengine:      wfenginefake.New(),
+		addr:     addr,
+		pull:     p,
+		resultCh: make(chan *schedulerv1pb.WatchJobsRequest, 16),
+		pullCh:   make(chan pullSend),
+		done:     make(chan struct{}),
+		wfengine: wfenginefake.New(),
 	}
+	// Reads s.wfengine when called, so a test can swap the engine first.
+	s.pullTypes = map[string]pullType{testActivityType: {free: func() (uint32, <-chan struct{}) {
+		return s.wfengine.ActivityFreeSlots()
+	}}}
 	go func() {
 		for {
 			select {
@@ -283,13 +286,12 @@ func TestConnector_InitialCarriesPullState(t *testing.T) {
 		Initial: &schedulerv1pb.WatchJobsRequestInitial{AppId: "myapp"},
 	}}
 	c := &connector{
-		req:           base,
-		addr:          "sched-0",
-		pull:          p,
-		pullActorType: testActivityType,
-		wfengine: wfenginefake.New().WithActivityFreeSlots(func() (uint32, <-chan struct{}) {
+		req:  base,
+		addr: "sched-0",
+		pull: p,
+		pullTypes: map[string]pullType{testActivityType: {free: func() (uint32, <-chan struct{}) {
 			return 3, nil
-		}),
+		}}},
 	}
 
 	req := c.initial()

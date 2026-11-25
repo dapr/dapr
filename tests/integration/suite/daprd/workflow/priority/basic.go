@@ -51,7 +51,8 @@ metadata:
 spec:
   workflow:
     maxConcurrentActivityInvocations: 4
-    activityDispatchMode: pull
+    maxConcurrentWorkflowInvocations: 10
+    dispatchMode: pull
     priority:
       default:
         priorityLevel: high

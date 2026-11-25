@@ -39,6 +39,8 @@ type Pull struct {
 	// retained holds the schedulers whose results are kept for a stream to
 	// take; nil until the first Retain keeps every scheduler's.
 	retained map[string]bool
+	// slots counts the workflow turns held across streams and clusters.
+	slots *workflowSlots
 }
 
 type pullJobKey struct {
@@ -66,6 +68,17 @@ func NewPull(ctx context.Context) *Pull {
 		streams: make(map[string][]*streamer),
 		changed: make(chan struct{}),
 	}
+}
+
+func (p *Pull) workflowSlots(capa int32) *workflowSlots {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	// A Configuration change restarts the runtime (SIGHUP), which makes a
+	// new Pull, so the cap never changes on this one.
+	if p.slots == nil {
+		p.slots = newWorkflowSlots(capa)
+	}
+	return p.slots
 }
 
 // refs returns the pull reminders delivered by the scheduler at addr that

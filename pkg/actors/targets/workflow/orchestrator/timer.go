@@ -32,9 +32,9 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
+func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEvent, generation uint64, workflowName string) error {
 	for _, e := range es {
-		if err := o.createTimer(ctx, e, generation); err != nil {
+		if err := o.createTimer(ctx, e, generation, workflowName); err != nil {
 			return err
 		}
 	}
@@ -83,7 +83,7 @@ func eventTimerName(tc *protos.TimerCreatedEvent) (string, bool) {
 	return "", false
 }
 
-func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
+func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent, generation uint64, workflowName string) error {
 	ts := e.GetTimerFired()
 	if ts == nil {
 		return errors.New("invalid timer object for creating a timer reminder")
@@ -95,14 +95,14 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 
 	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderName, start)
 
-	if err := o.createTimerReminder(ctx, reminderName, data, start); err != nil {
+	if err := o.createTimerReminder(ctx, reminderName, data, start, workflowName); err != nil {
 		return fmt.Errorf("actor '%s' failed to create reminder for timer: %w", o.actorID, err)
 	}
 
 	return nil
 }
 
-func (o *orchestrator) createTimerReminder(ctx context.Context, name string, data proto.Message, start time.Time) error {
+func (o *orchestrator) createTimerReminder(ctx context.Context, name string, data proto.Message, start time.Time, workflowName string) error {
 	actorType := o.actorTypeBuilder.Workflow(o.appID)
 	dueTime := start.UTC().Format(time.RFC3339Nano)
 
@@ -113,7 +113,7 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, name, dueTime)
 
-	return common.CreateReminderWithRetry(ctx, o.reminders, &actorapi.CreateReminderRequest{
+	req := &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
@@ -122,7 +122,9 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 		// One shot, retry forever, jittered interval. The timer's due time
 		// is untouched; only the post-failure retry interval is jittered.
 		FailurePolicy: common.RetryForeverPolicy(),
-	})
+	}
+	o.pullTurn(req, workflowName)
+	return common.CreateReminderWithRetry(ctx, o.reminders, req)
 }
 
 // deleteCancelledEventTimers scans the workflow history to find timer reminders

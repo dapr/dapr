@@ -102,9 +102,11 @@ func Test_handleJob_markedDeliveryExecutesLocally(t *testing.T) {
 		pull          *bool
 		pullDispatch  bool
 		pullActorType string
+		turn          bool
 		want          bool
 	}{
 		"pull job on a sidecar offering slots executes locally": {pull: new(true), pullDispatch: true, pullActorType: activityType, want: true},
+		"pull workflow turn goes to the placement owner":        {pull: new(true), pullDispatch: true, pullActorType: activityType, turn: true, want: false},
 		"pull job on a sidecar without slots forwards":          {pull: new(true), pullDispatch: false, want: false},
 		"pull job of another actor type forwards":               {pull: new(true), pullDispatch: true, pullActorType: "other", want: false},
 		"unmarked, pull false, forwards":                        {pull: new(false), pullDispatch: true, pullActorType: activityType, want: false},
@@ -120,7 +122,7 @@ func Test_handleJob_markedDeliveryExecutesLocally(t *testing.T) {
 					return nil
 				},
 			)
-			s := &streamer{actors: actors, wfengine: wfenginefake.New(), pullActorType: tc.pullActorType}
+			s := &streamer{actors: actors, wfengine: wfenginefake.New(), pullTypes: map[string]pullType{tc.pullActorType: pullTypeFor(tc.turn)}}
 			if tc.pullDispatch {
 				s.pull = NewPull(t.Context())
 			}
@@ -152,7 +154,7 @@ func Test_handleJob_pullCreateFailureIsNotARefusal(t *testing.T) {
 	actors := routerfake.New().WithCallReminderFn(func(context.Context, *actorapi.Reminder) error {
 		return backoff.Permanent(fmt.Errorf("%w: actor hosting is suspended", actorerrors.ErrCreatingActor))
 	})
-	s := &streamer{actors: actors, wfengine: wfenginefake.New(), pull: NewPull(t.Context()), pullActorType: activityType}
+	s := &streamer{actors: actors, wfengine: wfenginefake.New(), pull: NewPull(t.Context()), pullTypes: map[string]pullType{activityType: {}}}
 	job := func(pull bool) *schedulerv1pb.WatchJobsResponse {
 		return &schedulerv1pb.WatchJobsResponse{
 			Name: "run-activity",
@@ -350,4 +352,11 @@ func Test_invokeActorReminder_SourceAppID(t *testing.T) {
 	assert.Equal(t, "activity-result-abc", got.Name)
 	assert.Equal(t, "dapr.internal.default.target.workflow", got.ActorType)
 	assert.Equal(t, "instance-1", got.ActorID)
+}
+
+func pullTypeFor(turn bool) pullType {
+	if turn {
+		return pullType{workflow: newWorkflowSlots(1)}
+	}
+	return pullType{}
 }

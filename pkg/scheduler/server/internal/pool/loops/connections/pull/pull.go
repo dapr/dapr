@@ -93,8 +93,8 @@ func New(opts Options) *Dispatcher {
 		pending:  make(map[string]*queue),
 		claims:   make(map[string]*claim),
 		sidecars: make(map[string]*sidecar),
-		backlog:  newGauge(monitoring.RecordWorkflowActivityBacklog),
-		inflight: newGauge(monitoring.RecordWorkflowActivityInflight),
+		backlog:  newGauge(monitoring.RecordWorkflowActivityBacklog, monitoring.RecordWorkflowBacklog),
+		inflight: newGauge(monitoring.RecordWorkflowActivityInflight, monitoring.RecordWorkflowInflight),
 	}
 }
 

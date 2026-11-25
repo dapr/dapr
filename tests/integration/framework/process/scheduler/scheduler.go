@@ -335,6 +335,17 @@ func (s *Scheduler) WaitUntilPullInflight(t *testing.T, ctx context.Context, wan
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
+// WaitUntilWorkflowPullInflight waits until the pull-dispatched workflow
+// turns in flight on this scheduler, summed over labels, equal want.
+func (s *Scheduler) WaitUntilWorkflowPullInflight(t *testing.T, ctx context.Context, want float64, labels ...string) {
+	t.Helper()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, want, s.Metrics(c, ctx).SumWithLabels(
+			"dapr_scheduler_workflow_inflight", labels...), 0)
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
 func (s *Scheduler) ID() string {
 	return s.id
 }

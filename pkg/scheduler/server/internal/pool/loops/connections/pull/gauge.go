@@ -13,29 +13,54 @@ limitations under the License.
 
 package pull
 
-import "github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+import (
+	"strings"
 
-// gauge counts pull triggers by app, activity name and priority level and
-// publishes each count as it changes.
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+)
+
+// recordFn publishes a count for one app, name and priority level.
+type recordFn func(namespace, appID, name, priorityLevel string, count int64)
+
+// gauge counts pull triggers by app, name and priority level and publishes
+// each count as it changes: activities on one metric, workflow turns on
+// another.
 type gauge struct {
-	record func(namespace, appID, activityName, priorityLevel string, count int64)
-	counts map[gaugeKey]int64
+	activity recordFn
+	workflow recordFn
+	counts   map[gaugeKey]int64
 }
 
 type gaugeKey struct {
 	appID, name, level string
+	workflow           bool
 }
 
-func newGauge(record func(namespace, appID, activityName, priorityLevel string, count int64)) *gauge {
-	return &gauge{record: record, counts: make(map[gaugeKey]int64)}
+func newGauge(activity, workflow recordFn) *gauge {
+	return &gauge{activity: activity, workflow: workflow, counts: make(map[gaugeKey]int64)}
 }
 
 func (g *gauge) add(req *loops.TriggerRequest, delta int64) {
 	meta := req.Job.GetMetadata()
-	key := gaugeKey{appID: meta.GetAppId(), name: meta.GetConcurrencyKey(), level: levelName(levelOf(req))}
+	key := gaugeKey{
+		appID:    meta.GetAppId(),
+		name:     meta.GetConcurrencyKey(),
+		level:    levelName(levelOf(req)),
+		workflow: isWorkflowType(meta.GetTarget().GetActor().GetType()),
+	}
 	g.counts[key] += delta
-	g.record(meta.GetNamespace(), key.appID, key.name, key.level, g.counts[key])
+	record := g.activity
+	if key.workflow {
+		record = g.workflow
+	}
+	record(meta.GetNamespace(), key.appID, key.name, key.level, g.counts[key])
 	if g.counts[key] == 0 {
 		delete(g.counts, key)
 	}
+}
+
+// isWorkflowType reports whether actorType is a workflow actor type, whose
+// pull triggers are workflow turns.
+func isWorkflowType(actorType string) bool {
+	return strings.HasSuffix(actorType, ".workflow")
 }
