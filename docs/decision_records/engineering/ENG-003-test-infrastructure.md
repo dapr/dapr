@@ -1,4 +1,4 @@
-# ENG-003: Test infrastrcuture
+# ENG-003: Test infrastructure
 
 ## Status
 
