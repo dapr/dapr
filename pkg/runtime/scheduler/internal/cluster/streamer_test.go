@@ -177,7 +177,7 @@ func Test_handleJob_noCapacity(t *testing.T) {
 	actors := routerfake.New().WithCallReminderFn(func(context.Context, *actorapi.Reminder) error {
 		return backoff.Permanent(actorerrors.ErrNoCapacity)
 	})
-	s := &streamer{actors: actors, wfengine: wfenginefake.New()}
+	s := &streamer{actors: actors, wfengine: wfenginefake.New(), supportsPullSlots: true}
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name: "run-activity",
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -190,6 +190,10 @@ func Test_handleJob_noCapacity(t *testing.T) {
 	}
 	assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY, s.handleJob(t.Context(), job),
 		"a refused pull delivery is queued again by the scheduler, not retried as a failure")
+
+	s.supportsPullSlots = false
+	assert.Equal(t, schedulerv1pb.WatchJobsRequestResultStatus_FAILED, s.handleJob(t.Context(), job),
+		"a scheduler without pull support does not know NO_CAPACITY and closes the stream on it")
 }
 
 func Test_handleJob_ErrReminderCanceled_localSentinel(t *testing.T) {
