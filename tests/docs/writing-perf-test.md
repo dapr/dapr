@@ -152,7 +152,7 @@ I recommend the following links before starting to work with k6.
 
 You can use the full power of k6 on dapr and the only difference is that we kept our test driver as is being used for the QPS with Fortio load testing tool. In addition, the k6 load tester also contains a dapr sidecar container within the same pod. To start a new k6 load test create a simple js file inside the same folder as your test driver `.go` with your desired name (`test.js` is preferable).
 
-The dapr specifities:
+The dapr specifics:
 
 For k6 loadtesting on dapr perf test at least two methods are required, they are
 

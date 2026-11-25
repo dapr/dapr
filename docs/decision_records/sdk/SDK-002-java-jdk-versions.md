@@ -12,7 +12,7 @@ See https://github.com/dapr/java-sdk/issues/17
 
 * Java 8 should be the minimum version supported for Dapr's Java SDK.
 * Java 11 should be used in samples and user documentation to encourage adoption.
-* Java 8's commercial support ends in 2022. Dapr's Java SDK shoud migrate to Java 11 prior to that. The timeline still not decided.
+* Java 8's commercial support ends in 2022. Dapr's Java SDK should migrate to Java 11 prior to that. The timeline still not decided.
   
 ## Consequences
 
