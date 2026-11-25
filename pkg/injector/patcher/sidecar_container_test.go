@@ -45,6 +45,20 @@ func TestParseEnvString(t *testing.T) {
 			expEnv:   []corev1.EnvVar{},
 		},
 		{
+			testName: "whitespace environment string",
+			envStr:   "   ",
+			expLen:   0,
+			expKeys:  []string{},
+			expEnv:   []corev1.EnvVar{},
+		},
+		{
+			testName: "empty key is skipped",
+			envStr:   "=value1, =value2",
+			expLen:   0,
+			expKeys:  []string{},
+			expEnv:   []corev1.EnvVar{},
+		},
+		{
 			testName: "common valid environment string",
 			envStr:   "ENV1=value1 , ENV2=value2 , ENV3=value3",
 			expLen:   3,
@@ -326,6 +340,60 @@ func TestParseEnvFromSecret(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			testName:     "whitespace only secret string",
+			envSecretStr: "   ",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
+		},
+		{
+			testName:     "empty secret value is skipped",
+			envSecretStr: "KEY1=, KEY2= ",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
+		},
+		{
+			testName:     "secret with missing key or name is skipped",
+			envSecretStr: "KEY1=NAME:, KEY2=:KEY, KEY3=:, KEY4= : ",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
+		},
+		{
+			testName:     "malformed secret with more than two parts is skipped and excluded from keys",
+			envSecretStr: "KEY1=NAME:KEY:EXTRA",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
+		},
+		{
+			testName:     "valid secret mixed with invalid secret only includes valid one in env and keys",
+			envSecretStr: "KEY1=NAME1:SECRETKEY1, KEY2=INVALID:A:B, KEY3=NAME3:",
+			expLen:       1,
+			expKeys:      []string{"KEY1"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name: "KEY1",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME1",
+							},
+							Key: "SECRETKEY1",
+						},
+					},
+				},
+			},
+		},
+		{
+			testName:     "empty env var name is skipped",
+			envSecretStr: "=NAME1:SECRETKEY1, =NAME2",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
 		},
 	}
 	for _, tc := range testCases {
