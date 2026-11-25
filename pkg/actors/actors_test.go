@@ -450,8 +450,31 @@ func TestLogUnhostedBindings(t *testing.T) {
 	// Each actor type is logged once, however often the app registers.
 	buf.Reset()
 	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor", "BalanceActor"})
-	logUnhostedBindings(l, &logged, bindings, nil)
+	assert.Empty(t, buf.String())
+	logUnhostedBindings(l, &logged, bindings, []string{"TransactionActor"})
 	assert.Contains(t, buf.String(), "Actor type BalanceActor is bound")
 	assert.NotContains(t, buf.String(), "OrphanActor")
 	assert.NotContains(t, buf.String(), "transactionactor")
+}
+
+func TestLogUnhostedBindingsWarnsAfterInfo(t *testing.T) {
+	bindings := map[string]string{"transactionactor": "wallet-transactions"}
+
+	var buf bytes.Buffer
+	l := logger.NewLogger(t.Name())
+	l.SetOutput(&buf)
+
+	// The app registers the type that differs in case in a later
+	// registration: the earlier info log must not hide the warning.
+	var logged sync.Map
+	logUnhostedBindings(l, &logged, bindings, []string{"BalanceActor"})
+	assert.Contains(t, buf.String(), `level=info msg="Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it;`)
+
+	buf.Reset()
+	logUnhostedBindings(l, &logged, bindings, []string{"BalanceActor", "TransactionActor"})
+	assert.Contains(t, buf.String(), `level=warning msg="Actor type transactionactor is bound to state store wallet-transactions, but this app does not host it; did you mean TransactionActor? Actor types are case-sensitive"`)
+
+	buf.Reset()
+	logUnhostedBindings(l, &logged, bindings, []string{"BalanceActor", "TransactionActor"})
+	assert.Empty(t, buf.String())
 }

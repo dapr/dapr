@@ -247,7 +247,7 @@ func warnUnusableStateStores(l logger.Logger, r *actorstate.Resolver, actorTypes
 }
 
 // logUnhostedBindings logs, sorted by actor type, each bound actor type that
-// this app does not host, at most once per actor type recorded in logged.
+// this app does not host, at most once per outcome recorded in logged.
 // That is a valid setup when apps share a Configuration, so it is logged at
 // info level. When a hosted actor type differs from it only in case, the
 // binding is likely a typo, as actor types are case-sensitive, so that is
@@ -257,10 +257,17 @@ func logUnhostedBindings(l logger.Logger, logged *sync.Map, bindings map[string]
 		if slices.Contains(hosted, actorType) {
 			continue
 		}
-		if _, ok := logged.LoadOrStore(actorType, struct{}{}); ok {
+		// The two outcomes are recorded under different keys, so that an
+		// earlier info log does not hide the warning when the app registers
+		// the type which differs in case later.
+		idx := slices.IndexFunc(hosted, func(h string) bool { return strings.EqualFold(h, actorType) })
+		key := actorType
+		if idx >= 0 {
+			key += "/" + hosted[idx]
+		}
+		if _, ok := logged.LoadOrStore(key, struct{}{}); ok {
 			continue
 		}
-		idx := slices.IndexFunc(hosted, func(h string) bool { return strings.EqualFold(h, actorType) })
 		if idx >= 0 {
 			l.Warnf("Actor type %s is bound to state store %s, but this app does not host it; did you mean %s? Actor types are case-sensitive", actorType, bindings[actorType], hosted[idx])
 			continue
