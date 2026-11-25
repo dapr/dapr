@@ -102,6 +102,16 @@ type disseminator struct {
 	// v2Completed are the seqs of rounds completed on this stream.
 	v2Completed map[uint64]struct{}
 
+	// halting counts, per actor type, the halts in progress which block it
+	// (see handleHaltActorTypes). A round does not unblock such a type.
+	halting map[string]int
+
+	// pendingHalts are the halts whose in-flight calls are draining.
+	pendingHalts map[*loops.HaltActorTypes]struct{}
+
+	// closeCh is closed on shutdown, which ends the wait for those drains.
+	closeCh chan struct{}
+
 	// roundCompleted is set once a dissemination round completed on this
 	// stream. Until then, a change of the reminder types in place waits for
 	// that round, which sends them.
@@ -124,6 +134,9 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss.v2Rounds = make(map[uint64]*v2Round)
 	diss.v2Completed = make(map[uint64]struct{})
 	diss.roundCompleted = false
+	diss.halting = make(map[string]int)
+	diss.pendingHalts = make(map[*loops.HaltActorTypes]struct{})
+	diss.closeCh = make(chan struct{})
 	diss.healthTarget = opts.HTarget
 	diss.ready = opts.Ready
 
@@ -160,7 +173,9 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 	case *loops.LockRequest:
 		d.handleAcquireRequest(e)
 	case *loops.HaltActorTypes:
-		d.handleHaltActorTypes(ctx, e)
+		d.handleHaltActorTypes(e)
+	case *loops.HaltActorTypesDrained:
+		d.handleHaltActorTypesDrained(ctx, e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
 	case *loops.ReloadReminderTypes:
@@ -175,7 +190,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 	case *loops.DisseminationTimeout:
 		d.handleTimeout(ctx, e)
 	case *loops.Shutdown:
-		d.handleShutdown(e)
+		d.handleShutdown(ctx, e)
 	default:
 		panic(fmt.Sprintf("unknown disseminator event type: %T", e))
 	}
@@ -183,12 +198,14 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error 
 	return nil
 }
 
-func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
+func (d *disseminator) handleShutdown(ctx context.Context, shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
 
 	d.streamLoop.Close(shutdown)
 	d.inflight.Close(shutdown.Error)
 	d.timeoutQ.Close()
+
+	d.completePendingHalts(ctx)
 
 	stream.LoopFactory.CacheLoop(d.streamLoop)
 	loopCache.Put(d)

@@ -742,8 +742,10 @@ type boundStore struct {
 // against it. A store that was not loaded and is added deactivates nothing:
 // no state call of its actor types succeeded before, so nothing is stale.
 // In-flight calls of those types drain with the configured timeout first,
-// and the actors' timers are deleted. Hosting itself is unaffected, and other
-// actor types continue.
+// while their new calls wait, and the actors' timers are deleted. An in-flight
+// call can still save its state, against the store as it is now, and
+// complete. Hosting itself is unaffected, and other actor types are served
+// during the drain.
 func (a *actors) convergeBoundStores(ctx context.Context) {
 	previous, current := a.boundStores, a.currentBoundStores()
 	a.boundStores = current

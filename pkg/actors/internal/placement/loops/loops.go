@@ -268,13 +268,21 @@ type SetEntityDrainOngoingCallTimeouts struct {
 
 // HaltActorTypes runs Halt once the in-flight calls of ActorTypes have
 // drained, with the configured drain timeout, while new calls of those types
-// wait for Halt to return. Its result is sent on Done.
+// wait for Halt to return. Its result is sent on Done. The other actor types
+// are served during the drain.
 type HaltActorTypes struct {
 	*placebase
 	*dissbase
 	ActorTypes []string
 	Halt       func(context.Context) error
 	Done       chan error
+}
+
+// HaltActorTypesDrained reports to the disseminator that the in-flight calls
+// of Halt have drained.
+type HaltActorTypesDrained struct {
+	*dissbase
+	Halt *HaltActorTypes
 }
 
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {

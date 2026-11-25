@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -27,24 +28,111 @@ func (d *disseminator) handleLookupRequest(req *loops.LookupRequest) {
 }
 
 func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
+	// A state call of a type which is blocked only because its actors are
+	// being halted in place is not queued. It may belong to an in-flight
+	// call, which the halt waits for: queued, that call could not complete
+	// before the drain timeout.
+	if d.halting[req.ActorType] > 0 && !d.roundBlocks(req.ActorType) {
+		d.inflight.AcquireUnqueued(req)
+		return
+	}
 	d.inflight.Acquire(req)
 }
 
 // handleHaltActorTypes halts the actors of the given types the way a
 // dissemination round halts the actors it moves: new calls of those types
 // queue, in-flight calls drain with the configured timeout, then the actors
-// are halted. Types a round already blocks stay blocked when it returns.
-func (d *disseminator) handleHaltActorTypes(ctx context.Context, e *loops.HaltActorTypes) {
-	lock := make([]string, 0, len(e.ActorTypes))
+// are halted. Unlike a round, the drain does not hold this loop, so the other
+// actor types are served meanwhile, and so are the state calls of the halted
+// types, which lets an in-flight call save its state and complete. Types a
+// round blocks stay blocked when the halt completes.
+func (d *disseminator) handleHaltActorTypes(e *loops.HaltActorTypes) {
+	d.inflight.LockTypes(e.ActorTypes)
 	for _, actorType := range e.ActorTypes {
-		if !d.inflight.IsBlocked(actorType) {
-			lock = append(lock, actorType)
+		d.halting[actorType]++
+	}
+	d.pendingHalts[e] = struct{}{}
+
+	drained := d.inflight.DrainClaimsForTypes(e.ActorTypes, errors.New("bound actor state store changed"))
+	// d is pooled once this loop shuts down, so the goroutine does not use it.
+	lp, closeCh := d.loop, d.closeCh
+	d.wg.Go(func() {
+		select {
+		case <-drained:
+			lp.Enqueue(&loops.HaltActorTypesDrained{Halt: e})
+		case <-closeCh:
+		}
+	})
+}
+
+func (d *disseminator) handleHaltActorTypesDrained(ctx context.Context, e *loops.HaltActorTypesDrained) {
+	if _, ok := d.pendingHalts[e.Halt]; ok {
+		d.completeHalt(ctx, e.Halt)
+	}
+}
+
+// completeHalt halts the actors of a drained halt and unblocks its types,
+// except those another halt or a round still blocks.
+func (d *disseminator) completeHalt(ctx context.Context, e *loops.HaltActorTypes) {
+	delete(d.pendingHalts, e)
+
+	e.Done <- e.Halt(ctx)
+
+	unlock := make([]string, 0, len(e.ActorTypes))
+	for _, actorType := range e.ActorTypes {
+		d.halting[actorType]--
+		if d.halting[actorType] > 0 {
+			continue
+		}
+		delete(d.halting, actorType)
+		if !d.roundBlocks(actorType) {
+			unlock = append(unlock, actorType)
 		}
 	}
-	d.inflight.LockTypes(lock)
-	d.inflight.CancelClaimsForTypes(e.ActorTypes, errors.New("bound actor state store changed"))
-	e.Done <- e.Halt(ctx)
-	d.inflight.UnlockTypes(lock)
+	d.inflight.UnlockTypes(unlock)
+}
+
+// completePendingHalts runs, on shutdown, the halts still waiting for their
+// drain: closing inflight ended every claim, and this loop takes no more
+// events.
+func (d *disseminator) completePendingHalts(ctx context.Context) {
+	close(d.closeCh)
+	for e := range d.pendingHalts {
+		d.completeHalt(ctx, e)
+	}
+}
+
+// roundBlocks returns whether a dissemination round in progress blocks the
+// actor type.
+func (d *disseminator) roundBlocks(actorType string) bool {
+	if _, ok := d.roundChangedTypes[actorType]; ok {
+		return true
+	}
+	for _, r := range d.v2Rounds {
+		if _, ok := r.changed[actorType]; ok || slices.Contains(r.scope, actorType) {
+			return true
+		}
+	}
+	return false
+}
+
+// unlockRoundTypes unblocks the types a completed round blocked. A type
+// whose actors are being halted stays blocked until the halt completes,
+// unless another round blocks it, but its state calls which queued during
+// the round are served, as handleAcquireRequest serves them from now on.
+func (d *disseminator) unlockRoundTypes(actorTypes []string) {
+	var halting []string
+	actorTypes = slices.DeleteFunc(actorTypes, func(actorType string) bool {
+		if d.halting[actorType] == 0 {
+			return false
+		}
+		if !d.roundBlocks(actorType) {
+			halting = append(halting, actorType)
+		}
+		return true
+	})
+	d.inflight.UnlockTypes(actorTypes)
+	d.inflight.FlushLocks(halting)
 }
 
 // completeRound runs at the end of every dissemination round on this
@@ -206,7 +294,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		clear(d.roundChangedTypes)
 		d.completeRound(ctx)
 
-		d.inflight.UnlockTypes(toUnlock)
+		d.unlockRoundTypes(toUnlock)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Ack: &loops.Ack{
