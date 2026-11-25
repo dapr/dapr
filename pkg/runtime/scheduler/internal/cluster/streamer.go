@@ -53,6 +53,10 @@ type streamer struct {
 	// the placement owner like any other reminder.
 	pull          *Pull
 	pullActorType string
+	// supportsPullSlots is true when every scheduler supports pull dispatch.
+	// Only such a scheduler knows the NO_CAPACITY result status: an older one
+	// closes the stream on it.
+	supportsPullSlots bool
 
 	// pullCh carries pull messages to outgoing, which reports whether Send
 	// succeeded. done is closed when outgoing stops sending.
@@ -265,7 +269,7 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
-		if errors.Is(err, actorerrors.ErrNoCapacity) {
+		if s.supportsPullSlots && errors.Is(err, actorerrors.ErrNoCapacity) {
 			log.Debugf("Refused pull reminder %s for actor %s: %s", job.GetName(), t.Actor.GetId(), err)
 			return schedulerv1pb.WatchJobsRequestResultStatus_NO_CAPACITY
 		}
