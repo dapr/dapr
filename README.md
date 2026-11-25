@@ -4,6 +4,8 @@
 
 [![Go Report][go-report-badge]][go-report-url] [![OpenSSF][openssf-badge]][openssf-url] [![Docker Pulls][docker-badge]][docker-url] [![Build Status][actions-badge]][actions-url] [![Test Status][e2e-badge]][e2e-url] [![Code Coverage][codecov-badge]][codecov-url] [![License: Apache 2.0][apache-badge]][apache-url] [![FOSSA Status][fossa-badge]][fossa-url] [![TODOs][todo-badge]][todo-url] [![Good First Issues][gfi-badge]][gfi-url] [![discord][discord-badge]][discord-url] [![YouTube][youtube-badge]][youtube-link] [![Bluesky][bluesky-badge]][bluesky-link] [![X/Twitter][x-badge]][x-link]
 
+<a href="README.zh-CN.md">简体中文</a>
+
 [go-report-badge]: https://goreportcard.com/badge/github.com/dapr/dapr
 [go-report-url]: https://goreportcard.com/report/github.com/dapr/dapr
 [openssf-badge]: https://www.bestpractices.dev/projects/5044/badge
