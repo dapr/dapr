@@ -533,3 +533,47 @@ func TestUnlockTypes_DrainsQueuedFns(t *testing.T) {
 
 	i.Close(nil)
 }
+
+func TestFlushLocks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	i := New(Options{Hostname: "h", Port: "1"})
+	i.Set(newTables(100, map[string]map[string]int64{
+		"locked": {"h:1": 1},
+	}), 1)
+	i.Open(ctx)
+	defer i.Close(nil)
+	i.LockTypes([]string{"locked"})
+
+	lockCh := make(chan *loops.LockResponse, 1)
+	i.Acquire(&loops.LockRequest{ActorType: "locked", Context: ctx, Response: lockCh})
+	lookupCh := make(chan *loops.LookupResponse, 1)
+	i.AcquireLookup(&loops.LookupRequest{
+		Request:  &api.LookupActorRequest{ActorType: "locked", ActorID: "x"},
+		Context:  ctx,
+		Response: lookupCh,
+	})
+
+	// The lock request is served, and the type stays blocked for lookups.
+	i.FlushLocks([]string{"locked", "other"})
+	select {
+	case resp := <-lockCh:
+		resp.Cancel(nil)
+	case <-time.After(time.Second):
+		require.Fail(t, "the queued lock request was not served")
+	}
+	assert.True(t, i.IsBlocked("locked"))
+	select {
+	case <-lookupCh:
+		require.Fail(t, "the queued lookup was served")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	i.UnlockTypes([]string{"locked"})
+	select {
+	case <-lookupCh:
+	case <-time.After(time.Second):
+		require.Fail(t, "the queued lookup was not served after UnlockTypes")
+	}
+}
