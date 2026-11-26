@@ -1233,6 +1233,26 @@ func TestActorsSpecDecode(t *testing.T) {
 	})
 }
 
+func TestWorkflowSpecStateStoreDecode(t *testing.T) {
+	t.Run("standalone YAML", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_state_store_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("operator JSON", func(t *testing.T) {
+		var config Configuration
+		require.NoError(t, json.Unmarshal([]byte(`{"spec":{"workflow":{"stateStore":"wallet-workflows"}}}`), &config))
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("no stateStore leaves it empty", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		require.NoError(t, err)
+		assert.Empty(t, config.Spec.WorkflowSpec.GetStateStore())
+	})
+}
+
 func TestActorsSpecStateStoreByActorType(t *testing.T) {
 	spec := &ActorsSpec{
 		StateStores: []ActorStateStoreBinding{
@@ -1423,6 +1443,22 @@ func TestLoadKubernetesConfiguration(t *testing.T) {
 		assert.Equal(t, map[string]string{"BalanceActor": "wallet-balance"}, conf.Spec.ActorsSpec.StateStoreByActorType())
 		require.NotNil(t, res.Spec.ActorsSpec)
 		assert.Equal(t, cfg.Spec.ActorsSpec, res.Spec.ActorsSpec)
+	})
+
+	t.Run("operator-marshalled CRD carries the workflow state store", func(t *testing.T) {
+		cfg := configapi.Configuration{
+			Spec: configapi.ConfigurationSpec{
+				WorkflowSpec: &configapi.WorkflowSpec{StateStore: "wallet-workflows"},
+			},
+		}
+		b, err := json.Marshal(&cfg)
+		require.NoError(t, err)
+
+		conf, res, err := LoadKubernetesConfiguration("c", "default", &fakeOperatorClient{resp: b})
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", conf.Spec.WorkflowSpec.GetStateStore())
+		require.NotNil(t, res.Spec.WorkflowSpec)
+		assert.Equal(t, "wallet-workflows", res.Spec.WorkflowSpec.StateStore)
 	})
 }
 

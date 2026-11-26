@@ -349,6 +349,13 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	return errors.Join(errs.Slice()...)
 }
 
+// DeactivateAll halts every actor as HaltAll does. HaltAll records no
+// rebalance and leaves the factory serving, so it is also how this factory
+// deactivates the actors of a type which stays hosted.
+func (f *factory) DeactivateAll(ctx context.Context) error {
+	return f.HaltAll(ctx)
+}
+
 // CancelWakes cancels the detached local wakes as HaltAll does, without
 // deactivating the actors, for a daprd turning into a fallback host in place.
 // It has no local executor left to drive them, and a wake parked in a stall

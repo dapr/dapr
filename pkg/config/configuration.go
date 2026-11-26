@@ -320,6 +320,18 @@ type WorkflowSpec struct {
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+
+	// StateStore is the name of the state store which holds the state of the
+	// app's workflow actor types: the workflow, activity, executor and
+	// retentioner actors. They are bound to it together, as an actor type is
+	// bound by spec.actors.stateStores, and never fall back to the default
+	// actor state store. If omitted, they use the default actor state store.
+	// Setting or changing it does not migrate state. The state of the workflows
+	// started with another store stays in that store, where daprd no longer
+	// reads, lists, purges or cleans it up, so those workflows are not found
+	// and do not continue. Set or change it only when the app has no workflows
+	// in progress, and to the same value on every replica of the app.
+	StateStore string `json:"stateStore,omitempty" yaml:"stateStore,omitempty"`
 }
 
 // WorkflowPriority is the priority block of spec.workflow.
@@ -433,6 +445,15 @@ func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// GetStateStore returns the name of the state store bound to the workflow
+// actor types, or "" if they use the default actor state store.
+func (w *WorkflowSpec) GetStateStore() string {
+	if w == nil {
+		return ""
+	}
+	return w.StateStore
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
