@@ -168,10 +168,23 @@ func (o *orchestrator) parentNotification(ctx context.Context, state *wfenginest
 			},
 		}
 	} else {
+		fd := completed.GetFailureDetails()
+		if fd == nil {
+			errType := "WorkflowFailed"
+			errMsg := "child workflow failed"
+			if completed.GetWorkflowStatus() == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED {
+				errType = "WorkflowTerminated"
+				errMsg = "child workflow was terminated"
+			}
+			fd = &protos.TaskFailureDetails{
+				ErrorType:    errType,
+				ErrorMessage: errMsg,
+			}
+		}
 		evt.EventType = &protos.HistoryEvent_ChildWorkflowInstanceFailed{
 			ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{
 				TaskScheduledId: parent.GetTaskScheduledId(),
-				FailureDetails:  completed.GetFailureDetails(),
+				FailureDetails:  fd,
 			},
 		}
 	}
