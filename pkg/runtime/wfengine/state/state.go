@@ -186,7 +186,25 @@ type State struct {
 	signingCertificateLength         int
 	externalSigningCertificateLength int
 	signatureLength                  int
+
+	// summary is the resolved view of the instance as of the last load or
+	// successful save, with the facts that keep it current from the new
+	// events of each save. A load derives it from the whole history. nil
+	// means unknown: the next save derives it from the whole history.
+	// pendingSummary is the summary that the last GetSaveRequest wrote.
+	// ResetChangeTracking commits it.
+	summary        *backend.BackendWorkflowSummary
+	summaryFacts   summaryFacts
+	pendingSummary *pendingSummary
 }
+
+// decodeError marks a load that read a row it cannot decode. Unlike a
+// failed store read, a retry gives the same result. The message and the
+// wrapped error do not change.
+type decodeError struct{ err error }
+
+func (e *decodeError) Error() string { return e.err.Error() }
+func (e *decodeError) Unwrap() error { return e.err }
 
 // TODO: @joshvanl: remove in v1.16
 type legacyWorkflowStateMetadata struct {
@@ -271,6 +289,8 @@ func (s *State) ResetChangeTracking() {
 		s.creationInputPersisted = s.CreationInput != nil
 		s.creationInputChanged = false
 	}
+	// Before the counters reset: the summary check compares them.
+	s.commitSummary()
 
 	s.inboxAddedCount = 0
 	s.inboxRemovedCount = 0
@@ -701,6 +721,11 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		}
 	}
 
+	// The summary is computed from the events that this save adds, not from
+	// the whole history. The committed summary does not change until
+	// ResetChangeTracking, so a failed save or a second call gives the same
+	// row.
+	summary, facts := s.nextSummary(inbox)
 	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
 		InboxLength:                      uint64(len(inbox)),
 		HistoryLength:                    uint64(len(s.History)),
@@ -708,6 +733,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		SignatureLength:                  uint64(len(s.Signatures)),
 		SigningCertificateLength:         uint64(len(s.SigningCertificates)),
 		ExternalSigningCertificateLength: uint64(len(s.ExternalSigningCertificates)),
+		Summary:                          summary,
 	})
 	if err != nil {
 		return nil, err
@@ -734,6 +760,8 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 			ETag:  s.metadataETag,
 		},
 	})
+
+	s.pendingSummary = &pendingSummary{sum: summary, facts: facts, mark: s.currentSummaryMark()}
 
 	return req, nil
 }
@@ -940,7 +968,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var metadataJSON legacyWorkflowStateMetadata
 		jerr := json.Unmarshal(res.Data, &metadataJSON)
 		if jerr != nil {
-			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal workflow metadata: %w", err)}
 		}
 
 		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
@@ -1083,7 +1111,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var hist backend.HistoryEvent
 		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)}
 		}
 
 		wState.Inbox = append(wState.Inbox, &hist)
@@ -1104,12 +1132,20 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var hist backend.HistoryEvent
 		err = proto.Unmarshal(bulkRes[key].Data, &hist)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)}
 		}
 
 		wState.History = append(wState.History, &hist)
 		wState.RawHistory = append(wState.RawHistory, bulkRes[key].Data)
 	}
+
+	// The load derives the summary from the history and inbox that it read,
+	// and ignores the summary in the metadata row. History signing does not
+	// cover the row, so the row can be stale or changed. The next save
+	// writes the derived summary over it. The summary is set before any
+	// verification below, so a state returned with a verification error
+	// still has one.
+	wState.summary, wState.summaryFacts = summarize(wState.History, wState.Inbox)
 
 	for i := range metadata.GetSigningCertificateLength() {
 		key = getMultiEntryKeyName(sigcertKeyPrefix, i)
@@ -1125,7 +1161,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var cert backend.SigningCertificate
 		err = proto.Unmarshal(bulkRes[key].Data, &cert)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal signing certificate from state key '%s': %w", key, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal signing certificate from state key '%s': %w", key, err)}
 		}
 
 		wState.SigningCertificates = append(wState.SigningCertificates, &cert)
@@ -1146,7 +1182,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var ext backend.ExternalSigningCertificate
 		err = proto.Unmarshal(bulkRes[key].Data, &ext)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal external signing certificate from state key '%s': %w", key, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal external signing certificate from state key '%s': %w", key, err)}
 		}
 		loadedExtCerts = append(loadedExtCerts, &ext)
 	}
@@ -1171,7 +1207,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 		var sig backend.HistorySignature
 		err = proto.Unmarshal(bulkRes[key].Data, &sig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history signature from state key '%s': %w", key, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal history signature from state key '%s': %w", key, err)}
 		}
 
 		wState.Signatures = append(wState.Signatures, &sig)
@@ -1193,7 +1229,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 			// TODO: @famarting: remove in v1.16
 			jerr := json.Unmarshal(bulkRes[customStatusKey].Data, &customStatusValue)
 			if jerr != nil {
-				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
+				return nil, &decodeError{fmt.Errorf("failed to unmarshal custom status key entry: %w", err)}
 			}
 
 			wState.CustomStatus.Value = customStatusValue
@@ -1206,7 +1242,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 	if len(bulkRes[propagatedHistoryKey].Data) > 0 {
 		var ph protos.PropagatedHistory
 		if err = proto.Unmarshal(bulkRes[propagatedHistoryKey].Data, &ph); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)
+			return nil, &decodeError{fmt.Errorf("failed to unmarshal propagated history for '%s': %w", actorID, err)}
 		}
 		wState.IncomingHistory = &ph
 	}
@@ -1226,7 +1262,7 @@ func loadWorkflowStateOnce(ctx context.Context, state state.Interface, actorID s
 			// and let the next save rewrite it stamped.
 			var legacy wrapperspb.StringValue
 			if perr := proto.Unmarshal(ci.Data, &legacy); perr != nil {
-				return nil, fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)
+				return nil, &decodeError{fmt.Errorf("failed to unmarshal creation input for '%s': %w", actorID, err)}
 			}
 			parent := executionStartedOf(wState.History, wState.Inbox).GetParentInstance()
 			if parent == nil {

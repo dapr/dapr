@@ -16,6 +16,7 @@ package state
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/ptr"
 )
@@ -277,4 +279,147 @@ func TestLoadWorkflowState_ConcurrentSaveMismatch(t *testing.T) {
 			MetadataKey,
 		}, purgeKeys(t, got))
 	})
+}
+
+func TestLoadSummary_Unreadable(t *testing.T) {
+	t.Parallel()
+
+	const actorID = "wf-summary-unreadable"
+
+	metaBytes := func(t *testing.T, meta *backend.BackendWorkflowStateMetadata) []byte {
+		t.Helper()
+		b, err := proto.Marshal(meta)
+		require.NoError(t, err)
+		return b
+	}
+
+	store := func(get func() (*api.StateResponse, error), bulk api.BulkStateResponse) *statefake.Fake {
+		return statefake.New().
+			WithGetFn(func(context.Context, *api.GetStateRequest, bool) (*api.StateResponse, error) {
+				return get()
+			}).
+			WithGetBulkFn(func(context.Context, *api.GetBulkStateRequest, bool) (api.BulkStateResponse, error) {
+				return bulk, nil
+			})
+	}
+
+	t.Run("metadata that does not decode is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: []byte{0xff, 0xff, 0xff}}, nil
+		}, nil)
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	t.Run("metadata over the entry limit is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: maxStateEntries + 1})}, nil
+		}, nil)
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	t.Run("a history row that does not decode is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: 1, Generation: 1})}, nil
+		}, api.BulkStateResponse{"history-000000": {Data: []byte{0xff, 0xff, 0xff}}})
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	t.Run("a custom status row that does not decode is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{Generation: 1})}, nil
+		}, api.BulkStateResponse{"customStatus": {Data: []byte{0xff}}})
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	// The metadata declares a signature that the store does not have. The
+	// load returns the state with a VerificationError.
+	t.Run("a state that fails verification is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: 1, SignatureLength: 1, Generation: 1})}, nil
+		}, api.BulkStateResponse{"history-000000": {Data: historyBytes(t)}})
+		_, lerr := LoadWorkflowState(t.Context(), s, actorID, testOpts())
+		var verr *wferrors.VerificationError
+		require.ErrorAs(t, lerr, &verr)
+
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	// The history is signed and this daprd has no signer.
+	t.Run("a configuration error is returned", func(t *testing.T) {
+		t.Parallel()
+		sig, err := proto.Marshal(&backend.HistorySignature{EventCount: 1})
+		require.NoError(t, err)
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: 1, SignatureLength: 1, Generation: 1})}, nil
+		}, api.BulkStateResponse{"history-000000": {Data: historyBytes(t)}, "signature-000000": {Data: sig}})
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		var cerr *wferrors.ConfigurationError
+		require.ErrorAs(t, err, &cerr)
+		assert.Nil(t, sum)
+	})
+
+	t.Run("a missing history row with unchanged metadata is skipped", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{
+				Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: 1, Generation: 1}),
+				ETag: ptr.Of("1"),
+			}, nil
+		}, nil)
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.NoError(t, err)
+		assert.Nil(t, sum)
+	})
+
+	// Each read sees another metadata ETag: saves land between the reads, so
+	// a retry of the list can succeed.
+	t.Run("a missing history row with changing metadata is returned", func(t *testing.T) {
+		t.Parallel()
+		var gets atomic.Int64
+		s := store(func() (*api.StateResponse, error) {
+			return &api.StateResponse{
+				Data: metaBytes(t, &backend.BackendWorkflowStateMetadata{HistoryLength: 1, Generation: 1}),
+				ETag: ptr.Of(strconv.FormatInt(gets.Add(1), 10)),
+			}, nil
+		}, nil)
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "declared in metadata")
+		assert.Nil(t, sum)
+	})
+
+	t.Run("a failed store read is returned", func(t *testing.T) {
+		t.Parallel()
+		s := store(func() (*api.StateResponse, error) {
+			return nil, assert.AnError
+		}, nil)
+		sum, err := LoadSummary(t.Context(), s, actorID, testOpts())
+		require.ErrorIs(t, err, assert.AnError)
+		assert.Nil(t, sum)
+	})
+}
+
+// historyBytes returns one encoded ExecutionStarted history event.
+func historyBytes(t *testing.T) []byte {
+	t.Helper()
+	b, err := proto.Marshal(&backend.HistoryEvent{EventId: -1, EventType: &protos.HistoryEvent_ExecutionStarted{
+		ExecutionStarted: &protos.ExecutionStartedEvent{Name: "wf"},
+	}})
+	require.NoError(t, err)
+	return b
 }
