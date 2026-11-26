@@ -133,6 +133,31 @@ type ConfigurationSpec struct {
 	WasmSpec *WasmSpec `json:"wasm,omitempty"`
 	// +optional
 	WorkflowSpec *WorkflowSpec `json:"workflow,omitempty"`
+	// +optional
+	ActorsSpec *ActorsSpec `json:"actors,omitempty"`
+}
+
+// ActorsSpec defines the configuration for Dapr actors.
+type ActorsSpec struct {
+	// stateStores binds actor types to state stores other than the default
+	// actor state store. A bound actor type uses only its bound store and
+	// never falls back to the default one.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty"`
+}
+
+// ActorStateStoreBinding binds a set of actor types to one state store.
+type ActorStateStoreBinding struct {
+	// name is the name of the state store component.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// actorTypes are the actor types whose state is kept in this store.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:items:MinLength=1
+	// +listType=set
+	ActorTypes []string `json:"actorTypes"`
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.

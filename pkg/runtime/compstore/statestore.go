@@ -25,6 +25,7 @@ func (c *ComponentStore) AddStateStore(name string, store state.Store) {
 	defer c.lock.Unlock()
 
 	c.states[name] = store
+	c.bumpStateRevLocked(name)
 }
 
 func (c *ComponentStore) AddStateStoreActor(name string, store state.Store) error {
@@ -36,6 +37,7 @@ func (c *ComponentStore) AddStateStoreActor(name string, store state.Store) erro
 	}
 
 	c.states[name] = store
+	c.bumpStateRevLocked(name)
 	c.actorStateStore.name = name
 	c.actorStateStore.store = store
 	c.actorStateStore.rev++
@@ -70,6 +72,25 @@ func (c *ComponentStore) DeleteStateStore(name string) {
 	}
 
 	delete(c.states, name)
+	c.bumpStateRevLocked(name)
+}
+
+// GetStateStoreRevision returns the revision of the named state store. It
+// changes every time the store is added or deleted, so comparing revisions
+// detects that the store was removed or reloaded, even when a delete and an
+// add are observed together. It is zero for a store never loaded.
+func (c *ComponentStore) GetStateStoreRevision(name string) uint64 {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return c.stateRevs[name]
+}
+
+// bumpStateRevLocked records a change of the named state store. Must be
+// called with lock held.
+func (c *ComponentStore) bumpStateRevLocked(name string) {
+	c.stateRev++
+	c.stateRevs[name] = c.stateRev
 }
 
 func (c *ComponentStore) StateStoresLen() int {
