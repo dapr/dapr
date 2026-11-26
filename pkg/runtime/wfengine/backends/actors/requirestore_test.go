@@ -25,6 +25,7 @@ import (
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/kit/logger"
 )
 
@@ -74,6 +75,16 @@ func TestRequireActorStateStore(t *testing.T) {
 
 	t.Run("both stores loaded", func(t *testing.T) {
 		require.NoError(t, newBackend(t, true, true).requireActorStateStore(""))
+	})
+
+	// Listing reads the bound store, but fails like the other operations
+	// without the default actor state store.
+	t.Run("listing requires the default actor state store", func(t *testing.T) {
+		_, err := newBackend(t, false, true).ListInstanceIDs(t.Context(), new(protos.ListInstanceIDsRequest))
+		require.ErrorIs(t, err, messages.ErrActorRuntimeNotFound)
+
+		_, err = newBackend(t, true, false).ListInstanceIDs(t.Context(), new(protos.ListInstanceIDsRequest))
+		require.ErrorContains(t, err, "is bound to state store wallet-workflows, which is not loaded")
 	})
 }
 

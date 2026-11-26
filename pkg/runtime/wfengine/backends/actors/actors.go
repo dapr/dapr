@@ -1439,6 +1439,10 @@ func (abe *Actors) OnWorkflowTaskCompletion(request *protos.WorkflowRequest, cb 
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
+	if err := abe.requireActorStateStore(abe.appID); err != nil {
+		return nil, err
+	}
+
 	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
 		StoreResolver:     abe.actors.StateStoreResolver(),
 		WorkflowActorType: abe.workflowActorType,
