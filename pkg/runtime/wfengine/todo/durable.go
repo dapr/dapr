@@ -23,7 +23,9 @@ const (
 	DurableProperty = "dapr.durable"
 
 	// DurableHeader is the response header daprd sets on a completion call
-	// it answered only after the result was saved.
+	// it answered only after the result was saved. CompleteWorkflowTask
+	// always waits. A worker asks CompleteActivityTask to wait by sending
+	// the header with the value "true".
 	DurableHeader = "dapr-workflow-durable"
 )
 
@@ -127,6 +129,14 @@ func (d *Durables) Fulfil(key, token string, durable *Durable) {
 	if token != "" {
 		fill(d.waiting[durableKey(key, token)])
 	}
+}
+
+// Expecting reports whether a completion call expects the result of task
+// key with the given completion token.
+func (d *Durables) Expecting(key, token string) bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return len(d.waiting[durableKey(key, token)]) > 0
 }
 
 // Close ends the expectation, and returns the Durable of the work item the

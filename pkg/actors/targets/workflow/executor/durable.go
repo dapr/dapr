@@ -28,12 +28,27 @@ const (
 	// item its result ends in.
 	MetadataCompletionToken = "completiontoken"
 
+	// MetadataAwaitSaved asks the daprd that delivers a forwarded activity
+	// completion to wait for its result to be saved, because the worker
+	// asked to wait. A workflow completion is always waited for.
+	MetadataAwaitSaved = "awaitsaved"
+
 	// MetadataSaved is the response header of a Complete call that waited
 	// for the delivered result to be saved: "true" when it was saved, and
 	// "false" when it was not. A call that delivered nothing on this daprd,
 	// or whose result no work item took, does not set it.
 	MetadataSaved = "saved"
 )
+
+// awaitsSave reports whether a Complete call waits for the result it
+// delivers to be saved.
+func awaitsSave(req *internalsv1pb.InternalInvokeRequest, taskType string) bool {
+	if taskType == TaskTypeWorkflow {
+		return true
+	}
+	v, ok := req.GetMetadata()[MetadataAwaitSaved]
+	return ok && len(v.GetValues()) > 0 && v.GetValues()[0] == "true"
+}
 
 func completionTokenOf(req *internalsv1pb.InternalInvokeRequest) string {
 	if v, ok := req.GetMetadata()[MetadataCompletionToken]; ok && len(v.GetValues()) > 0 {
@@ -45,12 +60,11 @@ func completionTokenOf(req *internalsv1pb.InternalInvokeRequest) string {
 // deliverDurably runs run, which hands a completion to its waiter on this
 // daprd, and then waits for the result to be saved when a work item took
 // it. The answer carries MetadataSaved, so the daprd that forwarded the
-// completion answers the worker as if it had delivered it itself. Only a
-// workflow completion waits: no activity work item settles a Durable, and an
-// activity completion without a token could otherwise take the Durable of a
-// workflow whose instance ID equals the activity's actor ID.
+// completion answers the worker as if it had delivered it itself. A
+// workflow completion always waits, and an activity completion only when
+// the worker asked to wait (see awaitsSave).
 func (e *executor) deliverDurably(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, run func()) (*internalsv1pb.InternalInvokeResponse, error) {
-	if e.durables == nil || taskTypeOf(req, e.actorID) != TaskTypeWorkflow {
+	if e.durables == nil || !awaitsSave(req, taskTypeOf(req, e.actorID)) {
 		run()
 		return nil, nil
 	}

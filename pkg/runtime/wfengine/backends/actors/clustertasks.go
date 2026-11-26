@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -166,6 +167,7 @@ func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key, 
 		WithMetadata(map[string][]string{
 			executor.MetadataTaskType:        {taskType},
 			executor.MetadataCompletionToken: {token},
+			executor.MetadataAwaitSaved:      {strconv.FormatBool(be.durables != nil && be.durables.Expecting(key, token))},
 		})
 
 	res, err := router.Call(ctx, req)

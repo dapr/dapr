@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -27,13 +28,15 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
-// A forwarded workflow completion is answered once its result is saved. An
-// activity completion is answered at once, even when a workflow's Durable is
-// handed over under the same key.
-func TestCompleteWaitsForWorkflowSave(t *testing.T) {
+// A completion forwarded to the daprd that owns its task is answered once
+// the result is saved: always for a workflow, and for an activity only when
+// the worker asked to wait.
+func TestCompleteWaitsForSave(t *testing.T) {
 	t.Parallel()
 
-	complete := func(t *testing.T, taskType string, turn *todo.Durable) <-chan *internalsv1pb.InternalInvokeResponse {
+	// complete delivers a forwarded completion of taskType with token t1 to
+	// an executor whose waiter hands over turn, and returns its answer.
+	complete := func(t *testing.T, taskType string, await bool, turn *todo.Durable) <-chan *internalsv1pb.InternalInvokeResponse {
 		t.Helper()
 		durables := todo.NewDurables()
 		f := &factory{
@@ -43,15 +46,19 @@ func TestCompleteWaitsForWorkflowSave(t *testing.T) {
 			durables:     durables,
 		}
 		dereg := f.pending.RegisterCallback(PendingKey(taskType, "abc"), func(pending.Result) {
-			durables.Fulfil("abc", "", turn)
+			durables.Fulfil("abc", "t1", turn)
 		})
 		t.Cleanup(dereg)
 
+		md := map[string][]string{MetadataTaskType: {taskType}, MetadataCompletionToken: {"t1"}}
+		if await {
+			md[MetadataAwaitSaved] = []string{"true"}
+		}
 		req := internalsv1pb.NewInternalInvokeRequest(MethodComplete).
 			WithActor(f.actorType, "abc").
 			WithData([]byte("result")).
 			WithContentType(invokev1.ProtobufContentType).
-			WithMetadata(map[string][]string{MetadataTaskType: {taskType}})
+			WithMetadata(md)
 
 		resCh := make(chan *internalsv1pb.InternalInvokeResponse, 1)
 		go func() {
@@ -62,32 +69,53 @@ func TestCompleteWaitsForWorkflowSave(t *testing.T) {
 		return resCh
 	}
 
-	t.Run("a workflow completion waits for the save", func(t *testing.T) {
-		t.Parallel()
-		turn := todo.NewDurable()
-		resCh := complete(t, TaskTypeWorkflow, turn)
+	saved := func(res *internalsv1pb.InternalInvokeResponse) []string {
+		return res.GetHeaders()[MetadataSaved].GetValues()
+	}
+
+	requireWaiting := func(t *testing.T, resCh <-chan *internalsv1pb.InternalInvokeResponse) {
+		t.Helper()
 		select {
 		case <-resCh:
-			require.FailNow(t, "answered before the save")
+			require.FailNow(t, "answered before the result was saved")
 		case <-time.After(200 * time.Millisecond):
 		}
-		turn.Settle(nil)
+	}
+
+	requireAnswer := func(t *testing.T, resCh <-chan *internalsv1pb.InternalInvokeResponse) *internalsv1pb.InternalInvokeResponse {
+		t.Helper()
 		select {
 		case res := <-resCh:
-			assert.Equal(t, []string{"true"}, res.GetHeaders()[MetadataSaved].GetValues())
+			return res
 		case <-time.After(5 * time.Second):
-			require.FailNow(t, "not answered after the save")
+			require.FailNow(t, "not answered")
+			return nil
 		}
+	}
+
+	t.Run("a workflow result waits for the save", func(t *testing.T) {
+		t.Parallel()
+		turn := todo.NewDurable()
+		resCh := complete(t, TaskTypeWorkflow, false, turn)
+		requireWaiting(t, resCh)
+
+		turn.Settle(nil)
+		assert.Equal(t, []string{"true"}, saved(requireAnswer(t, resCh)))
 	})
 
-	t.Run("an activity completion is answered at once", func(t *testing.T) {
+	t.Run("an activity result does not wait unless asked to", func(t *testing.T) {
 		t.Parallel()
-		resCh := complete(t, TaskTypeActivity, todo.NewDurable())
-		select {
-		case res := <-resCh:
-			assert.Nil(t, res.GetHeaders()[MetadataSaved])
-		case <-time.After(5 * time.Second):
-			require.FailNow(t, "the activity completion waited for a workflow save")
-		}
+		resCh := complete(t, TaskTypeActivity, false, todo.NewDurable())
+		assert.Empty(t, saved(requireAnswer(t, resCh)))
+	})
+
+	t.Run("an activity result asked to wait reports an unsaved result", func(t *testing.T) {
+		t.Parallel()
+		turn := todo.NewDurable()
+		resCh := complete(t, TaskTypeActivity, true, turn)
+		requireWaiting(t, resCh)
+
+		turn.Settle(errors.New("parent workflow unreachable"))
+		assert.Equal(t, []string{"false"}, saved(requireAnswer(t, resCh)))
 	})
 }

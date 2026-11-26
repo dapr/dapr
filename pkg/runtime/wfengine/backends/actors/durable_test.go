@@ -44,6 +44,7 @@ import (
 func newDurableBackend() *Actors {
 	return &Actors{
 		pendingTasksBackend: pendingtracker.New(local.NewTasksBackend()),
+		activityExecs:       newActivityExecutions(),
 		durables:            todo.NewDurables(),
 	}
 }

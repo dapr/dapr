@@ -851,6 +851,10 @@ func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Acti
 
 	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
+	// As for a workflow work item: a completion call waiting on this result
+	// sees the execution settle unsaved.
+	abe.fulfilActivityDurable(wi)
+
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
@@ -962,6 +966,7 @@ func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
 func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	defer abe.releaseActivity()
 
+	abe.fulfilActivityDurable(wi)
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -1303,11 +1308,18 @@ func (abe *Actors) CancelWorkflowTask(ctx context.Context, instanceID api.Instan
 	}))
 }
 
-// CompleteActivityTask implements backend.Backend.
+// CompleteActivityTask implements backend.Backend. When the worker asks for
+// it with the todo.DurableHeader request header, it answers only once the
+// result is published to the parent workflow; see completeDurably.
 func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
-	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
+	deliver := func() error {
 		return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
-	}))
+	}
+	if !wantsDurable(ctx) {
+		return ignoreUnknownTask(abe.callWithBackoff(ctx, deliver))
+	}
+	key := common.ActivityActorID(response.GetInstanceId(), response.GetTaskId())
+	return abe.completeDurably(ctx, key, response.GetCompletionToken(), deliver)
 }
 
 // CompleteWorkflowTask implements backend.Backend. It answers only once the
@@ -1327,6 +1339,15 @@ func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.Wo
 func (abe *Actors) fulfilDurable(wi *backend.WorkflowWorkItem) {
 	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
 		abe.durables.Fulfil(string(wi.InstanceID), wi.CompletionToken, durable)
+	}
+}
+
+// fulfilActivityDurable hands the activity execution's Durable to the
+// completion call whose result the work item ended in.
+func (abe *Actors) fulfilActivityDurable(wi *backend.ActivityWorkItem) {
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		key := common.ActivityActorID(string(wi.InstanceID), wi.NewEvent.GetEventId())
+		abe.durables.Fulfil(key, wi.CompletionToken, durable)
 	}
 }
 

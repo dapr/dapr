@@ -15,6 +15,7 @@ package actors
 
 import (
 	"context"
+	"slices"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -66,4 +67,15 @@ func waitDurable(ctx context.Context, durable *todo.Durable) error {
 		return status.Errorf(codes.Aborted, "result was not saved: %s", err)
 	}
 	return nil
+}
+
+// wantsDurable reports whether the worker sent todo.DurableHeader with the
+// value "true" on the call.
+//
+// Waiting is opt-in for activities: the wait lasts until the parent workflow
+// takes the result, which can be behind a turn that waits for the worker. A
+// worker that runs activities and workflows on one bounded pool of threads
+// can then block every thread on answers that wait for each other.
+func wantsDurable(ctx context.Context) bool {
+	return slices.Contains(metadata.ValueFromIncomingContext(ctx, todo.DurableHeader), "true")
 }
