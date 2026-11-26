@@ -133,6 +133,7 @@ func TestMaxBodySize(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, runtime.DefaultMaxRequestBodySize, opts.MaxRequestSize)
+		assert.Equal(t, 16<<20, opts.MaxRequestSize)
 	})
 
 	t.Run("max-body-size is unitless", func(t *testing.T) {

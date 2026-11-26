@@ -62,9 +62,11 @@ const (
 	// internalGRPCStablePortStart is the lowest stable port picked for the
 	// internal gRPC server when no port is configured.
 	internalGRPCStablePortStart = 47300
-	// DefaultMaxRequestBodySize is the default option for the maximum body size in bytes for Dapr HTTP servers.
-	// Equal to 4MB
-	DefaultMaxRequestBodySize = 4 << 20
+	// DefaultMaxRequestBodySize is the default maximum body size in bytes for
+	// the Dapr HTTP and gRPC servers: 16 MiB. A workflow's history must fit in
+	// one gRPC message to its worker, so this value also limits the size of a
+	// workflow's history.
+	DefaultMaxRequestBodySize = 16 << 20
 	// DefaultAPIListenAddress is which address to listen for the Dapr HTTP and GRPC APIs. Empty string is all addresses.
 	DefaultAPIListenAddress = ""
 	// DefaultReadBufferSize is the default option for the maximum header size in bytes for Dapr HTTP servers.
