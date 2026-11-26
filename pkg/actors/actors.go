@@ -855,6 +855,7 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 
 		return &runtimev1pb.ActorRuntime{
 			RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
+			StateStores:   a.boundStateStoresStatus(),
 		}
 	}
 
@@ -885,7 +886,31 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 		ActiveActors:  count,
 		Placement:     statusMessage,
 		HostReady:     hostReady,
+		StateStores:   a.boundStateStoresStatus(),
 	}
+}
+
+// boundStateStoresStatus returns the state stores bound to actor types,
+// sorted by name, each with its actor types, sorted, and whether the store is
+// loaded now.
+func (a *actors) boundStateStoresStatus() []*runtimev1pb.ActorRuntimeStateStore {
+	typesOf := make(map[string][]string)
+	for actorType, storeName := range a.stateResolver.Bindings() {
+		typesOf[storeName] = append(typesOf[storeName], actorType)
+	}
+
+	stores := make([]*runtimev1pb.ActorRuntimeStateStore, 0, len(typesOf))
+	for _, storeName := range slices.Sorted(maps.Keys(typesOf)) {
+		actorTypes := typesOf[storeName]
+		slices.Sort(actorTypes)
+		_, loaded := a.compStore.GetStateStore(storeName)
+		stores = append(stores, &runtimev1pb.ActorRuntimeStateStore{
+			Name:       storeName,
+			ActorTypes: actorTypes,
+			Loaded:     loaded,
+		})
+	}
+	return stores
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

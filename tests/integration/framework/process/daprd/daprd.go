@@ -626,6 +626,13 @@ type MetadataActorRuntime struct {
 	HostReady     bool                               `json:"hostReady"`
 	Placement     string                             `json:"placement"`
 	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
+	StateStores   []*MetadataActorRuntimeStateStore  `json:"stateStores"`
+}
+
+type MetadataActorRuntimeStateStore struct {
+	Name       string   `json:"name"`
+	ActorTypes []string `json:"actorTypes"`
+	Loaded     bool     `json:"loaded"`
 }
 
 type MetadataWorkflows struct {

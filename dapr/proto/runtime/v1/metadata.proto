@@ -75,6 +75,21 @@ message ActorRuntime {
   bool host_ready = 3 [json_name = "hostReady"];
   // Custom message from the placement provider.
   string placement = 4 [json_name = "placement"];
+  // The state stores bound to actor types by the configuration's
+  // spec.actors.stateStores and spec.workflow.stateStore, sorted by name.
+  // Actor types which are not listed use the default actor state store.
+  repeated ActorRuntimeStateStore state_stores = 5 [json_name = "stateStores"];
+}
+
+// ActorRuntimeStateStore is a state store bound to a set of actor types.
+message ActorRuntimeStateStore {
+  // The name of the state store component.
+  string name = 1;
+  // The actor types whose state is kept in this state store, sorted.
+  repeated string actor_types = 2 [json_name = "actorTypes"];
+  // Whether the state store component is loaded. State operations of the
+  // actor types fail while it is not.
+  bool loaded = 3;
 }
 
 message ActiveActorsCount {

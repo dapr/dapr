@@ -2155,13 +2155,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false},"workflows":{"connectedWorkers":1}}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false,"stateStores":[{"name":"wallet-balance","actorTypes":["BalanceActor"],"loaded":false},{"name":"wallet-transactions","actorTypes":["AuditActor","TransactionActor"],"loaded":true}]},"workflows":{"connectedWorkers":1}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		var called atomic.Int64
 		actors.WithRuntimeStatus(func() *runtimev1pb.ActorRuntime {
 			called.Add(1)
-			return new(runtimev1pb.ActorRuntime)
+			return &runtimev1pb.ActorRuntime{
+				StateStores: []*runtimev1pb.ActorRuntimeStateStore{
+					{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+					{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Loaded: true},
+				},
+			}
 		})
 		resp := fakeServer(t).DoRequest("GET", "v1.0/metadata", nil, nil)
 
