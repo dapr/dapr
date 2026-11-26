@@ -1,0 +1,75 @@
+diff --git a/tests/integration/suite/daprd/workflow/security/forgedresult.go b/tests/integration/suite/daprd/workflow/security/forgedresult.go
+index 426ee7130..91557dad7 100644
+--- a/tests/integration/suite/daprd/workflow/security/forgedresult.go
++++ b/tests/integration/suite/daprd/workflow/security/forgedresult.go
+@@ -56,7 +56,9 @@ func init() {
+ // is not the app the activity was dispatched to; a payload that is not an
+ // activity result (a termination, a timer firing) is dropped before it can
+ // reach the inbox; a result for a task the workflow has not scheduled yet is
+-// dropped rather than parked in the inbox.
++// refused until the task is scheduled and then dropped by the creator check,
++// unless its creator stamped it outside the retry window, in which case it
++// is dropped on the first fire.
+ // Every forged reminder is acked and deleted, the sidecar stays up, and the
+ // workflow completes with the real activity outputs.
+ type forgedresult struct {
+@@ -73,10 +75,10 @@ func (f *forgedresult) Setup(t *testing.T) []framework.Option {
+ 	f.sched = scheduler.New(t, scheduler.WithSentry(f.sentry), scheduler.WithID("dapr-scheduler-server-0"))
+ 
+ 	f.dropped = logline.New(t, logline.WithStdoutLineContains(
+-		"dropping activity result: it was sent by app 'other' but the task was dispatched to 'target'",
++		"dropping completion (sender ''): it was sent by app 'other' but the task was dispatched to 'target'",
+ 		"dropping activity-result reminder 'activity-result-forged-terminate' from app 'other': payload is not an activity result",
+ 		"dropping activity-result reminder 'activity-result-forged-timer' from app 'other': payload is not an activity result",
+-		"dropping activity result: it was sent by app 'other' for a task that has not been scheduled",
++		"dropping activity-result reminder 'activity-result-forged-ahead-future', its scheduling did not become durable",
+ 	))
+ 
+ 	f.target = daprd.New(t,
+@@ -166,7 +168,12 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
+ 			},
+ 		},
+ 		"activity-result-forged-ahead": completed(1, `"FORGED1"`),
++		// The creator picks the stamp that bounds the retry of a refused
++		// result: one far in the future must expire like an ancient one, not
++		// keep the reminder refiring forever.
++		"activity-result-forged-ahead-future": completed(1, `"FORGED1"`),
+ 	}
++	forged["activity-result-forged-ahead-future"].Timestamp = timestamppb.New(time.Now().Add(time.Hour))
+ 
+ 	other := f.sched.ClientMTLS(t, ctx, "other")
+ 	for name, ev := range forged {
+@@ -221,11 +228,18 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
+ 		if !assert.NoError(c, jerr) {
+ 			return
+ 		}
+-		for name := range forged {
++		for _, name := range []string{"activity-result-forged", "activity-result-forged-terminate", "activity-result-forged-timer", "activity-result-forged-ahead-future"} {
+ 			assert.NotContains(c, names, name, "the forged reminder must be acked and deleted, not retried")
+ 		}
+ 	}, time.Second*20, time.Millisecond*10)
+ 
++	// The result for the not yet scheduled task is refused, not acked, so
++	// the Scheduler keeps re-delivering it while its scheduling could still
++	// be committing.
++	names, err := jobNames()
++	require.NoError(t, err)
++	assert.Contains(t, names, "activity-result-forged-ahead")
++
+ 	meta, err := cl.FetchOrchestrationMetadata(ctx, id, api.WithFetchPayloads(true))
+ 	require.NoError(t, err)
+ 	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus(), "no forged event may move the workflow")
+@@ -235,4 +249,13 @@ func (f *forgedresult) Run(t *testing.T, ctx context.Context) {
+ 	require.NoError(t, err)
+ 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+ 	assert.Equal(t, `"real+second"`, meta.GetOutput().GetValue())
++
++	// Once task 1 is scheduled the re-delivered result fails the creator
++	// check and is acked, so the one-shot reminder goes away.
++	assert.EventuallyWithT(t, func(c *assert.CollectT) {
++		names, jerr := jobNames()
++		if assert.NoError(c, jerr) {
++			assert.NotContains(c, names, "activity-result-forged-ahead")
++		}
++	}, time.Second*20, time.Millisecond*10)
+ }
