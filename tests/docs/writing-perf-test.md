@@ -6,7 +6,7 @@ Before writing a perf test, make sure that you have a configured [local test env
 
 In order to create a performance test for a given functionality you must ensure that the functionality is testable in some way. There are functionalities that might need an intermediate app to act as the user application, others don't, as an example, an outputbinding may not require an app to be tested, you can make calls to daprd and collect the results. But if you have to test a functionality that requires an application, e.g any actors-related feature, you may need a custom app as well.
 
-Follow the same as described in our [e2e-tests docs](./running-e2e-test.md#writing-e2e-test.md) to create custom test apps, make sure that none of the already created apps would serve as your test app, they can be reusable without further problems.
+Follow the same as described in our [e2e-tests docs](./writing-e2e-test.md) to create custom test apps, make sure that none of the already created apps would serve as your test app, they can be reusable without further problems.
 
 ## Types of testing
 
