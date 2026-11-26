@@ -77,6 +77,8 @@ type Options struct {
 	// of this app with a free slot instead of the placement owner. Nil means
 	// never.
 	DispatchPull func(activityName string) bool
+	// ReceivedPriority resolves an activity from what the calling app sent.
+	ReceivedPriority func(activityName, sentLevel string, sentWeight uint32) (string, uint32)
 
 	// Detached runs the work that must outlive a placement churn (the
 	// drive-failure escalations and the handed-off result publishes) on the
@@ -142,7 +144,8 @@ type factory struct {
 
 	// dispatchPull resolves the configured dispatch mode per activity name
 	// (see Options.DispatchPull). Nil means never.
-	dispatchPull func(activityName string) bool
+	dispatchPull     func(activityName string) bool
+	receivedPriority func(activityName, sentLevel string, sentWeight uint32) (string, uint32)
 
 	// drives is the churn-scoped runner carrying those local drives: HaltAll
 	// (which also fires on placement disconnection) aborts and drains it, then
@@ -235,6 +238,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		fastPath:         opts.FastPath,
 		fallback:         opts.Fallback,
 		dispatchPull:     opts.DispatchPull,
+		receivedPriority: opts.ReceivedPriority,
 		executionHeld:    opts.ExecutionHeld,
 		registerResolver: opts.RegisterResolver,
 		staleClaimAfter:  2 * common.JanitorPeriod(),

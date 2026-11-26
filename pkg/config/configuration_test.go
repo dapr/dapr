@@ -1428,12 +1428,15 @@ func TestLoadKubernetesConfiguration(t *testing.T) {
 
 func TestActivityPriority(t *testing.T) {
 	var nilSpec *WorkflowSpec
-	level, weight := nilSpec.ActivityPriority("wf", "act")
+	level, weight := nilSpec.ActivityPriority("wf", "act", "", 0)
 	require.Empty(t, level)
 	require.Zero(t, weight)
-	level, weight = (&WorkflowSpec{}).ActivityPriority("wf", "act")
+	level, weight = (&WorkflowSpec{}).ActivityPriority("wf", "act", "", 0)
 	require.Empty(t, level)
 	require.Zero(t, weight)
+	level, weight = nilSpec.ActivityPriority("wf", "act", PriorityLevelLow, 4)
+	require.Equal(t, PriorityLevelLow, level, "no config: what the workflow was started with")
+	require.Equal(t, uint32(4), weight)
 
 	spec := &WorkflowSpec{Priority: &WorkflowPriority{
 		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
@@ -1447,18 +1450,123 @@ func TestActivityPriority(t *testing.T) {
 		},
 	}}
 
-	check := func(workflow, activity, wantLevel string, wantWeight uint32, msg string) {
+	check := func(workflow, activity, startLevel string, startWeight uint32, wantLevel string, wantWeight uint32, msg string) {
 		t.Helper()
-		level, weight := spec.ActivityPriority(workflow, activity)
+		level, weight := spec.ActivityPriority(workflow, activity, startLevel, startWeight)
 		require.Equal(t, wantLevel, level, msg)
 		require.Equal(t, wantWeight, weight, msg)
 	}
-	check("other-wf", "other", PriorityLevelHigh, 2, "nothing of its own: the default")
-	check("critical-wf", "other", PriorityLevelCritical, 2, "level from the calling workflow, weight from the default")
-	check("critical-wf", "weighted", PriorityLevelCritical, 3, "own weight, level from the calling workflow")
-	check("heavy-wf", "weighted", PriorityLevelHigh, 3, "own weight beats the workflow's weight")
-	check("heavy-wf", "other", PriorityLevelHigh, 7, "weight from the calling workflow")
-	check("critical-wf", "background", PriorityLevelBackground, 5, "own values beat the workflow's")
+	check("other-wf", "other", "", 0, PriorityLevelHigh, 2, "nothing of its own: the default")
+	check("critical-wf", "other", "", 0, PriorityLevelCritical, 2, "level from the calling workflow, weight from the default")
+	check("critical-wf", "weighted", "", 0, PriorityLevelCritical, 3, "own weight, level from the calling workflow")
+	check("heavy-wf", "weighted", "", 0, PriorityLevelHigh, 3, "own weight beats the workflow's weight")
+	check("heavy-wf", "other", "", 0, PriorityLevelHigh, 7, "weight from the calling workflow")
+	check("critical-wf", "background", "", 0, PriorityLevelBackground, 5, "own values beat the workflow's")
+
+	check("other-wf", "other", PriorityLevelLow, 4, PriorityLevelLow, 4, "started with values and no entries: they beat the default")
+	check("other-wf", "other", PriorityLevelLow, 0, PriorityLevelLow, 2, "started with a level only: weight from the default")
+	check("other-wf", "other", "", 4, PriorityLevelHigh, 4, "started with a weight only: level from the default")
+	check("critical-wf", "other", PriorityLevelLow, 4, PriorityLevelCritical, 4, "the workflow's entry beats what it was started with, field by field")
+	check("heavy-wf", "other", PriorityLevelLow, 4, PriorityLevelLow, 7, "the workflow's weight beats the started weight, the started level stays")
+	check("other-wf", "weighted", PriorityLevelLow, 4, PriorityLevelLow, 3, "the activity's entry beats what the workflow was started with")
+	check("other-wf", "background", PriorityLevelCritical, 4, PriorityLevelBackground, 5, "the activity's entry beats both started values")
+}
+
+func TestActivityReceivedPriority(t *testing.T) {
+	var nilSpec *WorkflowSpec
+	level, weight := nilSpec.ActivityReceivedPriority("act", PriorityLevelLow, 4)
+	require.Equal(t, PriorityLevelLow, level, "no config: what was sent")
+	require.Equal(t, uint32(4), weight)
+
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default:   &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+		Workflows: []NamedPriorityValues{{Name: new("act"), PriorityLevel: new(PriorityLevelCritical)}},
+		Activities: []NamedPriorityValues{
+			{Name: new("weighted"), FairnessWeight: new(uint32(3))},
+			{Name: new("background"), PriorityLevel: new(PriorityLevelBackground), FairnessWeight: new(uint32(5))},
+		},
+	}}
+	check := func(activity, sentLevel string, sentWeight uint32, wantLevel string, wantWeight uint32, msg string) {
+		t.Helper()
+		level, weight := spec.ActivityReceivedPriority(activity, sentLevel, sentWeight)
+		require.Equal(t, wantLevel, level, msg)
+		require.Equal(t, wantWeight, weight, msg)
+	}
+	check("act", "", 0, PriorityLevelHigh, 2, "nothing sent and no entry: this app's default, not the workflow entry of the same name")
+	check("act", PriorityLevelLow, 4, PriorityLevelLow, 4, "what was sent beats this app's default")
+	check("act", PriorityLevelLow, 0, PriorityLevelLow, 2, "a sent level only: weight from this app's default")
+	check("weighted", PriorityLevelLow, 4, PriorityLevelLow, 3, "own entry beats what was sent, field by field")
+	check("background", PriorityLevelCritical, 9, PriorityLevelBackground, 5, "own entry beats both sent values")
+	check("act", "urgent", 5000, PriorityLevelHigh, 2, "invalid sent values are ignored")
+}
+
+func TestPriorityIgnoresInvalidStartValues(t *testing.T) {
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+	}}
+	for _, l := range []string{"urgent", " high", "lo"} {
+		level, _ := spec.WorkflowPriority("wf", l, 0)
+		require.Equal(t, PriorityLevelHigh, level, l)
+		level, _ = spec.ActivityPriority("wf", "act", l, 0)
+		require.Equal(t, PriorityLevelHigh, level, l)
+		level, _ = spec.ActivityReceivedPriority("act", l, 0)
+		require.Equal(t, PriorityLevelHigh, level, l)
+	}
+	for _, l := range []string{"Critical", "CRITICAL", "critical"} {
+		level, _ := spec.WorkflowPriority("wf", l, 0)
+		require.Equal(t, PriorityLevelCritical, level, "any case: %s", l)
+		level, _ = spec.ActivityPriority("wf", "act", l, 0)
+		require.Equal(t, PriorityLevelCritical, level, l)
+		level, _ = spec.ActivityReceivedPriority("act", l, 0)
+		require.Equal(t, PriorityLevelCritical, level, l)
+	}
+	level, _ := (&WorkflowSpec{Priority: &WorkflowPriority{
+		Workflows: []NamedPriorityValues{{Name: new("wf"), PriorityLevel: new("Low")}},
+	}}).WorkflowPriority("wf", "", 0)
+	require.Equal(t, PriorityLevelLow, level, "an entry in any case is lowered")
+	for _, w := range []uint32{1001, 5000, 4294967295} {
+		_, weight := spec.WorkflowPriority("wf", "", w)
+		require.Equal(t, uint32(2), weight, w)
+		_, weight = spec.ActivityPriority("wf", "act", "", w)
+		require.Equal(t, uint32(2), weight, w)
+	}
+	level, weight := spec.WorkflowPriority("wf", PriorityLevelLow, 1000)
+	require.Equal(t, PriorityLevelLow, level, "valid start values still apply")
+	require.Equal(t, uint32(1000), weight)
+}
+
+func TestWorkflowPriority(t *testing.T) {
+	var nilSpec *WorkflowSpec
+	level, weight := nilSpec.WorkflowPriority("wf", "", 0)
+	require.Empty(t, level)
+	require.Zero(t, weight)
+	level, weight = nilSpec.WorkflowPriority("wf", PriorityLevelLow, 4)
+	require.Equal(t, PriorityLevelLow, level, "no config: what the workflow was started with")
+	require.Equal(t, uint32(4), weight)
+
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+		Workflows: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelCritical)},
+			{Name: new("heavy-wf"), FairnessWeight: new(uint32(7))},
+		},
+		Activities: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelBackground), FairnessWeight: new(uint32(5))},
+		},
+	}}
+
+	check := func(workflow, startLevel string, startWeight uint32, wantLevel string, wantWeight uint32, msg string) {
+		t.Helper()
+		level, weight := spec.WorkflowPriority(workflow, startLevel, startWeight)
+		require.Equal(t, wantLevel, level, msg)
+		require.Equal(t, wantWeight, weight, msg)
+	}
+	check("other-wf", "", 0, PriorityLevelHigh, 2, "nothing of its own: the default")
+	check("critical-wf", "", 0, PriorityLevelCritical, 2, "own level, weight from the default, the activity entry of the same name is ignored")
+	check("heavy-wf", "", 0, PriorityLevelHigh, 7, "own weight, level from the default")
+	check("other-wf", PriorityLevelLow, 4, PriorityLevelLow, 4, "started with values: they beat the default")
+	check("critical-wf", PriorityLevelLow, 4, PriorityLevelCritical, 4, "own level beats the started level, the started weight stays")
+	check("heavy-wf", PriorityLevelLow, 4, PriorityLevelLow, 7, "own weight beats the started weight, the started level stays")
 }
 
 func TestValidateWorkflowPriority(t *testing.T) {
@@ -1487,8 +1595,15 @@ func TestValidateWorkflowPriority(t *testing.T) {
 	err := conf(&WorkflowPriority{Default: &PriorityValues{PriorityLevel: new("urgent")}}).validateWorkflowSpec()
 	require.ErrorContains(t, err, `invalid priorityLevel "urgent" in workflow priority default: must be one of critical, high, normal, low, background`)
 
-	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new("Critical")}}}).validateWorkflowSpec()
-	require.ErrorContains(t, err, `invalid priorityLevel "Critical" in workflow priority workflows entry "a"`)
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new("urgent")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid priorityLevel "urgent" in workflow priority workflows entry "a"`)
+
+	for _, level := range []string{"Critical", "HIGH", "Background"} {
+		require.NoError(t, conf(&WorkflowPriority{
+			Default:   &PriorityValues{PriorityLevel: new(level)},
+			Workflows: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(level)}},
+		}).validateWorkflowSpec(), "any case: %s", level)
+	}
 
 	err = conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(uint32(0))}}).validateWorkflowSpec()
 	require.ErrorContains(t, err, "invalid fairnessWeight 0 in workflow priority default: must be between 1 and 1000")
@@ -1536,10 +1651,10 @@ spec:
 `), 0o600))
 	c, err := LoadStandaloneConfiguration(path)
 	require.NoError(t, err)
-	level, weight := c.Spec.WorkflowSpec.ActivityPriority("PaymentTransfer", "SendReceipt")
+	level, weight := c.Spec.WorkflowSpec.ActivityPriority("PaymentTransfer", "SendReceipt", "", 0)
 	require.Equal(t, PriorityLevelCritical, level)
 	require.InDelta(t, 3, weight, 1e-6)
-	level, weight = c.Spec.WorkflowSpec.ActivityPriority("Other", "Other")
+	level, weight = c.Spec.WorkflowSpec.ActivityPriority("Other", "Other", "", 0)
 	require.Equal(t, PriorityLevelHigh, level)
 	require.Zero(t, weight)
 

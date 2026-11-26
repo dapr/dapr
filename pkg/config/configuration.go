@@ -595,9 +595,18 @@ func (p *WorkflowPriority) validate() error {
 	return nil
 }
 
+// PriorityLevelName returns the level name in lower case, and false when it
+// is not one of PriorityLevels.
+func PriorityLevelName(level string) (string, bool) {
+	level = strings.ToLower(level)
+	return level, slices.Contains(PriorityLevels, level)
+}
+
 func validatePriorityValues(where string, level *string, weight *uint32) error {
-	if level != nil && !slices.Contains(PriorityLevels, *level) {
-		return fmt.Errorf("invalid priorityLevel %q in %s: must be one of %s", *level, where, strings.Join(PriorityLevels, ", "))
+	if level != nil {
+		if _, ok := PriorityLevelName(*level); !ok {
+			return fmt.Errorf("invalid priorityLevel %q in %s: must be one of %s", *level, where, strings.Join(PriorityLevels, ", "))
+		}
 	}
 	if weight != nil && (*weight < MinFairnessWeight || *weight > MaxFairnessWeight) {
 		return fmt.Errorf("invalid fairnessWeight %d in %s: must be between %d and %d", *weight, where, MinFairnessWeight, MaxFairnessWeight)
@@ -605,28 +614,56 @@ func validatePriorityValues(where string, level *string, weight *uint32) error {
 	return nil
 }
 
-// ActivityPriority resolves an activity's level and weight: its own entry, else
-// the calling workflow's, else the default. Empty and zero mean unset.
-func (w *WorkflowSpec) ActivityPriority(workflowName, activityName string) (level string, weight uint32) {
-	if w == nil || w.Priority == nil {
-		return "", 0
-	}
-	p := w.Priority
+// ActivityPriority is the activity's entry, else its workflow's entry, else
+// the workflow's start value, else the default, field by field.
+func (w *WorkflowSpec) ActivityPriority(workflowName, activityName, startLevel string, startWeight uint32) (string, uint32) {
+	return w.resolvePriority(activityName, workflowName, startLevel, startWeight)
+}
+
+// WorkflowPriority is the workflow's entry, else its start value, else the default.
+func (w *WorkflowSpec) WorkflowPriority(workflowName, startLevel string, startWeight uint32) (string, uint32) {
+	return w.resolvePriority("", workflowName, startLevel, startWeight)
+}
+
+// ActivityReceivedPriority is the activity's entry, else what the caller sent,
+// else the default.
+func (w *WorkflowSpec) ActivityReceivedPriority(activityName, sentLevel string, sentWeight uint32) (string, uint32) {
+	return w.resolvePriority(activityName, "", sentLevel, sentWeight)
+}
+
+func (w *WorkflowSpec) resolvePriority(activityName, workflowName, startLevel string, startWeight uint32) (level string, weight uint32) {
 	take := func(l *string, wt *uint32) {
 		if level == "" && l != nil {
-			level = *l
+			level, _ = PriorityLevelName(*l)
 		}
 		if weight == 0 && wt != nil {
 			weight = *wt
 		}
 	}
-	if e := findPriority(p.Activities, activityName); e != nil {
-		take(e.PriorityLevel, e.FairnessWeight)
+	var p *WorkflowPriority
+	if w != nil {
+		p = w.Priority
 	}
-	if e := findPriority(p.Workflows, workflowName); e != nil {
-		take(e.PriorityLevel, e.FairnessWeight)
+	if p != nil && activityName != "" {
+		if e := findPriority(p.Activities, activityName); e != nil {
+			take(e.PriorityLevel, e.FairnessWeight)
+		}
 	}
-	if p.Default != nil {
+	if p != nil && workflowName != "" {
+		if e := findPriority(p.Workflows, workflowName); e != nil {
+			take(e.PriorityLevel, e.FairnessWeight)
+		}
+	}
+	if l, ok := PriorityLevelName(startLevel); ok {
+		startLevel = l
+	} else {
+		startLevel = ""
+	}
+	if startWeight > MaxFairnessWeight {
+		startWeight = 0
+	}
+	take(&startLevel, &startWeight)
+	if p != nil && p.Default != nil {
 		take(p.Default.PriorityLevel, p.Default.FairnessWeight)
 	}
 	return level, weight
