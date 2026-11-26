@@ -46,6 +46,8 @@ func (factory) Exists(string) bool            { return false }
 func (factory) HaltAll(context.Context) error { return nil }
 func (factory) Len() int                      { return 0 }
 
+func (factory) DeactivateAll(context.Context) error { return nil }
+
 func (factory) HaltNonHosted(context.Context, func(*api.LookupActorRequest) bool) error {
 	return nil
 }
