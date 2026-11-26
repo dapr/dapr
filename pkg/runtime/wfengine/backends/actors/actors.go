@@ -755,7 +755,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 	rstate := runtimestate.NewWorkflowRuntimeState(string(id), wstate.CustomStatus, wstate.History)
 
 	name, _ := runtimestate.Name(rstate)
-	createdAt, _ := runtimestate.CreatedTime(rstate)
+	createdAt, err := runtimestate.CreatedTime(rstate)
+	if pending := pendingstart.Event(wstate); err != nil && pending != nil {
+		// A PENDING instance has its ExecutionStarted event in the inbox
+		// until its first turn commits it to the history.
+		createdAt = pending.GetTimestamp().AsTime()
+	}
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
@@ -766,6 +771,12 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 		startedAt = timestamppb.New(t)
 	}
 
+	// An instance that did not complete has no completion time.
+	var completedAt *timestamppb.Timestamp
+	if t, cerr := runtimestate.CompletedTime(rstate); cerr == nil {
+		completedAt = timestamppb.New(t)
+	}
+
 	return &backend.WorkflowMetadata{
 		InstanceId:     string(id),
 		Name:           name,
@@ -773,6 +784,7 @@ func (abe *Actors) GetWorkflowMetadata(ctx context.Context, id api.InstanceID, r
 		CreatedAt:      timestamppb.New(createdAt),
 		StartedAt:      startedAt,
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
+		CompletedAt:    completedAt,
 		Input:          input,
 		Output:         output,
 		CustomStatus:   rstate.GetCustomStatus(),

@@ -21,6 +21,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	wfstate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
@@ -58,7 +59,9 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 	if i := strings.IndexAny(likePrefix, `%_\`); i >= 0 {
 		likePrefix = likePrefix[:i]
 	}
-	like := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||" + likePrefix + "%||metadata"
+	keyPrefix := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||"
+	keySuffix := "||" + wfstate.MetadataKey
+	like := keyPrefix + likePrefix + "%" + keySuffix
 
 	resp, err := ks.KeysLike(ctx, &state.KeysLikeRequest{
 		Pattern:           like,
@@ -71,6 +74,15 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 
 	keys := make([]string, 0, len(resp.Keys))
 	for _, key := range resp.Keys {
+		// The app ID and the namespace are not escaped in the pattern either.
+		// An "_" in them matches any character, so the store can return the
+		// keys of another app that shares it. Some stores also match LIKE
+		// without case. Only the keys of this app's workflow actor type are
+		// kept.
+		if !strings.HasPrefix(key, keyPrefix) || !strings.HasSuffix(key, keySuffix) {
+			continue
+		}
+
 		split := strings.Split(key, "||")
 		if len(split) != 4 {
 			return nil, fmt.Errorf("invalid key format: %s", key)
