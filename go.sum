@@ -523,8 +523,6 @@ github.com/dapr/components-contrib v1.19.1-0.20261118141753-ffdb9bfca6d6 h1:egjW
 github.com/dapr/components-contrib v1.19.1-0.20261118141753-ffdb9bfca6d6/go.mod h1:bqhLe5flhvy4n0jd0uns0RGHc0u5FyknHArjZBYNL+U=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf h1:vRT6BytcXSseSg+VZthVm93niltGVOFbhLeRXbwyWKI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20260219105038-d0cf89ba8acf/go.mod h1:NawmfMN065wKn8Jk39E1iwwgWe3kti/MfHBy1jQmSZs=
-github.com/dapr/durabletask-go v0.16.1-0.20261109153237-98658f38d8cb h1:7ZRhGooLkfaKKgnkWDl+Oc/KX6iatOTnvhP6zKuA1Xc=
-github.com/dapr/durabletask-go v0.16.1-0.20261109153237-98658f38d8cb/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4 h1:VKGjNTbRKRSfhvDestGRoCmBa0zw53/oXNbP3HQp1PU=
 github.com/dapr/kit v0.19.1-0.20261030175054-be979ab98cc4/go.mod h1:KCZPSqtPU2T2cUuQeGE9sNc8VdQ/ou6C2cX5TsdA/tQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1127,6 +1125,8 @@ github.com/jhump/protoreflect v1.15.3 h1:6SFRuqU45u9hIZPJAoZ8c28T3nK64BNdp9w6jFo
 github.com/jhump/protoreflect v1.15.3/go.mod h1:4ORHmSBmlCW8fh3xHmJMGyul1zNqZK4Elxc8qKP+p1k=
 github.com/jinzhu/copier v0.3.5 h1:GlvfUwHk62RokgqVNvYsku0TATCF7bAHVwEXoBh3iJg=
 github.com/jinzhu/copier v0.3.5/go.mod h1:DfbEm0FYsaqBcKcFuvmOZb218JkPGtvSHsKg8S8hyyg=
+github.com/jjcollinge/durabletask-go v0.16.1-0.20261126125015-a41534423b6a h1:09EPIxIfqw5irw9Af0MdhwefMpL9wbpgE+D7/dxATTY=
+github.com/jjcollinge/durabletask-go v0.16.1-0.20261126125015-a41534423b6a/go.mod h1:+8ABEQn9JvRPRvPr1QNVxdkdLPgJgpJwcpie5ZDt7nk=
 github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af/go.mod h1:Nht3zPeWKUH0NzdCt2Blrr5ys8VGpn0CEB0cQHVjt7k=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=

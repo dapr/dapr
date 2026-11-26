@@ -172,7 +172,8 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	// The backend answers the worker's completion call once this is settled:
-	// nil after the turn's save below, the turn's error on any other return.
+	// nil as soon as a save commits the turn, including a stall or a save
+	// followed by an error, and the turn's error on any other return.
 	durable := todo.NewDurable()
 	wi.Properties[todo.DurableProperty] = durable
 	defer func() { durable.Settle(cmp.Or(err, errTurnNotSaved)) }()
@@ -298,6 +299,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// The CAN save persisted the effect of every consumed event,
 				// including folded completions: their senders are acked.
 				foldedCommitted = true
+				// The newest generation the worker's results produced is
+				// saved, so the worker is told they were.
+				durable.Settle(nil)
 
 				// The generation bumped: void the escalation marks rather
 				// than reap them (see reapEscalatedCompletions).
@@ -339,7 +343,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}()
 
-	if err = o.handleStalled(ctx, state, rs); err != nil {
+	if err = o.handleStalled(ctx, state, rs, durable); err != nil {
 		return todo.RunCompletedFalse, err
 	}
 	compactPatches(rs)
@@ -418,12 +422,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	dispatchErr := errors.Join(activityResult.Err, createResult.Err)
 	if dispatchErr != nil {
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
-			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
+			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, durable,
 				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
 		}
 		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
 			cacheSettled = true
-			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, activityResult, createResult, dispatchErr)
+			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, durable, activityResult, createResult, dispatchErr)
 		}
 
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
@@ -736,8 +740,9 @@ func (o *orchestrator) classifyStartability(ctx context.Context, state *wfengine
 // savePartialDispatch commits a first turn whose remote dispatches partly
 // failed: dispatched events stay in history, failed ones are withheld, and
 // the inbox is kept so the existing reminder retries. The caller owns the
-// cache-settled and diagnostic bookkeeping its deferred closures read.
-func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, activityResult, createResult messages.DispatchResult, dispatchErr error) error {
+// cache-settled and diagnostic bookkeeping its deferred closures read. The
+// turn is saved, so turn is settled as saved although an error is returned.
+func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, turn *todo.Durable, activityResult, createResult messages.DispatchResult, dispatchErr error) error {
 	// Save state without the events that failed to dispatch so the
 	// workflow transitions to RUNNING. Successfully dispatched items
 	// keep their events in history so they are not re-dispatched on
@@ -768,6 +773,7 @@ func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfengines
 	if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
 		return saveErr
 	}
+	turn.Settle(nil)
 	o.reapEscalatedCompletions(state)
 	return wferrors.NewRecoverable(dispatchErr)
 }
@@ -801,7 +807,7 @@ func (o *orchestrator) guardPayloadSize(ctx context.Context, state *wfenginestat
 		}
 		committed = true
 	}
-	return true, committed, o.stallWorkflow(ctx, state, rs, reason, description)
+	return true, committed, o.stallWorkflow(ctx, state, rs, nil, reason, description)
 }
 
 // executionStatusForRuntimeStatus maps a terminal workflow runtime status to

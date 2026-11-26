@@ -22,22 +22,23 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState) error {
+func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, turn *todo.Durable) error {
 	for _, msg := range rs.GetPendingMessages() {
 		if executionStalledEvent := msg.GetHistoryEvent().GetExecutionStalled(); executionStalledEvent != nil {
-			return o.stallWorkflow(ctx, state, rs, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription())
+			return o.stallWorkflow(ctx, state, rs, turn, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription())
 		}
 	}
 
 	patchMismatch, patchMismatchDescription := o.hasPatchMismatch(rs)
 	if patchMismatch {
-		return o.stallWorkflow(ctx, state, rs, protos.StalledReason_PATCH_MISMATCH, patchMismatchDescription)
+		return o.stallWorkflow(ctx, state, rs, turn, protos.StalledReason_PATCH_MISMATCH, patchMismatchDescription)
 	}
 	return nil
 }
@@ -60,7 +61,11 @@ func (o *orchestrator) hasPatchMismatch(rs *backend.WorkflowRuntimeState) (bool,
 		strings.Join(currentPatches, ", "))
 }
 
-func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, reason protos.StalledReason, description string) error {
+// stallWorkflow saves the stall and holds the turn until ctx ends or the
+// stall is released. The stall is the turn's outcome, so turn, the Durable
+// of the worker's result when there is one, is settled as saved before the
+// hold: the worker is answered at once rather than when the hold ends.
+func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, turn *todo.Durable, reason protos.StalledReason, description string) error {
 	rs.CompletedEvent = nil
 	rs.CompletedTime = nil
 
@@ -91,6 +96,9 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 		if err != nil {
 			return err
 		}
+	}
+	if turn != nil {
+		turn.Settle(nil)
 	}
 	log.Infof("Workflow actor '%s': workflow is stalled; holding execution until context is canceled", o.actorID)
 

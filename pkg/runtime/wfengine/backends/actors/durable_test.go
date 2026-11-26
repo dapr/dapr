@@ -24,8 +24,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	clocktesting "k8s.io/utils/clock/testing"
+	"google.golang.org/protobuf/proto"
 
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors/pendingtracker"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
@@ -37,7 +44,7 @@ import (
 func newDurableBackend() *Actors {
 	return &Actors{
 		pendingTasksBackend: pendingtracker.New(local.NewTasksBackend()),
-		durables:            newDurables(clocktesting.NewFakeClock(time.Now())),
+		durables:            todo.NewDurables(),
 	}
 }
 
@@ -46,10 +53,23 @@ type testTurn struct {
 	callback chan bool
 }
 
-// startTurn hands a workflow work item to a stand-in for the engine: the
-// first completion delivered for the instance settles its registration and
-// completes the work item on the delivering goroutine, as durabletask does.
-func startTurn(t *testing.T, abe *Actors, instanceID string) *testTurn {
+// engineStep is what a stand-in for the engine does with a result it
+// takes.
+type engineStep int
+
+const (
+	completeTurn engineStep = iota
+	abandonTurn
+	// continueTurn stands for a continue-as-new step: the engine runs the
+	// workflow again and the work item stays open.
+	continueTurn
+)
+
+// startTurn hands a workflow work item to a stand-in for the engine. Like
+// durabletask, it ignores a result whose completion token is neither want
+// nor empty, records the token of the result it takes on the work item, and
+// ends the work item on the delivering goroutine.
+func startTurn(t *testing.T, abe *Actors, instanceID, want string, step engineStep) *testTurn {
 	t.Helper()
 
 	turn := &testTurn{durable: todo.NewDurable(), callback: make(chan bool, 1)}
@@ -60,7 +80,6 @@ func startTurn(t *testing.T, abe *Actors, instanceID string) *testTurn {
 			todo.DurableProperty:         turn.durable,
 		},
 	}
-	abe.durables.track(instanceID, turn.durable)
 
 	var (
 		once  sync.Once
@@ -68,12 +87,22 @@ func startTurn(t *testing.T, abe *Actors, instanceID string) *testTurn {
 		dereg func()
 	)
 	lock.Lock()
-	dereg = abe.OnWorkflowTaskCompletion(&protos.WorkflowRequest{InstanceId: instanceID}, func(*protos.WorkflowResponse, error) {
+	dereg = abe.OnWorkflowTaskCompletion(&protos.WorkflowRequest{InstanceId: instanceID}, func(resp *protos.WorkflowResponse, _ error) {
+		if token := resp.GetCompletionToken(); token != "" && token != want {
+			return
+		}
 		once.Do(func() {
 			lock.Lock()
 			dereg()
 			lock.Unlock()
-			assert.NoError(t, abe.CompleteWorkflowWorkItem(t.Context(), wi))
+			wi.CompletionToken = resp.GetCompletionToken()
+			switch step {
+			case completeTurn:
+				assert.NoError(t, abe.CompleteWorkflowWorkItem(t.Context(), wi))
+			case abandonTurn:
+				assert.NoError(t, abe.AbandonWorkflowWorkItem(t.Context(), wi))
+			case continueTurn:
+			}
 		})
 	})
 	lock.Unlock()
@@ -106,21 +135,39 @@ func requireNoAnswer(t *testing.T, errCh <-chan error) {
 	}
 }
 
+func requireTaken(t *testing.T, turn *testTurn) {
+	t.Helper()
+	select {
+	case completed := <-turn.callback:
+		assert.True(t, completed)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "the result did not reach the workflow actor")
+	}
+}
+
 func TestCompleteWorkflowTaskWaitsForSave(t *testing.T) {
 	t.Parallel()
 
 	t.Run("answers only after the turn is saved", func(t *testing.T) {
 		t.Parallel()
 		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
+		turn := startTurn(t, abe, "wf1", "t1", completeTurn)
 
 		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		select {
-		case completed := <-turn.callback:
-			assert.True(t, completed)
-		case <-time.After(5 * time.Second):
-			require.FailNow(t, "the result did not reach the workflow actor")
-		}
+		requireTaken(t, turn)
+		requireNoAnswer(t, errCh)
+
+		turn.durable.Settle(nil)
+		require.NoError(t, requireAnswer(t, errCh))
+	})
+
+	t.Run("a result without a completion token waits for the save", func(t *testing.T) {
+		t.Parallel()
+		abe := newDurableBackend()
+		turn := startTurn(t, abe, "wf1", "t1", completeTurn)
+
+		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1"})
+		requireTaken(t, turn)
 		requireNoAnswer(t, errCh)
 
 		turn.durable.Settle(nil)
@@ -130,291 +177,200 @@ func TestCompleteWorkflowTaskWaitsForSave(t *testing.T) {
 	t.Run("a failed save answers Aborted", func(t *testing.T) {
 		t.Parallel()
 		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
+		turn := startTurn(t, abe, "wf1", "t1", completeTurn)
 
 		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		<-turn.callback
+		requireTaken(t, turn)
 		requireNoAnswer(t, errCh)
 
 		turn.durable.Settle(errors.New("state store unavailable"))
-		err := requireAnswer(t, errCh)
-		require.Error(t, err)
-		assert.Equal(t, codes.Aborted, status.Code(err))
-		assert.Contains(t, err.Error(), "state store unavailable")
-		assert.False(t, abe.durables.isSaved("wf1", "t1"))
-	})
-
-	t.Run("a saved token sent again answers success", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
-
-		resp := &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}
-		errCh := completeAsync(abe, t.Context(), resp)
-		<-turn.callback
-		turn.durable.Settle(nil)
-		require.NoError(t, requireAnswer(t, errCh))
-
-		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), resp))
-	})
-
-	t.Run("a token that was not saved answers NotFound", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-
-		err := abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		require.Error(t, err)
-		assert.Equal(t, codes.NotFound, status.Code(err))
-
-		turn := startTurn(t, abe, "wf1")
-		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		<-turn.callback
-		turn.durable.Settle(errors.New("state store unavailable"))
-		require.Error(t, requireAnswer(t, errCh))
-
-		err = abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		require.Error(t, err)
-		assert.Equal(t, codes.NotFound, status.Code(err))
-	})
-
-	t.Run("a result without a token for no pending task answers success", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1"}))
-	})
-
-	t.Run("a token sent again while its save runs waits for the save", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
-
-		resp := &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}
-		first := completeAsync(abe, t.Context(), resp)
-		<-turn.callback
-		require.Eventually(t, func() bool {
-			return abe.durables.consumedWith("wf1", "t1") != nil
-		}, 5*time.Second, 10*time.Millisecond)
-
-		second := completeAsync(abe, t.Context(), resp)
-		requireNoAnswer(t, first)
-		requireNoAnswer(t, second)
-
-		turn.durable.Settle(nil)
-		require.NoError(t, requireAnswer(t, first))
-		require.NoError(t, requireAnswer(t, second))
-	})
-
-	t.Run("a cancelled call stops waiting", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
-
-		ctx, cancel := context.WithCancel(t.Context())
-		errCh := completeAsync(abe, ctx, &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		<-turn.callback
-		requireNoAnswer(t, errCh)
-
-		cancel()
-		err := requireAnswer(t, errCh)
-		assert.Equal(t, codes.Canceled, status.Code(err))
-	})
-
-	t.Run("a token sent again after a cancelled call's turn was saved answers success", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-		turn := startTurn(t, abe, "wf1")
-
-		resp := &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}
-		ctx, cancel := context.WithCancel(t.Context())
-		errCh := completeAsync(abe, ctx, resp)
-		<-turn.callback
-		require.Eventually(t, func() bool {
-			return abe.durables.consumedWith("wf1", "t1") != nil
-		}, 5*time.Second, 10*time.Millisecond)
-		cancel()
-		assert.Equal(t, codes.Canceled, status.Code(requireAnswer(t, errCh)))
-
-		turn.durable.Settle(nil)
-		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), resp))
-	})
-
-	t.Run("a result no tracked work item takes answers at once", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-
-		delivered := make(chan struct{}, 1)
-		dereg := abe.OnWorkflowTaskCompletion(&protos.WorkflowRequest{InstanceId: "wf1"}, func(*protos.WorkflowResponse, error) {
-			delivered <- struct{}{}
-		})
-		defer dereg()
-
-		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}))
-		<-delivered
-	})
-}
-
-// startEngineTurn is startTurn with a stand-in for the engine that, like
-// durabletask, ignores a result whose completion token is not want and leaves
-// its registration armed. onResult runs on the delivering goroutine for a
-// result it takes; it completes the work item unless abandon is set.
-func startEngineTurn(t *testing.T, abe *Actors, instanceID, want string, abandon bool, onStale func()) *testTurn {
-	t.Helper()
-
-	turn := &testTurn{durable: todo.NewDurable(), callback: make(chan bool, 1)}
-	wi := &backend.WorkflowWorkItem{
-		InstanceID: api.InstanceID(instanceID),
-		Properties: map[string]any{
-			todo.CallbackChannelProperty: turn.callback,
-			todo.DurableProperty:         turn.durable,
-		},
-	}
-	abe.durables.track(instanceID, turn.durable)
-
-	var (
-		once  sync.Once
-		lock  sync.Mutex
-		dereg func()
-	)
-	lock.Lock()
-	dereg = abe.OnWorkflowTaskCompletion(&protos.WorkflowRequest{InstanceId: instanceID}, func(resp *protos.WorkflowResponse, _ error) {
-		if resp.GetCompletionToken() != want {
-			if onStale != nil {
-				onStale()
-			}
-			return
-		}
-		once.Do(func() {
-			lock.Lock()
-			dereg()
-			lock.Unlock()
-			if abandon {
-				assert.NoError(t, abe.AbandonWorkflowWorkItem(t.Context(), wi))
-			} else {
-				assert.NoError(t, abe.CompleteWorkflowWorkItem(t.Context(), wi))
-			}
-		})
-	})
-	lock.Unlock()
-	return turn
-}
-
-func TestCompleteWorkflowTaskMatchesTheResultTaken(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a stale token delivered alongside the current one is not credited with its save", func(t *testing.T) {
-		t.Parallel()
-		abe := newDurableBackend()
-
-		staleIn := make(chan struct{})
-		releaseStale := make(chan struct{})
-		turn := startEngineTurn(t, abe, "wf1", "t2", false, func() {
-			close(staleIn)
-			<-releaseStale
-		})
-
-		staleCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		<-staleIn
-		currentCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t2"})
-		// Give the current result the chance to be taken while the stale one
-		// is still being delivered.
-		select {
-		case <-turn.callback:
-		case <-time.After(200 * time.Millisecond):
-		}
-		close(releaseStale)
-
-		// The stale result fed no work item, so it is answered at once.
-		require.NoError(t, requireAnswer(t, staleCh))
-		requireNoAnswer(t, currentCh)
-
-		turn.durable.Settle(nil)
-		require.NoError(t, requireAnswer(t, currentCh))
-		assert.True(t, abe.durables.isSaved("wf1", "t2"))
-		assert.False(t, abe.durables.isSaved("wf1", "t1"))
+		assert.Equal(t, codes.Aborted, status.Code(requireAnswer(t, errCh)))
 	})
 
 	t.Run("a result whose processing abandons the turn answers Aborted", func(t *testing.T) {
 		t.Parallel()
 		abe := newDurableBackend()
-		turn := startEngineTurn(t, abe, "wf1", "t1", true, nil)
+		turn := startTurn(t, abe, "wf1", "t1", abandonTurn)
 
 		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
 		select {
 		case completed := <-turn.callback:
 			assert.False(t, completed)
 		case <-time.After(5 * time.Second):
-			require.FailNow(t, "the work item was not abandoned")
+			require.FailNow(t, "the abandon did not reach the workflow actor")
 		}
 		requireNoAnswer(t, errCh)
 
-		// The workflow actor settles an abandoned turn with its error.
-		turn.durable.Settle(errors.New("the workflow turn ended without saving the response"))
-		err := requireAnswer(t, errCh)
-		assert.Equal(t, codes.Aborted, status.Code(err))
-		assert.False(t, abe.durables.isSaved("wf1", "t1"))
+		turn.durable.Settle(errors.New("execution aborted"))
+		assert.Equal(t, codes.Aborted, status.Code(requireAnswer(t, errCh)))
 	})
 
-	t.Run("a call waiting for another delivery of its key stops when cancelled", func(t *testing.T) {
+	// The actor settles the turn with its error when its context ends while
+	// the worker is still running. A result taken after that was not saved.
+	t.Run("a result taken after the turn ended unsaved answers Aborted", func(t *testing.T) {
 		t.Parallel()
 		abe := newDurableBackend()
+		turn := startTurn(t, abe, "wf1", "t1", completeTurn)
+		turn.durable.Settle(context.Canceled)
 
-		staleIn := make(chan struct{})
-		releaseStale := make(chan struct{})
-		startEngineTurn(t, abe, "wf1", "t2", false, func() {
-			close(staleIn)
-			<-releaseStale
-		})
-		defer close(releaseStale)
+		err := abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
+		assert.Equal(t, codes.Aborted, status.Code(err))
+	})
 
-		_ = completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
-		<-staleIn
+	t.Run("a cancelled call stops waiting", func(t *testing.T) {
+		t.Parallel()
+		abe := newDurableBackend()
+		turn := startTurn(t, abe, "wf1", "t1", completeTurn)
+
 		ctx, cancel := context.WithCancel(t.Context())
-		errCh := completeAsync(abe, ctx, &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t2"})
+		errCh := completeAsync(abe, ctx, &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
+		requireTaken(t, turn)
 		requireNoAnswer(t, errCh)
+
 		cancel()
 		assert.Equal(t, codes.Canceled, status.Code(requireAnswer(t, errCh)))
 	})
+
+	t.Run("a stale result is answered at once", func(t *testing.T) {
+		t.Parallel()
+		abe := newDurableBackend()
+		turn := startTurn(t, abe, "wf1", "t2", completeTurn)
+
+		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}))
+		select {
+		case <-turn.callback:
+			require.FailNow(t, "the stale result must not end the work item")
+		default:
+		}
+	})
+
+	t.Run("a continue-as-new step is answered at once", func(t *testing.T) {
+		t.Parallel()
+		abe := newDurableBackend()
+		startTurn(t, abe, "wf1", "t1", continueTurn)
+
+		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}))
+	})
+
+	t.Run("a result for no pending task answers success", func(t *testing.T) {
+		t.Parallel()
+		abe := newDurableBackend()
+
+		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}))
+		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1"}))
+	})
 }
 
-func TestDurablesForgetsSettledWorkItems(t *testing.T) {
+func TestWaitDurable(t *testing.T) {
 	t.Parallel()
 
-	d := newDurables(clocktesting.NewFakeClock(time.Now()))
-	durable := todo.NewDurable()
-	d.track("wf1", durable)
-	require.Len(t, d.unconsumed("wf1"), 1)
+	t.Run("a save that settled as the call ended is reported as saved", func(t *testing.T) {
+		t.Parallel()
+		durable := todo.NewDurable()
+		durable.Settle(nil)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
 
-	durable.Settle(nil)
-	assert.Empty(t, d.unconsumed("wf1"))
-	d.lock.Lock()
-	assert.Empty(t, d.pending)
-	d.lock.Unlock()
+		require.NoError(t, waitDurable(ctx, durable))
+	})
+
+	t.Run("an unsaved result answers Aborted", func(t *testing.T) {
+		t.Parallel()
+		durable := todo.NewDurable()
+		durable.Settle(errors.New("state store unavailable"))
+
+		assert.Equal(t, codes.Aborted, status.Code(waitDurable(t.Context(), durable)))
+	})
 }
 
-func TestDurablesSavedTokenExpiry(t *testing.T) {
+// TestCompleteWorkflowTaskForwarded covers a completion that lands on a
+// daprd which does not own the workflow, under clustered deployment. The
+// daprd that owns it delivers the result through its executor actor and
+// answers once the turn is saved.
+func TestCompleteWorkflowTaskForwarded(t *testing.T) {
 	t.Parallel()
 
-	clk := clocktesting.NewFakeClock(time.Now())
-	d := newDurables(clk)
+	// newForwarded returns a front door daprd whose completions are
+	// forwarded to an owner daprd, and the owner's Durable for wf1's turn.
+	// Owner and front door have their own pending map and Durables.
+	newForwarded := func(t *testing.T, ownerDurables *todo.Durables) (*Actors, *todo.Durable) {
+		t.Helper()
+		const executorType = "dapr.internal.default.test.executor"
 
-	d.markSaved("wf1", "t1")
-	assert.True(t, d.isSaved("wf1", "t1"))
-	assert.False(t, d.isSaved("wf1", "t2"))
+		ownerPending := pending.New()
+		owner, err := executor.New(t.Context(), executor.Options{
+			Actors:    actorsfake.New(),
+			ActorType: executorType,
+			Pending:   ownerPending,
+			Durables:  ownerDurables,
+		})
+		require.NoError(t, err)
 
-	clk.Step(savedTokenTTL)
-	d.markSaved("wf2", "t2")
-	assert.True(t, d.isSaved("wf1", "t1"), "a token is kept for at least savedTokenTTL")
+		// The owner's engine takes the result and completes the work item.
+		turn := todo.NewDurable()
+		dereg := ownerPending.RegisterCallback(executor.PendingKey(executor.TaskTypeWorkflow, "wf1"), func(res pending.Result) {
+			var resp protos.WorkflowResponse
+			if uerr := proto.Unmarshal(res.Data, &resp); uerr != nil {
+				t.Errorf("unmarshal the forwarded result: %v", uerr)
+				return
+			}
+			if ownerDurables != nil {
+				ownerDurables.Fulfil("wf1", resp.GetCompletionToken(), turn)
+			}
+		})
+		t.Cleanup(dereg)
 
-	clk.Step(savedTokenTTL)
-	d.markSaved("wf3", "t3")
-	assert.False(t, d.isSaved("wf1", "t1"))
-	assert.True(t, d.isSaved("wf2", "t2"))
-}
+		routerFake := routerfake.New().
+			WithCallFn(func(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+				return owner.GetOrCreate(req.GetActor().GetActorId()).InvokeMethod(ctx, req)
+			})
+		frontDurables := todo.NewDurables()
+		front, err := NewClusterTasksBackend(ClusterTasksBackendOptions{
+			Actors: actorsfake.New().WithRouter(func(context.Context) (router.Interface, error) {
+				return routerFake, nil
+			}).WithPlacementLookupActor(func(context.Context, *actorsapi.LookupActorRequest) (*actorsapi.LookupActorResponse, error) {
+				return &actorsapi.LookupActorResponse{Local: false}, nil
+			}),
+			ExecutorActorType: executorType,
+			Pending:           pending.New(),
+			Durables:          frontDurables,
+		})
+		require.NoError(t, err)
 
-func TestCancelTaskIgnoresUnknownTask(t *testing.T) {
-	t.Parallel()
+		return &Actors{
+			pendingTasksBackend: pendingtracker.New(front),
+			durables:            frontDurables,
+		}, turn
+	}
 
-	abe := newDurableBackend()
-	require.NoError(t, abe.CancelWorkflowTask(t.Context(), "wf1"))
-	require.NoError(t, abe.CancelActivityTask(t.Context(), "wf1", 1))
+	for _, token := range []string{"t1", ""} {
+		t.Run("answers once the owner saved the turn, token "+token, func(t *testing.T) {
+			t.Parallel()
+			abe, turn := newForwarded(t, todo.NewDurables())
+
+			errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: token})
+			requireNoAnswer(t, errCh)
+
+			turn.Settle(nil)
+			require.NoError(t, requireAnswer(t, errCh))
+		})
+	}
+
+	t.Run("answers Aborted when the owner did not save the turn", func(t *testing.T) {
+		t.Parallel()
+		abe, turn := newForwarded(t, todo.NewDurables())
+
+		errCh := completeAsync(abe, t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"})
+		requireNoAnswer(t, errCh)
+
+		turn.Settle(errors.New("state store unavailable"))
+		assert.Equal(t, codes.Aborted, status.Code(requireAnswer(t, errCh)))
+	})
+
+	t.Run("an owner that does not wait for saves is answered as before", func(t *testing.T) {
+		t.Parallel()
+		abe, _ := newForwarded(t, nil)
+
+		require.NoError(t, abe.CompleteWorkflowTask(t.Context(), &protos.WorkflowResponse{InstanceId: "wf1", CompletionToken: "t1"}))
+	})
 }

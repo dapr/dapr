@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
 func newExecutor() *executor {
@@ -41,6 +42,11 @@ type Options struct {
 	// cluster tasks backend. Completions arriving at this actor are
 	// delivered into it when the waiter is registered on this host.
 	Pending *pending.Pending
+
+	// Durables hands a completion delivered into Pending the Durable of the
+	// work item its result ended in, so the completion is answered once the
+	// result is saved. Optional.
+	Durables *todo.Durables
 }
 
 type factory struct {
@@ -50,6 +56,7 @@ type factory struct {
 	placement    placement.Interface
 	deactivateCh chan *executor
 	pending      *pending.Pending
+	durables     *todo.Durables
 
 	table sync.Map
 	lock  sync.Mutex
@@ -82,6 +89,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		placement:    placement,
 		deactivateCh: deactivateCh,
 		pending:      opts.Pending,
+		durables:     opts.Durables,
 	}, nil
 }
 

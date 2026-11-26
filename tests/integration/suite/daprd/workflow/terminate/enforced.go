@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -75,28 +74,19 @@ func (e *enforced) Run(t *testing.T, ctx context.Context) {
 				time.Sleep(time.Millisecond * 50)
 				continue
 			}
-			sc := protos.NewTaskHubSidecarServiceClient(conn)
-			if _, err = sc.Hello(wctx, new(emptypb.Empty)); err != nil {
-				conn.Close()
-				time.Sleep(time.Millisecond * 50)
-				continue
-			}
-			stream, err := sc.GetWorkItems(wctx, new(protos.GetWorkItemsRequest))
+			worker, err := workflow.OpenRawWorker(wctx, conn)
 			if err != nil {
 				conn.Close()
 				time.Sleep(time.Millisecond * 50)
 				continue
 			}
-			for {
-				wi, rerr := stream.Recv()
-				if rerr != nil {
-					break
-				}
+			sc := worker.Client()
+			for wi := range worker.Items() {
 				wr := wi.GetWorkflowRequest()
 				if wr == nil {
 					continue
 				}
-				_, rerr = sc.CompleteWorkflowTask(wctx, &protos.WorkflowResponse{
+				_, rerr := sc.CompleteWorkflowTask(wctx, &protos.WorkflowResponse{
 					InstanceId: wr.GetInstanceId(),
 					Actions: []*protos.WorkflowAction{{
 						Id: timerSeq.Add(1) - 1,

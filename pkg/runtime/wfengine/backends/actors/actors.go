@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"k8s.io/utils/clock"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
@@ -166,9 +165,9 @@ type Actors struct {
 	activityPriority                func(workflowName, activityName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
-	// durables holds the work items whose result the answer to the worker
-	// waits to see saved; see completeDurably.
-	durables *durables
+	// durables hands a completion call the Durable of the work item its
+	// result ended in; see completeDurably.
+	durables *todo.Durables
 
 	// activityCommitted counts activity work items handed to the engine and
 	// not yet completed or abandoned, against activityCap. See credits.go.
@@ -266,6 +265,7 @@ func (abe *Actors) redriveOverduePendingStart(id api.InstanceID) {
 func New(opts Options) (*Actors, error) {
 	var pendingTasksBackend PendingTasksBackend
 	var pendingCompletions *pending.Pending
+	durables := todo.NewDurables()
 	if opts.EnableClusteredDeployment {
 		pendingCompletions = pending.New()
 		var err error
@@ -273,6 +273,7 @@ func New(opts Options) (*Actors, error) {
 			Actors:            opts.Actors,
 			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 			Pending:           pendingCompletions,
+			Durables:          durables,
 		})
 		if err != nil {
 			return nil, err
@@ -301,7 +302,7 @@ func New(opts Options) (*Actors, error) {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
-		durables:                  newDurables(clock.RealClock{}),
+		durables:                  durables,
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
@@ -383,10 +384,6 @@ func (abe *Actors) factoryOptions() workflow.Options {
 
 			if err := abe.requireLocalExecutor(); err != nil {
 				return err
-			}
-
-			if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
-				abe.durables.track(string(wi.InstanceID), durable)
 			}
 
 			select {
@@ -864,15 +861,13 @@ func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Acti
 
 // AbandonWorkflowWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+func (abe *Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// A result whose processing failed ends here rather than in
 	// CompleteWorkflowWorkItem; the completion call then waits to see the
 	// turn settle unsaved.
-	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
-		durable.Consume()
-	}
+	abe.fulfilDurable(wi)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
 	// TODO: @joshvanl: remove
@@ -973,10 +968,8 @@ func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Act
 }
 
 // CompleteWorkflowWorkItem implements backend.Backend
-func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
-	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
-		durable.Consume()
-	}
+func (abe *Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+	abe.fulfilDurable(wi)
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -1327,6 +1320,14 @@ func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.Wo
 		}
 		return err
 	})
+}
+
+// fulfilDurable hands the turn's Durable to the completion call whose result
+// the work item ended in.
+func (abe *Actors) fulfilDurable(wi *backend.WorkflowWorkItem) {
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		abe.durables.Fulfil(string(wi.InstanceID), wi.CompletionToken, durable)
+	}
 }
 
 func isUnknownTask(err error) bool {

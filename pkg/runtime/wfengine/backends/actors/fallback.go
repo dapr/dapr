@@ -301,6 +301,7 @@ func (abe *Actors) executorFactory(ctx context.Context) (table.ActorTypeFactory,
 			ActorType: abe.executorActorType,
 			Actors:    abe.actors,
 			Pending:   abe.pendingCompletions,
+			Durables:  abe.durables,
 		})
 		if err != nil {
 			return table.ActorTypeFactory{}, err

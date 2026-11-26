@@ -15,272 +15,52 @@ package actors
 
 import (
 	"context"
-	"slices"
-	"sync"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
-// DurableHeader is the response header daprd sets on a completion call it
-// answered only after the result was saved.
-const DurableHeader = "dapr-workflow-durable"
-
-// savedTokenTTL is at least how long a saved completion token is remembered,
-// so that a worker that sends the same result again is told it was saved.
-const savedTokenTTL = time.Minute
-
-// durables tracks, per task key, the todo.Durable of each work item the engine
-// holds, so that the answer to a completion call can wait for its result to
-// be saved. It also remembers, per task key, the completion token of the last
-// result it saw saved.
-type durables struct {
-	clock clock.Clock
-
-	lock    sync.Mutex
-	pending map[string][]*trackedDurable
-	// delivering serialises the completion calls of one task key from before
-	// they deliver until they have recorded their token, so that a work item
-	// consumed in between is credited to the call whose result it took.
-	delivering map[string]*keyLock
-	// saved and savedPrev map a task key to the completion token of its last
-	// saved result. saved replaces savedPrev every savedTokenTTL.
-	saved     map[string]string
-	savedPrev map[string]string
-	rotatedAt time.Time
-}
-
-type trackedDurable struct {
-	durable *todo.Durable
-	// token is the completion token of the result the work item consumed,
-	// once a completion call has seen it consumed. Guarded by durables.lock.
-	token string
-}
-
-func newDurables(clk clock.Clock) *durables {
-	return &durables{
-		clock:      clk,
-		pending:    make(map[string][]*trackedDurable),
-		delivering: make(map[string]*keyLock),
-		saved:      make(map[string]string),
-		savedPrev:  make(map[string]string),
-		rotatedAt:  clk.Now(),
-	}
-}
-
-type keyLock struct {
-	ch   chan struct{}
-	refs int
-}
-
-// lockKey takes the delivery lock of key, or fails when ctx ends first.
-func (d *durables) lockKey(ctx context.Context, key string) (func(), error) {
-	d.lock.Lock()
-	kl := d.delivering[key]
-	if kl == nil {
-		kl = &keyLock{ch: make(chan struct{}, 1)}
-		d.delivering[key] = kl
-	}
-	kl.refs++
-	d.lock.Unlock()
-
-	release := func() {
-		d.lock.Lock()
-		kl.refs--
-		if kl.refs == 0 {
-			delete(d.delivering, key)
-		}
-		d.lock.Unlock()
-	}
-
-	select {
-	case kl.ch <- struct{}{}:
-		return func() {
-			<-kl.ch
-			release()
-		}, nil
-	case <-ctx.Done():
-		release()
-		return nil, status.FromContextError(ctx.Err()).Err()
-	}
-}
-
-// track records the Durable of a work item handed to the engine until it is
-// settled. A result saved by then is remembered as saved under the token a
-// completion call recorded for it, in the same step that forgets the work
-// item, so that a resend is never answered NotFound in between, nor after the
-// call that recorded the token gave up waiting.
-func (d *durables) track(key string, durable *todo.Durable) {
-	entry := &trackedDurable{durable: durable}
-	d.lock.Lock()
-	d.pending[key] = append(d.pending[key], entry)
-	d.lock.Unlock()
-
-	durable.OnSettle(func() {
-		saved := durable.Err() == nil
-		d.lock.Lock()
-		defer d.lock.Unlock()
-		if saved && entry.token != "" {
-			d.markSavedLocked(key, entry.token)
-		}
-		entries := slices.DeleteFunc(d.pending[key], func(e *trackedDurable) bool { return e == entry })
-		if len(entries) == 0 {
-			delete(d.pending, key)
-		} else {
-			d.pending[key] = entries
-		}
-	})
-}
-
-// unconsumed returns the tracked work items for key whose result has not been
-// handed to the engine yet.
-func (d *durables) unconsumed(key string) []*trackedDurable {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	var out []*trackedDurable
-	for _, e := range d.pending[key] {
-		if !e.durable.Consumed() {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
-// adopted returns the entries of before whose result has been consumed since,
-// and records token against them.
-func (d *durables) adopted(before []*trackedDurable, token string) []*todo.Durable {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	var out []*todo.Durable
-	for _, e := range before {
-		if e.durable.Consumed() {
-			if e.token == "" {
-				e.token = token
-			}
-			out = append(out, e.durable)
-		}
-	}
-	return out
-}
-
-// consumedWith returns the tracked work item for key that consumed the result
-// with the given completion token, if it is not settled yet.
-func (d *durables) consumedWith(key, token string) *todo.Durable {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	for _, e := range d.pending[key] {
-		if e.token == token {
-			return e.durable
-		}
-	}
-	return nil
-}
-
-func (d *durables) markSaved(key, token string) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	d.markSavedLocked(key, token)
-}
-
-func (d *durables) markSavedLocked(key, token string) {
-	if now := d.clock.Now(); now.Sub(d.rotatedAt) >= savedTokenTTL {
-		d.savedPrev = d.saved
-		d.saved = make(map[string]string)
-		d.rotatedAt = now
-	}
-	d.saved[key] = token
-}
-
-func (d *durables) isSaved(key, token string) bool {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	return d.saved[key] == token || d.savedPrev[key] == token
-}
-
 // completeDurably delivers a result with deliver and answers the worker only
 // once the result is saved.
 //
-// The engine runs a delivered result through to Complete*WorkItem, or to
-// Abandon*WorkItem when processing it fails, on the delivering goroutine.
-// Deliveries for one key are serialised, so a tracked work item that consumed
-// its result while deliver ran took this one. The answer waits for each such work item to
-// settle, and is Aborted when one was not saved. A result that no tracked
-// work item took is answered as before: it was forwarded to another daprd,
-// discarded as stale, or fed a turn that continues as new.
-//
-// When deliver finds no pending task, the result was taken earlier or
-// dropped. The answer is then a success only if a result with the same
-// completion token was saved, and NotFound otherwise. A result without a
-// completion token cannot be matched, and is answered as a success as before.
+// The work item that took the result hands its Durable to the call through
+// abe.durables: on this daprd when the result was delivered here, and as the
+// owner's answer when it was forwarded to the daprd that owns the task. A
+// result that no work item took is answered at once, as before: it was
+// discarded as stale, fed a workflow that continues as new, or reached a
+// daprd that does not wait for saves.
 func (abe *Actors) completeDurably(ctx context.Context, key, token string, deliver func() error) error {
-	unlock, err := abe.durables.lockKey(ctx, key)
+	receipt := abe.durables.Expect(key, token)
+	err := abe.callWithBackoff(ctx, deliver)
+	durable := receipt.Close()
 	if err != nil {
-		return err
-	}
-	before := abe.durables.unconsumed(key)
-	err = abe.callWithBackoff(ctx, deliver)
-	var adopted []*todo.Durable
-	if err == nil {
-		adopted = abe.durables.adopted(before, token)
-	}
-	unlock()
-
-	switch {
-	case isUnknownTask(err):
-		return abe.answerUnknown(ctx, key, token, err)
-	case err != nil:
-		return err
-	case len(adopted) == 0:
-		return nil
-	}
-	return abe.waitSaved(ctx, key, token, adopted...)
-}
-
-// answerUnknown answers a result for which deliver found no pending task.
-func (abe *Actors) answerUnknown(ctx context.Context, key, token string, err error) error {
-	if token == "" {
 		return ignoreUnknownTask(err)
 	}
-
-	// The worker sent the result again while the first copy is being saved.
-	if durable := abe.durables.consumedWith(key, token); durable != nil {
-		return abe.waitSaved(ctx, key, token, durable)
+	if durable == nil {
+		return nil
 	}
-
-	if !abe.durables.isSaved(key, token) {
-		return status.Errorf(codes.NotFound, "task %s is not pending and no result with this completion token was saved: %s", key, err)
-	}
-	return abe.waitSaved(ctx, key, token)
-}
-
-// waitSaved waits for each of ds to settle, then records token as
-// saved and marks the answer durable. It returns Aborted when one was not
-// saved.
-func (abe *Actors) waitSaved(ctx context.Context, key, token string, ds ...*todo.Durable) error {
-	for _, durable := range ds {
-		if err := waitDurable(ctx, durable); err != nil {
-			return err
-		}
-	}
-	if token != "" {
-		abe.durables.markSaved(key, token)
+	if err := waitDurable(ctx, durable); err != nil {
+		return err
 	}
 	// Not a gRPC server context when called in-process.
-	_ = grpc.SetHeader(ctx, metadata.Pairs(DurableHeader, "true"))
+	_ = grpc.SetHeader(ctx, metadata.Pairs(todo.DurableHeader, "true"))
 	return nil
 }
 
 func waitDurable(ctx context.Context, durable *todo.Durable) error {
+	// A save that settled as ctx ended is still reported as saved.
 	select {
 	case <-durable.Done():
-	case <-ctx.Done():
-		return status.FromContextError(ctx.Err()).Err()
+	default:
+		select {
+		case <-durable.Done():
+		case <-ctx.Done():
+			return status.FromContextError(ctx.Err()).Err()
+		}
 	}
 	if err := durable.Err(); err != nil {
 		return status.Errorf(codes.Aborted, "result was not saved: %s", err)

@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -41,7 +43,10 @@ type turnfailed struct {
 }
 
 func (r *turnfailed) Setup(t *testing.T) []framework.Option {
-	r.workflow = newWorkflow(t, "DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES", "1")
+	r.workflow = workflow.New(t,
+		workflow.WithClusteredDeployment(false),
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_WORKFLOW_TEST_FAIL_TURN_SAVES", "1"))),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(r.workflow),
@@ -49,10 +54,12 @@ func (r *turnfailed) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *turnfailed) Run(t *testing.T, ctx context.Context) {
-	thub, items, cl := connect(t, ctx, r.workflow)
-	id := schedule(t, ctx, cl, "durable-turn-failed")
+	r.workflow.WaitUntilRunning(t, ctx)
+	worker := r.workflow.ConnectRawWorker(t, ctx)
+	cl := r.workflow.ManagementClient(t, ctx)
+	id := workflow.StartWorkflow(t, ctx, cl, "durable-turn-failed")
 
-	_, err := thub.CompleteWorkflowTask(ctx, completeResponse(nextWorkflowItem(t, items)))
+	_, err := worker.Client().CompleteWorkflowTask(ctx, workflow.CompletedResponse(worker.NextWorkflowItem(t)))
 	require.Error(t, err, "a turn that was not saved must not be answered as a success")
 	assert.Equal(t, codes.Aborted, status.Code(err))
 
@@ -61,7 +68,7 @@ func (r *turnfailed) Run(t *testing.T, ctx context.Context) {
 	assert.NotEqual(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
 	// The turn runs again and is saved.
-	_, err = thub.CompleteWorkflowTask(ctx, completeResponse(nextWorkflowItem(t, items)))
+	_, err = worker.Client().CompleteWorkflowTask(ctx, workflow.CompletedResponse(worker.NextWorkflowItem(t)))
 	require.NoError(t, err)
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

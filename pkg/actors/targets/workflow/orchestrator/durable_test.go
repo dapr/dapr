@@ -38,9 +38,10 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-// durableTurn runs one workflow turn whose engine result is handed back with
-// completed, against a store whose save calls save.
-func durableTurn(t *testing.T, completed bool, save func(context.Context) error) (*orchestrator, <-chan *todo.Durable) {
+// durableTurn runs one workflow turn, against a store whose save calls save.
+// engine stands in for the engine processing the work item, and returns
+// whether the engine completed it.
+func durableTurn(t *testing.T, engine func(*backend.WorkflowWorkItem) bool, save func(context.Context) error) (*orchestrator, <-chan *todo.Durable) {
 	t.Helper()
 
 	const instanceID = "durable-turn"
@@ -70,8 +71,7 @@ func durableTurn(t *testing.T, completed bool, save func(context.Context) error)
 		durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable)
 		require.True(t, ok, "the work item must carry a Durable")
 		durables <- durable
-		durable.Consume()
-		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- completed
+		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- engine(wi)
 		return nil
 	}
 
@@ -106,6 +106,10 @@ func durableTurn(t *testing.T, completed bool, save func(context.Context) error)
 	return o, durables
 }
 
+func completes(*backend.WorkflowWorkItem) bool { return true }
+
+func abandons(*backend.WorkflowWorkItem) bool { return false }
+
 func requireSettled(t *testing.T, durable *todo.Durable) error {
 	t.Helper()
 	select {
@@ -125,7 +129,7 @@ func Test_runWorkflow_settlesDurableAfterSave(t *testing.T) {
 
 		saving := make(chan struct{})
 		release := make(chan struct{})
-		o, durables := durableTurn(t, true, func(context.Context) error {
+		o, durables := durableTurn(t, completes, func(context.Context) error {
 			close(saving)
 			<-release
 			return nil
@@ -154,7 +158,7 @@ func Test_runWorkflow_settlesDurableAfterSave(t *testing.T) {
 		t.Parallel()
 
 		saveErr := errors.New("state store unavailable")
-		o, durables := durableTurn(t, true, func(context.Context) error { return saveErr })
+		o, durables := durableTurn(t, completes, func(context.Context) error { return saveErr })
 
 		_, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-durable"})
 		require.Error(t, err)
@@ -166,10 +170,79 @@ func Test_runWorkflow_settlesDurableAfterSave(t *testing.T) {
 	t.Run("an abandoned turn settles with an error", func(t *testing.T) {
 		t.Parallel()
 
-		o, durables := durableTurn(t, false, func(context.Context) error { return nil })
+		o, durables := durableTurn(t, abandons, func(context.Context) error { return nil })
 
 		_, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-durable"})
 		require.Error(t, err)
 		assert.Error(t, requireSettled(t, <-durables))
+	})
+}
+
+// A turn that saves and then returns an error still saved the worker's
+// result, so its Durable is settled as saved.
+func Test_runWorkflow_settlesDurableAtEachCommit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a stalled turn is settled before its hold", func(t *testing.T) {
+		t.Parallel()
+
+		stall := func(wi *backend.WorkflowWorkItem) bool {
+			wi.State.PendingMessages = append(wi.State.PendingMessages, &protos.WorkflowRuntimeStateMessage{
+				HistoryEvent: &protos.HistoryEvent{
+					EventId:   -1,
+					Timestamp: timestamppb.Now(),
+					EventType: &protos.HistoryEvent_ExecutionStalled{ExecutionStalled: &protos.ExecutionStalledEvent{
+						Reason:      protos.StalledReason_PATCH_MISMATCH,
+						Description: new("stalled for the test"),
+					}},
+				},
+			})
+			return true
+		}
+		o, durables := durableTurn(t, stall, func(context.Context) error { return nil })
+
+		ctx, cancel := context.WithCancel(t.Context())
+		runErr := make(chan error, 1)
+		go func() {
+			_, err := o.runWorkflow(ctx, &actorapi.Reminder{Name: "new-event-durable"})
+			runErr <- err
+		}()
+
+		require.NoError(t, requireSettled(t, <-durables))
+		select {
+		case err := <-runErr:
+			require.FailNow(t, "the stalled turn returned before its hold ended", "err: %v", err)
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		cancel()
+		select {
+		case err := <-runErr:
+			require.Error(t, err)
+		case <-time.After(5 * time.Second):
+			require.FailNow(t, "the stalled turn did not return once its context ended")
+		}
+	})
+
+	t.Run("an abandoned continue-as-new turn is settled after its save", func(t *testing.T) {
+		t.Parallel()
+
+		continueAsNew := func(wi *backend.WorkflowWorkItem) bool {
+			wi.State.ContinuedAsNew = true
+			wi.State.NewEvents = []*protos.HistoryEvent{{
+				EventId:   -1,
+				Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_ExecutionStarted{ExecutionStarted: &protos.ExecutionStartedEvent{
+					Name:             "TestWorkflow",
+					WorkflowInstance: &protos.WorkflowInstance{InstanceId: "durable-turn"},
+				}},
+			}}
+			return false
+		}
+		o, durables := durableTurn(t, continueAsNew, func(context.Context) error { return nil })
+
+		_, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-durable"})
+		require.ErrorContains(t, err, todo.ErrExecutionAborted.Error())
+		require.NoError(t, requireSettled(t, <-durables))
 	})
 }

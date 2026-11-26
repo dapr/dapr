@@ -24,16 +24,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/client"
 )
 
 func init() {
@@ -74,22 +71,11 @@ func (r *recreate) Run(t *testing.T, ctx context.Context) {
 
 	var activityRuns atomic.Int64
 
-	conn := r.workflow.Dapr().GRPCConn(t, ctx)
-	thub := protos.NewTaskHubSidecarServiceClient(conn)
-
-	_, err := thub.Hello(ctx, new(emptypb.Empty))
-	require.NoError(t, err)
-
-	stream, err := thub.GetWorkItems(ctx, new(protos.GetWorkItemsRequest))
-	require.NoError(t, err)
+	worker := r.workflow.ConnectRawWorker(t, ctx)
+	thub := worker.Client()
 
 	go func() {
-		for {
-			wi, rerr := stream.Recv()
-			if rerr != nil {
-				return
-			}
-
+		for wi := range worker.Items() {
 			switch req := wi.GetRequest().(type) {
 			case *protos.WorkItem_WorkflowRequest:
 				wr := req.WorkflowRequest
@@ -148,7 +134,7 @@ func (r *recreate) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	sched := client.NewTaskHubGrpcClient(conn, logger.New(t))
+	sched := r.workflow.ManagementClient(t, ctx)
 
 	id, err := sched.ScheduleNewWorkflow(ctx, workflowName, api.WithInstanceID(instanceID))
 	require.NoError(t, err)
