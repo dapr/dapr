@@ -103,6 +103,11 @@ func (r *redeliver) Run(t *testing.T, ctx context.Context) {
 	survivor := 1 - victim
 	r.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-redeliver")
 
+	// The turn that scheduled the activity must be acknowledged first: a
+	// replacement replica would otherwise run it again and schedule the
+	// activity a second time.
+	r.workflow.Scheduler().WaitJobKeyCount(t, ctx, "||start-", func(n int) bool { return n == 0 })
+
 	r.workflow.DaprN(victim).Kill(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
