@@ -65,10 +65,10 @@ const (
 	continueTurn
 )
 
-// startTurn hands a workflow work item to a stand-in for the engine. Like
-// durabletask, it ignores a result whose completion token is neither want
-// nor empty, records the token of the result it takes on the work item, and
-// ends the work item on the delivering goroutine.
+// startTurn hands a workflow work item, dispatched with completion token
+// want, to a stand-in for the engine. Like durabletask, it ignores a result
+// whose completion token is neither want nor empty, records want on the work
+// item, and ends the work item on the delivering goroutine.
 func startTurn(t *testing.T, abe *Actors, instanceID, want string, step engineStep) *testTurn {
 	t.Helper()
 
@@ -95,7 +95,7 @@ func startTurn(t *testing.T, abe *Actors, instanceID, want string, step engineSt
 			lock.Lock()
 			dereg()
 			lock.Unlock()
-			wi.CompletionToken = resp.GetCompletionToken()
+			wi.CompletionToken = want
 			switch step {
 			case completeTurn:
 				assert.NoError(t, abe.CompleteWorkflowWorkItem(t.Context(), wi))
@@ -306,7 +306,8 @@ func TestCompleteWorkflowTaskForwarded(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// The owner's engine takes the result and completes the work item.
+		// The owner's engine takes the result and completes the work item,
+		// which was dispatched with token t1.
 		turn := todo.NewDurable()
 		dereg := ownerPending.RegisterCallback(executor.PendingKey(executor.TaskTypeWorkflow, "wf1"), func(res pending.Result) {
 			var resp protos.WorkflowResponse
@@ -315,7 +316,7 @@ func TestCompleteWorkflowTaskForwarded(t *testing.T) {
 				return
 			}
 			if ownerDurables != nil {
-				ownerDurables.Fulfil("wf1", resp.GetCompletionToken(), turn)
+				ownerDurables.Fulfil("wf1", "t1", turn)
 			}
 		})
 		t.Cleanup(dereg)

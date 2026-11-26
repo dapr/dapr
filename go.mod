@@ -564,4 +564,4 @@ replace (
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
-replace github.com/dapr/durabletask-go => github.com/jjcollinge/durabletask-go v0.16.1-0.20261126125015-a41534423b6a
+replace github.com/dapr/durabletask-go => github.com/jjcollinge/durabletask-go v0.16.1-0.20261126151159-4247fccc3894

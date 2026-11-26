@@ -71,11 +71,12 @@ func (d *Durable) Err() error {
 // that delivers the result, so a call expects its result before delivering
 // it, and finds the Durable on its Receipt once the delivery returns.
 //
-// A call is matched to a work item by the result's completion token. A
-// result without one is matched by its task key. That is exact because such
-// a result only ever reaches a single pending execution of its task: the
-// backends either keep one waiter per task or refuse the result while
-// several are pending.
+// A call is matched to a work item by the completion token of the work
+// item's dispatch, which the worker echoes. A call whose result has no token
+// is matched by its task key instead, so a work item is handed to the calls
+// expecting either. That is exact because a result without a token only
+// ever reaches a single pending execution of its task: the backends either
+// keep one waiter per task or refuse the result while several are pending.
 type Durables struct {
 	lock    sync.Mutex
 	waiting map[string][]*Receipt
@@ -110,15 +111,21 @@ func (d *Durables) Expect(key, token string) *Receipt {
 	return r
 }
 
-// Fulfil hands durable to the calls that expect the result of task key with
-// the given completion token.
+// Fulfil hands durable to the calls that expect the result of task key,
+// with the completion token of its dispatch or without a token.
 func (d *Durables) Fulfil(key, token string, durable *Durable) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	for _, r := range d.waiting[durableKey(key, token)] {
-		if r.durable == nil {
-			r.durable = durable
+	fill := func(rs []*Receipt) {
+		for _, r := range rs {
+			if r.durable == nil {
+				r.durable = durable
+			}
 		}
+	}
+	fill(d.waiting[durableKey(key, "")])
+	if token != "" {
+		fill(d.waiting[durableKey(key, token)])
 	}
 }
 
