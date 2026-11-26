@@ -291,25 +291,17 @@ func UpdateSpanStatusFromGRPCError(span trace.Span, err error) {
 
 // SpanContextFromIncomingGRPCMetadata returns the SpanContext stored in incoming metadata of context, or empty if there isn't one.
 func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) {
-	var (
-		sc trace.SpanContext
-		md metadata.MD
-		ok bool
-	)
-	if md, ok = metadata.FromIncomingContext(ctx); !ok {
-		return sc, false
+	md, _ := metadata.FromIncomingContext(ctx)
+	var sc trace.SpanContext
+	var ok bool
+
+	// Client instrumentation can update traceparent after the SDK writes grpc-trace-bin.
+	if values := md.Get(diagConsts.TraceparentHeader); len(values) > 0 {
+		sc, ok = SpanContextFromW3CString(values[0])
 	}
-	traceContext := md[diagConsts.GRPCTraceContextKey]
-	if len(traceContext) > 0 {
-		sc, ok = diagUtils.SpanContextFromBinary([]byte(traceContext[0]))
-	} else {
-		// add workaround to fallback on checking traceparent header
-		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
-		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
-		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
-		traceContext = md[diagConsts.TraceparentHeader]
-		if len(traceContext) > 0 {
-			sc, ok = SpanContextFromW3CString(traceContext[0])
+	if !ok {
+		if values := md.Get(diagConsts.GRPCTraceContextKey); len(values) > 0 {
+			sc, ok = diagUtils.SpanContextFromBinary([]byte(values[0]))
 		}
 	}
 	if ok && len(md[diagConsts.TracestateHeader]) > 0 {
