@@ -72,7 +72,10 @@ type Inflight struct {
 	drainRebalancedActors   atomic.Pointer[bool]
 	entityDrainTimeouts     atomic.Pointer[map[string]time.Duration]
 
-	queued       map[string][]func()
+	queued map[string][]func()
+	// queuedLocks are the queued lock requests, kept apart from the lookups
+	// in queued so that FlushLocks can release them on their own.
+	queuedLocks  map[string][]func()
 	blockedTypes map[string]struct{}
 
 	lock loop.Interface[lock.Event]
@@ -113,6 +116,7 @@ func New(opts Options) *Inflight {
 		v2Entries:     make(map[string]*rendezvousEntry),
 		versionByType: make(map[string]uint64),
 		queued:        make(map[string][]func()),
+		queuedLocks:   make(map[string][]func()),
 		blockedTypes:  make(map[string]struct{}),
 	}
 }
@@ -151,14 +155,16 @@ func (i *Inflight) Open(ctx context.Context) {
 		})
 	}
 
-	for t, fns := range i.queued {
-		if _, blocked := i.blockedTypes[t]; blocked {
-			continue
+	for _, queued := range []map[string][]func(){i.queued, i.queuedLocks} {
+		for t, fns := range queued {
+			if _, blocked := i.blockedTypes[t]; blocked {
+				continue
+			}
+			for _, fn := range fns {
+				fn()
+			}
+			delete(queued, t)
 		}
-		for _, fn := range fns {
-			fn()
-		}
-		delete(i.queued, t)
 	}
 }
 
@@ -339,8 +345,33 @@ func (i *Inflight) LockTypes(types []string) {
 // type. Blocks until drain completes. Should be called AFTER LockTypes so
 // no new claims are issued for these types concurrently with the drain.
 func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
+	if event := i.cancelTypes(types, err); event != nil {
+		i.lock.Enqueue(event)
+		<-event.Done
+	}
+}
+
+// DrainClaimsForTypes is CancelClaimsForTypes without blocking the caller,
+// and without holding the claim-tracking loop, which keeps serving the other
+// actor types during the drain. The returned channel is closed when the
+// drain completes.
+func (i *Inflight) DrainClaimsForTypes(types []string, err error) <-chan struct{} {
+	event := i.cancelTypes(types, err)
+	if event == nil {
+		done := make(chan struct{})
+		close(done)
+		return done
+	}
+	event.Async = true
+	i.lock.Enqueue(event)
+	return event.Done
+}
+
+// cancelTypes returns the event which drains the claims of the given actor
+// types, or nil when there is nothing to drain.
+func (i *Inflight) cancelTypes(types []string, err error) *lock.CancelTypes {
 	if i.lock == nil || len(types) == 0 {
-		return
+		return nil
 	}
 	set := make(map[string]struct{}, len(types))
 	for _, t := range types {
@@ -359,16 +390,14 @@ func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 		}
 	}
 
-	done := make(chan struct{})
-	i.lock.Enqueue(&lock.CancelTypes{
+	return &lock.CancelTypes{
 		Types:                 set,
 		Error:                 err,
 		Timeout:               i.drainOngoingCallTimeout.Load(),
 		PerTypeTimeouts:       perType,
 		DrainRebalancedActors: i.drainRebalancedActors.Load(),
-		Done:                  done,
-	})
-	<-done
+		Done:                  make(chan struct{}),
+	}
 }
 
 // UnlockTypes unmarks the given actor types and flushes any acquires that
@@ -377,22 +406,51 @@ func (i *Inflight) CancelClaimsForTypes(types []string, err error) {
 func (i *Inflight) UnlockTypes(types []string) {
 	for _, t := range types {
 		delete(i.blockedTypes, t)
-		fns, ok := i.queued[t]
-		if !ok || i.lock == nil {
+		if i.lock == nil {
 			continue
 		}
-		for _, fn := range fns {
+		for _, queued := range []map[string][]func(){i.queued, i.queuedLocks} {
+			for _, fn := range queued[t] {
+				fn()
+			}
+			delete(queued, t)
+		}
+	}
+}
+
+// FlushLocks responds to the lock requests queued for the given actor types,
+// which stay blocked: their lookups stay queued. It is for the types whose
+// lock requests AcquireUnqueued serves.
+func (i *Inflight) FlushLocks(types []string) {
+	if i.lock == nil {
+		return
+	}
+	for _, t := range types {
+		for _, fn := range i.queuedLocks[t] {
 			fn()
 		}
-		delete(i.queued, t)
+		delete(i.queuedLocks, t)
 	}
 }
 
 func (i *Inflight) Acquire(lu *loops.LockRequest) {
 	if i.lock == nil || i.isBlocked(lu.ActorType) {
-		i.queued[lu.ActorType] = append(i.queued[lu.ActorType], func() {
+		i.queuedLocks[lu.ActorType] = append(i.queuedLocks[lu.ActorType], func() {
 			lu.Response <- i.getLockResponse(lu)
 		})
+		return
+	}
+
+	lu.Response <- i.getLockResponse(lu)
+}
+
+// AcquireUnqueued responds to lu even while its actor type is blocked, for a
+// state call of an actor type whose actors are being halted in place: the
+// in-flight call it belongs to can then complete, which ends the drain.
+// Without a claim-tracking loop it queues like Acquire.
+func (i *Inflight) AcquireUnqueued(lu *loops.LockRequest) {
+	if i.lock == nil {
+		i.Acquire(lu)
 		return
 	}
 
