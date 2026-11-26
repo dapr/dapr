@@ -250,3 +250,27 @@ func TestDispatcher_DrainStopsWhenTypeGateFull(t *testing.T) {
 	assert.Len(t, h.dispatched[0], 2, "the released gate admits one parked instance")
 	assert.Equal(t, 4, h.d.pending[testActorType].len())
 }
+
+func TestDispatcher_OverwrittenJobDoesNotLeakInflight(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 2)
+	h.gates[testActorType+":act"] = &gate{limit: 2}
+
+	first := h.trigger("wf::1::0", "act")
+	h.handle(first)
+	// The same job fires again while its first delivery is unresolved, as
+	// when its reminder is created a second time.
+	second := h.trigger("wf::1::0", "act")
+	h.handle(second)
+	h.pump(t)
+	require.Len(t, h.dispatched[0], 2)
+	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, first), "the replaced delivery is resolved; the cron drops an old job version's result")
+	assert.Equal(t, uint32(1), h.gates[testActorType+":act"].current, "the replaced delivery gives its gate back")
+
+	// The first delivery's late result is spent.
+	h.ack(t, first)
+	h.ack(t, second)
+	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, first))
+	assert.Empty(t, h.d.inflight.counts)
+	assert.Equal(t, uint32(0), h.gates[testActorType+":act"].current)
+}
