@@ -305,6 +305,13 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	return nil
 }
 
+// DeactivateAll halts every actor as HaltAll does. HaltAll records no
+// rebalance and leaves the factory serving, so it is also how this factory
+// deactivates the actors of a type which stays hosted.
+func (f *factory) DeactivateAll(ctx context.Context) error {
+	return f.HaltAll(ctx)
+}
+
 // newDriveScope returns a churn-scoped runner for the local activity drives,
 // with the cancel that aborts the drives already parked on it. Deliberately
 // not rooted in the registration context: a drive scope is retired and

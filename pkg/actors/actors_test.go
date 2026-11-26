@@ -400,6 +400,22 @@ func TestNew_ActorStateStoreBindings(t *testing.T) {
 	})
 }
 
+// TestStateStoreResolver checks that the actor runtime exposes the resolver
+// built from its bindings, which the workflow backend uses to find the store
+// of the workflow actor types.
+func TestStateStoreResolver(t *testing.T) {
+	cs := compstore.New()
+	cs.AddStateStore("wallet-workflows", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
+	a := New(Options{
+		CompStore:        cs,
+		ActorStateStores: map[string]string{"dapr.internal.ns.app.workflow": "wallet-workflows"},
+	})
+
+	name, _, err := a.StateStoreResolver().Resolve("dapr.internal.ns.app.workflow")
+	require.NoError(t, err)
+	assert.Equal(t, "wallet-workflows", name)
+}
+
 func TestWarnUnusableStateStores(t *testing.T) {
 	newStore := func() contribstate.Store {
 		return inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))
@@ -502,4 +518,25 @@ func TestLogUnhostedBindingsWarnsAfterInfo(t *testing.T) {
 	buf.Reset()
 	logUnhostedBindings(l, &logged, bindings, []string{"BalanceActor", "TransactionActor"})
 	assert.Empty(t, buf.String())
+}
+
+// TestLogUnhostedBindingsSkipsInternalTypes checks that the workflow actor
+// types bound by spec.workflow.stateStore are not logged: they are hosted
+// only while a workflow worker is connected, so not hosting them is normal.
+func TestLogUnhostedBindingsSkipsInternalTypes(t *testing.T) {
+	bindings := map[string]string{
+		"dapr.internal.ns.app.workflow": "wallet-workflows",
+		"dapr.internal.ns.app.activity": "wallet-workflows",
+		"OrphanActor":                   "wallet-orphans",
+	}
+
+	var buf bytes.Buffer
+	l := logger.NewLogger(t.Name())
+	l.SetOutput(&buf)
+
+	var logged sync.Map
+	logUnhostedBindings(l, &logged, bindings, nil)
+
+	assert.Contains(t, buf.String(), "Actor type OrphanActor is bound")
+	assert.NotContains(t, buf.String(), "dapr.internal")
 }
