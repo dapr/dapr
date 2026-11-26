@@ -72,6 +72,8 @@ type Options struct {
 	ActorsEnabled  bool
 	Outbox         outbox.Outbox
 	Actors         Actors
+	// TracingEnabled wraps every state store so calls into it emit spans.
+	TracingEnabled bool
 }
 
 type state struct {
@@ -80,19 +82,21 @@ type state struct {
 	meta      *meta.Meta
 	lock      sync.RWMutex
 
-	actorsEnabled bool
-	outbox        outbox.Outbox
-	actors        Actors
+	actorsEnabled  bool
+	outbox         outbox.Outbox
+	actors         Actors
+	tracingEnabled bool
 }
 
 func New(opts Options) *state {
 	return &state{
-		registry:      opts.Registry,
-		compStore:     opts.ComponentStore,
-		meta:          opts.Meta,
-		actorsEnabled: opts.ActorsEnabled,
-		outbox:        opts.Outbox,
-		actors:        opts.Actors,
+		registry:       opts.Registry,
+		compStore:      opts.ComponentStore,
+		meta:           opts.Meta,
+		actorsEnabled:  opts.ActorsEnabled,
+		outbox:         opts.Outbox,
+		actors:         opts.Actors,
+		tracingEnabled: opts.TracingEnabled,
 	}
 }
 
@@ -142,6 +146,10 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+
+	if s.tracingEnabled {
+		store = compstate.WithTracing(store, comp.Name, comp.Spec.Type)
 	}
 
 	// when placement address list is not empty, set specified actor store.

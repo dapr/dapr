@@ -41,6 +41,7 @@ import (
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
@@ -183,6 +184,8 @@ func New(opts Options) *Processor {
 		opts.GlobalConfig = new(config.Configuration)
 	}
 
+	tracingEnabled := diagUtils.IsTracingEnabled(opts.GlobalConfig.GetTracingSpec().SamplingRate)
+
 	subscriberProc := subscriber.New(subscriber.Options{
 		AppID:                           opts.ID,
 		Namespace:                       opts.Namespace,
@@ -204,6 +207,7 @@ func New(opts Options) *Processor {
 		Meta:           opts.Meta,
 		Outbox:         opts.Outbox,
 		Actors:         opts.Actors,
+		TracingEnabled: tracingEnabled,
 	})
 
 	secretProc := secret.New(secret.Options{
@@ -238,6 +242,7 @@ func New(opts Options) *Processor {
 		Registry:       opts.Registry.Configurations(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
+		TracingEnabled: tracingEnabled,
 	})
 	cryptoProc := crypto.New(crypto.Options{
 		Registry:       opts.Registry.Crypto(),

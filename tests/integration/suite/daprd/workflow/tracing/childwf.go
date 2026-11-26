@@ -90,10 +90,7 @@ func (c *childwf) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(cc *assert.CollectT) {
 		spans := c.collector.TraceSpans(span.SpanContext().TraceID())
-		names := make([]string, len(spans))
-		for i, span := range spans {
-			names[i] = span.GetName()
-		}
+		names := workflowSpanNames(spans)
 
 		assert.Equal(cc, []string{
 			"schedule-my-workflow",
