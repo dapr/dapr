@@ -112,6 +112,64 @@ func Test_HaltDeletesTimers(t *testing.T) {
 	})
 }
 
+// deactivatorFactory records DeactivateAll, which the table prefers over
+// HaltAll when halting actor types that stay hosted.
+type deactivatorFactory struct {
+	*fake.FakeFactory
+	deactivated *[]string
+	name        string
+}
+
+func (f *deactivatorFactory) DeactivateAll(context.Context) error {
+	*f.deactivated = append(*f.deactivated, f.name)
+	return nil
+}
+
+func Test_HaltActorTypes(t *testing.T) {
+	storage := &stubTimerStorage{}
+	var halted, deactivated []string
+	tble := table.New(table.Options{
+		ReentrancyStore: reentrancystore.New(),
+		Timers:          func() internaltimers.Storage { return storage },
+	})
+	tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: []table.ActorTypeFactory{
+			{Type: "bound", Factory: &deactivatorFactory{
+				FakeFactory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+					halted = append(halted, "bound")
+					return nil
+				}),
+				deactivated: &deactivated,
+				name:        "bound",
+			}},
+			{Type: "plain", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+				halted = append(halted, "plain")
+				return nil
+			})},
+			{Type: "other", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
+				halted = append(halted, "other")
+				return nil
+			})},
+		},
+	})
+
+	require.NoError(t, tble.HaltActorTypes(t.Context(), "bound", "plain", "notregistered"))
+
+	// A factory which can deactivate without recording a rebalance does so;
+	// others are halted.
+	assert.Equal(t, []string{"bound"}, deactivated)
+	assert.Equal(t, []string{"plain"}, halted)
+
+	// Only the timers of the given types are deleted.
+	require.Len(t, storage.sweeps, 1)
+	assert.True(t, storage.sweeps[0]("bound", "a"))
+	assert.True(t, storage.sweeps[0]("plain", "a"))
+	assert.False(t, storage.sweeps[0]("other", "a"))
+
+	// The types stay registered and hosted.
+	assert.ElementsMatch(t, []string{"bound", "plain", "other"}, tble.Types())
+}
+
 func Test_GetOrCreate_NotRegistered(t *testing.T) {
 	tble := table.New(table.Options{
 		ReentrancyStore: reentrancystore.New(),
@@ -152,6 +210,8 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.Empty(t, tble.Types())
 		assert.False(t, tble.IsActorTypeHosted("test1"))
 		assert.Equal(t, int64(1), halted.Load())
+		// The registered types are still known while suspended.
+		assert.Equal(t, []string{"test1"}, tble.Registered())
 
 		_, err := tble.GetOrCreate(t.Context(), "test1", "1")
 		require.Error(t, err)

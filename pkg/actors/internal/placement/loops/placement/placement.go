@@ -212,6 +212,8 @@ func (p *placement) handle(ctx context.Context, event loops.EventPlace) error {
 		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.SetEntityDrainOngoingCallTimeouts:
 		p.inflight.SetEntityDrainOngoingCallTimeouts(e.Timeouts)
+	case *loops.HaltActorTypes:
+		p.handleHaltActorTypes(ctx, e)
 	case *loops.Shutdown:
 		p.handleShutdown(e)
 	default:
@@ -248,6 +250,17 @@ func (p *placement) handleLookupRequest(req *loops.LookupRequest) {
 		return
 	}
 	p.dissLoop.Enqueue(req)
+}
+
+// handleHaltActorTypes hands the halt to the disseminator, which owns the
+// in-flight claims. With no stream, calls are queued rather than claimed, so
+// there is nothing to drain and the actors are halted at once.
+func (p *placement) handleHaltActorTypes(ctx context.Context, e *loops.HaltActorTypes) {
+	if p.dissLoop == nil {
+		e.Done <- e.Halt(ctx)
+		return
+	}
+	p.dissLoop.Enqueue(e)
 }
 
 func (p *placement) handleLockRequest(req *loops.LockRequest) {
