@@ -318,11 +318,7 @@ func (t *table) HaltActorTypes(ctx context.Context, actorTypes ...string) error 
 		factory := f.(targets.Factory)
 		wg.Go(func() {
 			t.waitCreates(actorType)
-			if d, ok := factory.(targets.Deactivator); ok {
-				errs.Append(d.DeactivateAll(ctx))
-				return
-			}
-			errs.Append(factory.HaltAll(ctx))
+			errs.Append(factory.DeactivateAll(ctx))
 		})
 	}
 	wg.Wait()

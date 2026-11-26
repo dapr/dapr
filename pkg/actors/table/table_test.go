@@ -112,53 +112,37 @@ func Test_HaltDeletesTimers(t *testing.T) {
 	})
 }
 
-// deactivatorFactory records DeactivateAll, which the table prefers over
-// HaltAll when halting actor types that stay hosted.
-type deactivatorFactory struct {
-	*fake.FakeFactory
-	deactivated *[]string
-	name        string
-}
-
-func (f *deactivatorFactory) DeactivateAll(context.Context) error {
-	*f.deactivated = append(*f.deactivated, f.name)
-	return nil
-}
-
 func Test_HaltActorTypes(t *testing.T) {
 	storage := &stubTimerStorage{}
 	var halted, deactivated []string
+	factory := func(name string) *fake.FakeFactory {
+		return fake.NewFactory().
+			WithHaltAll(func(context.Context) error {
+				halted = append(halted, name)
+				return nil
+			}).
+			WithDeactivateAll(func(context.Context) error {
+				deactivated = append(deactivated, name)
+				return nil
+			})
+	}
 	tble := table.New(table.Options{
 		ReentrancyStore: reentrancystore.New(),
 		Timers:          func() internaltimers.Storage { return storage },
 	})
 	tble.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: []table.ActorTypeFactory{
-			{Type: "bound", Factory: &deactivatorFactory{
-				FakeFactory: fake.NewFactory().WithHaltAll(func(context.Context) error {
-					halted = append(halted, "bound")
-					return nil
-				}),
-				deactivated: &deactivated,
-				name:        "bound",
-			}},
-			{Type: "plain", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
-				halted = append(halted, "plain")
-				return nil
-			})},
-			{Type: "other", Factory: fake.NewFactory().WithHaltAll(func(context.Context) error {
-				halted = append(halted, "other")
-				return nil
-			})},
+			{Type: "bound", Factory: factory("bound")},
+			{Type: "plain", Factory: factory("plain")},
+			{Type: "other", Factory: factory("other")},
 		},
 	})
 
 	require.NoError(t, tble.HaltActorTypes(t.Context(), "bound", "plain", "notregistered"))
 
-	// A factory which can deactivate without recording a rebalance does so;
-	// others are halted.
-	assert.Equal(t, []string{"bound"}, deactivated)
-	assert.Equal(t, []string{"plain"}, halted)
+	// The actors stay hosted, so they are deactivated, not halted.
+	assert.ElementsMatch(t, []string{"bound", "plain"}, deactivated)
+	assert.Empty(t, halted)
 
 	// Only the timers of the given types are deleted.
 	require.Len(t, storage.sweeps, 1)

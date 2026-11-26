@@ -257,6 +257,10 @@ func newDaprRuntime(ctx context.Context,
 
 	schedulerPlacement := runtimeConfig.SchedulerPlacementEnabled()
 
+	if storeName := globalConfig.Spec.WorkflowSpec.GetStateStore(); storeName != "" {
+		log.Infof("Workflow state is stored in state store %s, set by spec.workflow.stateStore. State is not migrated: workflows started with another state store are not found", storeName)
+	}
+
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
 		Namespace: namespace,
@@ -269,7 +273,7 @@ func newDaprRuntime(ctx context.Context,
 		Healthz:                   runtimeConfig.healthz,
 		CompStore:                 compStore,
 		StateTTLEnabled:           globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		ActorStateStores:          globalConfig.Spec.ActorsSpec.StateStoreByActorType(),
+		ActorStateStores:          actorStateStoreBindings(globalConfig.Spec, namespace, runtimeConfig.id),
 		MaxRequestBodySize:        runtimeConfig.maxRequestBodySize,
 		Mode:                      runtimeConfig.mode,
 		DisseminationTimeout:      runtimeConfig.actorsDisseminationTimeout,
