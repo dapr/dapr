@@ -424,3 +424,32 @@ func TestDispatcher_NoCapacityAtTheBoundStillParks(t *testing.T) {
 	assert.NotContains(t, h.results, running, "a refused trigger never reaches its failure policy, even with the queue full")
 	assert.Equal(t, 2, h.d.pending[testActorType].len())
 }
+
+func TestDispatcher_OverwrittenOrphanReleasesItsGates(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 1, 2)
+	h.gates[testActorType] = &gate{limit: 2}
+
+	first := h.trigger("wf::1::0", "act")
+	h.handle(first)
+	// Its stream closes and the sidecar reconnects without listing it, so
+	// the first delivery waits on its reattach timer.
+	h.closeStream(t, 0, first)
+	h.dispatched = append(h.dispatched, nil)
+	h.addStreamFor(t, 1, addr(0), &schedulerv1pb.WatchJobsRequestInitial{
+		PullSlots: []*schedulerv1pb.PullSlots{{ActorType: testActorType, Free: 2}},
+	})
+	require.NotNil(t, h.d.sidecars[sidecarOf(0)].flights[key("wf::1::0")].timer)
+
+	// The overwritten job fires again before the timer.
+	second := h.trigger("wf::1::0", "act")
+	h.handle(second)
+	h.pump(t)
+	require.Len(t, h.dispatched[1], 1)
+	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, h.resultOf(t, first), "the replaced delivery is resolved, not forgotten")
+	assert.Equal(t, uint32(1), h.gates[testActorType].current, "only the new delivery holds the gate")
+
+	h.ack(t, second)
+	assert.Equal(t, uint32(0), h.gates[testActorType].current)
+	assert.Empty(t, h.d.inflight.counts)
+}
