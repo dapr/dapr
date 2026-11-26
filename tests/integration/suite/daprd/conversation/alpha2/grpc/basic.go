@@ -319,6 +319,87 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("reasoning round trip", func(t *testing.T) {
+		// echo reflects the requested effort and the reasoning sent back on the
+		// assistant turn in the reasoning it returns, never in the content.
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{{Text: "one"}},
+								},
+							},
+						},
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Content:   []*rtv1.ConversationMessageContent{{Text: "two"}},
+									Reasoning: new("earlier thought"),
+								},
+							},
+						},
+					},
+				},
+			},
+			ReasoningEffort: new("high"),
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		message := resp.GetOutputs()[0].GetChoices()[0].GetMessage()
+		require.Equal(t, "one\ntwo", message.GetContent())
+		require.Equal(t, "reasoning effort: high\nearlier thought", message.GetReasoning())
+	})
+
+	t.Run("reasoning is absent when there is none", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{{Text: "hello"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		require.Nil(t, resp.GetOutputs()[0].GetChoices()[0].GetMessage().Reasoning)
+	})
+
+	t.Run("reasoning effort must not be empty", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Content: []*rtv1.ConversationMessageContent{{Text: "hello"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			ReasoningEffort: new(""),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("max tokens must fit in int32", func(t *testing.T) {
 		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
