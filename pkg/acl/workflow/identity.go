@@ -20,15 +20,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-// IsInternalActorType reports whether actorType is a Dapr-reserved internal
-// actor type (workflow, activity, executor, retentioner, ...). User-facing
-// actor APIs (invoke, state, reminder, timer) must reject these because the
-// workflow runtime owns their lifecycle. Direct access from a user would
-// corrupt state or bypass per-operation policy enforcement.
-func IsInternalActorType(actorType string) bool {
-	return strings.HasPrefix(actorType, actorTypePrefix)
-}
-
 // StripUntrustedCallerIdentity removes the caller-identity headers from
 // metadata that arrived from an untrusted source (a user-facing API like
 // InvokeActor or onDirectActorMessage that copies client metadata
