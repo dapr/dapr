@@ -76,7 +76,7 @@ func (a *anthropicWIF) Setup(t *testing.T) []framework.Option {
 		placement.WithSentryAddress(a.sentry.Address()),
 	)
 
-	a.anthropic = anthropic.New(t, bundle.JWT.JWKS)
+	a.anthropic = anthropic.New(t, anthropic.WithJWKS(bundle.JWT.JWKS))
 
 	a.daprd = daprd.New(t,
 		daprd.WithAppID("wif-app"),
