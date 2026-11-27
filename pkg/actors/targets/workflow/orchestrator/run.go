@@ -292,16 +292,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// scheduleWorkflowStart: a reminder created first can fire on
 				// another host before the save commits, ack SUCCESS off the
 				// old state and be deleted, stranding the pending start.
-				if err = o.signAndSaveState(ctx, state); err != nil {
-					// signAndSaveState already invalidated the cache.
+				// The newest generation the worker's results produced is
+				// saved by this, so the worker is told they were.
+				if err = o.signAndSaveTurn(ctx, state, durable); err != nil {
+					// signAndSaveTurn already invalidated the cache.
 					return todo.RunCompletedFalse, err
 				}
 				// The CAN save persisted the effect of every consumed event,
 				// including folded completions: their senders are acked.
 				foldedCommitted = true
-				// The newest generation the worker's results produced is
-				// saved, so the worker is told they were.
-				durable.Settle(nil)
 
 				// The generation bumped: void the escalation marks rather
 				// than reap them (see reapEscalatedCompletions).
@@ -453,12 +452,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if err = holdOrFailTurnSaveForTest(ctx); err != nil {
 		return todo.RunCompletedFalse, err
 	}
-	err = o.signAndSaveState(ctx, state)
+	err = o.signAndSaveTurn(ctx, state, durable)
 	cacheSettled = true
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
-	durable.Settle(nil)
 	// The turn's single Multi is durable: folded completions are now in
 	// history and their senders are acked (see the deferred fold handling).
 	foldedCommitted = true
@@ -770,10 +768,9 @@ func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfengines
 	rs.NewEvents = filtered
 	state.ApplyRuntimeStateChanges(rs)
 	rs.NewEvents = origNewEvents
-	if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
+	if saveErr := o.signAndSaveTurn(ctx, state, turn); saveErr != nil {
 		return saveErr
 	}
-	turn.Settle(nil)
 	o.reapEscalatedCompletions(state)
 	return wferrors.NewRecoverable(dispatchErr)
 }

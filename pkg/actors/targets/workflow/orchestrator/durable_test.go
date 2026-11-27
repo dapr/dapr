@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -222,6 +223,33 @@ func Test_runWorkflow_settlesDurableAtEachCommit(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			require.FailNow(t, "the stalled turn did not return once its context ended")
 		}
+	})
+
+	t.Run("a save whose metadata row cannot be confirmed is settled as saved", func(t *testing.T) {
+		t.Parallel()
+
+		var saved atomic.Bool
+		o, durables := durableTurn(t, completes, func(context.Context) error {
+			saved.Store(true)
+			return nil
+		})
+		// The row reads back empty once after the save, and the read that
+		// confirms it fails, so the committed turn returns an error.
+		var reads atomic.Int32
+		o.actorState.(*statefake.Fake).WithGetFn(func(context.Context, *actorapi.GetStateRequest, bool) (*actorapi.StateResponse, error) {
+			if !saved.Load() {
+				return nil, nil
+			}
+			if reads.Add(1) == 1 {
+				return &actorapi.StateResponse{}, nil
+			}
+			return nil, errors.New("state store unavailable")
+		})
+		o.state.SetMetadataETag(new("1"))
+
+		_, err := o.runWorkflow(t.Context(), &actorapi.Reminder{Name: "new-event-durable"})
+		require.ErrorContains(t, err, "failed to confirm the metadata row after save")
+		require.NoError(t, requireSettled(t, <-durables))
 	})
 
 	t.Run("an abandoned continue-as-new turn is settled after its save", func(t *testing.T) {

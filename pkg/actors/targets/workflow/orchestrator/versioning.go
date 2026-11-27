@@ -92,7 +92,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	}
 	if hasFilteredNewEvents || hasStalledEvent {
 		state.ApplyRuntimeStateChanges(rs)
-		err := o.signAndSaveState(ctx, state)
+		err := o.signAndSaveTurn(ctx, state, turn)
 		if err != nil {
 			return err
 		}

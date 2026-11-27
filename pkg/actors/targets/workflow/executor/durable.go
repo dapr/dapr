@@ -45,9 +45,12 @@ func completionTokenOf(req *internalsv1pb.InternalInvokeRequest) string {
 // deliverDurably runs run, which hands a completion to its waiter on this
 // daprd, and then waits for the result to be saved when a work item took
 // it. The answer carries MetadataSaved, so the daprd that forwarded the
-// completion answers the worker as if it had delivered it itself.
+// completion answers the worker as if it had delivered it itself. Only a
+// workflow completion waits: no activity work item settles a Durable, and an
+// activity completion without a token could otherwise take the Durable of a
+// workflow whose instance ID equals the activity's actor ID.
 func (e *executor) deliverDurably(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, run func()) (*internalsv1pb.InternalInvokeResponse, error) {
-	if e.durables == nil {
+	if e.durables == nil || taskTypeOf(req, e.actorID) != TaskTypeWorkflow {
 		run()
 		return nil, nil
 	}
