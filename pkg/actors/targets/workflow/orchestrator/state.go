@@ -147,7 +147,7 @@ func (o *orchestrator) tombstoneTamperedState(ctx context.Context, opts wfengine
 	o.cacheDurable(failed)
 
 	if o.eventSink != nil {
-		o.eventSink(o.ometa)
+		o.eventSink(o.ometa, o.getExecutionStartedEvent(failed).GetTags())
 	}
 	o.notifyStreams()
 
@@ -463,7 +463,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 
 	o.cacheDurable(state)
 	if o.eventSink != nil {
-		o.eventSink(o.ometa)
+		o.eventSink(o.ometa, o.getExecutionStartedEvent(state).GetTags())
 	}
 	o.notifyStreams()
 
