@@ -186,7 +186,8 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	// return error status code for resiliency to decide on retry
 	// TODO: Update types to uint32
 	//nolint:gosec
-	return resiliency.NewCodeError(int32(statusCode), rterrors.NewRetriable(errors.New(errMsg)))
+	return resiliency.NewCodeError(int32(statusCode), rterrors.NewRetriable(errors.New(errMsg))).
+		WithRetryAfterHeader(resp.Headers().Get("Retry-After"))
 }
 
 // DeliverBulk publishes bulk message to a subscriber using HTTP and takes care

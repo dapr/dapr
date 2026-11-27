@@ -318,8 +318,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			return operation(ctx)
 		}
 
-		// Use retry/back off
-		b := def.r.NewBackOffWithContext(ctx)
+		// Use retry/back off. The Retry-After wrapper sits inside the context
+		// wrapper so backoff can still see the context and stop waiting when
+		// it's canceled.
+		rab := &retryAfterBackOff{BackOff: def.r.NewBackOff()}
+		b := backoff.WithContext(rab, ctx)
 		attempts := atomic.Int32{}
 		return retry.NotifyRecoverWithData(
 			func() (T, error) {
@@ -334,6 +337,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				var cErr CodeError
 				if errors.As(rErr, &cErr) {
 					if def.r.statusCodeNeedRetry(cErr.StatusCode) {
+						rab.setHint(cErr.RetryAfter())
 						return rRes, rErr
 					} else {
 						return rRes, backoff.Permanent(rErr)
@@ -354,6 +358,33 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 			},
 		)
 	}
+}
+
+// retryAfterBackOff waits at least as long as the last failed attempt asked
+// for (e.g. through a Retry-After header), or the delay from the wrapped
+// policy if that's longer.
+type retryAfterBackOff struct {
+	backoff.BackOff
+	hint time.Duration
+}
+
+func (b *retryAfterBackOff) setHint(d time.Duration) {
+	b.hint = d
+}
+
+func (b *retryAfterBackOff) NextBackOff() time.Duration {
+	next := b.BackOff.NextBackOff()
+	hint := b.hint
+	b.hint = 0
+	if next == backoff.Stop {
+		return next
+	}
+	return max(next, hint)
+}
+
+func (b *retryAfterBackOff) Reset() {
+	b.hint = 0
+	b.BackOff.Reset()
 }
 
 // DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.

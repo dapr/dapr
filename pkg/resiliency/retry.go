@@ -15,12 +15,18 @@ package resiliency
 
 import (
 	"fmt"
+	"math"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/kit/retry"
 )
+
+// maxRetryAfterSeconds keeps a huge Retry-After from overflowing time.Duration.
+const maxRetryAfterSeconds = int64(math.MaxInt64 / int64(time.Second))
 
 var (
 	// Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
@@ -40,6 +46,7 @@ type CodeError struct {
 	StatusCode    int32
 	retryScenario retryScenario
 	err           error
+	retryAfter    time.Duration
 }
 
 func (ce CodeError) Error() string {
@@ -48,6 +55,52 @@ func (ce CodeError) Error() string {
 
 func (ce CodeError) Unwrap() error {
 	return ce.err
+}
+
+// RetryAfter returns the minimum delay the remote end asked for before the
+// next attempt, or 0 if it didn't ask for one.
+func (ce CodeError) RetryAfter() time.Duration {
+	return ce.retryAfter
+}
+
+// WithRetryAfterHeader returns a copy of the error carrying the delay from a
+// Retry-After header. The header is only honored on HTTP 429 and 503
+// responses, which are the ones where RFC 9110 gives it a meaning. Invalid
+// values are ignored.
+func (ce CodeError) WithRetryAfterHeader(value string) CodeError {
+	if ce.retryScenario != retryScenarioHTTPInvoke ||
+		(ce.StatusCode != http.StatusTooManyRequests && ce.StatusCode != http.StatusServiceUnavailable) {
+		return ce
+	}
+	if d, ok := ParseRetryAfter(value, time.Now()); ok {
+		ce.retryAfter = d
+	}
+	return ce
+}
+
+// ParseRetryAfter parses the value of a Retry-After header, which is either a
+// number of seconds or an HTTP date. A date in the past means no delay.
+func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+
+	if secs, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if secs < 0 {
+			return 0, false
+		}
+		if secs > maxRetryAfterSeconds {
+			secs = maxRetryAfterSeconds
+		}
+		return time.Duration(secs) * time.Second, true
+	}
+
+	t, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	return max(t.Sub(now), 0), true
 }
 
 // NewCodeError is used when the statusCode can be either HTTP or gRPC

@@ -89,6 +89,18 @@ var BufPool = sync.Pool{
 // from user app to Dapr.
 type DaprInternalMetadata map[string]*internalv1pb.ListStringValue
 
+// Get returns the first value for key, matching the key case-insensitively
+// since HTTP headers and gRPC metadata don't agree on casing. It returns an
+// empty string when the key isn't there.
+func (m DaprInternalMetadata) Get(key string) string {
+	for k, v := range m {
+		if strings.EqualFold(k, key) && len(v.GetValues()) > 0 {
+			return v.GetValues()[0]
+		}
+	}
+	return ""
+}
+
 // IsJSONContentType returns true if contentType is the mime media type for JSON.
 func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
