@@ -128,6 +128,8 @@ The Helm chart has the follow configuration options that can be supplied:
 |--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
 | `dapr_operator.replicaCount`               | Number of replicas                                                                                                                                                                            | `1`         |
 | `dapr_operator.logLevel`                   | Log level                                                                                                                                                                                     | `info`      |
+| `dapr_operator.logFile` | Optional log file path on a writable volume | `""` |
+| `dapr_operator.logOutputs` | Comma-separated log destinations: `stdout`, `stderr`, or file paths | `""` |
 | `dapr_operator.watchInterval`              | Interval for polling pods' state (e.g. `2m`). Set to `0` to disable, or `once` to only run once when the operator starts                                                                      | `0`         |
 | `dapr_operator.maxPodRestartsPerMinute`    | Maximum number of pods in an invalid state that can be restarted per minute                                                                                                                   | `20`        |
 | `dapr_operator.image.name`                 | Docker image name (`global.registry/dapr_operator.image.name`)                                                                                                                                | `operator`  |
@@ -149,6 +151,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.ha`| If set to true, deploys the Placement service with 3 nodes regardless of the value of `global.ha.enabled` | `false` |
 | `dapr_placement.replicationFactor` | Number of consistent hashing virtual node | `100`|
 | `dapr_placement.logLevel` | Service Log level | `info`|
+| `dapr_placement.logFile` | Optional log file path on a writable volume | `""` |
+| `dapr_placement.logOutputs` | Comma-separated log destinations: `stdout`, `stderr`, or file paths | `""` |
 | `dapr_placement.image.name`                    | Service docker image name (`global.registry/dapr_placement.image.name`)                                                                                                   | `placement`                  |
 | `dapr_placement.cluster.forceInMemoryLog`      | Use in-memory log store and disable volume attach when HA is true                                                                                                         | `false`                 |
 | `dapr_placement.cluster.logStorePath`          | Mount path for persistent volume for log store in unix-like system when HA is true                                                                                        | `/var/run/dapr/raft-log` |
@@ -182,6 +186,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                     | Description                                                                                                                                                                                                                                                                                                                                          | Default                                    |
 |-----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------|
 | `dapr_scheduler.logLevel`                     | Service Log level                                                                                                                                                                                                                                                                                                                                    | `info`                                     |
+| `dapr_scheduler.logFile` | Optional log file path on a writable volume | `""` |
+| `dapr_scheduler.logOutputs` | Comma-separated log destinations: `stdout`, `stderr`, or file paths | `""` |
 | `dapr_scheduler.image.name`                   | Service docker image name (`global.registry/dapr_scheduler.image.name`)                                                                                                                                                                                                                                                                              | `scheduler`                                |
 | `dapr_scheduler.cluster.etcdDataDirPath`      | Mount path for persistent volume for log store in unix-like system                                                                                                                                                                                                                                                                                   | `/var/run/data/dapr-scheduler/etcd-data-dir` |
 | `dapr_scheduler.cluster.etcdDataDirWinPath`   | Mount path for persistent volume for log store in windows                                                                                                                                                                                                                                                                                            | `C:\\etcd-data-dir`                        |
@@ -216,6 +222,8 @@ The Helm chart has the follow configuration options that can be supplied:
 |---|---|---|
 | `dapr_sentry.replicaCount`          | Number of replicas                                                                                                                                      | `1`                     |
 | `dapr_sentry.logLevel`              | Log level                                                                                                                                               | `info`                  |
+| `dapr_sentry.logFile` | Optional log file path on a writable volume | `""` |
+| `dapr_sentry.logOutputs` | Comma-separated log destinations: `stdout`, `stderr`, or file paths | `""` |
 | `dapr_sentry.image.name`            | Docker image name (`global.registry/dapr_sentry.image.name`)                                                                                            | `sentry`                  |
 | `dapr_sentry.tls.issuer.certPEM`    | Issuer Certificate cert                                                                                                                                 | `""`                    |
 | `dapr_sentry.tls.issuer.keyPEM`     | Issuer Private Key cert                                                                                                                                 | `""`                    |
@@ -236,6 +244,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.sidecarImagePullPolicy`            | Dapr sidecar image pull policy                                                                                                                                                                                                                                                                                                                                                                                                                                         | `IfNotPresent`                                                                                                                                                                                                            |
 | `dapr_sidecar_injector.replicaCount`                      | Number of replicas                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `1`                                                                                                                                                                                                                       |
 | `dapr_sidecar_injector.logLevel`                          | Log level                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `info`                                                                                                                                                                                                                    |
+| `dapr_sidecar_injector.logFile` | Optional log file path on a writable volume | `""` |
+| `dapr_sidecar_injector.logOutputs` | Comma-separated log destinations: `stdout`, `stderr`, or file paths | `""` |
 | `dapr_sidecar_injector.image.name`                        | Docker image name for Dapr runtime sidecar to inject into an application (`global.registry/dapr_sidecar_injector.image.name`)                                                                                                                                                                                                                                                                                                                                          | `daprd`                                                                                                                                                                                                                   |
 | `dapr_sidecar_injector.injectorImage.name`                | Docker image name for sidecar injector service (`global.registry/dapr_sidecar_injector.injectorImage.name`)                                                                                                                                                                                                                                                                                                                                                            | `injector`                                                                                                                                                                                                                |
 | `dapr_sidecar_injector.webhookFailurePolicy`              | Failure policy for the sidecar injector                                                                                                                                                                                                                                                                                                                                                                                                                                | `Ignore`                                                                                                                                                                                                                  |
@@ -338,3 +348,26 @@ kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
 ```bash
 helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set global.nodeSelector.myLabel=myValue --wait
 ```
+
+## Log destinations
+
+Control-plane components accept optional `logFile` and `logOutputs` values. Empty values preserve the logger defaults. For example:
+
+```yaml
+dapr_operator:
+  logFile: /var/log/dapr/operator.log
+  logOutputs: stdout
+```
+
+For application sidecars, set the equivalent pod annotations:
+
+```yaml
+metadata:
+  annotations:
+    dapr.io/log-file: "/var/log/dapr/app.log"
+    dapr.io/log-outputs: "stdout"
+```
+
+The injector passes these values as `--log-file` and `--log-outputs`. When both are set, the logger merges their destinations. `logOutputs` can also contain multiple comma-separated destinations, such as `stdout,/var/log/dapr/app.log`.
+
+File destinations require a writable directory accessible to the container user. These settings do not create or mount volumes. Mount a writable volume at the destination; for application sidecars, use `dapr.io/volume-mounts-rw` to mount a volume already defined on the pod. A log-collection sidecar can mount the same volume to read the files.
