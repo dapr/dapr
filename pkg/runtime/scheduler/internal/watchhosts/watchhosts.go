@@ -58,17 +58,22 @@ type WatchHosts struct {
 	lastAddrs        []string
 	lastSupportsPull bool
 
+	// unreachable reports why daprd is not ready until the first host list.
+	unreachable *unreachable
+
 	loop loop.Interface[loops.EventHost]
 }
 
 func New(opts Options) *WatchHosts {
+	htarget := opts.Healthz.AddTarget("scheduler-watch-hosts")
 	return &WatchHosts{
-		htarget:    opts.Healthz.AddTarget("scheduler-watch-hosts"),
-		allAddrs:   opts.Addresses,
-		security:   opts.Security,
-		clients:    opts.Clients,
-		loop:       opts.HostLoop,
-		leadership: opts.Leadership,
+		htarget:     htarget,
+		allAddrs:    opts.Addresses,
+		security:    opts.Security,
+		clients:     opts.Clients,
+		loop:        opts.HostLoop,
+		leadership:  opts.Leadership,
+		unreachable: newUnreachable(opts.Addresses, htarget),
 	}
 }
 
@@ -87,6 +92,11 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		stream, closeCon, err := w.connSchedulerHosts(ctx)
 		if err != nil {
 			log.Errorf("Failed to connect to scheduler host: %s", err)
+			// An attempt that fails because daprd shuts down is not a reason to
+			// report an unreachable Scheduler.
+			if ctx.Err() == nil {
+				w.unreachable.failed(err)
+			}
 
 			select {
 			case <-ctx.Done():
@@ -137,6 +147,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 					return ctx.Err()
 				}
 				log.Warnf("Scheduler WatchHosts stream error, reconnecting: %s", err)
+				w.unreachable.failed(err)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -159,6 +170,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 				break
 			}
 
+			w.unreachable.connected()
 			w.htarget.Ready()
 
 			resp, err = stream.Recv()
