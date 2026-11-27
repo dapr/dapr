@@ -759,3 +759,105 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 	}
 	wg.Wait()
 }
+
+// TestEndpointPolicyConcurrentCacheAccess guards against the concurrent-map
+// read/write crash (#10413). A goroutine resolving a named endpoint policy
+// reads the r.serviceCBs cache map, while another goroutine resolving a new
+// (default-policy) endpoint writes new entries to the same map under lock.
+// Go maps are not safe for concurrent read/write even on different keys, so
+// this must hold under `go test -race`.
+func TestEndpointPolicyConcurrentCacheAccess(t *testing.T) {
+	config := &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
+					"testCB": {
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), ""): {
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
+				},
+			},
+			Targets: resiliencyV1alpha.Targets{
+				Apps: map[string]resiliencyV1alpha.EndpointPolicyNames{
+					"namedApp": {CircuitBreaker: "testCB"},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+
+	var wg sync.WaitGroup
+	wg.Add(20)
+	for i := range 20 {
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				if i%2 == 0 {
+					// Named-policy branch: previously read r.serviceCBs without a lock.
+					r.EndpointPolicy("namedApp", "localhost")
+				} else {
+					// Default-policy branch: writes a fresh entry to r.serviceCBs under lock.
+					r.EndpointPolicy(fmt.Sprintf("newApp-%d-%d", i, j), "localhost")
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// TestActorPreLockPolicyConcurrentCacheAccess is the actor-cache analogue of
+// TestEndpointPolicyConcurrentCacheAccess (see #10413).
+func TestActorPreLockPolicyConcurrentCacheAccess(t *testing.T) {
+	config := &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
+					"testCB": {
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), ""): {
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
+				},
+			},
+			Targets: resiliencyV1alpha.Targets{
+				Actors: map[string]resiliencyV1alpha.ActorPolicyNames{
+					"namedActorType": {
+						CircuitBreaker:          "testCB",
+						CircuitBreakerScope:     "type",
+						CircuitBreakerCacheSize: 100,
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+
+	var wg sync.WaitGroup
+	wg.Add(20)
+	for i := range 20 {
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				if i%2 == 0 {
+					// Named-policy branch: previously read r.actorCBCaches without a lock.
+					r.ActorPreLockPolicy("namedActorType", "actorID")
+				} else {
+					// Default-policy branch: writes a fresh entry to r.actorCBCaches under lock.
+					r.ActorPreLockPolicy(fmt.Sprintf("newActor-%d-%d", i, j), "actorID")
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+}
