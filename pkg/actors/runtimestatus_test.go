@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
@@ -149,7 +150,12 @@ func TestRuntimeStatusStateStores(t *testing.T) {
 		"BalanceActor":     "wallet-balance",
 	}
 
-	t.Run("bound stores are reported with whether they are loaded", func(t *testing.T) {
+	const (
+		notLoaded  = "the state store is not loaded"
+		noFeatures = "the state store does not support both the ETag and transactional features required for actor state"
+	)
+
+	t.Run("bound stores are reported with whether they are usable", func(t *testing.T) {
 		t.Parallel()
 
 		cs := compstore.New()
@@ -161,18 +167,35 @@ func TestRuntimeStatusStateStores(t *testing.T) {
 		require.Len(t, status.GetStateStores(), 2)
 		assert.Equal(t, "wallet-balance", status.GetStateStores()[0].GetName())
 		assert.Equal(t, []string{"BalanceActor"}, status.GetStateStores()[0].GetActorTypes())
-		assert.False(t, status.GetStateStores()[0].GetLoaded())
+		assert.False(t, status.GetStateStores()[0].GetUsable())
+		assert.Equal(t, notLoaded, status.GetStateStores()[0].GetError())
 		assert.Equal(t, "wallet-transactions", status.GetStateStores()[1].GetName())
 		assert.Equal(t, []string{"AuditActor", "TransactionActor"}, status.GetStateStores()[1].GetActorTypes())
-		assert.True(t, status.GetStateStores()[1].GetLoaded())
+		assert.True(t, status.GetStateStores()[1].GetUsable())
+		assert.Empty(t, status.GetStateStores()[1].GetError())
 
-		// A store loaded later is reported as loaded, and a removed one is not.
+		// A store loaded later is reported as usable, and a removed one is not.
 		cs.AddStateStore("wallet-balance", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
 		cs.DeleteStateStore("wallet-transactions")
 		status = a.RuntimeStatus()
 		require.Len(t, status.GetStateStores(), 2)
-		assert.True(t, status.GetStateStores()[0].GetLoaded())
-		assert.False(t, status.GetStateStores()[1].GetLoaded())
+		assert.True(t, status.GetStateStores()[0].GetUsable())
+		assert.Empty(t, status.GetStateStores()[0].GetError())
+		assert.False(t, status.GetStateStores()[1].GetUsable())
+		assert.Equal(t, notLoaded, status.GetStateStores()[1].GetError())
+	})
+
+	t.Run("a loaded store without the features of actor state is not usable", func(t *testing.T) {
+		t.Parallel()
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-balance", new(daprt.MockStateStore))
+		a := newActors(t, cs, []string{"10.0.0.1:50005"}, map[string]string{"BalanceActor": "wallet-balance"})
+
+		stores := a.RuntimeStatus().GetStateStores()
+		require.Len(t, stores, 1)
+		assert.False(t, stores[0].GetUsable())
+		assert.Equal(t, noFeatures, stores[0].GetError())
 	})
 
 	t.Run("no bindings reports no state stores", func(t *testing.T) {

@@ -632,7 +632,8 @@ type MetadataActorRuntime struct {
 type MetadataActorRuntimeStateStore struct {
 	Name       string   `json:"name"`
 	ActorTypes []string `json:"actorTypes"`
-	Loaded     bool     `json:"loaded"`
+	Usable     bool     `json:"usable"`
+	Error      string   `json:"error,omitempty"`
 }
 
 type MetadataWorkflows struct {

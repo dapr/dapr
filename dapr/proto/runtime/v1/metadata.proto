@@ -87,9 +87,12 @@ message ActorRuntimeStateStore {
   string name = 1;
   // The actor types whose state is kept in this state store, sorted.
   repeated string actor_types = 2 [json_name = "actorTypes"];
-  // Whether the state store component is loaded. State operations of the
-  // actor types fail while it is not.
-  bool loaded = 3;
+  // Whether the state store can hold the state of the actor types now: it is
+  // loaded, and supports the ETag and transactional features that actor state
+  // needs. State operations of the actor types fail while it is false.
+  bool usable = 3;
+  // Why the state store is not usable. Empty when usable is true.
+  string error = 4;
 }
 
 message ActiveActorsCount {

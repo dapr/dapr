@@ -38,8 +38,9 @@ func init() {
 
 // statestores ensures that the metadata API reports, over HTTP and gRPC, the
 // state stores bound by spec.actors.stateStores and spec.workflow.stateStore
-// with their actor types, and whether each store is loaded: a bound store
-// that is missing is reported as not loaded, until hot reload loads it.
+// with their actor types, and whether each store is usable: a bound store
+// that is missing is reported as not usable, with the reason, until hot
+// reload loads it.
 type statestores struct {
 	app       *actors.Actors
 	balanceDB *sqlite.SQLite
@@ -105,12 +106,16 @@ func (s *statestores) Run(t *testing.T, ctx context.Context) {
 	// The stores are sorted by name and their actor types are sorted. A bound
 	// actor type which the app does not host is reported too.
 	expected := func(balanceLoaded bool) []*daprd.MetadataActorRuntimeStateStore {
+		balance := &daprd.MetadataActorRuntimeStateStore{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}, Usable: balanceLoaded}
+		if !balanceLoaded {
+			balance.Error = "the state store is not loaded"
+		}
 		return []*daprd.MetadataActorRuntimeStateStore{
-			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}, Loaded: balanceLoaded},
-			{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Loaded: true},
+			balance,
+			{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Usable: true},
 			{Name: "wallet-workflows", ActorTypes: []string{
 				wfType + "activity", wfType + "executor", wfType + "retentioner", wfType + "workflow",
-			}, Loaded: true},
+			}, Usable: true},
 		}
 	}
 
@@ -122,7 +127,8 @@ func (s *statestores) Run(t *testing.T, ctx context.Context) {
 			stores = append(stores, &daprd.MetadataActorRuntimeStateStore{
 				Name:       store.GetName(),
 				ActorTypes: store.GetActorTypes(),
-				Loaded:     store.GetLoaded(),
+				Usable:     store.GetUsable(),
+				Error:      store.GetError(),
 			})
 		}
 		return stores

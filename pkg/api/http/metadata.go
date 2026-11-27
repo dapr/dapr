@@ -133,7 +133,8 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					res.ActorRuntime.StateStores = append(res.ActorRuntime.StateStores, metadataActorRuntimeStateStore{
 						Name:       store.GetName(),
 						ActorTypes: store.GetActorTypes(),
-						Loaded:     store.GetLoaded(),
+						Usable:     store.GetUsable(),
+						Error:      store.GetError(),
 					})
 				}
 
@@ -209,7 +210,8 @@ type metadataActorRuntime struct {
 type metadataActorRuntimeStateStore struct {
 	Name       string   `json:"name"`
 	ActorTypes []string `json:"actorTypes"`
-	Loaded     bool     `json:"loaded"`
+	Usable     bool     `json:"usable"`
+	Error      string   `json:"error,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {

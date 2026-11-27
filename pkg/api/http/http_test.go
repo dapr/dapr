@@ -2155,18 +2155,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false,"stateStores":[{"name":"wallet-balance","actorTypes":["BalanceActor"],"loaded":false},{"name":"wallet-transactions","actorTypes":["AuditActor","TransactionActor"],"loaded":true}]},"workflows":{"connectedWorkers":1}}`
+	// expectedBody is the response with the given extra fields of actorRuntime.
+	expectedBody := func(actorRuntime string) string {
+		return `{"id":"xyz","runtimeVersion":"edge","components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false` + actorRuntime + `},"workflows":{"connectedWorkers":1}}`
+	}
 
-	t.Run("Get Metadata", func(t *testing.T) {
+	getMetadata := func(t *testing.T, runtimeStatus *runtimev1pb.ActorRuntime) string {
+		t.Helper()
+
 		var called atomic.Int64
 		actors.WithRuntimeStatus(func() *runtimev1pb.ActorRuntime {
 			called.Add(1)
-			return &runtimev1pb.ActorRuntime{
-				StateStores: []*runtimev1pb.ActorRuntimeStateStore{
-					{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
-					{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Loaded: true},
-				},
-			}
+			return runtimeStatus
 		})
 		resp := fakeServer(t).DoRequest("GET", "v1.0/metadata", nil, nil)
 
@@ -2179,8 +2179,25 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		}
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.JSONEq(t, expectedBody, string(resp.RawBody))
 		assert.Equal(t, int64(1), called.Load())
+		return string(resp.RawBody)
+	}
+
+	t.Run("Get Metadata", func(t *testing.T) {
+		body := getMetadata(t, new(runtimev1pb.ActorRuntime))
+		assert.JSONEq(t, expectedBody(""), body)
+		// Without bound state stores, the response has no stateStores field.
+		assert.NotContains(t, body, "stateStores")
+	})
+
+	t.Run("Get Metadata with bound actor state stores", func(t *testing.T) {
+		body := getMetadata(t, &runtimev1pb.ActorRuntime{
+			StateStores: []*runtimev1pb.ActorRuntimeStateStore{
+				{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}, Error: "the state store is not loaded"},
+				{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Usable: true},
+			},
+		})
+		assert.JSONEq(t, expectedBody(`,"stateStores":[{"name":"wallet-balance","actorTypes":["BalanceActor"],"usable":false,"error":"the state store is not loaded"},{"name":"wallet-transactions","actorTypes":["AuditActor","TransactionActor"],"usable":true}]`), body)
 	})
 }
 
