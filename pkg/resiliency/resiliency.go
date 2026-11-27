@@ -853,8 +853,10 @@ func (r *Resiliency) ComponentOutboundPolicy(name string, componentType Componen
 			policyDef.r = r.retries[componentPolicies.Outbound.Retry]
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
-			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
-			policyDef.cb = r.componentCBs.Get(r.log, name, template)
+			// Skip a circuit breaker that is named but not defined, like for apps and actors.
+			if template, ok := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]; ok {
+				policyDef.cb = r.componentCBs.Get(r.log, name, template)
+			}
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ComponentPolicy{componentType: componentType, componentDirection: "Outbound"}); ok {
@@ -893,8 +895,10 @@ func (r *Resiliency) ComponentInboundPolicy(name string, componentType Component
 			policyDef.r = r.retries[componentPolicies.Inbound.Retry]
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
-			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
-			policyDef.cb = r.componentCBs.Get(r.log, name, template)
+			// Skip a circuit breaker that is named but not defined, like for apps and actors.
+			if template, ok := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]; ok {
+				policyDef.cb = r.componentCBs.Get(r.log, name, template)
+			}
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(ComponentPolicy{componentType: componentType, componentDirection: Inbound}); ok {
