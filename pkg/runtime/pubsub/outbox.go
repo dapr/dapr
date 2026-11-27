@@ -168,22 +168,29 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 	}
 
 	projections := map[string]state.SetRequest{}
-
-	for i, op := range operations {
+	// Build a new slice instead of deleting from operations while ranging:
+	// mutating the slice under range skips entries and can panic once more
+	// than one projection is present (e.g. one projection per key).
+	filteredOps := make([]state.TransactionalStateOperation, 0, len(operations))
+	for _, op := range operations {
 		sr, ok := op.(state.SetRequest)
-
 		if ok {
+			isProjection := false
 			for k, v := range sr.Metadata {
 				if k == "outbox.projection" && kitstrings.IsTruthy(v) {
 					projections[sr.Key] = sr
-
-					operations = append(operations[:i], operations[i+1:]...)
+					isProjection = true
+					break
 				}
 			}
+			if isProjection {
+				continue
+			}
 		}
+		filteredOps = append(filteredOps, op)
 	}
 
-	for _, op := range operations {
+	for _, op := range filteredOps {
 		sr, ok := op.(state.SetRequest)
 		if ok {
 			tr, err := transaction()
@@ -260,11 +267,11 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			operations = append(operations, tr)
+			filteredOps = append(filteredOps, tr)
 		}
 	}
 
-	return operations, nil
+	return filteredOps, nil
 }
 
 // isOutboxStateKey reports whether key has the form of the outbox state keys
