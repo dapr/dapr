@@ -61,10 +61,15 @@ func GetKubeClusterDomainFromDNS(ctx context.Context) (string, error) {
 // clusterDomainFromCNAME extracts the cluster domain from a CNAME response.
 // DNS CNAME responses typically include a trailing dot (e.g.
 // "kubernetes.default.svc.cluster.local."), which must be stripped.
+// Return an empty string if the canonical name does not contain the service
+// name followed by a cluster domain.
 func clusterDomainFromCNAME(apiSvc, cname string) string {
-	clusterDomain := strings.TrimPrefix(cname, apiSvc)
-	clusterDomain = strings.Trim(clusterDomain, ".")
-	return clusterDomain
+	prefix := apiSvc + "."
+	if len(cname) <= len(prefix) || !strings.EqualFold(cname[:len(prefix)], prefix) {
+		return ""
+	}
+
+	return strings.TrimSuffix(cname[len(prefix):], ".")
 }
 
 // GetKubeClusterDomain search KubeClusterDomain value from /etc/resolv.conf file.
