@@ -710,8 +710,8 @@ func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) map[s
 	res := make(map[string]struct{}, len(r))
 	for _, v := range r {
 		//nolint:gocritic
-		if strings.ToLower(string(v.Protocol)) == string(protocol) {
-			key := v.Version + "/" + v.Name
+		if strings.EqualFold(strings.TrimSpace(string(v.Protocol)), string(protocol)) {
+			key := strings.TrimSpace(v.Version) + "/" + strings.TrimSpace(v.Name)
 			res[key] = struct{}{}
 		}
 	}

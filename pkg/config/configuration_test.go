@@ -651,9 +651,12 @@ func TestAPIAccessRules(t *testing.T) {
 				Allowed: APIAccessRules{
 					APIAccessRule{Name: "foo", Version: "v1", Protocol: "http"},
 					APIAccessRule{Name: "MyMethod", Version: "v1alpha1", Protocol: "grpc"},
+					APIAccessRule{Name: "baz", Version: "v1", Protocol: " HTTP "},
+					APIAccessRule{Name: " other ", Version: " v2 ", Protocol: " gRPC "},
 				},
 				Denied: APIAccessRules{
 					APIAccessRule{Name: "bar", Version: "v1", Protocol: "http"},
+					APIAccessRule{Name: "secret", Version: "v1", Protocol: "GRPC"},
 				},
 			},
 		},
@@ -661,10 +664,10 @@ func TestAPIAccessRules(t *testing.T) {
 
 	apiSpec := config.Spec.APISpec
 
-	assert.Equal(t, []string{"v1/foo"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolHTTP))))
-	assert.Equal(t, []string{"v1alpha1/MyMethod"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
+	assert.ElementsMatch(t, []string{"v1/foo", "v1/baz"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolHTTP))))
+	assert.ElementsMatch(t, []string{"v1alpha1/MyMethod", "v2/other"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
 	assert.Equal(t, []string{"v1/bar"}, slices.Collect(maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolHTTP))))
-	assert.Empty(t, slices.Collect(maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
+	assert.Equal(t, []string{"v1/secret"}, slices.Collect(maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
 }
 
 func TestSortMetrics(t *testing.T) {

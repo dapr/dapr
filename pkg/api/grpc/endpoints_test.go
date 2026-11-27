@@ -458,4 +458,50 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("case-insensitive and whitespace-tolerant protocol, name, and version in allowlist", func(t *testing.T) {
+		allowed := []config.APIAccessRule{
+			{
+				Name:     " STATE ",
+				Version:  " V1 ",
+				Protocol: " GRPC ",
+			},
+			{
+				Name:     "jobs",
+				Version:  "v1Alpha1",
+				Protocol: "gRPC",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
+
+		for _, e := range endpoints["state.v1"] {
+			tm(t, e, false)
+		}
+		for _, e := range endpoints["jobs.v1alpha1"] {
+			tm(t, e, false)
+		}
+		for _, e := range endpoints["secrets.v1"] {
+			tm(t, e, true)
+		}
+	})
+
+	t.Run("case-insensitive and whitespace-tolerant protocol, name, and version in denylist", func(t *testing.T) {
+		denied := []config.APIAccessRule{
+			{
+				Name:     "State",
+				Version:  "V1",
+				Protocol: "GRPC",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(nil, denied))
+
+		for _, e := range endpoints["state.v1"] {
+			tm(t, e, true)
+		}
+		for _, e := range endpoints["jobs.v1alpha1"] {
+			tm(t, e, false)
+		}
+	})
 }
