@@ -30,10 +30,11 @@ type Interface interface {
 
 // TODO: @joshvanl: consolidate struct types.
 type DeliverBulkRequest struct {
-	BulkSubCallData      *todo.BulkSubscribeCallData
-	BulkSubMsg           *todo.BulkSubscribedMessage
-	BulkSubResiliencyRes *todo.BulkSubscribeResiliencyRes
-	BulkResponses        *[]contribpubsub.BulkSubscribeResponseEntry
-	RawPayload           bool
-	DeadLetterTopic      string
+	BulkSubCallData        *todo.BulkSubscribeCallData
+	BulkSubMsg             *todo.BulkSubscribedMessage
+	BulkSubResiliencyRes   *todo.BulkSubscribeResiliencyRes
+	BulkResponses          *[]contribpubsub.BulkSubscribeResponseEntry
+	RawPayload             bool
+	DeadLetterTopic        string
+	DeadLetterErrorDetails pubsub.DeadLetterErrorDetailsConfig
 }

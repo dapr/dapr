@@ -152,7 +152,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 							Topic:       topic,
 							Metadata:    message.Metadata,
 							ContentType: &msg.Entries[i].ContentType,
-						}, route.DeadLetterTopic)
+						}, route.DeadLetterTopic, "")
 					}
 
 					bulkResponses[i].EntryId = message.EntryId
@@ -269,7 +269,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 				Topic:       bscData.Topic,
 				Metadata:    message.Metadata,
 				ContentType: &message.ContentType,
-			}, route.DeadLetterTopic)
+			}, route.DeadLetterTopic, "")
 		}
 
 		todo.SetBulkResponseEntry(bscData.BulkResponses, i, message.EntryId, nil)
@@ -330,6 +330,15 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		// Entries that failed before delivery, such as on an invalid event or a
 		// routing error, were not, but are taken out of the retry count too.
 		bscData.BulkSubDiag.AddStatusCount(contribpubsub.Retry, -int64(len(data)))
+	}
+
+	rawPayload, _ := metadata.IsRawPayload(s.route.Metadata)
+	if s.deadLetterErrorDetails.Enabled && !sendAllEntries {
+		for i := range data {
+			entryID := (*bscData.EntryIdIndexMap)[data[i].EntryId]
+			details := rtpubsub.ErrorDetails((*bscData.BulkResponses)[entryID].Error)
+			rtpubsub.EnrichDeadLetterBulkEntry(&data[i], details, rawPayload, s.deadLetterErrorDetails)
+		}
 	}
 
 	req := &contribpubsub.BulkPublishRequest{
