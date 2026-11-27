@@ -197,6 +197,34 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	}
 }
 
+func TestSpanAttributesServerAddressAndPort(t *testing.T) {
+	tests := []struct {
+		remoteAddr string
+		address    string
+		port       string
+	}{
+		{"10.0.0.1:3500", "10.0.0.1", "3500"},
+		{"[::1]:3500", "::1", "3500"},
+		{"[fe80::1%eth0]:50002", "fe80::1%eth0", "50002"},
+		{"10.0.0.1", "10.0.0.1", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.remoteAddr, func(t *testing.T) {
+			req := getTestHTTPRequest()
+			req.RemoteAddr = tt.remoteAddr
+			resp := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
+			resp.WriteHeader(http.StatusOK)
+
+			got := spanAttributesMapFromHTTPContext(resp, req)
+			assert.Equal(t, tt.address, got[diagConsts.OtelSpanConvServerAddressAttributeKey])
+			port, ok := got[diagConsts.OtelSpanConvServerPortAttributeKey]
+			assert.Equal(t, tt.port, port)
+			assert.Equal(t, tt.port != "", ok)
+		})
+	}
+}
+
 func TestSpanContextToResponse(t *testing.T) {
 	tests := []struct {
 		scConfig trace.SpanContextConfig

@@ -15,6 +15,7 @@ package diagnostics
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -234,11 +235,13 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 	// OTel convention attributes
 	m[diagConsts.OtelSpanConvHTTPRequestMethodAttributeKey] = r.Method
 	m[diagConsts.OtelSpanConvURLFullAttributeKey] = r.RequestURI
-	addressAndPort := strings.Split(r.RemoteAddr, ":")
-	m[diagConsts.OtelSpanConvServerAddressAttributeKey] = addressAndPort[0]
-	if len(addressAndPort) > 1 {
-		// This should always be true for Dapr, adding this "if" just to be safe.
-		m[diagConsts.OtelSpanConvServerPortAttributeKey] = addressAndPort[1]
+	// SplitHostPort handles IPv6 addresses such as "[::1]:3500", which contain colons.
+	if host, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		m[diagConsts.OtelSpanConvServerAddressAttributeKey] = host
+		m[diagConsts.OtelSpanConvServerPortAttributeKey] = port
+	} else {
+		// No port in the address: keep it as it is.
+		m[diagConsts.OtelSpanConvServerAddressAttributeKey] = r.RemoteAddr
 	}
 
 	return m
