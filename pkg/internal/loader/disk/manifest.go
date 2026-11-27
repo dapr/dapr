@@ -118,10 +118,11 @@ func (m *manifestSet[T]) decodeYaml(f io.Reader) error {
 		m.manifestIndex++
 
 		if !scanner.Scan() {
-			err := scanner.Err()
-			if err != nil {
+			// A scanner that failed (for example with bufio.ErrTooLong on a
+			// manifest larger than 64KiB) fails again on every later call, so
+			// report the error once and stop instead of looping forever.
+			if err := scanner.Err(); err != nil {
 				errs = append(errs, err)
-				continue
 			}
 
 			break
