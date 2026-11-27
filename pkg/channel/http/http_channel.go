@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -513,14 +512,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 					}
 					w.Header().Del("Content-Length")
 					w.WriteHeader(clientResp.StatusCode)
+					// Copy errors, including io.ErrUnexpectedEOF when the
+					// app's body ends early, are kept in pipeErr so they
+					// propagate through the pipe: the data received so far
+					// is only a prefix of the response, not a complete body.
 					_, pipeErr = io.Copy(w, clientResp.Body)
-					// If the upstream app declared a Content-Length larger
-					// than the actual body, Go's HTTP client body reader
-					// returns io.ErrUnexpectedEOF. The data we received is
-					// still valid, so treat this as a normal completion.
-					if errors.Is(pipeErr, io.ErrUnexpectedEOF) {
-						pipeErr = nil
-					}
 				}
 			}
 		}))
