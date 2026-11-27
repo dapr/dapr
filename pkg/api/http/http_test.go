@@ -91,6 +91,7 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -2193,7 +2194,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	t.Run("Get Metadata with bound actor state stores", func(t *testing.T) {
 		body := getMetadata(t, &runtimev1pb.ActorRuntime{
 			StateStores: []*runtimev1pb.ActorRuntimeStateStore{
-				{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}, Error: "the state store is not loaded"},
+				{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}, Error: ptr.Of("the state store is not loaded")},
 				{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}, Usable: true},
 			},
 		})

@@ -172,7 +172,7 @@ func TestRuntimeStatusStateStores(t *testing.T) {
 		assert.Equal(t, "wallet-transactions", status.GetStateStores()[1].GetName())
 		assert.Equal(t, []string{"AuditActor", "TransactionActor"}, status.GetStateStores()[1].GetActorTypes())
 		assert.True(t, status.GetStateStores()[1].GetUsable())
-		assert.Empty(t, status.GetStateStores()[1].GetError())
+		assert.Nil(t, status.GetStateStores()[1].Error)
 
 		// A store loaded later is reported as usable, and a removed one is not.
 		cs.AddStateStore("wallet-balance", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
@@ -180,7 +180,7 @@ func TestRuntimeStatusStateStores(t *testing.T) {
 		status = a.RuntimeStatus()
 		require.Len(t, status.GetStateStores(), 2)
 		assert.True(t, status.GetStateStores()[0].GetUsable())
-		assert.Empty(t, status.GetStateStores()[0].GetError())
+		assert.Nil(t, status.GetStateStores()[0].Error)
 		assert.False(t, status.GetStateStores()[1].GetUsable())
 		assert.Equal(t, notLoaded, status.GetStateStores()[1].GetError())
 	})

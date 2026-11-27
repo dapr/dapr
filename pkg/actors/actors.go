@@ -898,7 +898,7 @@ func (a *actors) boundStateStoresStatus() []*runtimev1pb.ActorRuntimeStateStore 
 		}
 		if err := a.stateResolver.CheckBoundStore(b.Name); err != nil {
 			store.Usable = false
-			store.Error = err.Error()
+			store.Error = ptr.Of(err.Error())
 		}
 		stores = append(stores, store)
 	}

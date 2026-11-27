@@ -91,8 +91,8 @@ message ActorRuntimeStateStore {
   // loaded, and supports the ETag and transactional features that actor state
   // needs. State operations of the actor types fail while it is false.
   bool usable = 3;
-  // Why the state store is not usable. Empty when usable is true.
-  string error = 4;
+  // Why the state store is not usable. Nil when usable is true.
+  optional string error = 4;
 }
 
 message ActiveActorsCount {
