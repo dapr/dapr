@@ -233,6 +233,32 @@ func Test_scheduleWorkflowStart_savesBeforeReminderCreate(t *testing.T) {
 	assert.NotNil(t, h.orch.state.Inbox[0].GetExecutionStarted())
 }
 
+// Test_createWorkflowInstance_sinkGetsStartTags proves the event sink is handed
+// the run's start-event tags on the save that creates the run, before any of
+// its code has run, so a view written from that first save can carry them.
+func Test_createWorkflowInstance_sinkGetsStartTags(t *testing.T) {
+	const instanceID = "test-start-tags"
+
+	h := newCreateHarness(t, instanceID)
+	var (
+		gotMeta *backend.WorkflowMetadata
+		gotTags map[string]string
+	)
+	h.orch.eventSink = func(ometa *backend.WorkflowMetadata, tags map[string]string) {
+		gotMeta, gotTags = ometa, tags
+	}
+
+	tags := map[string]string{"team": "payments"}
+	start := startEventFor(instanceID, time.Now(), func(es *protos.ExecutionStartedEvent) {
+		es.Tags = tags
+	})
+	require.NoError(t, h.orch.createWorkflowInstance(t.Context(), createRequest(start)))
+
+	require.NotNil(t, gotMeta, "the save that creates the run reaches the sink")
+	assert.Equal(t, instanceID, gotMeta.GetInstanceId())
+	assert.Equal(t, tags, gotTags)
+}
+
 func Test_scheduleWorkflowStart_honorsScheduledStartTimestamp(t *testing.T) {
 	const instanceID = "test-start-delayed"
 
