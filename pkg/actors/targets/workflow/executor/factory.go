@@ -132,6 +132,13 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	return nil
 }
 
+// DeactivateAll halts every actor as HaltAll does. HaltAll records no
+// rebalance and leaves the factory serving, so it is also how this factory
+// deactivates the actors of a type which stays hosted.
+func (f *factory) DeactivateAll(ctx context.Context) error {
+	return f.HaltAll(ctx)
+}
+
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()

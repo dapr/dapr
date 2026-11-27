@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/kit/logger"
@@ -36,8 +37,6 @@ type Report struct {
 	Namespace  string
 	ActorTypes []string
 }
-
-const internalActorTypePrefix = "dapr.internal."
 
 // Authorize rejects a report whose app ID or namespace does not match the
 // caller's SPIFFE identity, and reports claiming internal actor types
@@ -90,12 +89,12 @@ func Authorize(ctx context.Context, sec security.Handler, r Report) error {
 // internal type, such as one with an empty segment, is internal and owned by
 // no one.
 func InternalActorType(actorType, ns, appID string) (internal, owned bool) {
-	if actorType != "dapr.internal" && !strings.HasPrefix(actorType, internalActorTypePrefix) {
+	if !reserved.IsInternalActorType(actorType) {
 		return false, false
 	}
 	if ns == "" || appID == "" {
 		return true, false
 	}
-	owner := internalActorTypePrefix + ns + "." + appID
+	owner := reserved.InternalActorTypePrefix + ns + "." + appID
 	return true, actorType == owner || strings.HasPrefix(actorType, owner+".")
 }

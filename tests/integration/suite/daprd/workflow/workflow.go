@@ -76,6 +76,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/stagedops"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/statefulhistory"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/statestore"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/taskexecutionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/terminate"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/terminate/batched"

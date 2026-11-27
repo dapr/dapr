@@ -151,7 +151,17 @@ func (f *factory) initApp(actorID string) *app {
 func (f *factory) HaltAll(ctx context.Context) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.haltActors(ctx, func(actorID string) bool {
+	return f.haltActors(ctx, true, func(actorID string) bool {
+		return false
+	})
+}
+
+// DeactivateAll halts every actor like HaltAll, without recording them as
+// rebalanced: they stay hosted here and reactivate on their next call.
+func (f *factory) DeactivateAll(ctx context.Context) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	return f.haltActors(ctx, false, func(actorID string) bool {
 		return false
 	})
 }
@@ -159,7 +169,7 @@ func (f *factory) HaltAll(ctx context.Context) error {
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.haltActors(ctx, func(actorID string) bool {
+	return f.haltActors(ctx, true, func(actorID string) bool {
 		return fn(&api.LookupActorRequest{
 			ActorType: f.actorType,
 			ActorID:   actorID,
@@ -167,7 +177,9 @@ func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReq
 	})
 }
 
-func (f *factory) haltActors(ctx context.Context, fn func(string) bool) error {
+// haltActors halts the actors fn does not keep. rebalanced records each halt
+// in the rebalanced actors metric.
+func (f *factory) haltActors(ctx context.Context, rebalanced bool, fn func(string) bool) error {
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 
@@ -181,7 +193,7 @@ func (f *factory) haltActors(ctx context.Context, fn func(string) bool) error {
 		wg.Add(1)
 		go func(aa *app) {
 			defer wg.Done()
-			errs.Append(f.halt(ctx, aa))
+			errs.Append(f.halt(ctx, aa, rebalanced))
 		}(aa)
 
 		return true
@@ -216,16 +228,18 @@ func (f *factory) handleIdleActor(target *app) {
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := f.halt(ctx, target); err != nil {
+	if err := f.halt(ctx, target, true); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
 }
 
-func (f *factory) halt(ctx context.Context, app *app) error {
+func (f *factory) halt(ctx context.Context, app *app, rebalanced bool) error {
 	key := app.Key()
 
-	diag.DefaultMonitoring.ActorRebalanced(app.Type())
+	if rebalanced {
+		diag.DefaultMonitoring.ActorRebalanced(app.Type())
+	}
 
 	log.Debugf("Halting actor '%s'", key)
 
