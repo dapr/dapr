@@ -59,6 +59,10 @@ func (f *factory) HaltAll(context.Context) error {
 	return nil
 }
 
+func (f *factory) DeactivateAll(context.Context) error {
+	return nil
+}
+
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	return nil
 }
