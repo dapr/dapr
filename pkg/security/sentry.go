@@ -80,8 +80,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
 		))
 		if err != nil {
-			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
-			return nil, fmt.Errorf("error establishing connection to sentry: %w", err)
+			return nil, &certificateRequestError{reason: "sentry_conn", err: fmt.Errorf("error establishing connection to sentry: %w", err)}
 		}
 
 		defer conn.Close()
@@ -95,8 +94,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 		}
 
 		if err != nil {
-			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_token")
-			return nil, fmt.Errorf("error obtaining token: %w", err)
+			return nil, &certificateRequestError{reason: "sentry_token", err: fmt.Errorf("error obtaining token: %w", err)}
 		}
 
 		req := &sentryv1pb.SignCertificateRequest{
@@ -116,18 +114,16 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 
 		resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
 		if err != nil {
-			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
-			return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
+			return nil, &certificateRequestError{reason: "sign", err: fmt.Errorf("error from sentry SignCertificate: %w", err)}
 		}
 
 		if err = resp.GetValidUntil().CheckValid(); err != nil {
-			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
-			return nil, fmt.Errorf("error parsing ValidUntil: %w", err)
+			return nil, &certificateRequestError{reason: "invalid_ts", err: fmt.Errorf("error parsing ValidUntil: %w", err)}
 		}
 
 		workloadcert, err := cryptopem.DecodePEMCertificates(resp.GetWorkloadCertificate())
 		if err != nil {
-			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
+			return nil, &certificateRequestError{reason: "invalid_cert", err: fmt.Errorf("error parsing newly signed certificate: %w", err)}
 		}
 
 		var jwtVal *string
@@ -142,13 +138,11 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 				jwt.WithContext(ctx),
 				jwt.WithVerify(false))
 			if err != nil {
-				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
-				return nil, fmt.Errorf("error parsing JWT: %w", err)
+				return nil, &certificateRequestError{reason: "jwt_parse", err: fmt.Errorf("error parsing JWT: %w", err)}
 			}
 
 			if len(tkn.Audience()) == 0 {
-				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
-				return nil, errors.New("JWT audience is empty")
+				return nil, &certificateRequestError{reason: "jwt_aud", err: errors.New("JWT audience is empty")}
 			}
 
 			jwtVal = new(resp.GetJwt().GetValue())
@@ -161,13 +155,11 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 				jwt.WithContext(ctx),
 				jwt.WithVerify(false))
 			if err != nil {
-				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
-				return nil, fmt.Errorf("error parsing JWT: %w", err)
+				return nil, &certificateRequestError{reason: "jwt_parse", err: fmt.Errorf("error parsing JWT: %w", err)}
 			}
 
 			if len(tkn.Audience()) != 1 || aud != tkn.Audience()[0] {
-				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
-				return nil, errors.New("JWT audience mismatch")
+				return nil, &certificateRequestError{reason: "jwt_aud", err: errors.New("JWT audience mismatch")}
 			}
 
 			if perAudiencesJwts == nil {
