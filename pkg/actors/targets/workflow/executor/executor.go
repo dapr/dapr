@@ -83,7 +83,7 @@ type executor struct {
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (res *internalsv1pb.InternalInvokeResponse, err error) {
-	if err := e.enter(); err != nil {
+	if err = e.enter(); err != nil {
 		if req.GetMessage().GetMethod() == MethodClaim {
 			return &internalsv1pb.InternalInvokeResponse{
 				Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
