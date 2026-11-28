@@ -16,6 +16,7 @@ package root
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -116,8 +117,8 @@ type Root struct {
 	inFlight int
 
 	// pendingBarriers holds Done channels for Barriers that arrived while
-	// inFlight > 0. They are closed when inFlight returns to 0.
-	pendingBarriers []chan struct{}
+	// inFlight > 0. They receive barrierError() when inFlight returns to 0.
+	pendingBarriers []chan error
 
 	// runCtx is captured from Run so per-name MCPServer loops created from
 	// inside Handle can be launched with the same lifecycle as the root.
@@ -220,18 +221,41 @@ func (r *Root) Handle(ctx context.Context, e loops.EventRoot) error {
 	return nil
 }
 
-// handleBarrier closes the Barrier's Done channel once all currently in-flight
-// Init operations have completed (i.e. inFlight returns to 0). If there is
-// no in-flight work, the Done is closed immediately.
+// handleBarrier completes the Barrier once all currently in-flight Init
+// operations have completed (i.e. inFlight returns to 0). If there is no
+// in-flight work, it completes immediately.
 func (r *Root) handleBarrier(ev *loops.Barrier) {
 	if ev.Done == nil {
 		return
 	}
 	if r.inFlight == 0 {
-		close(ev.Done)
+		ev.Done <- r.barrierError()
 		return
 	}
 	r.pendingBarriers = append(r.pendingBarriers, ev.Done)
+}
+
+// barrierError reports why a flush must fail daprd startup (#7326): a
+// recorded fatal init error, or a non-ignored component still parked behind
+// a secret store that never became ready. Parked ignoreErrors components
+// stay parked and may still load if the store arrives via hot reload. A
+// reported fatal error is cleared: Flush has surfaced it, so Run need not
+// return it again on shutdown.
+func (r *Root) barrierError() error {
+	var errs []error
+	if fatal := r.fatalErr.Swap(nil); fatal != nil {
+		errs = append(errs, *fatal)
+	}
+	for store, deps := range r.pendingDependents {
+		for _, comp := range deps {
+			if comp.Spec.IgnoreErrors {
+				log.Errorf("Ignoring error processing component %s: secret store %q is not ready", comp.Name, store)
+				continue
+			}
+			errs = append(errs, fmt.Errorf("process component %s error: secret store %q is not ready", comp.Name, store))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Root) handleShutdown(ev *loops.Shutdown) {
