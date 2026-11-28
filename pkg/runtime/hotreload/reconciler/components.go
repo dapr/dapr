@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 )
 
@@ -243,7 +245,7 @@ func (c *components) notifyStateStoreChanged(name string) func() {
 // way. comp is resolved only when the deciding entry is an environment
 // variable or secret reference, so a literal value costs no secret reads.
 // A value that cannot be known counts as marked: a reference whose secret
-// store is not loaded yet, a secret read that failed, or metadata the
+// store is not loaded yet, a failed read of its secret, or metadata the
 // processor cannot build. Skipping the component is recoverable, while a
 // second actor state store, or a failed init, exits daprd.
 func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve func() (*compapi.Component, string, error)) bool {
@@ -271,8 +273,9 @@ func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve fun
 		}
 		resolved, unready, err := resolve()
 		// A failed secret read leaves the value empty, as an empty secret
-		// does, while the processor's own read may succeed.
-		if err != nil {
+		// does, while the processor's own read may succeed. A failed read of
+		// another entry, such as a password, does not decide the value.
+		if readFailed(err, last) {
 			return true
 		}
 		if unready != "" {
@@ -297,4 +300,29 @@ func (c *components) isMarkedActorStateStore(comp compapi.Component, resolve fun
 		return true
 	}
 	return state.IsActorStateStore(base.Properties)
+}
+
+// readFailed returns whether err, from ResolveResource, holds a failed read
+// of one of the entries at the indexes in entries, or an error that names no
+// entry.
+func readFailed(err error, entries map[string]int) bool {
+	if err == nil {
+		return false
+	}
+	errs := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	}
+	for _, e := range errs {
+		var rerr *secret.ReadError
+		if !errors.As(e, &rerr) {
+			return true
+		}
+		for _, i := range entries {
+			if rerr.Index == i {
+				return true
+			}
+		}
+	}
+	return false
 }

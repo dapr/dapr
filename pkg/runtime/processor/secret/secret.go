@@ -124,9 +124,25 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 	return updated, secretStoreName
 }
 
+// ReadError is a failed read or decode of the secret of one metadata entry.
+type ReadError struct {
+	// Index is the entry's index in the resource's NameValuePairs.
+	Index int
+	Err   error
+}
+
+func (e *ReadError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *ReadError) Unwrap() error {
+	return e.Err
+}
+
 // ResolveResource is ProcessResource, and also returns the errors of the
-// secret reads and decodes that failed. ProcessResource logs them and leaves
-// the value as it was, which its caller cannot tell from an empty secret.
+// secret reads and decodes that failed, one *ReadError per entry.
+// ProcessResource logs them and leaves the value as it was, which its caller
+// cannot tell from an empty secret.
 func (s *secret) ResolveResource(ctx context.Context, resource meta.Resource) (updated bool, secretStoreName string, err error) {
 	ctx = s.withSVIDContext(ctx)
 
@@ -163,14 +179,14 @@ func (s *secret) ResolveResource(ctx context.Context, resource meta.Resource) (u
 
 			if derr := json.Unmarshal(m.Value.Raw, &jsonVal); derr != nil {
 				log.Errorf("Error decoding secret: %v", derr)
-				errs = append(errs, fmt.Errorf("error decoding secret of %s: %w", m.Name, derr))
+				errs = append(errs, &ReadError{Index: i, Err: fmt.Errorf("error decoding secret of %s: %w", m.Name, derr)})
 				continue
 			}
 
 			dec, derr := base64.StdEncoding.DecodeString(jsonVal)
 			if derr != nil {
 				log.Errorf("Error decoding secret: %v", derr)
-				errs = append(errs, fmt.Errorf("error decoding secret of %s: %w", m.Name, derr))
+				errs = append(errs, &ReadError{Index: i, Err: fmt.Errorf("error decoding secret of %s: %w", m.Name, derr)})
 				continue
 			}
 
@@ -197,7 +213,7 @@ func (s *secret) ResolveResource(ctx context.Context, resource meta.Resource) (u
 			})
 			if gerr != nil {
 				log.Errorf("Error getting secret: %v", gerr)
-				errs = append(errs, fmt.Errorf("error getting secret %s: %w", m.SecretKeyRef.Name, gerr))
+				errs = append(errs, &ReadError{Index: i, Err: fmt.Errorf("error getting secret %s: %w", m.SecretKeyRef.Name, gerr)})
 				continue
 			}
 
