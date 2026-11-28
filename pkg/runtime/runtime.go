@@ -248,7 +248,7 @@ func newDaprRuntime(ctx context.Context,
 	// directly. Mirrors what the Runner does for other component operations.
 	outbox := pubsub.NewOutbox(pubsub.OptionsOutbox{
 		Publisher:             pubsubAdapter,
-		GetPubsubFn:           compStore.GetPubSubComponent,
+		GetPubsubFn:           compStore.GetPubSub,
 		GetStateFn:            compStore.GetStateStore,
 		CloudEventExtractorFn: pubsub.ExtractCloudEventProperty,
 		Namespace:             namespace,
