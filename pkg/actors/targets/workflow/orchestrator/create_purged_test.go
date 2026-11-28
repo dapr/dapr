@@ -426,7 +426,7 @@ func Test_saveInternalState_recordsCommittedExecutionBeforeRefresh(t *testing.T)
 
 	cached.History[0] = startEventFor(instanceID, time.Now(), withExecutionID("exec-2"))
 	h.refreshErr = errors.New("store unavailable")
-	require.NoError(t, h.orch.saveInternalState(t.Context(), cached))
+	require.NoError(t, h.orch.saveInternalState(t.Context(), cached, nil))
 	require.Nil(t, h.orch.state, "the failed refresh drops the cache")
 	require.NotNil(t, h.orch.cachedExecutionID)
 	assert.Equal(t, "exec-2", *h.orch.cachedExecutionID, "the record names the committed generation")
