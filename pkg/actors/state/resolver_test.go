@@ -244,6 +244,43 @@ func TestResolver_Bindings(t *testing.T) {
 	assert.Equal(t, map[string]string{"A": "s1", "B": "s2"}, r.Bindings())
 }
 
+func TestResolver_BoundStores(t *testing.T) {
+	t.Run("stores sorted by name with their actor types sorted", func(t *testing.T) {
+		r := NewResolver(ResolverOptions{Stores: &fakeStores{}, Bindings: map[string]string{
+			"TransactionActor": "wallet-transactions",
+			"AuditActor":       "wallet-transactions",
+			"BalanceActor":     "wallet-balance",
+		}})
+
+		assert.Equal(t, []BoundStore{
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+			{Name: "wallet-transactions", ActorTypes: []string{"AuditActor", "TransactionActor"}},
+		}, r.BoundStores())
+	})
+
+	t.Run("no bindings", func(t *testing.T) {
+		assert.Empty(t, NewResolver(ResolverOptions{Stores: &fakeStores{}}).BoundStores())
+	})
+}
+
+func TestResolver_CheckBoundStore(t *testing.T) {
+	stores := &fakeStores{stores: map[string]contribstate.Store{
+		"good":      daprt.NewFakeStateStore(),
+		"incapable": &daprt.MockStateStore{},
+	}}
+	r := NewResolver(ResolverOptions{Stores: stores, Bindings: map[string]string{
+		"A": "good", "B": "incapable", "C": "missing",
+	}})
+
+	require.NoError(t, r.CheckBoundStore("good"))
+	require.EqualError(t, r.CheckBoundStore("incapable"), "the state store does not support both the ETag and transactional features required for actor state")
+	require.EqualError(t, r.CheckBoundStore("missing"), "the state store is not loaded")
+
+	// The store is looked up on every call.
+	stores.stores["missing"] = daprt.NewFakeStateStore()
+	require.NoError(t, r.CheckBoundStore("missing"))
+}
+
 // TestResolver_CompStore verifies stores are resolved from the component
 // store on every call, so hot reloading a store (add, replace, remove) is
 // observed without reconstructing the resolver.
