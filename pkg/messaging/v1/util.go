@@ -142,41 +142,41 @@ func connectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struc
 // permanent request headers maintained by IANA.
 // http://www.iana.org/assignments/message-headers/message-headers.xml
 func isPermanentHTTPHeader(hdr string) bool {
-	switch hdr {
+	switch strings.ToLower(hdr) {
 	case
-		"Accept",
-		"Accept-Charset",
-		"Accept-Language",
-		"Accept-Ranges",
+		"accept",
+		"accept-charset",
+		"accept-language",
+		"accept-ranges",
 		// Connection-specific header fields such as Connection and Keep-Alive are prohibited in HTTP/2.
 		// See https://tools.ietf.org/html/rfc7540#section-8.1.2.2.
-		"Connection",
-		"Keep-Alive",
-		"Proxy-Connection",
-		"Transfer-Encoding",
-		"Upgrade",
-		"Cache-Control",
-		"Content-Type",
+		"connection",
+		"keep-alive",
+		"proxy-connection",
+		"transfer-encoding",
+		"upgrade",
+		"cache-control",
+		"content-type",
 		// Remove content-length header since it represents http1.1 payload size,
 		// not the sum of the h2 DATA frame payload lengths.
 		// See https://httpwg.org/specs/rfc7540.html#malformed.
-		"Content-Length",
-		"Cookie",
-		"Date",
-		"Expect",
-		"From",
-		"Host",
-		"If-Match",
-		"If-Modified-Since",
-		"If-None-Match",
-		"If-Schedule-Tag-Match",
-		"If-Unmodified-Since",
-		"Max-Forwards",
-		"Origin",
-		"Pragma",
-		"Referer",
-		"Via",
-		"Warning":
+		"content-length",
+		"cookie",
+		"date",
+		"expect",
+		"from",
+		"host",
+		"if-match",
+		"if-modified-since",
+		"if-none-match",
+		"if-schedule-tag-match",
+		"if-unmodified-since",
+		"max-forwards",
+		"origin",
+		"pragma",
+		"referer",
+		"via",
+		"warning":
 		return true
 	}
 	return false
@@ -203,7 +203,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 			continue
 		}
 
-		if httpHeaderConversion && isPermanentHTTPHeader(k) {
+		if httpHeaderConversion && isPermanentHTTPHeader(keyName) {
 			keyName = DaprHeaderPrefix + keyName
 		}
 
@@ -277,7 +277,9 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		case DestinationIDHeader:
 			continue
 		case diagConsts.BaggageHeader:
-			setHeader(diagConsts.BaggageHeader, listVal.GetValues()[0])
+			for _, val := range listVal.GetValues() {
+				setHeader(diagConsts.BaggageHeader, val)
+			}
 			continue
 		}
 

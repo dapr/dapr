@@ -58,6 +58,51 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	sort.Strings(savedHeaderKeyNames)
 
 	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
+
+	t.Run("preserves multiple baggage headers", func(t *testing.T) {
+		baggageMetadata := map[string]*internalv1pb.ListStringValue{
+			"baggage": {
+				Values: []string{"userId=alice", "serverNode=DF"},
+			},
+		}
+		var receivedBaggage []string
+		InternalMetadataToHTTPHeader(ctx, baggageMetadata, func(k, v string) {
+			if k == "baggage" {
+				receivedBaggage = append(receivedBaggage, v)
+			}
+		})
+		assert.Equal(t, []string{"userId=alice", "serverNode=DF"}, receivedBaggage)
+	})
+}
+
+func TestIsPermanentHTTPHeader(t *testing.T) {
+	permanentHeaders := []string{
+		"Accept", "accept", "ACCEPT",
+		"Content-Type", "content-type", "CoNtEnT-TyPe",
+		"Connection", "connection",
+		"Host", "host", "HOST",
+		"Cookie", "cookie",
+		"Date", "date",
+		"Transfer-Encoding", "transfer-encoding",
+		"Upgrade", "upgrade",
+		"Keep-Alive", "keep-alive",
+		"Proxy-Connection", "proxy-connection",
+		"Origin", "origin",
+		"Pragma", "pragma",
+		"Referer", "referer",
+		"Warning", "warning",
+		"If-Match", "if-match",
+	}
+	for _, h := range permanentHeaders {
+		assert.True(t, isPermanentHTTPHeader(h), "expected %q to be permanent HTTP header", h)
+	}
+
+	nonPermanentHeaders := []string{
+		"X-Custom-Header", "custom-header", "Authorization", "my-header",
+	}
+	for _, h := range nonPermanentHeaders {
+		assert.False(t, isPermanentHTTPHeader(h), "expected %q to NOT be permanent HTTP header", h)
+	}
 }
 
 func TestIsHopByHopHeader(t *testing.T) {
@@ -263,6 +308,61 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		for _, ht := range testHeaders {
 			assert.Equal(t, ht.expected, convertedMD[ht.key][0])
 		}
+	})
+
+	t.Run("with http header conversion for lowercase and mixed-case http headers", func(t *testing.T) {
+		lowercaseHeaders := map[string]*internalv1pb.ListStringValue{
+			"host": {
+				Values: []string{"localhost"},
+			},
+			"content-type": {
+				Values: []string{"application/json"},
+			},
+			"connection": {
+				Values: []string{"keep-alive"},
+			},
+			"transfer-encoding": {
+				Values: []string{"gzip"},
+			},
+			"upgrade": {
+				Values: []string{"websocket"},
+			},
+			"cookie": {
+				Values: []string{"session=123"},
+			},
+			"user-agent": {
+				Values: []string{"curl/8.1.0"},
+			},
+			"CoNtEnT-LeNgTh": {
+				Values: []string{"100"},
+			},
+			"PrOxY-CoNnEcTiOn": {
+				Values: []string{"close"},
+			},
+			"KeEp-AlIvE": {
+				Values: []string{"timeout=5"},
+			},
+			"DaTe": {
+				Values: []string{"Wed, 21 Oct 2026 07:28:00 GMT"},
+			},
+		}
+
+		convertedMD := InternalMetadataToGrpcMetadata(ctx, lowercaseHeaders, true)
+		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
+		assert.Equal(t, "application/json", convertedMD["dapr-content-type"][0])
+		assert.Equal(t, "keep-alive", convertedMD["dapr-connection"][0])
+		assert.Equal(t, "gzip", convertedMD["dapr-transfer-encoding"][0])
+		assert.Equal(t, "websocket", convertedMD["dapr-upgrade"][0])
+		assert.Equal(t, "session=123", convertedMD["dapr-cookie"][0])
+		assert.Equal(t, "curl/8.1.0", convertedMD["user-agent"][0])
+		assert.Equal(t, "100", convertedMD["dapr-content-length"][0])
+		assert.Equal(t, "close", convertedMD["dapr-proxy-connection"][0])
+		assert.Equal(t, "timeout=5", convertedMD["dapr-keep-alive"][0])
+		assert.Equal(t, "Wed, 21 Oct 2026 07:28:00 GMT", convertedMD["dapr-date"][0])
+		assert.Empty(t, convertedMD["host"])
+		assert.Empty(t, convertedMD["connection"])
+		assert.Empty(t, convertedMD["cookie"])
+		assert.Empty(t, convertedMD["date"])
 	})
 
 	keyBinValue := []byte{100, 50}
