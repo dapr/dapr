@@ -434,7 +434,16 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 		return false, stream.Send(req)
 	})
 	if err != nil {
-		return err
+		// Map the error as CallActor does. The calling daprd retries a stream
+		// only on the codes it retries a unary call on, so a plain "remote
+		// actor moved" must reach it as ErrActorInvoke and not as Unknown.
+		if errors.Is(err, context.DeadlineExceeded) {
+			return status.FromContextError(err).Err()
+		}
+		if _, ok := status.FromError(err); ok {
+			return err
+		}
+		return messages.ErrActorInvoke.WithFormat(err)
 	}
 
 	return nil
