@@ -21,6 +21,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
@@ -271,8 +274,19 @@ func (o *orchestrator) isRetired() bool {
 	return o.retired
 }
 
+type deactivationReason int
+
+const (
+	deactivationReasonActorLifecycle deactivationReason = iota
+	deactivationReasonWorkflowDriven
+)
+
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	return o.deactivateWithReason(ctx, deactivationReasonActorLifecycle)
+}
+
+func (o *orchestrator) deactivateWithReason(ctx context.Context, reason deactivationReason) error {
 	unlock, err := o.lock.ContextLock(ctx)
 	if targeterrors.IsStalled(err) {
 		// The actor is parked in the stall hold; wake it so its invocation
@@ -306,7 +320,11 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	o.lock.Close()
 	o.foldFlush()
 	for _, stream := range o.streamFns {
-		stream.errCh <- targeterrors.NewClosed("deactivated")
+		if reason == deactivationReasonActorLifecycle {
+			stream.errCh <- status.Error(codes.Unavailable, targeterrors.NewClosed("deactivated").Error())
+		} else {
+			stream.errCh <- targeterrors.NewClosed("deactivated")
+		}
 	}
 	clear(o.streamFns)
 	o.signing.Reset()

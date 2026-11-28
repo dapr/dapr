@@ -239,7 +239,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 				case <-ctx.Done():
 					return
 				case orchestrator := <-deactivateCh:
-					orchestrator.Deactivate(ctx)
+					orchestrator.deactivateWithReason(ctx, deactivationReasonWorkflowDriven)
 				}
 			}
 		})
