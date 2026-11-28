@@ -56,7 +56,6 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints", "mcpservers", "workflowaccesspolicies"]
     verbs: [ "get", "list", "watch"]
-{{- end }}
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
@@ -64,6 +63,7 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts/finalizers"]
     verbs: ["update"]
+{{- end }}
 {{- end }}
 ---
 {{- if not .Values.global.rbac.namespaced }}
