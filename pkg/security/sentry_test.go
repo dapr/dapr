@@ -15,14 +15,17 @@ package security
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/kit/crypto/spiffe"
 )
@@ -70,4 +73,46 @@ func Test_newJWTRequestFn(t *testing.T) {
 		_, err := newFn(t, serve(t, new(sentryv1pb.UnimplementedCAServer)))(t.Context(), []string{"a"})
 		require.ErrorContains(t, err, "upgrade the Dapr control plane")
 	})
+}
+
+func Test_withRotationMetrics(t *testing.T) {
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(meter.Stop)
+	require.NoError(t, diagnostics.DefaultMonitoring.Init(meter, "test", view.Distribution(1)))
+
+	rotated := func(t *testing.T) int64 {
+		t.Helper()
+		rows, err := meter.RetrieveData("runtime/mtls/workload_cert_rotated_total")
+		require.NoError(t, err)
+		if len(rows) == 0 {
+			return 0
+		}
+		require.Len(t, rows, 1)
+		return rows[0].Data.(*view.CountData).Value
+	}
+
+	var reqErr error
+	fn := withRotationMetrics(func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		return new(spiffe.SVIDResponse), nil
+	})
+
+	_, err := fn(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), rotated(t), "initial identity is not a rotation")
+
+	reqErr = errors.New("sentry unavailable")
+	_, err = fn(t.Context(), nil)
+	require.Error(t, err)
+	assert.Equal(t, int64(0), rotated(t), "failed request is not a rotation")
+
+	reqErr = nil
+	_, err = fn(t.Context(), nil)
+	require.NoError(t, err)
+	_, err = fn(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), rotated(t))
 }
