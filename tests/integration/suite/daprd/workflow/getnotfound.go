@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,7 +74,10 @@ func (g *getnotfound) Run(t *testing.T, ctx context.Context) {
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"errorCode":"ERR_INSTANCE_ID_NOT_FOUND","message":"unable to find workflow with the provided instance ID: not-found"}`, string(body))
+		var data map[string]any
+		require.NoError(t, json.Unmarshal(body, &data))
+		assert.Equal(t, "ERR_INSTANCE_ID_NOT_FOUND", data["errorCode"])
+		assert.Equal(t, "unable to find workflow with the provided instance ID: not-found", data["message"])
 		require.NoError(t, resp.Body.Close())
 	})
 }

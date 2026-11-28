@@ -48,6 +48,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor/pending"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -576,7 +577,7 @@ func (abe *Actors) targetWorkflowActorType(target string) (string, error) {
 	}
 
 	if !common.ValidAppID(target) {
-		return "", messages.ErrInvalidWorkflowAppID.WithFormat(target)
+		return "", apierrors.WorkflowAppIDInvalid(target)
 	}
 
 	return common.NewActorTypeBuilder(abe.namespace).Workflow(target), nil
