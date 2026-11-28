@@ -85,6 +85,39 @@ func TestComponentsPatch(t *testing.T) {
 			&socketSharedVolumeMount,
 		},
 		{
+			"patch should handle whitespace and trailing comma in pluggable-components annotation",
+			"",
+			[]componentsapi.Component{},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyPluggableComponents: " component1, component2, ",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{appContainer, {
+						Name: "component1",
+					}, {
+						Name: "component2",
+					}},
+				},
+			},
+			jsonpatch.Patch{
+				NewPatchOperation("add", PatchPathVolumes, []corev1.Volume{sharedComponentsSocketVolume()}),
+				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
+					Value: socketSharedVolumeMount.MountPath,
+				}}),
+				NewPatchOperation("add", PatchPathContainers+"/1/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
+				NewPatchOperation("add", PatchPathContainers+"/2/env", []corev1.EnvVar{{
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
+					Value: socketSharedVolumeMount.MountPath,
+				}}),
+				NewPatchOperation("add", PatchPathContainers+"/2/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
+			},
+			&socketSharedVolumeMount,
+		},
+		{
 			"patch should not create injectable containers operations when app is scopped but has no annotations",
 			appName,
 			[]componentsapi.Component{
