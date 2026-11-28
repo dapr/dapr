@@ -37,6 +37,21 @@ func TestJSONMarshal(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDecodeStringUndeclaredFunction(t *testing.T) {
+	tests := map[string]string{
+		"global function":    `foo(input.test)`,
+		"receiver function":  `input.test.startsWit("a")`,
+		"with variable list": `has(input.test) && bar(result)`,
+	}
+	for name, code := range tests {
+		t.Run(name, func(t *testing.T) {
+			var e expr.Expr
+			err := e.DecodeString(code)
+			require.ErrorContains(t, err, "undeclared reference to")
+		})
+	}
+}
+
 func TestEmptyProgramNoPanic(t *testing.T) {
 	var e expr.Expr
 	r, err := e.Eval(map[string]any{})
