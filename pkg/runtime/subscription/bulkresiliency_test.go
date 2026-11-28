@@ -1500,3 +1500,162 @@ func TestBulkSubscribeResiliencyAbandonedAttempt(t *testing.T) {
 		}
 	}
 }
+
+// routeAppChannel answers every entry delivered to the orders1 route with
+// SUCCESS, and never answers the orders2 route, so its deliveries time out.
+type routeAppChannel struct {
+	channel.AppChannel
+}
+
+func (c *routeAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	if req.Message().GetMethod() == "orders2" {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	body, err := req.RawDataFull()
+	if err != nil {
+		return nil, err
+	}
+
+	var bulkReq struct {
+		Entries []struct {
+			EntryID string `json:"entryId"`
+		} `json:"entries"`
+	}
+	if err = json.Unmarshal(body, &bulkReq); err != nil {
+		return nil, err
+	}
+
+	appResp := contribpubsub.AppBulkResponse{
+		AppResponses: make([]contribpubsub.AppBulkResponseEntry, len(bulkReq.Entries)),
+	}
+	for i, entry := range bulkReq.Entries {
+		appResp.AppResponses[i] = contribpubsub.AppBulkResponseEntry{
+			EntryId: entry.EntryID,
+			Status:  contribpubsub.Success,
+		}
+	}
+
+	b, err := json.Marshal(appResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(b).
+		WithContentType("application/json"), nil
+}
+
+// TestBulkSubscribeResiliencyTimedOutRouteAfterAnother covers a bulk message
+// whose entries match two routes. bulkSubscribeTopic delivers each route in
+// turn, and every delivery shares the call data of the whole bulk message.
+// When the first route succeeds and every attempt on the second one times
+// out, the entries of the second route must be reported as failed, so that
+// the component redelivers them, rather than as delivered.
+func TestBulkSubscribeResiliencyTimedOutRouteAfterAnother(t *testing.T) {
+	comp := inmemory.New(log)
+	require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+	ps, err := New(Options{
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		Postman: http.New(http.Options{
+			Channels: new(channels.Channels).WithAppChannel(new(routeAppChannel)),
+		}),
+		PubSub: &runtimePubsub.PubsubItem{Component: comp},
+	})
+	require.NoError(t, err)
+
+	retry := resiliencyV1alpha.Retry{Policy: "constant", Duration: "10ms"}
+	retry.MaxRetries = new(1)
+
+	policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "200ms", retry)
+	policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
+
+	in := getInput()
+
+	first := in.pbsm
+	first.PubSubMessages = in.pbsm.PubSubMessages[:5]
+	first.Length = 5
+	first.Path = orders1
+
+	second := in.pbsm
+	second.PubSubMessages = in.pbsm.PubSubMessages[5:]
+	second.Length = 5
+	second.Path = "orders2"
+
+	_, err = ps.applyBulkSubscribeResiliency(t.Context(), &in.bscData, first, "", orders1, policyDef, true, in.envelope)
+	require.NoError(t, err)
+
+	b, err := ps.applyBulkSubscribeResiliency(t.Context(), &in.bscData, second, "", "orders2", policyDef, true, in.envelope)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	require.Len(t, *b, 10)
+	for i, resp := range *b {
+		assert.Equal(t, in.pbsm.PubSubMessages[i].Entry.EntryId, resp.EntryId)
+		if i < 5 {
+			require.NoError(t, resp.Error, "entry %s of the route that succeeded", resp.EntryId)
+		} else {
+			require.Error(t, resp.Error, "entry %s of the route that timed out is reported as delivered", resp.EntryId)
+		}
+	}
+}
+
+// TestBulkSubscribeTimedOutRouteIsNotAcknowledged sends bulk messages whose
+// two entries match two routes through the subscription, with a policy
+// timeout that every delivery to the second route runs into. The response
+// for the entry of that route must carry an error, so that the component
+// does not treat it as delivered. The routes of a bulk message are delivered
+// in map order, so the message is sent several times to cover both orders.
+func TestBulkSubscribeTimedOutRouteIsNotAcknowledged(t *testing.T) {
+	comp := &mockSubscribePubSub{
+		features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
+	}
+	require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
+
+	rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+	require.NoError(t, err)
+	rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+	require.NoError(t, err)
+
+	retry := resiliencyV1alpha.Retry{Policy: "constant", Duration: "10ms"}
+	retry.MaxRetries = new(0)
+
+	ps, err := New(Options{
+		Resiliency: createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, "100ms", retry),
+		Postman: http.New(http.Options{
+			Channels: new(channels.Channels).WithAppChannel(new(routeAppChannel)),
+		}),
+		PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+		AppID:      TestRuntimeConfigID,
+		PubSubName: pubsubName,
+		Topic:      "topic0",
+		Route: runtimePubsub.Subscription{
+			Rules: []*runtimePubsub.Rule{rule1, rule2},
+			BulkSubscribe: &runtimePubsub.BulkSubscribe{
+				Enabled: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		ps.Stop()
+	})
+
+	for range 10 {
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
+			PubsubName: pubsubName,
+			Topic:      "topic0",
+			Entries:    getBulkMessageEntries(2),
+		})
+		require.NoError(t, err)
+
+		resp := comp.GetBulkResponse()
+		require.Error(t, resp.Error)
+		require.Len(t, resp.Statuses, 2)
+		assert.Equal(t, "1111111a", resp.Statuses[0].EntryId)
+		require.NoError(t, resp.Statuses[0].Error, "the entry delivered to orders1")
+		assert.Equal(t, "2222222b", resp.Statuses[1].EntryId)
+		require.Error(t, resp.Statuses[1].Error, "the entry whose delivery to orders2 timed out is acknowledged")
+	}
+}
