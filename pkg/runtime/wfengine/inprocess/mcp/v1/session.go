@@ -32,6 +32,13 @@ import (
 const (
 	// keepAliveInterval is the interval at which the MCP client pings the server.
 	keepAliveInterval = 30 * time.Second
+
+	// sessionCloseWait bounds how long closing a session waits for the server
+	// to acknowledge it. Otherwise only the client's wait for response headers
+	// bounds that wait, and that is the MCPServer's whole per-call timeout,
+	// spent while register, unregister or Reconnect holds a lock, and once per
+	// server at shutdown.
+	sessionCloseWait = 5 * time.Second
 )
 
 // SessionHolder wraps an MCP ClientSession with reconnection support.
@@ -112,7 +119,7 @@ func (h *SessionHolder) Reconnect(ctx context.Context) (*mcp.ClientSession, erro
 	defer h.mu.Unlock()
 
 	if s := h.session.Load(); s != nil {
-		(*s).Close()
+		closeSession(s, sessionCloseWait)
 		h.session.Store(nil)
 	}
 
@@ -124,9 +131,8 @@ func (h *SessionHolder) Reconnect(ctx context.Context) (*mcp.ClientSession, erro
 	return session, nil
 }
 
-// Close cancels the lifecycle ctx and closes the MCP session.
-// The underlying MCP session.Close issues an HTTP DELETE a context the SDK builds and detaches internally.
-// We cannot pass our own context to it, so we can't externally cancel/timeout it.
+// Close cancels the lifecycle ctx and closes the MCP session, waiting at most
+// sessionCloseWait for the server to acknowledge the close.
 func (h *SessionHolder) Close() {
 	if !h.closed.CompareAndSwap(false, true) {
 		return
@@ -135,8 +141,24 @@ func (h *SessionHolder) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if s := h.session.Load(); s != nil {
-		(*s).Close()
+		closeSession(s, sessionCloseWait)
 		h.session.Store(nil)
+	}
+}
+
+// closeSession closes s, waiting at most d for it. ClientSession.Close sends an
+// HTTP DELETE on a context the SDK builds and detaches internally, so we cannot
+// cancel it. Past d we stop waiting and the DELETE runs on in the background
+// until the client's wait for response headers ends.
+func closeSession(s *mcp.ClientSession, d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		s.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
 	}
 }
 

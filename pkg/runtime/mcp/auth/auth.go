@@ -35,7 +35,24 @@ import (
 const (
 	k8sStoreName = "kubernetes"
 	audienceKey  = "audience"
+
+	// DefaultCallTimeout is the per-call deadline for an MCPServer whose HTTP
+	// endpoint sets no timeout.
+	DefaultCallTimeout = 30 * time.Second
 )
+
+// CallTimeout returns the per-call deadline configured on the MCPServer's HTTP
+// endpoint, or DefaultCallTimeout when it sets none.
+func CallTimeout(server *mcpserverapi.MCPServer) time.Duration {
+	switch {
+	case server.Spec.Endpoint.StreamableHTTP != nil && server.Spec.Endpoint.StreamableHTTP.Timeout != nil:
+		return server.Spec.Endpoint.StreamableHTTP.Timeout.Duration
+	case server.Spec.Endpoint.SSE != nil && server.Spec.Endpoint.SSE.Timeout != nil:
+		return server.Spec.Endpoint.SSE.Timeout.Duration
+	default:
+		return DefaultCallTimeout
+	}
+}
 
 // HTTPTransportConfig extracts headers and auth from whichever HTTP transport
 // is configured on the MCPServer. Returns nil slices/pointers for stdio.
@@ -134,7 +151,10 @@ func BuildHTTPClient(
 	// Bound time-to-first-byte so an unresponsive MCP server
 	// (accepts the TCP connection but never replies) can't wedge a request indefinitely.
 	// Safe for SSE: servers send response headers promptly; only the body streams long.
-	transport.ResponseHeaderTimeout = 5 * time.Second
+	// The bound is the server's own per-call timeout, not a fixed one: a server
+	// that answers in plain JSON sends its headers only with the result, so
+	// anything shorter cuts a tool call that is still within its timeout.
+	transport.ResponseHeaderTimeout = CallTimeout(server)
 	var authTransport http.RoundTripper = transport
 
 	// OAuth2 client credentials — wraps raw transport with token injection.
