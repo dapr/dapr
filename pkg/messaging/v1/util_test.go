@@ -16,6 +16,7 @@ package v1
 import (
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"testing"
@@ -58,6 +59,21 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	sort.Strings(savedHeaderKeyNames)
 
 	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
+
+	t.Run("multiple baggage values", func(t *testing.T) {
+		values := []string{"region=west,zone=one", "user=alice%20smith;source=app"}
+		in := http.Header{}
+		for _, value := range values {
+			in.Add("baggage", value)
+		}
+		req := NewInvokeMethodRequest("method").WithHTTPHeaders(in)
+		defer req.Close()
+
+		out := http.Header{}
+		InternalMetadataToHTTPHeader(t.Context(), req.Metadata(), out.Add)
+
+		assert.Equal(t, values, out.Values("baggage"))
+	})
 }
 
 func TestIsHopByHopHeader(t *testing.T) {
@@ -263,6 +279,46 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		for _, ht := range testHeaders {
 			assert.Equal(t, ht.expected, convertedMD[ht.key][0])
 		}
+	})
+
+	t.Run("permanent headers with varied casing", func(t *testing.T) {
+		req := NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "").
+			WithRawDataString("body").
+			WithHTTPHeaders(http.Header{
+				"host":              {"localhost"},
+				"connection":        {"keep-alive"},
+				"content-type":      {"text/plain"},
+				"TrAnSfEr-EnCoDiNg": {"gzip", "chunked"},
+				"COOKIE":            {"name=value"},
+				"Date":              {"Sat, 28 Nov 2026 09:25:00 GMT"},
+				"X-Custom-Header":   {"custom"},
+			})
+		defer req.Close()
+
+		// The gRPC app channel converts the metadata from the buffered request.
+		pd, err := req.ProtoWithData()
+		require.NoError(t, err)
+		convertedMD := InternalMetadataToGrpcMetadata(t.Context(), pd.GetMetadata(), true)
+		unprefixedMD := InternalMetadataToGrpcMetadata(t.Context(), pd.GetMetadata(), false)
+
+		for _, header := range []struct {
+			key    string
+			values []string
+		}{
+			{"host", []string{"localhost"}},
+			{"connection", []string{"keep-alive"}},
+			{"content-type", []string{"text/plain"}},
+			{"transfer-encoding", []string{"gzip", "chunked"}},
+			{"cookie", []string{"name=value"}},
+			{"date", []string{"Sat, 28 Nov 2026 09:25:00 GMT"}},
+		} {
+			assert.Equal(t, header.values, convertedMD.Get("dapr-"+header.key), "dapr-%s", header.key)
+			assert.Empty(t, convertedMD.Get(header.key), header.key)
+			assert.Equal(t, header.values, unprefixedMD.Get(header.key), header.key)
+		}
+		assert.Equal(t, []string{"custom"}, convertedMD.Get("x-custom-header"))
+		assert.Empty(t, convertedMD.Get("dapr-x-custom-header"))
 	})
 
 	keyBinValue := []byte{100, 50}
