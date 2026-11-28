@@ -75,9 +75,9 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	var scrubber piiscrubber.Scrubber
 	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
+		return nil, err
 	}
 
 	var scrubbed []string
@@ -88,10 +88,12 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			if err != nil {
 				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 				a.logger.Debug(err)
-				return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
+				return nil, err
 			}
 
-			msg = scrubbed[0]
+			if len(scrubbed) > 0 {
+				msg = scrubbed[0]
+			}
 		}
 
 		c := llms.MessageContent{
@@ -134,7 +136,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
+		return nil, err
 	}
 
 	// handle response
@@ -149,7 +151,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		for _, o := range resp.Outputs {
 			// extract content from the first choice since this api version only responded with a single string result
 			var content string
-			if o.Choices != nil && o.Choices[0].Message.Content != "" {
+			if len(o.Choices) > 0 && o.Choices[0].Message.Content != "" {
 				content = o.Choices[0].Message.Content
 			}
 
@@ -160,10 +162,12 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				if err != nil {
 					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 					a.logger.Debug(err)
-					return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
+					return nil, err
 				}
 
-				res = scrubbed[0]
+				if len(scrubbed) > 0 {
+					res = scrubbed[0]
+				}
 			}
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{ //nolint:staticcheck
@@ -213,9 +217,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	var scrubber piiscrubber.Scrubber
 	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponseAlpha2{}, err
+		return nil, err
 	}
 
 	var llmMessages []*llms.MessageContent
@@ -246,7 +250,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						text = scrubbed[0]
 					}
@@ -273,7 +277,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						text = scrubbed[0]
 					}
@@ -298,7 +302,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						text = scrubbed[0]
 					}
@@ -323,7 +327,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						text = scrubbed[0]
 					}
@@ -377,7 +381,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						text = scrubbed[0]
 					}
@@ -513,7 +517,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponseAlpha2{}, err
+		return nil, err
 	}
 
 	// handle response
@@ -539,7 +543,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseAlpha2{}, err
+							return nil, err
 						}
 						content = scrubbed[0]
 					}
@@ -549,13 +553,14 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				// handle tool call results for user to then execute locally
 				if choice.Message.ToolCallRequest != nil {
 					for _, toolCall := range *choice.Message.ToolCallRequest {
-						resultingToolCall := &runtimev1pb.ConversationToolCalls{
-							ToolTypes: &runtimev1pb.ConversationToolCalls_Function{
+						resultingToolCall := &runtimev1pb.ConversationToolCalls{}
+						if toolCall.FunctionCall != nil {
+							resultingToolCall.ToolTypes = &runtimev1pb.ConversationToolCalls_Function{
 								Function: &runtimev1pb.ConversationToolCallsOfFunction{
 									Name:      toolCall.FunctionCall.Name,
 									Arguments: toolCall.FunctionCall.Arguments,
 								},
-							},
+							}
 						}
 						if toolCall.ID != "" {
 							resultingToolCall.Id = &toolCall.ID
