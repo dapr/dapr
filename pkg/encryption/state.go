@@ -17,9 +17,13 @@ import (
 	"bytes"
 	b64 "encoding/base64"
 	"fmt"
+	"sync"
 )
 
-var encryptedStateStores = map[string]ComponentEncryptionKeys{}
+var (
+	encryptedStateStores     = map[string]ComponentEncryptionKeys{}
+	encryptedStateStoresLock sync.RWMutex
+)
 
 const (
 	separator = "||"
@@ -27,6 +31,9 @@ const (
 
 // AddEncryptedStateStore adds an encrypted state store and an associated encryption key to a list.
 func AddEncryptedStateStore(storeName string, keys ComponentEncryptionKeys) bool {
+	encryptedStateStoresLock.Lock()
+	defer encryptedStateStoresLock.Unlock()
+
 	if _, ok := encryptedStateStores[storeName]; ok {
 		return false
 	}
@@ -37,6 +44,9 @@ func AddEncryptedStateStore(storeName string, keys ComponentEncryptionKeys) bool
 
 // EncryptedStateStore returns a bool that indicates if a state stores supports encryption.
 func EncryptedStateStore(storeName string) bool {
+	encryptedStateStoresLock.RLock()
+	defer encryptedStateStoresLock.RUnlock()
+
 	_, ok := encryptedStateStores[storeName]
 	return ok
 }
@@ -45,7 +55,13 @@ func EncryptedStateStore(storeName string) bool {
 // The function will append the name of the key to the value for later extraction.
 // If no encryption keys exist, the function will return the bytes unmodified.
 func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
-	keys := encryptedStateStores[storeName]
+	encryptedStateStoresLock.RLock()
+	keys, ok := encryptedStateStores[storeName]
+	encryptedStateStoresLock.RUnlock()
+	if !ok || keys.Primary.cipherObj == nil {
+		return value, nil
+	}
+
 	enc, err := encrypt(value, keys.Primary)
 	if err != nil {
 		return value, err
@@ -62,7 +78,12 @@ func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 		return []byte(""), nil
 	}
 
-	keys := encryptedStateStores[storeName]
+	encryptedStateStoresLock.RLock()
+	keys, ok := encryptedStateStores[storeName]
+	encryptedStateStoresLock.RUnlock()
+	if !ok {
+		return value, nil
+	}
 	// extract the decryption key that should be appended to the value
 	ind := bytes.LastIndex(value, []byte(separator))
 	if ind < 0 || ind+len(separator) == len(value) {

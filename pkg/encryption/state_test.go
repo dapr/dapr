@@ -17,6 +17,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,10 +62,22 @@ func TestAddEncryptedStateStore(t *testing.T) {
 }
 
 func TestTryEncryptValue(t *testing.T) {
-	t.Run("state store without keys", func(t *testing.T) {
+	t.Run("state store without keys returns unmodified value", func(t *testing.T) {
+		encryptedStateStoresLock.Lock()
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		encryptedStateStoresLock.Unlock()
+
 		ok := EncryptedStateStore("test")
 		assert.False(t, ok)
+
+		val := []byte("unencrypted-data")
+		enc, err := TryEncryptValue("test", val)
+		require.NoError(t, err)
+		assert.Equal(t, val, enc)
+
+		dec, err := TryDecryptValue("test", val)
+		require.NoError(t, err)
+		assert.Equal(t, val, dec)
 	})
 
 	t.Run("state store with AES256 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
@@ -274,5 +288,21 @@ func TestEncryptedStateStore(t *testing.T) {
 		ok := EncryptedStateStore("test")
 
 		assert.False(t, ok)
+	})
+
+	t.Run("concurrent access is thread-safe", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for i := range 20 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				store := fmt.Sprintf("store-%d", idx)
+				AddEncryptedStateStore(store, ComponentEncryptionKeys{})
+				_ = EncryptedStateStore(store)
+				_, _ = TryEncryptValue(store, []byte("data"))
+				_, _ = TryDecryptValue(store, []byte("data"))
+			}(i)
+		}
+		wg.Wait()
 	})
 }
