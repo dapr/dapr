@@ -240,5 +240,5 @@ dworkflow.NewClientWithLogger(daprd.GRPCConn(t, ctx), logger.New(t))
 `backend.DefaultLogger()` writes straight to stderr and cannot be redirected
 afterwards, so a lint rule rejects it.
 
-Take a look at `tests/integration/suite/ports/ports.go` as a "hello world"
+Take a look at `tests/integration/suite/ports/daprd.go` as a "hello world"
 example to base your test on.
