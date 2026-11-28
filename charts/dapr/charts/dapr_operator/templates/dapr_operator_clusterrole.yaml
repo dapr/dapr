@@ -1,0 +1,90 @@
+{{- /*
+Lives here rather than in dapr_rbac because only this subchart can see
+serviceReconciler.enabled and watchInterval. Each gated rule is used only by
+the feature that gates it: the service reconciler writes Services and owner
+finalizers, and the watchdog deletes (and may patch) pods. watchdogEnabled
+mirrors the watch-interval parsing in cmd/operator/options. $rbac keeps the
+component label these objects had in dapr_rbac.
+*/ -}}
+{{- $rbac := merge (dict "Values" (dict "component" "rbac")) $ }}
+{{- $watchdogEnabled := not (has (lower (toString .Values.watchInterval)) (list "0" "false" "f" "no" "off")) }}
+{{- if not .Values.global.rbac.namespaced }}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-operator-admin
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $rbac }}
+    {{- end }}
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/finalizers"]
+    verbs: ["get", "list", "watch"]
+{{- if .Values.serviceReconciler.enabled }}
+  - apiGroups: ["apps"]
+    resources: ["deployments/finalizers"]
+    verbs: ["update"]
+{{- end }}
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/finalizers"]
+    verbs: ["get", "list", "watch"]
+{{- if .Values.serviceReconciler.enabled }}
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/finalizers"]
+    verbs: ["update"]
+{{- end }}
+  - apiGroups: [""]
+    resources: ["pods"]
+{{- if not $watchdogEnabled }}
+    verbs: ["get", "list", "watch"]
+{{- else if .Values.global.operator.watchdogCanPatchPodLabels }}
+    verbs: ["get", "list", "delete", "watch", "patch"]
+{{- else }}
+    verbs: ["get", "list", "delete", "watch"]
+{{- end }}
+  - apiGroups: [""]
+    resources: ["services","services/finalizers"]
+{{- if .Values.serviceReconciler.enabled }}
+    verbs: ["get", "list", "watch", "update", "create"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["delete"]
+{{- else }}
+    verbs: ["get", "list", "watch"]
+{{- end }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["dapr.io"]
+    resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints", "mcpservers", "workflowaccesspolicies"]
+    verbs: [ "get", "list", "watch"]
+{{- if .Values.global.argoRolloutServiceReconciler.enabled }}
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts/finalizers"]
+    verbs: ["update"]
+{{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-operator-admin
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $rbac }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-operator
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dapr-operator-admin
+{{- end }}

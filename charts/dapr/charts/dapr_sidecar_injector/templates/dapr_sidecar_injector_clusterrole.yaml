@@ -1,0 +1,46 @@
+{{- /*
+Lives here rather than in dapr_rbac because only this subchart can see
+dapr_sidecar_injector.enabled, and nothing uses these rules while the injector
+is off. $rbac keeps the component label these objects had in dapr_rbac.
+*/ -}}
+{{- $rbac := merge (dict "Values" (dict "component" "rbac")) $ }}
+{{- if eq .Values.enabled true }}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-injector
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $rbac }}
+    {{- end }}
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["patch"]
+    resourceNames: ["dapr-sidecar-injector"]
+{{- if not .Values.global.rbac.namespaced }}
+  - apiGroups: ["dapr.io"]
+    resources: ["components"]
+    verbs: [ "get", "list"]
+{{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-injector
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $rbac }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-injector
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dapr-injector
+{{- end }}
