@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	contribstate "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/messages"
@@ -37,16 +38,41 @@ type ResolverOptions struct {
 	Bindings map[string]string
 }
 
+// BoundStore is a state store with the actor types bound to it.
+type BoundStore struct {
+	// Name is the name of the state store component.
+	Name string
+	// ActorTypes are the actor types bound to the store, sorted.
+	ActorTypes []string
+}
+
+var (
+	errBoundStoreNotLoaded = errors.New("the state store is not loaded")
+	errBoundStoreFeatures  = errors.New("the state store does not support both the ETag and transactional features required for actor state")
+)
+
 // Resolver resolves the state store that holds an actor type's state.
 type Resolver struct {
-	stores   StoreGetter
-	bindings map[string]string
+	stores      StoreGetter
+	bindings    map[string]string
+	boundStores []BoundStore
 }
 
 func NewResolver(opts ResolverOptions) *Resolver {
+	typesOf := make(map[string][]string)
+	for actorType, storeName := range opts.Bindings {
+		typesOf[storeName] = append(typesOf[storeName], actorType)
+	}
+	boundStores := make([]BoundStore, 0, len(typesOf))
+	for _, storeName := range slices.Sorted(maps.Keys(typesOf)) {
+		slices.Sort(typesOf[storeName])
+		boundStores = append(boundStores, BoundStore{Name: storeName, ActorTypes: typesOf[storeName]})
+	}
+
 	return &Resolver{
-		stores:   opts.Stores,
-		bindings: maps.Clone(opts.Bindings),
+		stores:      opts.Stores,
+		bindings:    maps.Clone(opts.Bindings),
+		boundStores: boundStores,
 	}
 }
 
@@ -81,6 +107,28 @@ func (r *Resolver) Unusable() map[string]error {
 // name.
 func (r *Resolver) Bindings() map[string]string {
 	return maps.Clone(r.bindings)
+}
+
+// BoundStores returns the state stores that actor types are bound to, sorted
+// by name, each with its actor types, sorted. The bindings do not change, so
+// it is built once. The caller must not modify it.
+func (r *Resolver) BoundStores() []BoundStore {
+	return r.boundStores
+}
+
+// CheckBoundStore returns why the named state store cannot hold the state of
+// the actor types bound to it: it is not loaded, or lacks the features actor
+// state needs. It returns nil if the store can be used. Like Resolve, it
+// looks the store up on every call.
+func (r *Resolver) CheckBoundStore(storeName string) error {
+	storeS, ok := r.stores.GetStateStore(storeName)
+	if !ok {
+		return errBoundStoreNotLoaded
+	}
+	if _, ok := capable(storeS); !ok {
+		return errBoundStoreFeatures
+	}
+	return nil
 }
 
 func (r *Resolver) resolveBound(actorType, storeName string) (string, Backend, error) {

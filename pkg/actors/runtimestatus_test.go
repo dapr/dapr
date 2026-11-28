@@ -19,9 +19,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	"github.com/dapr/dapr/pkg/healthz"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 // TestRuntimeStatusBeforeRegistration covers the window between process
@@ -119,4 +122,95 @@ func TestRuntimeStatusDisabledAfterRegistration(t *testing.T) {
 	status := a.RuntimeStatus()
 	assert.Equal(t, runtimev1pb.ActorRuntime_DISABLED, status.GetRuntimeStatus())
 	assert.Equal(t, "placement: disconnected", status.GetPlacement())
+}
+
+// TestRuntimeStatusStateStores asserts that the runtime status reports the
+// state stores bound to actor types, sorted, with their actor types sorted,
+// and whether each store is loaded at the time of the call.
+func TestRuntimeStatusStateStores(t *testing.T) {
+	t.Parallel()
+
+	newActors := func(t *testing.T, cs *compstore.ComponentStore, placementAddresses []string, bindings map[string]string) *actors {
+		t.Helper()
+		a, ok := New(Options{
+			AppID:              "app-1",
+			Namespace:          "ns-1",
+			PlacementAddresses: placementAddresses,
+			CompStore:          cs,
+			Healthz:            healthz.New(),
+			ActorStateStores:   bindings,
+		}).(*actors)
+		require.True(t, ok)
+		return a
+	}
+
+	bindings := map[string]string{
+		"TransactionActor": "wallet-transactions",
+		"AuditActor":       "wallet-transactions",
+		"BalanceActor":     "wallet-balance",
+	}
+
+	const (
+		notLoaded  = "the state store is not loaded"
+		noFeatures = "the state store does not support both the ETag and transactional features required for actor state"
+	)
+
+	t.Run("bound stores are reported with whether they are usable", func(t *testing.T) {
+		t.Parallel()
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-transactions", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
+		a := newActors(t, cs, []string{"10.0.0.1:50005"}, bindings)
+
+		status := a.RuntimeStatus()
+		assert.Equal(t, runtimev1pb.ActorRuntime_INITIALIZING, status.GetRuntimeStatus())
+		require.Len(t, status.GetStateStores(), 2)
+		assert.Equal(t, "wallet-balance", status.GetStateStores()[0].GetName())
+		assert.Equal(t, []string{"BalanceActor"}, status.GetStateStores()[0].GetActorTypes())
+		assert.False(t, status.GetStateStores()[0].GetUsable())
+		assert.Equal(t, notLoaded, status.GetStateStores()[0].GetError())
+		assert.Equal(t, "wallet-transactions", status.GetStateStores()[1].GetName())
+		assert.Equal(t, []string{"AuditActor", "TransactionActor"}, status.GetStateStores()[1].GetActorTypes())
+		assert.True(t, status.GetStateStores()[1].GetUsable())
+		assert.Nil(t, status.GetStateStores()[1].Error)
+
+		// A store loaded later is reported as usable, and a removed one is not.
+		cs.AddStateStore("wallet-balance", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name())))
+		cs.DeleteStateStore("wallet-transactions")
+		status = a.RuntimeStatus()
+		require.Len(t, status.GetStateStores(), 2)
+		assert.True(t, status.GetStateStores()[0].GetUsable())
+		assert.Nil(t, status.GetStateStores()[0].Error)
+		assert.False(t, status.GetStateStores()[1].GetUsable())
+		assert.Equal(t, notLoaded, status.GetStateStores()[1].GetError())
+	})
+
+	t.Run("a loaded store without the features of actor state is not usable", func(t *testing.T) {
+		t.Parallel()
+
+		cs := compstore.New()
+		cs.AddStateStore("wallet-balance", new(daprt.MockStateStore))
+		a := newActors(t, cs, []string{"10.0.0.1:50005"}, map[string]string{"BalanceActor": "wallet-balance"})
+
+		stores := a.RuntimeStatus().GetStateStores()
+		require.Len(t, stores, 1)
+		assert.False(t, stores[0].GetUsable())
+		assert.Equal(t, noFeatures, stores[0].GetError())
+	})
+
+	t.Run("no bindings reports no state stores", func(t *testing.T) {
+		t.Parallel()
+
+		a := newActors(t, compstore.New(), []string{"10.0.0.1:50005"}, nil)
+		assert.Empty(t, a.RuntimeStatus().GetStateStores())
+	})
+
+	t.Run("a disabled actor runtime reports no state stores", func(t *testing.T) {
+		t.Parallel()
+
+		a := newActors(t, compstore.New(), nil, bindings)
+		status := a.RuntimeStatus()
+		assert.Equal(t, runtimev1pb.ActorRuntime_DISABLED, status.GetRuntimeStatus())
+		assert.Empty(t, status.GetStateStores())
+	})
 }
