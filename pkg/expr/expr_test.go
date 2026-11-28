@@ -1,6 +1,7 @@
 package expr_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,32 @@ func TestEmptyProgramNoPanic(t *testing.T) {
 
 	assert.Nil(t, r)
 	require.Error(t, err)
+}
+
+func TestUnmarshalNull(t *testing.T) {
+	var e expr.Expr
+	err := json.Unmarshal([]byte("null"), &e)
+	require.NoError(t, err)
+	assert.Equal(t, "", e.Expr())
+	assert.Equal(t, "", e.String())
+}
+
+func TestNilExpr(t *testing.T) {
+	var e *expr.Expr
+	assert.Equal(t, "", e.String())
+	assert.NotPanics(t, func() {
+		assert.Equal(t, "", e.Expr())
+	})
+	assert.NotPanics(t, func() {
+		b, err := e.MarshalJSON()
+		require.NoError(t, err)
+		assert.Equal(t, "null", string(b))
+	})
+	assert.NotPanics(t, func() {
+		r, err := e.Eval(nil)
+		assert.Nil(t, r)
+		require.ErrorContains(t, err, "cannot evaluate nil expression")
+	})
 }
 
 var result any
