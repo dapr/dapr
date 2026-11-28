@@ -30,4 +30,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/statestores"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/statestores/validation"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/trailingslash"
 )
