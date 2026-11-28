@@ -17,8 +17,10 @@ package static
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/kit/logger"
@@ -39,9 +41,19 @@ type Options struct {
 }
 
 func New(opts Options) (connector.Interface, error) {
+	// Without a keepalive, a dropped or partitioned placement server hangs the
+	// stream until OS TCP keepalive fires. 10s is the gRPC minimum.
+	gopts := append([]grpc.DialOption{
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                time.Second * 10,
+			Timeout:             time.Second * 5,
+			PermitWithoutStream: true,
+		}),
+	}, opts.GRPCOptions...)
+
 	return &staticConnector{
 		addresses:    opts.Addresses,
-		gOpts:        opts.GRPCOptions,
+		gOpts:        gopts,
 		addressIndex: -1,
 	}, nil
 }
