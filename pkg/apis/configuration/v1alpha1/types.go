@@ -133,6 +133,31 @@ type ConfigurationSpec struct {
 	WasmSpec *WasmSpec `json:"wasm,omitempty"`
 	// +optional
 	WorkflowSpec *WorkflowSpec `json:"workflow,omitempty"`
+	// +optional
+	ActorsSpec *ActorsSpec `json:"actors,omitempty"`
+}
+
+// ActorsSpec defines the configuration for Dapr actors.
+type ActorsSpec struct {
+	// stateStores binds actor types to state stores other than the default
+	// actor state store. A bound actor type uses only its bound store and
+	// never falls back to the default one.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty"`
+}
+
+// ActorStateStoreBinding binds a set of actor types to one state store.
+type ActorStateStoreBinding struct {
+	// name is the name of the state store component.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// actorTypes are the actor types whose state is kept in this store.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:items:MinLength=1
+	// +listType=set
+	ActorTypes []string `json:"actorTypes"`
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.
@@ -192,6 +217,19 @@ type WorkflowSpec struct {
 	// instances will not be automatically purged.
 	// +optional
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty"`
+
+	// stateStore is the name of the state store which holds the state of the
+	// app's workflow actor types: the workflow, activity, executor and
+	// retentioner actors. They are bound to it together, as an actor type is
+	// bound by spec.actors.stateStores, and never fall back to the default
+	// actor state store. If omitted, they use the default actor state store.
+	// Setting or changing it does not migrate state. The state of the workflows
+	// started with another store stays in that store, where daprd no longer
+	// reads, lists, purges or cleans it up, so those workflows are not found
+	// and do not continue. Set or change it only when the app has no workflows
+	// in progress, and to the same value on every replica of the app.
+	// +optional
+	StateStore string `json:"stateStore,omitempty"`
 }
 
 // NamedConcurrencyLimit defines a per-name concurrency limit for a specific

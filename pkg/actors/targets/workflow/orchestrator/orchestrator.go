@@ -36,7 +36,11 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
 
-type EventSink func(*backend.WorkflowMetadata)
+// EventSink is handed a workflow's metadata after every save of its state,
+// the one that creates it included, with the tags of its ExecutionStarted
+// event, which the metadata does not carry. tags is the event's own map and
+// must not be modified.
+type EventSink func(ometa *backend.WorkflowMetadata, tags map[string]string)
 
 type orchestrator struct {
 	*factory

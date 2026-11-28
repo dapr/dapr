@@ -125,6 +125,11 @@ func (s *scaledown) Run(t *testing.T, ctx context.Context) {
 	idle := 1 - host
 	s.workflow.Scheduler().WaitUntilPullInflight(t, ctx, 1, "app_id:pull-scaledown")
 
+	// The turn that scheduled the activity must be acknowledged first: a
+	// replacement replica would otherwise run it again and schedule the
+	// activity a second time.
+	s.workflow.Scheduler().WaitJobKeyCount(t, ctx, "||start-", func(n int) bool { return n == 0 })
+
 	// Remove the replica that is not running the activity, and wait for the
 	// scheduler to drop its streams: a delivery that races the kill waits
 	// the reattach window before it is delivered elsewhere.

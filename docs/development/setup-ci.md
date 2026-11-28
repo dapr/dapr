@@ -2,7 +2,7 @@
 
 Dapr uses [GitHub Actions](https://github.com/features/actions) for continuous integration in order to automate the build and publish processes. As long as you have GitHub Account, you can set up your own private Actions in your fork of the Dapr repo. This document helps you set up the continuous integration for Dapr.
 
-## Prerequistes
+## Prerequisites
 
 * GitHub Account
 
