@@ -34,8 +34,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
-// caseTimeout is the wall clock budget for a single test case, covering both
-// process startup and the case body.
+// caseTimeout is the default wall clock budget for a single test case,
+// covering both process startup and the case body. A case can override it by
+// implementing suite.TimeoutCase.
 const caseTimeout = 45 * time.Second
 
 var (
@@ -113,7 +114,12 @@ func RunIntegrationTests(t *testing.T) {
 			// TODO: @joshvanl: update framework to use `t.Context()` which is
 			// correctly respected on cleanup.
 
-			ctx, cancel := context.WithTimeout(context.Background(), caseTimeout)
+			timeout := caseTimeout
+			if tc, ok := tcase.Case.(suite.TimeoutCase); ok {
+				timeout = tc.Timeout()
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			t.Cleanup(cancel)
 
 			// A blown deadline explains every downstream failure it causes, so
@@ -121,7 +127,7 @@ func RunIntegrationTests(t *testing.T) {
 			// reader to infer it.
 			t.Cleanup(func() {
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-					iowriter.Notef(t, "test case exceeded its %s deadline", caseTimeout)
+					iowriter.Notef(t, "test case exceeded its %s deadline", timeout)
 				}
 			})
 
