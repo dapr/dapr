@@ -112,6 +112,48 @@ func Test_HaltDeletesTimers(t *testing.T) {
 	})
 }
 
+func Test_HaltActorTypes(t *testing.T) {
+	storage := &stubTimerStorage{}
+	var halted, deactivated []string
+	factory := func(name string) *fake.FakeFactory {
+		return fake.NewFactory().
+			WithHaltAll(func(context.Context) error {
+				halted = append(halted, name)
+				return nil
+			}).
+			WithDeactivateAll(func(context.Context) error {
+				deactivated = append(deactivated, name)
+				return nil
+			})
+	}
+	tble := table.New(table.Options{
+		ReentrancyStore: reentrancystore.New(),
+		Timers:          func() internaltimers.Storage { return storage },
+	})
+	tble.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: []table.ActorTypeFactory{
+			{Type: "bound", Factory: factory("bound")},
+			{Type: "plain", Factory: factory("plain")},
+			{Type: "other", Factory: factory("other")},
+		},
+	})
+
+	require.NoError(t, tble.HaltActorTypes(t.Context(), "bound", "plain", "notregistered"))
+
+	// The actors stay hosted, so they are deactivated, not halted.
+	assert.ElementsMatch(t, []string{"bound", "plain"}, deactivated)
+	assert.Empty(t, halted)
+
+	// Only the timers of the given types are deleted.
+	require.Len(t, storage.sweeps, 1)
+	assert.True(t, storage.sweeps[0]("bound", "a"))
+	assert.True(t, storage.sweeps[0]("plain", "a"))
+	assert.False(t, storage.sweeps[0]("other", "a"))
+
+	// The types stay registered and hosted.
+	assert.ElementsMatch(t, []string{"bound", "plain", "other"}, tble.Types())
+}
+
 func Test_GetOrCreate_NotRegistered(t *testing.T) {
 	tble := table.New(table.Options{
 		ReentrancyStore: reentrancystore.New(),
@@ -152,6 +194,8 @@ func Test_SuspendHosting(t *testing.T) {
 		assert.Empty(t, tble.Types())
 		assert.False(t, tble.IsActorTypeHosted("test1"))
 		assert.Equal(t, int64(1), halted.Load())
+		// The registered types are still known while suspended.
+		assert.Equal(t, []string{"test1"}, tble.Registered())
 
 		_, err := tble.GetOrCreate(t.Context(), "test1", "1")
 		require.Error(t, err)

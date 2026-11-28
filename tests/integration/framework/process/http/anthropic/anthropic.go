@@ -40,18 +40,29 @@ type Anthropic struct {
 
 	lock         sync.Mutex
 	keySet       jwk.Set
+	apiKey       string
 	exchanged    []jwt.Token
 	accessTokens map[string]bool
 	usedJTIs     map[string]bool
 	messages     int
 }
 
-// New returns a fake Anthropic API trusting JWTs signed by keys in keySet.
-func New(t *testing.T, keySet jwk.Set) *Anthropic {
+// Option configures the fake Anthropic API.
+type Option func(*options)
+
+// New returns a fake Anthropic API. Callers authenticate with WithJWKS or
+// WithAPIKey.
+func New(t *testing.T, fopts ...Option) *Anthropic {
 	t.Helper()
 
+	var opts options
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
 	a := &Anthropic{
-		keySet:       keySet,
+		keySet:       opts.keySet,
+		apiKey:       opts.apiKey,
 		accessTokens: make(map[string]bool),
 		usedJTIs:     make(map[string]bool),
 	}
@@ -96,20 +107,47 @@ func (a *Anthropic) token(w nethttp.ResponseWriter, r *nethttp.Request) {
 }
 
 func (a *Anthropic) message(w nethttp.ResponseWriter, r *nethttp.Request) {
-	io.Copy(io.Discard, r.Body)
+	var req struct {
+		Messages []struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
 
 	a.lock.Lock()
-	ok := a.accessTokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+	ok := a.accessTokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] && r.Header.Get("x-api-key") == ""
+	if a.apiKey != "" {
+		ok = r.Header.Get("x-api-key") == a.apiKey
+	}
 	if ok {
 		a.messages++
 	}
 	a.lock.Unlock()
-	if !ok || r.Header.Get("x-api-key") != "" {
+	if !ok {
 		nethttp.Error(w, "unauthorized", nethttp.StatusUnauthorized)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	// As the real API does, reject text blocks with no text.
+	for _, msg := range req.Messages {
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		// Content may also be a plain string, which has no blocks.
+		json.Unmarshal(msg.Content, &blocks)
+		for _, block := range blocks {
+			if block.Type == "text" && block.Text == "" {
+				w.WriteHeader(nethttp.StatusBadRequest)
+				io.WriteString(w, `{"type":"error","error":{"type":"invalid_request_error",`+
+					`"message":"messages: text content blocks must be non-empty"}}`)
+				return
+			}
+		}
+	}
+
 	io.WriteString(w, `{"id":"msg","type":"message","role":"assistant","model":"claude",`+
 		`"content":[{"type":"text","text":"hello from claude"}],"stop_reason":"end_turn",`+
 		`"usage":{"input_tokens":1,"output_tokens":1}}`)

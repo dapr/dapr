@@ -16,6 +16,8 @@ package common
 import (
 	"strconv"
 	"unicode"
+
+	"github.com/dapr/dapr/pkg/actors/reserved"
 )
 
 type ActorTypeBuilder struct {
@@ -42,11 +44,11 @@ func ValidAppID(appID string) bool {
 }
 
 func (a *ActorTypeBuilder) Workflow(appID string) string {
-	return "dapr.internal." + a.ns + "." + appID + ".workflow"
+	return reserved.InternalActorTypePrefix + a.ns + "." + appID + ".workflow"
 }
 
 func (a *ActorTypeBuilder) Activity(appID string) string {
-	return "dapr.internal." + a.ns + "." + appID + ".activity"
+	return reserved.InternalActorTypePrefix + a.ns + "." + appID + ".activity"
 }
 
 // ActivityIDSeparator splits an activity actor ID into its parent workflow

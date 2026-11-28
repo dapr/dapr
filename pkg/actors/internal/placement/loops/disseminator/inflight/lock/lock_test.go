@@ -163,3 +163,64 @@ func TestClaimCancelEnqueuesReleaseBeforeReturning(t *testing.T) {
 		require.Equal(t, 0, acquiresLen(l), "the release must be enqueued before Cancel returns")
 	}
 }
+
+func TestCancelTypesAsyncDoesNotHoldTheLoop(t *testing.T) {
+	l := newTestLock(t)
+	claim := acquire(t, l, context.Background())
+
+	timeout := time.Minute
+	done := make(chan struct{})
+	l.loop.Enqueue(&CancelTypes{
+		Types:   map[string]struct{}{"a": {}},
+		Error:   errors.New("drained"),
+		Timeout: &timeout,
+		Async:   true,
+		Done:    done,
+	})
+
+	// The loop keeps serving while the claim drains.
+	respCh := make(chan *Claim, 1)
+	l.loop.Enqueue(&Acquire{ActorType: "b", Context: context.Background(), RespCh: respCh})
+	select {
+	case other := <-respCh:
+		other.Cancel(nil)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "the drain held the loop")
+	}
+
+	select {
+	case <-done:
+		require.Fail(t, "the drain ended before the claim was released")
+	default:
+	}
+
+	claim.Cancel(nil)
+	select {
+	case <-done:
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "the drain did not end once the claim was released")
+	}
+}
+
+func TestCancelTypesAsyncForceCancelsOnTimeout(t *testing.T) {
+	l := newTestLock(t)
+	claim := acquire(t, l, context.Background())
+
+	timeout := time.Millisecond * 10
+	errDrained := errors.New("drained")
+	done := make(chan struct{})
+	l.loop.Enqueue(&CancelTypes{
+		Types:   map[string]struct{}{"a": {}},
+		Error:   errDrained,
+		Timeout: &timeout,
+		Async:   true,
+		Done:    done,
+	})
+
+	select {
+	case <-done:
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "the drain did not end on its timeout")
+	}
+	require.ErrorIs(t, context.Cause(claim.Context), errDrained)
+}
