@@ -44,7 +44,9 @@ type operations struct {
 }
 
 func (o *operations) Setup(t *testing.T) []framework.Option {
-	o.workflow = workflow.New(t)
+	// The staged operations preview stages these calls instead of failing
+	// them, so this test pins it off whatever the suite's mode.
+	o.workflow = workflow.New(t, workflow.WithStagedOperations(false))
 	return []framework.Option{
 		framework.WithProcesses(o.workflow),
 	}

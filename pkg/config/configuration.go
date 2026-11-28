@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -183,6 +185,100 @@ type ConfigurationSpec struct {
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
 	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
+	ActorsSpec          *ActorsSpec         `json:"actors,omitempty"          yaml:"actors,omitempty"`
+}
+
+// ActorsSpec defines the configuration for Dapr actors.
+type ActorsSpec struct {
+	// StateStores binds actor types to state stores other than the default
+	// actor state store. A bound actor type uses only its bound store and
+	// never falls back to the default one.
+	StateStores []ActorStateStoreBinding `json:"stateStores,omitempty" yaml:"stateStores,omitempty"`
+}
+
+// ActorStateStoreBinding binds a set of actor types to one state store.
+type ActorStateStoreBinding struct {
+	// Name is the name of the state store component.
+	Name string `json:"name" yaml:"name"`
+	// ActorTypes are the actor types whose state is kept in this store.
+	ActorTypes []string `json:"actorTypes" yaml:"actorTypes"`
+}
+
+// Validate returns every violation of the actor state store binding rules:
+// each binding names a store and at least one non-empty actor type, an actor
+// type is bound to at most one store, and internal actor types (dapr.internal
+// and dapr.internal.*) cannot be bound.
+func (a *ActorsSpec) Validate() error {
+	if a == nil {
+		return nil
+	}
+
+	var errs []error
+	storeByType := make(map[string]string)
+	for i, binding := range a.StateStores {
+		errs = append(errs, binding.validate(i, storeByType)...)
+	}
+	return errors.Join(errs...)
+}
+
+// validate returns the violations of the binding at index idx. It records the
+// binding's actor types in storeByType, which holds the store each actor type
+// was bound to by the earlier bindings, to report an actor type bound to more
+// than one store.
+func (b ActorStateStoreBinding) validate(idx int, storeByType map[string]string) []error {
+	var errs []error
+	if b.Name == "" {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d]: name is required", idx))
+	}
+	if len(b.ActorTypes) == 0 {
+		errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actorTypes is required", idx, b.Name))
+	}
+
+	seen := make(map[string]struct{}, len(b.ActorTypes))
+	for _, actorType := range b.ActorTypes {
+		if actorType == "" {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type must not be empty", idx, b.Name))
+			continue
+		}
+		if reserved.IsInternalActorType(actorType) {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is reserved for Dapr internal actors", idx, b.Name, actorType))
+		}
+		if _, ok := seen[actorType]; ok {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores[%d] (%q): actor type %q is listed more than once", idx, b.Name, actorType))
+			continue
+		}
+		seen[actorType] = struct{}{}
+
+		if store, ok := storeByType[actorType]; ok && store != b.Name {
+			errs = append(errs, fmt.Errorf("spec.actors.stateStores: actor type %q is bound to more than one state store: %q and %q", actorType, store, b.Name))
+			continue
+		}
+		storeByType[actorType] = b.Name
+	}
+	return errs
+}
+
+// StateStoreByActorType returns the name of the state store bound to each
+// actor type. The map is a fresh copy owned by the caller, and is empty when
+// the spec is nil or has no bindings. It assumes the spec is valid: if an
+// actor type appeared in more than one binding, the last one would win.
+func (a *ActorsSpec) StateStoreByActorType() map[string]string {
+	if a == nil {
+		return map[string]string{}
+	}
+
+	var n int
+	for _, binding := range a.StateStores {
+		n += len(binding.ActorTypes)
+	}
+
+	stores := make(map[string]string, n)
+	for _, binding := range a.StateStores {
+		for _, actorType := range binding.ActorTypes {
+			stores[actorType] = binding.Name
+		}
+	}
+	return stores
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.
@@ -205,22 +301,97 @@ type WorkflowSpec struct {
 	// If omitted, no global maximum will be enforced.
 	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
 
+	// activityDispatchMode is the application-wide activity dispatch mode:
+	// "hashed" or "pull"; nil means "hashed". See ActivityDispatchPull. The
+	// slots offered to the scheduler are MaxConcurrentActivityInvocations less
+	// every activity the replica runs, pull or hashed.
+	ActivityDispatchMode *string `json:"activityDispatchMode,omitempty" yaml:"activityDispatchMode,omitempty"`
+
 	// Per-workflow-name concurrency limits enforced globally by the scheduler.
 	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
-	// Per-activity-name concurrency limits enforced globally by the scheduler.
-	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler,
+	// plus optional per-name dispatch mode overrides.
+	ActivityConcurrencyLimits []ActivityConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+
+	// Priority orders this application's activities while they wait for a free sidecar slot under pull dispatch.
+	Priority *WorkflowPriority `json:"priority,omitempty" yaml:"priority,omitempty"`
 
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+
+	// StateStore is the name of the state store which holds the state of the
+	// app's workflow actor types: the workflow, activity, executor and
+	// retentioner actors. They are bound to it together, as an actor type is
+	// bound by spec.actors.stateStores, and never fall back to the default
+	// actor state store. If omitted, they use the default actor state store.
+	// Setting or changing it does not migrate state. The state of the workflows
+	// started with another store stays in that store, where daprd no longer
+	// reads, lists, purges or cleans it up, so those workflows are not found
+	// and do not continue. Set or change it only when the app has no workflows
+	// in progress, and to the same value on every replica of the app.
+	StateStore string `json:"stateStore,omitempty" yaml:"stateStore,omitempty"`
 }
+
+// WorkflowPriority is the priority block of spec.workflow.
+type WorkflowPriority struct {
+	Default    *PriorityValues       `json:"default,omitempty"    yaml:"default,omitempty"`
+	Workflows  []NamedPriorityValues `json:"workflows,omitempty"  yaml:"workflows,omitempty"`
+	Activities []NamedPriorityValues `json:"activities,omitempty" yaml:"activities,omitempty"`
+}
+
+// PriorityValues is a priority level and a fairness weight, either optional.
+type PriorityValues struct {
+	PriorityLevel  *string `json:"priorityLevel,omitempty"  yaml:"priorityLevel,omitempty"`
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty" yaml:"fairnessWeight,omitempty"`
+}
+
+// NamedPriorityValues is the PriorityValues of one workflow or activity name.
+type NamedPriorityValues struct {
+	Name           *string `json:"name"                     yaml:"name"`
+	PriorityLevel  *string `json:"priorityLevel,omitempty"  yaml:"priorityLevel,omitempty"`
+	FairnessWeight *uint32 `json:"fairnessWeight,omitempty" yaml:"fairnessWeight,omitempty"`
+}
+
+const (
+	PriorityLevelCritical   = "critical"
+	PriorityLevelHigh       = "high"
+	PriorityLevelNormal     = "normal"
+	PriorityLevelLow        = "low"
+	PriorityLevelBackground = "background"
+
+	MinFairnessWeight = 1
+	MaxFairnessWeight = 1000
+)
+
+// PriorityLevels is every accepted level name, highest first.
+var PriorityLevels = []string{PriorityLevelCritical, PriorityLevelHigh, PriorityLevelNormal, PriorityLevelLow, PriorityLevelBackground}
 
 // NamedConcurrencyLimit defines a per-name concurrency limit.
 type NamedConcurrencyLimit struct {
 	Name          *string `json:"name"          yaml:"name"`
 	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
 }
+
+// ActivityConcurrencyLimit defines per-activity-name settings. MaxConcurrent
+// is the global (cross-replica) limit; DispatchMode overrides the
+// application's ActivityDispatchMode for this name, nil inherits it.
+type ActivityConcurrencyLimit struct {
+	Name          *string `json:"name"                   yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent"          yaml:"maxConcurrent"`
+	DispatchMode  *string `json:"dispatchMode,omitempty" yaml:"dispatchMode,omitempty"`
+}
+
+const (
+	// ActivityDispatchModeHashed runs each activity on the replica its actor ID
+	// hashes to. This is the default.
+	ActivityDispatchModeHashed = "hashed"
+	// ActivityDispatchModePull lets the scheduler deliver each activity to any
+	// replica with a free slot, where MaxConcurrentActivityInvocations is the
+	// per-replica slot count.
+	ActivityDispatchModePull = "pull"
+)
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
 // for workflow instances once they reaches a specific or any terminal state.
@@ -276,6 +447,15 @@ func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetStateStore returns the name of the state store bound to the workflow
+// actor types, or "" if they use the default actor state store.
+func (w *WorkflowSpec) GetStateStore() string {
+	if w == nil {
+		return ""
+	}
+	return w.StateStore
+}
+
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
 		return nil
@@ -317,15 +497,169 @@ func (w *WorkflowSpec) HasSchedulerConcurrencyLimits() bool {
 	}
 	// Only entries the scheduler actually enforces count (mirrors
 	// cluster.buildConcurrencyLimits).
-	enforced := func(ls []NamedConcurrencyLimit) bool {
-		for _, l := range ls {
-			if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
-				return true
-			}
+	for _, l := range w.WorkflowConcurrencyLimits {
+		if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+			return true
 		}
+	}
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && l.MaxConcurrent != nil && *l.MaxConcurrent > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ActivityDispatchPull reports whether activities with the given name are
+// pull-dispatched: a per-name entry with a DispatchMode wins, otherwise the
+// application-wide ActivityDispatchMode applies.
+func (w *WorkflowSpec) ActivityDispatchPull(name string) bool {
+	if w == nil {
 		return false
 	}
-	return enforced(w.WorkflowConcurrencyLimits) || enforced(w.ActivityConcurrencyLimits)
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && *l.Name == name && l.DispatchMode != nil {
+			return isPull(l.DispatchMode)
+		}
+	}
+	return isPull(w.ActivityDispatchMode)
+}
+
+func isPull(mode *string) bool {
+	return mode != nil && *mode == ActivityDispatchModePull
+}
+
+// HasPullActivityDispatch reports whether any activity of this application is
+// pull-dispatched, either through the application-wide mode or a per-name
+// override.
+func (w *WorkflowSpec) HasPullActivityDispatch() bool {
+	if w == nil {
+		return false
+	}
+	if isPull(w.ActivityDispatchMode) {
+		return true
+	}
+	for _, l := range w.ActivityConcurrencyLimits {
+		if l.Name != nil && isPull(l.DispatchMode) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateWorkflowSpec rejects dispatch settings the runtime cannot honour.
+func (c *Configuration) validateWorkflowSpec() error {
+	w := c.Spec.WorkflowSpec
+	if w == nil {
+		return nil
+	}
+
+	validMode := func(mode *string) bool {
+		return mode == nil || *mode == ActivityDispatchModeHashed || *mode == ActivityDispatchModePull
+	}
+	if !validMode(w.ActivityDispatchMode) {
+		return fmt.Errorf("invalid workflow activityDispatchMode %q: must be %q or %q", *w.ActivityDispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+	}
+
+	// A name may repeat as before (the last limit wins), but not once a
+	// dispatchMode makes the entries disagree on how it is dispatched.
+	seen := make(map[string]bool, len(w.ActivityConcurrencyLimits))
+	for _, l := range w.ActivityConcurrencyLimits {
+		if !validMode(l.DispatchMode) {
+			return fmt.Errorf("invalid dispatchMode %q in workflow activityConcurrencyLimits: must be %q or %q", *l.DispatchMode, ActivityDispatchModeHashed, ActivityDispatchModePull)
+		}
+		if l.Name == nil {
+			if l.DispatchMode != nil {
+				return fmt.Errorf("dispatchMode %q in workflow activityConcurrencyLimits requires a name", *l.DispatchMode)
+			}
+			continue
+		}
+		if hadMode, ok := seen[*l.Name]; ok && (hadMode || l.DispatchMode != nil) {
+			return fmt.Errorf("duplicate activity name %q with a dispatchMode in workflow activityConcurrencyLimits", *l.Name)
+		}
+		seen[*l.Name] = seen[*l.Name] || l.DispatchMode != nil
+	}
+
+	// Pull dispatch is only work-conserving when each replica advertises a slot
+	// count; without one the scheduler would deliver everything on arrival.
+	if w.HasPullActivityDispatch() && w.GetMaxConcurrentActivityInvocations() == nil {
+		return errors.New("workflow activity dispatchMode pull requires maxConcurrentActivityInvocations to be set to a positive value: it is the number of activity slots each sidecar offers to the scheduler")
+	}
+
+	return w.Priority.validate()
+}
+
+func (p *WorkflowPriority) validate() error {
+	if p == nil {
+		return nil
+	}
+	if p.Default != nil {
+		if err := validatePriorityValues("workflow priority default", p.Default.PriorityLevel, p.Default.FairnessWeight); err != nil {
+			return err
+		}
+	}
+	for list, entries := range map[string][]NamedPriorityValues{"workflows": p.Workflows, "activities": p.Activities} {
+		seen := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			if e.Name == nil || *e.Name == "" {
+				return fmt.Errorf("workflow priority %s entry requires a name", list)
+			}
+			if seen[*e.Name] {
+				return fmt.Errorf("duplicate name %q in workflow priority %s", *e.Name, list)
+			}
+			seen[*e.Name] = true
+			if err := validatePriorityValues(fmt.Sprintf("workflow priority %s entry %q", list, *e.Name), e.PriorityLevel, e.FairnessWeight); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validatePriorityValues(where string, level *string, weight *uint32) error {
+	if level != nil && !slices.Contains(PriorityLevels, *level) {
+		return fmt.Errorf("invalid priorityLevel %q in %s: must be one of %s", *level, where, strings.Join(PriorityLevels, ", "))
+	}
+	if weight != nil && (*weight < MinFairnessWeight || *weight > MaxFairnessWeight) {
+		return fmt.Errorf("invalid fairnessWeight %d in %s: must be between %d and %d", *weight, where, MinFairnessWeight, MaxFairnessWeight)
+	}
+	return nil
+}
+
+// ActivityPriority resolves an activity's level and weight: its own entry, else
+// the calling workflow's, else the default. Empty and zero mean unset.
+func (w *WorkflowSpec) ActivityPriority(workflowName, activityName string) (level string, weight uint32) {
+	if w == nil || w.Priority == nil {
+		return "", 0
+	}
+	p := w.Priority
+	take := func(l *string, wt *uint32) {
+		if level == "" && l != nil {
+			level = *l
+		}
+		if weight == 0 && wt != nil {
+			weight = *wt
+		}
+	}
+	if e := findPriority(p.Activities, activityName); e != nil {
+		take(e.PriorityLevel, e.FairnessWeight)
+	}
+	if e := findPriority(p.Workflows, workflowName); e != nil {
+		take(e.PriorityLevel, e.FairnessWeight)
+	}
+	if p.Default != nil {
+		take(p.Default.PriorityLevel, p.Default.FairnessWeight)
+	}
+	return level, weight
+}
+
+func findPriority(entries []NamedPriorityValues, name string) *NamedPriorityValues {
+	for i := range entries {
+		if entries[i].Name != nil && *entries[i].Name == name {
+			return &entries[i]
+		}
+	}
+	return nil
 }
 
 type SecretsSpec struct {
@@ -523,9 +857,7 @@ func (m MetricSpec) GetEnabled() bool {
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-		// TODO: [MetricsCardinality] Change default in 1.15+
-		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		log.Warn("'spec.metrics.http.increasedCardinality' is not set and defaults to 'true'. Set it to 'false' or configure 'pathMatching' to reduce the cardinality of HTTP metrics")
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality
@@ -606,9 +938,8 @@ func (m MetricSpec) GetRecordErrorCodes() bool {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
-	// TODO: [MetricsCardinality] Change default in 1.15+
+	// If true (default), metrics for the HTTP server are collected with increased cardinality.
+	// Set to false, or use pathMatching, to reduce cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	// +optional
@@ -759,7 +1090,11 @@ func LoadDefaultConfiguration() *Configuration {
 func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	conf := LoadDefaultConfiguration()
 
-	// Load all config files and apply them on top of the default config
+	// Load all config files and apply them on top of the default config.
+	// Decoding a file replaces lists, so the actor state store bindings of
+	// each file are collected and set once all files are decoded: every
+	// file's bindings apply, and validation sees them together.
+	var bindings []ActorStateStoreBinding
 	for _, config := range configs {
 		_, err := os.Stat(config)
 		if err != nil {
@@ -774,14 +1109,26 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 		// Parse environment variables from yaml
 		b = []byte(os.ExpandEnv(string(b)))
 
+		if conf.Spec.ActorsSpec != nil {
+			conf.Spec.ActorsSpec.StateStores = nil
+		}
 		err = yaml.Unmarshal(b, conf)
 		if err != nil {
 			return nil, err
 		}
+		if conf.Spec.ActorsSpec != nil {
+			bindings = append(bindings, conf.Spec.ActorsSpec.StateStores...)
+		}
+	}
+	// A later file may set spec.actors to null, which drops the struct.
+	if len(bindings) > 0 && conf.Spec.ActorsSpec == nil {
+		conf.Spec.ActorsSpec = &ActorsSpec{}
+	}
+	if conf.Spec.ActorsSpec != nil {
+		conf.Spec.ActorsSpec.StateStores = bindings
 	}
 
-	err := conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
+	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
@@ -815,8 +1162,7 @@ func LoadKubernetesConfiguration(config string, namespace string, operatorClient
 		return nil, nil, err
 	}
 
-	err = conf.sortAndValidateSecretsConfiguration()
-	if err != nil {
+	if err = conf.validate(); err != nil {
 		return nil, nil, err
 	}
 
@@ -1093,6 +1439,18 @@ func (c *Configuration) sortMetricsSpec() {
 	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
 		c.Spec.MetricSpec.RecordErrorCodes = c.Spec.MetricsSpec.RecordErrorCodes
 	}
+}
+
+// validate validates a loaded configuration. It is the single validation
+// entry point shared by the standalone and Kubernetes loaders.
+func (c *Configuration) validate() error {
+	if err := c.sortAndValidateSecretsConfiguration(); err != nil {
+		return err
+	}
+	if err := c.validateWorkflowSpec(); err != nil {
+		return err
+	}
+	return c.Spec.ActorsSpec.Validate()
 }
 
 // Validate the secrets configuration and sort to the allowed and denied lists if present.

@@ -80,15 +80,20 @@ type Options struct {
 
 	// Fallback, if set, reports whether this daprd hosts the workflow actor
 	// type as a fallback host (the WorkflowsStagedOperations preview): with no
-	// local executor. A fallback host serves every operation, and takes the
-	// durable reminder path for them rather than the WorkflowsFastPath local
-	// drives. Nil when the feature is off.
+	// local executor. A fallback host serves every operation, marks its
+	// responses with common.FallbackHeader so callers do not wait for the
+	// instance to advance, and takes the durable reminder path for them
+	// rather than the WorkflowsFastPath local drives. Nil when the feature
+	// is off.
 	Fallback func() bool
 
 	// Detached runs work that must outlive an invocation or claim context, on
 	// the runtime lifetime rather than this registration's. Nil creates one
 	// bounded by ctx.
 	Detached *detached.Runner
+
+	// ActivityPriority returns an activity's level name and weight. Nil means none.
+	ActivityPriority func(workflowName, activityName string) (string, uint32)
 }
 
 type factory struct {
@@ -122,12 +127,13 @@ type factory struct {
 	// recreates the context for subsequent activations. wakeLock serializes
 	// spawns against that cancel/recreate cycle so the WaitGroup Add never races
 	// the Wait.
-	fastPath   bool
-	fallback   func() bool
-	wakeLock   sync.Mutex
-	wakeCtx    context.Context
-	wakeCancel context.CancelFunc
-	wakeWG     sync.WaitGroup
+	fastPath         bool
+	fallback         func() bool
+	activityPriority func(workflowName, activityName string) (string, uint32)
+	wakeLock         sync.Mutex
+	wakeCtx          context.Context
+	wakeCancel       context.CancelFunc
+	wakeWG           sync.WaitGroup
 
 	// In-place drive retry schedule; nil selects the default jittered
 	// schedule. A field only so unit tests can compress it per factory.
@@ -212,6 +218,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		deactivateCh:           deactivateCh,
 		fastPath:               opts.FastPath,
 		fallback:               opts.Fallback,
+		activityPriority:       opts.ActivityPriority,
 		reaperScanInterval:     reaperScanInterval,
 		reaperIdleTTL:          reaperIdleTTL,
 		deactivateCtx:          ctx,
@@ -340,6 +347,29 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	}
 
 	return errors.Join(errs.Slice()...)
+}
+
+// DeactivateAll halts every actor as HaltAll does. HaltAll records no
+// rebalance and leaves the factory serving, so it is also how this factory
+// deactivates the actors of a type which stays hosted.
+func (f *factory) DeactivateAll(ctx context.Context) error {
+	return f.HaltAll(ctx)
+}
+
+// CancelWakes cancels the detached local wakes as HaltAll does, without
+// deactivating the actors, for a daprd turning into a fallback host in place.
+// It has no local executor left to drive them, and a wake parked in a stall
+// hold would keep its actor's turn until the wake times out, failing every
+// janitor delivery meanwhile. The janitor drives what they leave once a
+// daprd has an executor.
+func (f *factory) CancelWakes() {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.wakeLock.Lock()
+	defer f.wakeLock.Unlock()
+	f.wakeCancel()
+	f.wakeCtx, f.wakeCancel = context.WithCancel(context.Background())
 }
 
 func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {

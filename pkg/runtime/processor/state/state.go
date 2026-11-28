@@ -38,6 +38,27 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
+// IsActorStateStoreKey reports whether a metadata property name is the
+// "actorStateStore" property, which is matched case-insensitively.
+func IsActorStateStoreKey(name string) bool {
+	return strings.EqualFold(name, PropertyKeyActorStateStore)
+}
+
+// IsActorStateStore reports whether the metadata properties of a state store
+// mark it as the actor state store: its "actorStateStore" property, matched
+// case-insensitively, is truthy. Names differing only in case are separate
+// properties; the store is marked if any of them is truthy, so the result does
+// not depend on map iteration order. The hot reload reconciler applies the
+// same check before processing a component, so both must agree.
+func IsActorStateStore(props map[string]string) bool {
+	for k, v := range props {
+		if IsActorStateStoreKey(k) && kitstrings.IsTruthy(v) {
+			return true
+		}
+	}
+	return false
+}
+
 // Actors is the subset of the actor runtime which is notified when a
 // component becomes the actor state store.
 type Actors interface {
@@ -124,38 +145,28 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	// when placement address list is not empty, set specified actor store.
-	if s.actorsEnabled {
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := false
-
-		for k, v := range props {
-			//nolint:gocritic
-			if strings.ToLower(k) == PropertyKeyActorStateStore {
-				actorStoreSpecified = kitstrings.IsTruthy(v)
-				break
-			}
+	// AddStateStoreActor also adds the store, so the store is added once and
+	// its revision changes once.
+	if s.actorsEnabled && IsActorStateStore(props) {
+		if err = s.compStore.AddStateStoreActor(comp.Name, store); err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
-
-		if actorStoreSpecified {
-			if err = s.compStore.AddStateStoreActor(comp.Name, store); err != nil {
-				diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
-				return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-			}
-			log.Info("Using '" + comp.Name + "' as actor state store")
-
-			// Notify the actor runtime directly on the add side: components
-			// parked behind a not-yet-loaded secret store are initialized
-			// outside the hot reload reconciler, so its notification does not
-			// cover them. Notifications coalesce, so double notification via
-			// the reconciler is harmless. The remove side is only notified by
-			// the reconciler, once a remove or update has fully settled.
-			if s.actors != nil {
-				s.actors.OnActorStateStoreChanged()
-			}
-		}
+		log.Info("Using '" + comp.Name + "' as actor state store")
+	} else {
+		s.compStore.AddStateStore(comp.Name, store)
 	}
 
-	s.compStore.AddStateStore(comp.Name, store)
+	// Notify the actor runtime directly on the add side, of any state store:
+	// besides the actor state store, a state store may be bound to actor
+	// types. Components parked behind a not-yet-loaded secret store are
+	// initialized outside the hot reload reconciler, so its notification does
+	// not cover them. Notifications coalesce, so double notification via the
+	// reconciler is harmless. The remove side is only notified by the
+	// reconciler, once a remove or update has fully settled.
+	if s.actorsEnabled && s.actors != nil {
+		s.actors.OnActorStateStoreChanged()
+	}
 
 	err = compstate.SaveStateConfiguration(comp.Name, props)
 	if err != nil {

@@ -18,6 +18,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -37,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/dapr/pkg/sentry/server/images"
 	"github.com/dapr/kit/crypto/pem"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestNew(t *testing.T) {
@@ -425,5 +428,109 @@ func TestSignIdentity(t *testing.T) {
 			}
 		}
 		assert.Empty(t, clientCert[0].UnhandledCriticalExtensions)
+	})
+
+	t.Run("signing identity with a TTL should replace the workload certificate TTL", func(t *testing.T) {
+		dir := t.TempDir()
+		rootCertPath := filepath.Join(dir, "root.cert")
+		issuerCertPath := filepath.Join(dir, "issuer.cert")
+		issuerKeyPath := filepath.Join(dir, "issuer.key")
+		config := config.Config{
+			RootCertPath:    rootCertPath,
+			IssuerCertPath:  issuerCertPath,
+			IssuerKeyPath:   issuerKeyPath,
+			WorkloadCertTTL: 24 * time.Hour,
+		}
+
+		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
+		int1PEM, _, int1PKPEM, _ := genCrt(t, "int1", rootCrt, rootPK)
+
+		require.NoError(t, os.WriteFile(rootCertPath, rootPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, int1PEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, int1PKPEM, 0o600))
+
+		ca, err := New(t.Context(), config)
+		require.NoError(t, err)
+
+		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		for name, tc := range map[string]struct {
+			ttl  *time.Duration
+			want time.Duration
+		}{
+			"no TTL":   {nil, 24 * time.Hour},
+			"one hour": {ptr.Of(time.Hour), time.Hour},
+			"two days": {ptr.Of(48 * time.Hour), 48 * time.Hour},
+		} {
+			t.Run(name, func(t *testing.T) {
+				clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
+					PublicKey:   clientPK.Public(),
+					TrustDomain: "example.test.dapr.io",
+					Namespace:   "my-test-namespace",
+					AppID:       "my-app-id",
+					TTLOverride: tc.ttl,
+				})
+				require.NoError(t, err)
+				assert.WithinDuration(t, time.Now().Add(tc.want), clientCert[0].NotAfter, time.Minute)
+			})
+		}
+	})
+
+	t.Run("signing identity should add the requested extensions", func(t *testing.T) {
+		dir := t.TempDir()
+		rootCertPath := filepath.Join(dir, "root.cert")
+		issuerCertPath := filepath.Join(dir, "issuer.cert")
+		issuerKeyPath := filepath.Join(dir, "issuer.key")
+		config := config.Config{
+			RootCertPath:    rootCertPath,
+			IssuerCertPath:  issuerCertPath,
+			IssuerKeyPath:   issuerKeyPath,
+			WorkloadCertTTL: 24 * time.Hour,
+		}
+
+		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
+		int1PEM, _, int1PKPEM, _ := genCrt(t, "int1", rootCrt, rootPK)
+
+		require.NoError(t, os.WriteFile(rootCertPath, rootPEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerCertPath, int1PEM, 0o600))
+		require.NoError(t, os.WriteFile(issuerKeyPath, int1PKPEM, 0o600))
+
+		ca, err := New(t.Context(), config)
+		require.NoError(t, err)
+
+		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		custom := pkix.Extension{Id: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Value: []byte{0x05, 0x00}}
+
+		for name, tc := range map[string]struct {
+			ext     pkix.Extension
+			wantErr string
+		}{
+			"custom extension":           {custom, ""},
+			"critical custom extension":  {pkix.Extension{Id: custom.Id, Critical: true, Value: custom.Value}, "must not be critical"},
+			"subject alternative name":   {pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Value: []byte{0x30, 0x00}}, "is reserved for the CA"},
+			"certificate extension arc":  {pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29}, Value: []byte{0x30, 0x00}}, "is reserved for the CA"},
+			"container images extension": {pkix.Extension{Id: images.OIDContainerImages, Value: []byte{0x30, 0x00}}, "is reserved for the CA"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
+					PublicKey:   clientPK.Public(),
+					TrustDomain: "example.test.dapr.io",
+					Namespace:   "my-test-namespace",
+					AppID:       "my-app-id",
+					Extensions:  []pkix.Extension{tc.ext},
+				})
+				if tc.wantErr != "" {
+					require.ErrorContains(t, err, tc.wantErr)
+					return
+				}
+				require.NoError(t, err)
+				assert.Contains(t, clientCert[0].Extensions, tc.ext)
+				require.Len(t, clientCert[0].URIs, 1)
+				assert.Equal(t, "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id", clientCert[0].URIs[0].String())
+			})
+		}
 	})
 }

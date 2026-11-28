@@ -14,6 +14,7 @@ limitations under the License.
 package actors
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/addressreuse"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/call"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/deactivation"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination"
@@ -26,5 +27,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/schedulerplacement"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/statestores"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/statestores/validation"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
 )

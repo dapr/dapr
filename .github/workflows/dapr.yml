@@ -188,8 +188,8 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: arm64
     env:
@@ -239,8 +239,8 @@ jobs:
             # Process startup is slow enough on Windows that 8 at once starves
             # the timing-sensitive cases.
             test_parallel: 4
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: arm64
             test_parallel: 6
@@ -304,7 +304,7 @@ jobs:
             ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
             ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.xml
   integration-tests-workflow-modes:
-    name: "Integration tests (workflow${{ matrix.clustered && ' clustered' || '' }}${{ matrix.fastpath && ' fastpath' || '' }}${{ matrix.signing && ' signing' || '' }}${{ matrix.scheduler_placement && ' scheduler-placement' || '' }} mode)"
+    name: "Integration tests (workflow${{ matrix.clustered && ' clustered' || '' }}${{ matrix.fastpath && ' fastpath' || '' }}${{ matrix.signing && ' signing' || '' }}${{ matrix.scheduler_placement && ' scheduler-placement' || '' }}${{ matrix.staged && ' staged' || '' }} mode)"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -320,26 +320,30 @@ jobs:
         fastpath: [false, true]
         signing: [false, true]
         scheduler_placement: [false, true]
+        staged: [false, true]
         exclude:
           - clustered: false
             fastpath: false
             signing: false
             scheduler_placement: false
+            staged: false
           # The scheduler-placement extended focus job already runs the
           # workflow suite in this combination.
           - clustered: false
             fastpath: false
             signing: false
             scheduler_placement: true
+            staged: false
     env:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: "https://proxy.golang.org"
-      TEST_OUTPUT_FILE_PREFIX: "test_report_wf${{ matrix.clustered && '_clustered' || '' }}${{ matrix.fastpath && '_fastpath' || '' }}${{ matrix.signing && '_signing' || '' }}${{ matrix.scheduler_placement && '_schedplacement' || '' }}"
+      TEST_OUTPUT_FILE_PREFIX: "test_report_wf${{ matrix.clustered && '_clustered' || '' }}${{ matrix.fastpath && '_fastpath' || '' }}${{ matrix.signing && '_signing' || '' }}${{ matrix.scheduler_placement && '_schedplacement' || '' }}${{ matrix.staged && '_staged' || '' }}"
       DAPR_INTEGRATION_WORKFLOW_CLUSTERED: ${{ matrix.clustered }}
       DAPR_INTEGRATION_WORKFLOW_FASTPATH: ${{ matrix.fastpath }}
       DAPR_INTEGRATION_WORKFLOW_SIGNING: ${{ matrix.signing }}
       DAPR_INTEGRATION_SCHEDULER_PLACEMENT: ${{ matrix.scheduler_placement }}
+      DAPR_INTEGRATION_WORKFLOW_STAGED: ${{ matrix.staged }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
@@ -548,14 +552,14 @@ jobs:
             windows_version: ltsc2022
             job_name: "Windows LTSC 2022"
             sidecar_flavor: "allcomponents"
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: amd64
             job_name: "macOS/Intel"
             sidecar_flavor: "allcomponents"
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
+          # macos-14 retired 2026-11-02. TODO: @joshvanl Upgrade to latest once mDNS is fixed.
+          - os: macos-15
             target_os: darwin
             target_arch: arm64
             job_name: "macOS/Apple Silicon"
@@ -655,7 +659,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push Docker images to Docker Hub
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && env.DOCKER_REGISTRY_ID != '' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -672,7 +676,7 @@ jobs:
           fi
         shell: bash
       - name: Build and push Docker images to GHCR
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && github.event_name != 'merge_group' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
           TARGET_OS: ${{ matrix.target_os }}
@@ -811,10 +815,11 @@ jobs:
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
         shell: bash
+  # Only master publishes edge. Release branches would overwrite it with their own build.
   docker-publish:
     name: Publish docker images
     needs: build
-    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
       LATEST_TAG: latest

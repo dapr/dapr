@@ -117,6 +117,19 @@ func Test_PrefixFromMetadata_RoundTrip(t *testing.T) {
 	}
 }
 
+// Test_ActorReminderKey proves the key built from a reminder reference is the
+// key the job is stored under.
+func Test_ActorReminderKey(t *testing.T) {
+	t.Parallel()
+
+	stored, err := buildJobName(reqAdapter{
+		name: "run-activity",
+		meta: actorMeta("myns", "dapr.internal.myns.myapp.activity", "wf::1::0"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, stored, ActorReminderKey("myns", "dapr.internal.myns.myapp.activity", "wf::1::0", "run-activity"))
+}
+
 type reqAdapter struct {
 	name string
 	meta *schedulerv1pb.JobMetadata

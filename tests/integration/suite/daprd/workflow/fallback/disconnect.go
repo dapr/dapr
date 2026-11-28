@@ -46,8 +46,8 @@ type disconnect struct {
 
 func (d *disconnect) Setup(t *testing.T) []framework.Option {
 	d.workflow = workflow.New(t,
-		workflow.WithStagedOperations(),
-		withSettle(t, 0),
+		workflow.WithStagedOperations(true),
+		workflow.WithFallbackSettleN(t, 0),
 	)
 
 	return []framework.Option{

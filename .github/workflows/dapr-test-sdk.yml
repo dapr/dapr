@@ -272,7 +272,7 @@ jobs:
         run: cd java-sdk && ./mvnw clean install -B -q -DskipTests
       - name: Integration tests
         id: integration_tests
-        run: cd java-sdk && ./mvnw -B -pl '!durabletask-client' -Pintegration-tests dependency:copy-dependencies verify
+        run: cd java-sdk && ./mvnw -B -pl '!sdk-workflows' -Pintegration-tests dependency:copy-dependencies verify
       - name: Upload failsafe test report for sdk-tests on failure
         if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
         uses: actions/upload-artifact@v4

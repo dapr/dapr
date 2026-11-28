@@ -227,6 +227,37 @@ func TestTryDecryptValue(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, dr)
 	})
+
+	t.Run("malformed value", func(t *testing.T) {
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  hex.EncodeToString(bytes),
+		}
+
+		cipherObj, err := createCipher(pr, AESGCMAlgorithm)
+		require.NoError(t, err)
+		pr.cipherObj = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		for name, value := range map[string]string{
+			"no separator":     "abc",
+			"unknown key name": base64.StdEncoding.EncodeToString(make([]byte, 32)) + "||doesnotexist",
+			"short ciphertext": base64.StdEncoding.EncodeToString([]byte{1, 2, 3}) + "||primary",
+		} {
+			t.Run(name, func(t *testing.T) {
+				_, err := TryDecryptValue("test", []byte(value))
+				require.Error(t, err)
+				assert.NotContains(t, err.Error(), value)
+			})
+		}
+	})
 }
 
 func TestEncryptedStateStore(t *testing.T) {

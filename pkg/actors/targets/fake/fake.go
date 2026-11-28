@@ -38,6 +38,7 @@ type FakeFactory struct {
 	getOrCreateFn   func(string) targets.Interface
 	existsFn        func(string) bool
 	haltAllFn       func(context.Context) error
+	deactivateAllFn func(context.Context) error
 	haltNonHostedFn func(context.Context, func(*api.LookupActorRequest) bool) error
 	lenFn           func() int
 }
@@ -144,6 +145,9 @@ func NewFactory() *FakeFactory {
 		haltAllFn: func(context.Context) error {
 			return nil
 		},
+		deactivateAllFn: func(context.Context) error {
+			return nil
+		},
 		haltNonHostedFn: func(context.Context, func(*api.LookupActorRequest) bool) error {
 			return nil
 		},
@@ -168,6 +172,11 @@ func (f *FakeFactory) WithHaltAll(fn func(context.Context) error) *FakeFactory {
 	return f
 }
 
+func (f *FakeFactory) WithDeactivateAll(fn func(context.Context) error) *FakeFactory {
+	f.deactivateAllFn = fn
+	return f
+}
+
 func (f *FakeFactory) WithHaltNonHosted(fn func(context.Context, func(*api.LookupActorRequest) bool) error) *FakeFactory {
 	f.haltNonHostedFn = fn
 	return f
@@ -188,6 +197,10 @@ func (f *FakeFactory) Exists(actorID string) bool {
 
 func (f *FakeFactory) HaltAll(ctx context.Context) error {
 	return f.haltAllFn(ctx)
+}
+
+func (f *FakeFactory) DeactivateAll(ctx context.Context) error {
+	return f.deactivateAllFn(ctx)
 }
 
 func (f *FakeFactory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {

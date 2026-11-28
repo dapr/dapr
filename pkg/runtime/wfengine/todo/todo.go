@@ -18,11 +18,17 @@ import (
 	"errors"
 
 	"github.com/dapr/durabletask-go/backend"
+
+	"github.com/dapr/dapr/pkg/actors/reserved"
 )
 
 const (
 	// TODO: @joshvanl: remove
 	CallbackChannelProperty = "dapr.callback"
+	// PullProperty marks an activity work item delivered by pull dispatch. The
+	// backend refuses it, instead of queueing it, when the sidecar has no free
+	// activity slot.
+	PullProperty = "dapr.pull"
 
 	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
 	AddWorkflowEventMethod            = "AddWorkflowEvent"
@@ -32,6 +38,12 @@ const (
 	ForkWorkflowHistory               = "ForkWorkflowHistory"
 	RerunWorkflowInstance             = "RerunWorkflowInstance"
 	ExecuteActivityMethod             = "Execute"
+	// EvictWorkflowMethod deactivates the workflow actor wherever placement
+	// hosts it, dropping its cached state. A force purge runs on the daprd
+	// that received it and sends this to the owner when that is another
+	// daprd. Daprds that predate it answer "no such method"; the purge goes
+	// ahead regardless.
+	EvictWorkflowMethod = "EvictWorkflow"
 
 	MetadataActivityReminderDueTime = "dueTime"
 	// MetadataActivityLocalDrive certifies to the activity host that the
@@ -44,6 +56,8 @@ const (
 	// on the execution-claim record so a body live on the previous owner is
 	// deferred to (WorkflowsFastPath). Ignored by older hosts.
 	MetadataActivityJanitorRedispatch = "janitorRedispatch"
+	MetadataActivityPriorityLevel     = "priorityLevel"
+	MetadataActivityFairnessWeight    = "fairnessWeight"
 	MetadataPurgeRetentionCall        = "PurgeRetentionCall"
 	MetadataPurgeForce                = "PurgeForce"
 	// Set on a WaitForRuntimeStatus call to request that a terminal workflow
@@ -67,7 +81,7 @@ const (
 	// task IDs restart with each generation.
 	MetadataParentExecutionID = "ParentExecutionID"
 
-	ActorTypePrefix = "dapr.internal."
+	ActorTypePrefix = reserved.InternalActorTypePrefix
 
 	// ActivityReminderName is the per-activity-actor execution reminder name.
 	// Shared so the orchestrator can reap an escalated reminder whose task

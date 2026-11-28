@@ -14,21 +14,28 @@ limitations under the License.
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/kit/logger"
 )
 
@@ -51,6 +58,16 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		{
 			name:          "Invalid config file",
 			path:          "./testdata/invalid_secrets_config.yaml",
+			errorExpected: true,
+		},
+		{
+			name:          "Valid actor state stores config",
+			path:          "./testdata/actor_state_stores_config.yaml",
+			errorExpected: false,
+		},
+		{
+			name:          "Invalid actor state stores config",
+			path:          "./testdata/invalid_actor_state_stores_config.yaml",
 			errorExpected: true,
 		},
 	}
@@ -218,6 +235,64 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.False(t, mtlsSpec.Enabled) // Overridden
 		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
+	})
+
+	// Unlike other lists, actor state store bindings from several files add
+	// up: a later file must not drop the bindings of an earlier one, and the
+	// validation sees the bindings of every file together.
+	t.Run("multiple configurations with actor state store bindings", func(t *testing.T) {
+		writeConfig := func(t *testing.T, actors string) string {
+			t.Helper()
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(path, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: config
+spec:
+`+actors), 0o600))
+			return path
+		}
+		transactions := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-transactions
+        actorTypes: ["TransactionActor"]
+`)
+		balance := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-balance
+        actorTypes: ["BalanceActor"]
+`)
+		conflicting := writeConfig(t, `
+  actors:
+    stateStores:
+      - name: wallet-balance
+        actorTypes: ["TransactionActor"]
+`)
+		noActors := writeConfig(t, `
+  features:
+    - name: Actor.Reentrancy
+      enabled: true
+`)
+		nullActors := writeConfig(t, `
+  actors:
+`)
+
+		t.Run("bindings from every file are kept", func(t *testing.T) {
+			config, err := LoadStandaloneConfiguration(transactions, balance, noActors, nullActors)
+			require.NoError(t, err)
+			assert.Equal(t, map[string]string{
+				"TransactionActor": "wallet-transactions",
+				"BalanceActor":     "wallet-balance",
+			}, config.Spec.ActorsSpec.StateStoreByActorType())
+		})
+
+		t.Run("an actor type bound in two files is rejected", func(t *testing.T) {
+			_, err := LoadStandaloneConfiguration(transactions, conflicting, nullActors)
+			require.ErrorContains(t, err, `actor type "TransactionActor" is bound to more than one state store: "wallet-transactions" and "wallet-balance"`)
+		})
 	})
 
 	t.Run("tracing spec headers and timeout", func(t *testing.T) {
@@ -970,7 +1045,7 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 	require.True(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits())
 
 	// Entries the scheduler ignores must not disable the fast path.
@@ -981,9 +1056,540 @@ func TestHasSchedulerConcurrencyLimits(t *testing.T) {
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name}},
 	}).HasSchedulerConcurrencyLimits(), "nil max is not enforced")
 	require.False(t, (&WorkflowSpec{
-		ActivityConcurrencyLimits: []NamedConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, MaxConcurrent: i32(0)}},
 	}).HasSchedulerConcurrencyLimits(), "non-positive max is not enforced")
 	require.True(t, (&WorkflowSpec{
 		WorkflowConcurrencyLimits: []NamedConcurrencyLimit{{MaxConcurrent: i32(1)}, {Name: &name, MaxConcurrent: i32(1)}},
 	}).HasSchedulerConcurrencyLimits(), "one enforced entry among ignored ones counts")
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).HasSchedulerConcurrencyLimits(), "a dispatch-only entry is not a scheduler-enforced limit")
+}
+
+func TestActivityDispatchPull(t *testing.T) {
+	email := "SendEmail"
+	transcode := "Transcode"
+
+	var nilSpec *WorkflowSpec
+	require.False(t, nilSpec.ActivityDispatchPull(email))
+	require.False(t, nilSpec.HasPullActivityDispatch())
+	require.False(t, (&WorkflowSpec{}).ActivityDispatchPull(email))
+	require.False(t, (&WorkflowSpec{}).HasPullActivityDispatch())
+
+	appPull := &WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}
+	require.True(t, appPull.ActivityDispatchPull(email))
+	require.True(t, appPull.HasPullActivityDispatch())
+
+	appPullOptOut := &WorkflowSpec{
+		ActivityDispatchMode:      new(ActivityDispatchModePull),
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &email, DispatchMode: new(ActivityDispatchModeHashed)}},
+	}
+	require.False(t, appPullOptOut.ActivityDispatchPull(email), "per-name hashed overrides app-wide pull")
+	require.True(t, appPullOptOut.ActivityDispatchPull(transcode))
+	require.True(t, appPullOptOut.HasPullActivityDispatch())
+
+	perName := &WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{
+			{Name: &email, MaxConcurrent: new(int32(5))},
+			{Name: &transcode, DispatchMode: new(ActivityDispatchModePull)},
+		},
+	}
+	require.False(t, perName.ActivityDispatchPull(email), "an entry without dispatchMode inherits the app default")
+	require.True(t, perName.ActivityDispatchPull(transcode))
+	require.False(t, perName.ActivityDispatchPull("other"))
+	require.True(t, perName.HasPullActivityDispatch())
+}
+
+func TestValidateWorkflowSpec(t *testing.T) {
+	name := "SendEmail"
+	conf := func(w *WorkflowSpec) *Configuration {
+		c := LoadDefaultConfiguration()
+		c.Spec.WorkflowSpec = w
+		return c
+	}
+
+	require.NoError(t, conf(nil).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModeHashed)}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 2,
+		ActivityDispatchMode:             new(ActivityDispatchModePull),
+	}).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec())
+
+	err := conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+	// validate, which every loader calls, includes the workflow spec check.
+	err = conf(&WorkflowSpec{ActivityDispatchMode: new("random")}).validate()
+	require.ErrorContains(t, err, `invalid workflow activityDispatchMode "random"`)
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new("push")}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid dispatchMode "push"`)
+
+	require.NoError(t, conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name}, {Name: &name}},
+	}).validateWorkflowSpec(), "duplicate limits without a dispatchMode load as before")
+
+	for _, limits := range [][]ActivityConcurrencyLimit{
+		{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}, {Name: &name}},
+		{{Name: &name}, {Name: &name, DispatchMode: new(ActivityDispatchModeHashed)}},
+	} {
+		err = conf(&WorkflowSpec{
+			MaxConcurrentActivityInvocations: 1,
+			ActivityConcurrencyLimits:        limits,
+		}).validateWorkflowSpec()
+		require.ErrorContains(t, err, `duplicate activity name "SendEmail" with a dispatchMode`)
+	}
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 1,
+		ActivityConcurrencyLimits:        []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `dispatchMode "pull" in workflow activityConcurrencyLimits requires a name`)
+	require.False(t, (&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{DispatchMode: new(ActivityDispatchModePull)}},
+	}).HasPullActivityDispatch(), "a nameless entry can never match an activity")
+
+	err = conf(&WorkflowSpec{ActivityDispatchMode: new(ActivityDispatchModePull)}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		ActivityConcurrencyLimits: []ActivityConcurrencyLimit{{Name: &name, DispatchMode: new(ActivityDispatchModePull)}},
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	err = conf(&WorkflowSpec{
+		MaxConcurrentActivityInvocations: 0,
+		ActivityDispatchMode:             new(ActivityDispatchModePull),
+	}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations", "zero means unset")
+}
+
+func TestLoadStandaloneConfigurationRejectsPullWithoutSlots(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    activityDispatchMode: pull
+`), 0o600))
+	_, err := LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "requires maxConcurrentActivityInvocations")
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pull
+spec:
+  workflow:
+    maxConcurrentActivityInvocations: 3
+    activityDispatchMode: pull
+    activityConcurrencyLimits:
+      - name: SendEmail
+        maxConcurrent: 5
+        dispatchMode: hashed
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	require.True(t, c.Spec.WorkflowSpec.ActivityDispatchPull("Transcode"))
+	require.False(t, c.Spec.WorkflowSpec.ActivityDispatchPull("SendEmail"))
+	require.Equal(t, int32(5), *c.Spec.WorkflowSpec.ActivityConcurrencyLimits[0].MaxConcurrent)
+}
+
+func TestActorsSpecDecode(t *testing.T) {
+	want := &ActorsSpec{
+		StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		},
+	}
+
+	t.Run("standalone YAML", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/actor_state_stores_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, want, config.Spec.ActorsSpec)
+	})
+
+	t.Run("operator JSON", func(t *testing.T) {
+		var config Configuration
+		require.NoError(t, json.Unmarshal([]byte(`{"spec":{"actors":{"stateStores":[`+
+			`{"name":"wallet-transactions","actorTypes":["TransactionActor","AuditActor"]},`+
+			`{"name":"wallet-balance","actorTypes":["BalanceActor"]}]}}}`), &config))
+		assert.Equal(t, want, config.Spec.ActorsSpec)
+	})
+
+	t.Run("no actors section leaves ActorsSpec nil", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		require.NoError(t, err)
+		assert.Nil(t, config.Spec.ActorsSpec)
+	})
+}
+
+func TestWorkflowSpecStateStoreDecode(t *testing.T) {
+	t.Run("standalone YAML", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_state_store_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("operator JSON", func(t *testing.T) {
+		var config Configuration
+		require.NoError(t, json.Unmarshal([]byte(`{"spec":{"workflow":{"stateStore":"wallet-workflows"}}}`), &config))
+		assert.Equal(t, "wallet-workflows", config.Spec.WorkflowSpec.GetStateStore())
+	})
+
+	t.Run("no stateStore leaves it empty", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		require.NoError(t, err)
+		assert.Empty(t, config.Spec.WorkflowSpec.GetStateStore())
+	})
+}
+
+func TestActorsSpecStateStoreByActorType(t *testing.T) {
+	spec := &ActorsSpec{
+		StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		},
+	}
+	want := map[string]string{
+		"TransactionActor": "wallet-transactions",
+		"AuditActor":       "wallet-transactions",
+		"BalanceActor":     "wallet-balance",
+	}
+
+	t.Run("nil spec has no bindings", func(t *testing.T) {
+		var nilSpec *ActorsSpec
+		got := nilSpec.StateStoreByActorType()
+		assert.Empty(t, got)
+		_, ok := got["Any"]
+		assert.False(t, ok)
+	})
+
+	t.Run("maps every actor type to its store", func(t *testing.T) {
+		assert.Equal(t, want, spec.StateStoreByActorType())
+	})
+
+	t.Run("returns a fresh map on every call", func(t *testing.T) {
+		m1 := spec.StateStoreByActorType()
+		m1["BalanceActor"] = "hacked"
+		delete(m1, "TransactionActor")
+		assert.Equal(t, want, spec.StateStoreByActorType())
+	})
+}
+
+func TestActorsSpecValidate(t *testing.T) {
+	valid := func() *ActorsSpec {
+		return &ActorsSpec{StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor", "AuditActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		}}
+	}
+
+	tests := []struct {
+		name    string
+		spec    *ActorsSpec
+		wantErr []string
+	}{
+		{name: "nil spec", spec: nil},
+		{name: "empty spec", spec: &ActorsSpec{}},
+		{name: "valid bindings", spec: valid()},
+		{
+			name:    "empty store name",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{ActorTypes: []string{"A"}}}},
+			wantErr: []string{"stateStores[0]", "name"},
+		},
+		{
+			name:    "no actor types",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1"}}},
+			wantErr: []string{"stateStores[0]", `"s1"`, "actorTypes"},
+		},
+		{
+			name:    "empty actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{""}}}},
+			wantErr: []string{"stateStores[0]", `"s1"`, "empty"},
+		},
+		{
+			name:    "same actor type twice in one binding",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"A", "A"}}}},
+			wantErr: []string{`actor type "A" is listed more than once`, `"s1"`},
+		},
+		{
+			name: "same actor type in two bindings",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{Name: "s1", ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"A"}},
+			}},
+			wantErr: []string{`actor type "A" is bound to more than one state store: "s1" and "s2"`},
+		},
+		{
+			name: "same actor type twice in the second of two bindings",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{Name: "s1", ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"A", "A"}},
+			}},
+			wantErr: []string{`actor type "A" is bound to more than one state store: "s1" and "s2"`, `"A" is listed more than once`},
+		},
+		{
+			name:    "internal actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internal.ns.app.workflow"}}}},
+			wantErr: []string{`"dapr.internal.ns.app.workflow" is reserved for Dapr internal actors`},
+		},
+		{
+			name:    "bare dapr.internal actor type",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internal"}}}},
+			wantErr: []string{`"dapr.internal" is reserved for Dapr internal actors`},
+		},
+		{
+			name:    "a type merely starting with dapr.internal is allowed",
+			spec:    &ActorsSpec{StateStores: []ActorStateStoreBinding{{Name: "s1", ActorTypes: []string{"dapr.internalish"}}}},
+			wantErr: nil,
+		},
+		{
+			name: "every violation is reported",
+			spec: &ActorsSpec{StateStores: []ActorStateStoreBinding{
+				{ActorTypes: []string{"A"}},
+				{Name: "s2", ActorTypes: []string{"dapr.internal.x"}},
+			}},
+			wantErr: []string{"stateStores[0]", `"dapr.internal.x" is reserved`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.spec.Validate()
+			if len(tt.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, want := range tt.wantErr {
+				assert.Equalf(t, 1, strings.Count(err.Error(), want), "want %q exactly once in %q", want, err)
+			}
+		})
+	}
+}
+
+// fakeOperatorClient serves a fixed configuration. Embedding the interface
+// implements only the method under test.
+type fakeOperatorClient struct {
+	operatorv1pb.OperatorClient
+	resp []byte
+}
+
+func (f *fakeOperatorClient) GetConfiguration(context.Context, *operatorv1pb.GetConfigurationRequest, ...grpc.CallOption) (*operatorv1pb.GetConfigurationResponse, error) {
+	return &operatorv1pb.GetConfigurationResponse{Configuration: f.resp}, nil
+}
+
+func TestLoadKubernetesConfiguration(t *testing.T) {
+	// "carries bindings" and "no actors section" characterize the existing
+	// decoding; "rejects duplicate actor type" drives the validation.
+	t.Run("carries bindings", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{"actors":{"stateStores":[
+			{"name":"wallet-transactions","actorTypes":["TransactionActor"]},
+			{"name":"wallet-balance","actorTypes":["BalanceActor"]}]}}}`)}
+		conf, res, err := LoadKubernetesConfiguration("c", "default", client)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		assert.Equal(t, &ActorsSpec{StateStores: []ActorStateStoreBinding{
+			{Name: "wallet-transactions", ActorTypes: []string{"TransactionActor"}},
+			{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+		}}, conf.Spec.ActorsSpec)
+	})
+
+	t.Run("rejects duplicate actor type across bindings", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{"actors":{"stateStores":[
+			{"name":"s1","actorTypes":["A"]},
+			{"name":"s2","actorTypes":["A"]}]}}}`)}
+		conf, res, err := LoadKubernetesConfiguration("c", "default", client)
+		require.ErrorContains(t, err, `actor type "A" is bound to more than one state store`)
+		assert.Nil(t, conf)
+		assert.Nil(t, res)
+	})
+
+	t.Run("no actors section", func(t *testing.T) {
+		client := &fakeOperatorClient{resp: []byte(`{"kind":"Configuration","metadata":{"name":"c"},"spec":{}}`)}
+		conf, _, err := LoadKubernetesConfiguration("c", "default", client)
+		require.NoError(t, err)
+		assert.Nil(t, conf.Spec.ActorsSpec)
+	})
+
+	t.Run("operator-marshalled CRD carries bindings", func(t *testing.T) {
+		// The operator serves the Configuration CRD marshalled as JSON
+		// (pkg/operator/api/configurations.go), so the CRD type must carry
+		// spec.actors for the bindings to reach daprd in Kubernetes mode.
+		cfg := configapi.Configuration{
+			Spec: configapi.ConfigurationSpec{
+				ActorsSpec: &configapi.ActorsSpec{
+					StateStores: []configapi.ActorStateStoreBinding{
+						{Name: "wallet-balance", ActorTypes: []string{"BalanceActor"}},
+					},
+				},
+			},
+		}
+		b, err := json.Marshal(&cfg)
+		require.NoError(t, err)
+
+		conf, res, err := LoadKubernetesConfiguration("c", "default", &fakeOperatorClient{resp: b})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"BalanceActor": "wallet-balance"}, conf.Spec.ActorsSpec.StateStoreByActorType())
+		require.NotNil(t, res.Spec.ActorsSpec)
+		assert.Equal(t, cfg.Spec.ActorsSpec, res.Spec.ActorsSpec)
+	})
+
+	t.Run("operator-marshalled CRD carries the workflow state store", func(t *testing.T) {
+		cfg := configapi.Configuration{
+			Spec: configapi.ConfigurationSpec{
+				WorkflowSpec: &configapi.WorkflowSpec{StateStore: "wallet-workflows"},
+			},
+		}
+		b, err := json.Marshal(&cfg)
+		require.NoError(t, err)
+
+		conf, res, err := LoadKubernetesConfiguration("c", "default", &fakeOperatorClient{resp: b})
+		require.NoError(t, err)
+		assert.Equal(t, "wallet-workflows", conf.Spec.WorkflowSpec.GetStateStore())
+		require.NotNil(t, res.Spec.WorkflowSpec)
+		assert.Equal(t, "wallet-workflows", res.Spec.WorkflowSpec.StateStore)
+	})
+}
+
+func TestActivityPriority(t *testing.T) {
+	var nilSpec *WorkflowSpec
+	level, weight := nilSpec.ActivityPriority("wf", "act")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+	level, weight = (&WorkflowSpec{}).ActivityPriority("wf", "act")
+	require.Empty(t, level)
+	require.Zero(t, weight)
+
+	spec := &WorkflowSpec{Priority: &WorkflowPriority{
+		Default: &PriorityValues{PriorityLevel: new(PriorityLevelHigh), FairnessWeight: new(uint32(2))},
+		Workflows: []NamedPriorityValues{
+			{Name: new("critical-wf"), PriorityLevel: new(PriorityLevelCritical)},
+			{Name: new("heavy-wf"), FairnessWeight: new(uint32(7))},
+		},
+		Activities: []NamedPriorityValues{
+			{Name: new("weighted"), FairnessWeight: new(uint32(3))},
+			{Name: new("background"), PriorityLevel: new(PriorityLevelBackground), FairnessWeight: new(uint32(5))},
+		},
+	}}
+
+	check := func(workflow, activity, wantLevel string, wantWeight uint32, msg string) {
+		t.Helper()
+		level, weight := spec.ActivityPriority(workflow, activity)
+		require.Equal(t, wantLevel, level, msg)
+		require.Equal(t, wantWeight, weight, msg)
+	}
+	check("other-wf", "other", PriorityLevelHigh, 2, "nothing of its own: the default")
+	check("critical-wf", "other", PriorityLevelCritical, 2, "level from the calling workflow, weight from the default")
+	check("critical-wf", "weighted", PriorityLevelCritical, 3, "own weight, level from the calling workflow")
+	check("heavy-wf", "weighted", PriorityLevelHigh, 3, "own weight beats the workflow's weight")
+	check("heavy-wf", "other", PriorityLevelHigh, 7, "weight from the calling workflow")
+	check("critical-wf", "background", PriorityLevelBackground, 5, "own values beat the workflow's")
+}
+
+func TestValidateWorkflowPriority(t *testing.T) {
+	conf := func(p *WorkflowPriority) *Configuration {
+		c := LoadDefaultConfiguration()
+		c.Spec.WorkflowSpec = &WorkflowSpec{Priority: p}
+		return c
+	}
+
+	require.NoError(t, conf(nil).validateWorkflowSpec())
+	require.NoError(t, conf(&WorkflowPriority{}).validateWorkflowSpec())
+	require.Equal(t, []string{"critical", "high", "normal", "low", "background"}, PriorityLevels)
+	for _, level := range PriorityLevels {
+		require.NoError(t, conf(&WorkflowPriority{
+			Default:    &PriorityValues{PriorityLevel: new(level)},
+			Workflows:  []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(level)}},
+			Activities: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(level)}},
+		}).validateWorkflowSpec(), level)
+	}
+	require.NoError(t, conf(&WorkflowPriority{
+		Default:    &PriorityValues{PriorityLevel: new(PriorityLevelLow), FairnessWeight: new(uint32(MaxFairnessWeight))},
+		Workflows:  []NamedPriorityValues{{Name: new("a"), PriorityLevel: new(PriorityLevelCritical)}, {Name: new("b"), FairnessWeight: new(uint32(1))}},
+		Activities: []NamedPriorityValues{{Name: new("a")}},
+	}).validateWorkflowSpec(), "the same name may appear in workflows and activities")
+
+	err := conf(&WorkflowPriority{Default: &PriorityValues{PriorityLevel: new("urgent")}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid priorityLevel "urgent" in workflow priority default: must be one of critical, high, normal, low, background`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a"), PriorityLevel: new("Critical")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid priorityLevel "Critical" in workflow priority workflows entry "a"`)
+
+	err = conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(uint32(0))}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "invalid fairnessWeight 0 in workflow priority default: must be between 1 and 1000")
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("a"), FairnessWeight: new(uint32(1001))}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `invalid fairnessWeight 1001 in workflow priority activities entry "a"`)
+
+	for _, w := range []uint32{1, 2, 500, 1000} {
+		require.NoError(t, conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(w)}}).validateWorkflowSpec(), w)
+	}
+	for _, w := range []uint32{0, 1001, 100000} {
+		require.ErrorContains(t, conf(&WorkflowPriority{Default: &PriorityValues{FairnessWeight: new(w)}}).validateWorkflowSpec(), "invalid fairnessWeight", w)
+	}
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("a")}, {Name: new("a")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `duplicate name "a" in workflow priority activities`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{Name: new("a")}, {Name: new("a"), FairnessWeight: new(uint32(2))}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, `duplicate name "a" in workflow priority workflows`)
+
+	err = conf(&WorkflowPriority{Workflows: []NamedPriorityValues{{PriorityLevel: new(PriorityLevelHigh)}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "workflow priority workflows entry requires a name")
+
+	err = conf(&WorkflowPriority{Activities: []NamedPriorityValues{{Name: new("")}}}).validateWorkflowSpec()
+	require.ErrorContains(t, err, "workflow priority activities entry requires a name")
+}
+
+func TestLoadStandaloneConfigurationPriority(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: priority
+spec:
+  workflow:
+    priority:
+      default:
+        priorityLevel: high
+      workflows:
+        - name: PaymentTransfer
+          priorityLevel: critical
+      activities:
+        - name: SendReceipt
+          fairnessWeight: 3
+`), 0o600))
+	c, err := LoadStandaloneConfiguration(path)
+	require.NoError(t, err)
+	level, weight := c.Spec.WorkflowSpec.ActivityPriority("PaymentTransfer", "SendReceipt")
+	require.Equal(t, PriorityLevelCritical, level)
+	require.InDelta(t, 3, weight, 1e-6)
+	level, weight = c.Spec.WorkflowSpec.ActivityPriority("Other", "Other")
+	require.Equal(t, PriorityLevelHigh, level)
+	require.Zero(t, weight)
+
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: priority
+spec:
+  workflow:
+    priority:
+      activities:
+        - name: SendReceipt
+          fairnessWeight: 0
+`), 0o600))
+	_, err = LoadStandaloneConfiguration(path)
+	require.ErrorContains(t, err, "invalid fairnessWeight 0")
 }

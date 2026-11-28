@@ -52,6 +52,9 @@ func (n *noescalation) Setup(t *testing.T) []framework.Option {
 	n.reached = make(chan struct{}, 1)
 	n.release = make(chan struct{})
 	n.workflow = workflow.New(t,
+		// Asserts the workflow actor types are unregistered once the worker
+		// leaves, which the staged operations preview does not do.
+		workflow.WithStagedOperations(false),
 		workflow.WithFastPath(true),
 		workflow.WithDaprdOptions(0, daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_WORKFLOW_JANITOR_PERIOD", "2s",

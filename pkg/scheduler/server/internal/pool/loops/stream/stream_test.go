@@ -221,6 +221,35 @@ func Test_Stream(t *testing.T) {
 		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 	})
 
+	t.Run("unknown result status resolves the trigger and closes the stream", func(t *testing.T) {
+		t.Parallel()
+
+		suite := newSuite(t)
+
+		var resolved atomic.Pointer[api.TriggerResponseResult]
+		suite.streamLoop.Enqueue(&loops.TriggerRequest{
+			Job:      &internalsv1pb.JobEvent{Key: "job", Name: "job"},
+			ResultFn: func(res api.TriggerResponseResult) { resolved.Store(&res) },
+		})
+		req, err := suite.clientstream.Recv()
+		require.NoError(t, err)
+
+		require.NoError(t, suite.clientstream.Send(&schedulerv1pb.WatchJobsRequest{
+			WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+				Result: &schedulerv1pb.WatchJobsRequestResult{
+					Id:     req.GetId(),
+					Status: schedulerv1pb.WatchJobsRequestResultStatus(99),
+				},
+			},
+		}))
+
+		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
+		ptr := resolved.Load()
+		require.NotNil(t, ptr, "the trigger must not leak")
+		assert.Equal(t, api.TriggerResponseResult_FAILED, *ptr)
+		suite.streamLoop.Close(new(loops.StreamShutdown))
+	})
+
 	t.Run("receiving an initial request from client should close stream", func(t *testing.T) {
 		t.Parallel()
 

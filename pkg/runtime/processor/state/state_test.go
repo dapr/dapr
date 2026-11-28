@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -202,7 +203,10 @@ func TestActorStateStore(t *testing.T) {
 		assert.Equal(t, "mystore", name)
 	})
 
-	t.Run("unmarked store does not touch the slot or notify", func(t *testing.T) {
+	// Any state store may be bound to actor types, and may be initialized
+	// outside the hot reload reconciler, for example once the secret store it
+	// waits for is loaded, so its init notifies the actor runtime too.
+	t.Run("unmarked store does not touch the slot and notifies on init", func(t *testing.T) {
 		var kicks atomic.Int64
 		proc, compStore := newProc(t, &kicks)
 
@@ -210,9 +214,23 @@ func TestActorStateStore(t *testing.T) {
 
 		_, _, ok := compStore.GetStateStoreActor()
 		assert.False(t, ok)
+		assert.Equal(t, int64(1), kicks.Load())
 
 		require.NoError(t, proc.Close(t.Context(), comp("plain", false)))
-		assert.Equal(t, int64(0), kicks.Load())
+		assert.Equal(t, int64(1), kicks.Load())
+	})
+
+	// The actor runtime must observe a single revision change per init, or
+	// it could act on an intermediate one and then again on the final one.
+	t.Run("init changes the store revision once", func(t *testing.T) {
+		for _, marked := range []bool{true, false} {
+			var kicks atomic.Int64
+			proc, compStore := newProc(t, &kicks)
+
+			// The component store is empty, so a single change is revision 1.
+			require.NoError(t, proc.Init(t.Context(), comp("mystore", marked)))
+			assert.Equal(t, uint64(1), compStore.GetStateStoreRevision("mystore"), "marked=%t", marked)
+		}
 	})
 
 	t.Run("duplicate actor state store surfaces an init error", func(t *testing.T) {
@@ -280,4 +298,32 @@ func initMockStateStoreForRegistry(reg *registry.Registry, name, encryptKey stri
 	mockStateStore.On("Init", expectedMetadataUppercase).Return(e)
 
 	return mockStateStore
+}
+
+func TestIsActorStateStore(t *testing.T) {
+	tests := map[string]struct {
+		props map[string]string
+		want  bool
+	}{
+		"no property":           {props: map[string]string{"other": "true"}, want: false},
+		"true":                  {props: map[string]string{"actorStateStore": "true"}, want: true},
+		"case-insensitive name": {props: map[string]string{"ACTORSTATESTORE": "1"}, want: true},
+		"false":                 {props: map[string]string{"actorStateStore": "false"}, want: false},
+		"empty":                 {props: map[string]string{"actorStateStore": ""}, want: false},
+		"not a boolean":         {props: map[string]string{"actorStateStore": "maybe"}, want: false},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.want, state.IsActorStateStore(test.props))
+		})
+	}
+
+	// Map iteration order is random, so names differing only in case must not
+	// decide the result by whichever is visited first.
+	t.Run("case-variant names, one is truthy", func(t *testing.T) {
+		props := map[string]string{"actorStateStore": "false", "ACTORSTATESTORE": "true", "ActorStateStore": "0"}
+		for range 100 {
+			require.True(t, state.IsActorStateStore(props))
+		}
+	})
 }

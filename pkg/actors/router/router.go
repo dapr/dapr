@@ -196,6 +196,10 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
+	if req.ExecuteLocally {
+		return r.callLocalReminder(ctx, req)
+	}
+
 	wctx, removed, wcancel := req.UntilRemoved(ctx)
 	defer wcancel()
 
@@ -241,10 +245,20 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
+	return r.callLocalReminder(ctx, req)
+}
+
+// callLocalReminder invokes the reminder on this host's actor table.
+func (r *router) callLocalReminder(ctx context.Context, req *api.Reminder) error {
 	target, err := r.table.GetOrCreate(ctx, req.ActorType, req.ActorID)
 	if err != nil {
 		if ctx.Err() != nil {
 			return err
+		}
+		// The type left this host, such as when its worker disconnected:
+		// another host can take it. Any other failure is a real one.
+		if errors.Is(err, actorerrors.ErrNotRegistered) {
+			err = fmt.Errorf("%w: %w", actorerrors.ErrNoCapacity, err)
 		}
 		return backoff.Permanent(err)
 	}
@@ -308,7 +322,9 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if IsRetryableRemoteError(err) {
-		// Destroy the connection and force a re-connection on the next attempt
+		// The pooled connection is not destroyed here because other in-flight
+		// calls share it. The caller retries, resolving the actor host again,
+		// and reuses the pooled connection for that address and app.
 		attempt := resiliency.GetAttempt(ctx)
 		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}

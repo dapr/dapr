@@ -20,10 +20,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -64,7 +67,21 @@ type SignRequest struct {
 	// ContainerImages are optional image references of the workload's
 	// containers, embedded as a certificate extension when non-empty.
 	ContainerImages []images.ContainerImage
+
+	// TTLOverride, when set, is the lifetime of the certificate instead of the
+	// configured workload certificate TTL.
+	TTLOverride *time.Duration
+
+	// Extensions are added to the certificate. SignIdentity refuses a critical
+	// extension, and an extension in the X.509 certificate extension arc
+	// (2.5.29) or with the container images OID, so it cannot replace one the
+	// CA sets.
+	Extensions []pkix.Extension
 }
+
+// oidCertificateExtension is the arc of the standard X.509 certificate
+// extensions, such as the subject alternative name.
+var oidCertificateExtension = asn1.ObjectIdentifier{2, 5, 29}
 
 // Signer is the interface for the CA.
 type Signer interface {
@@ -283,7 +300,12 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := bundle.GenerateWorkloadCert(c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	ttl := c.config.WorkloadCertTTL
+	if req.TTLOverride != nil {
+		ttl = *req.TTLOverride
+	}
+
+	tmpl, err := bundle.GenerateWorkloadCert(ttl, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +316,17 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 	if ok {
+		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, ext)
+	}
+
+	for _, ext := range req.Extensions {
+		if ext.Critical {
+			return nil, fmt.Errorf("certificate extension %s must not be critical", ext.Id)
+		}
+		if (len(ext.Id) >= len(oidCertificateExtension) && ext.Id[:len(oidCertificateExtension)].Equal(oidCertificateExtension)) ||
+			ext.Id.Equal(images.OIDContainerImages) {
+			return nil, fmt.Errorf("certificate extension %s is reserved for the CA", ext.Id)
+		}
 		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, ext)
 	}
 

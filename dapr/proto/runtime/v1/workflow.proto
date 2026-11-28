@@ -72,6 +72,10 @@ message StartWorkflowRequest {
 message StartWorkflowResponse {
   // ID of the started workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
+  // Whether a fallback host saved the operation to run once a workflow
+  // worker connects, rather than running it now. Only true when the app
+  // hosting the workflow enables the WorkflowsStagedOperations preview.
+  bool staged = 2;
 }
 
 // TerminateWorkflowRequest is the request for TerminateWorkflowBeta1.
@@ -86,6 +90,14 @@ message TerminateWorkflowRequest {
   optional string app_id = 3 [json_name = "appID"];
 }
 
+// TerminateWorkflowResponse is the response for TerminateWorkflowBeta1.
+message TerminateWorkflowResponse {
+  // Whether a fallback host saved the operation to run once a workflow
+  // worker connects, rather than running it now. Only true when the app
+  // hosting the workflow enables the WorkflowsStagedOperations preview.
+  bool staged = 1;
+}
+
 // PauseWorkflowRequest is the request for PauseWorkflowBeta1.
 message PauseWorkflowRequest {
   // ID of the workflow instance to pause.
@@ -98,6 +110,14 @@ message PauseWorkflowRequest {
   optional string app_id = 3 [json_name = "appID"];
 }
 
+// PauseWorkflowResponse is the response for PauseWorkflowBeta1.
+message PauseWorkflowResponse {
+  // Whether a fallback host saved the operation to run once a workflow
+  // worker connects, rather than running it now. Only true when the app
+  // hosting the workflow enables the WorkflowsStagedOperations preview.
+  bool staged = 1;
+}
+
 // ResumeWorkflowRequest is the request for ResumeWorkflowBeta1.
 message ResumeWorkflowRequest {
   // ID of the workflow instance to resume.
@@ -108,6 +128,14 @@ message ResumeWorkflowRequest {
   // Defaults to the local app. Must be in the same namespace; the target
   // app's WorkflowAccessPolicy governs whether the call is permitted.
   optional string app_id = 3 [json_name = "appID"];
+}
+
+// ResumeWorkflowResponse is the response for ResumeWorkflowBeta1.
+message ResumeWorkflowResponse {
+  // Whether a fallback host saved the operation to run once a workflow
+  // worker connects, rather than running it now. Only true when the app
+  // hosting the workflow enables the WorkflowsStagedOperations preview.
+  bool staged = 1;
 }
 
 // RaiseEventWorkflowRequest is the request for RaiseEventWorkflowBeta1.
@@ -124,6 +152,14 @@ message RaiseEventWorkflowRequest {
   // Defaults to the local app. Must be in the same namespace; the target
   // app's WorkflowAccessPolicy governs whether the call is permitted.
   optional string app_id = 5 [json_name = "appID"];
+}
+
+// RaiseEventWorkflowResponse is the response for RaiseEventWorkflowBeta1.
+message RaiseEventWorkflowResponse {
+  // Whether a fallback host saved the operation to run once a workflow
+  // worker connects, rather than running it now. Only true when the app
+  // hosting the workflow enables the WorkflowsStagedOperations preview.
+  bool staged = 1;
 }
 
 // PurgeWorkflowRequest is the request for PurgeWorkflowBeta1.

@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/reserved"
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -27,9 +28,8 @@ import (
 )
 
 const (
-	actorTypePrefix = "dapr.internal."
-	suffixWorkflow  = ".workflow"
-	suffixActivity  = ".activity"
+	suffixWorkflow = ".workflow"
+	suffixActivity = ".activity"
 )
 
 // OperationType represents the type of workflow operation being performed.
@@ -44,7 +44,7 @@ const (
 // actor. Returns the operation type and true if it is a workflow/activity actor,
 // or empty string and false otherwise.
 func ParseActorType(actorType string) (OperationType, bool) {
-	if !strings.HasPrefix(actorType, actorTypePrefix) {
+	if !strings.HasPrefix(actorType, reserved.InternalActorTypePrefix) {
 		return "", false
 	}
 
@@ -133,6 +133,17 @@ func WorkflowNameFromCreateRequest(data []byte) (string, *protos.PropagatedHisto
 		return "", nil, errors.New("CreateWorkflowInstanceRequest missing ExecutionStarted event")
 	}
 	return es.GetName(), req.GetPropagatedHistory(), nil
+}
+
+// IsCompletionEvent reports whether ev carries the outcome of a task the
+// target workflow dispatched: an activity result or a child workflow's
+// completion or failure. A completion is the reply to the workflow's own
+// request, not an operation the sender performs on it, so no rule describes
+// it and the access policy does not gate it. The orchestrator admits it only
+// against the matching dispatch record.
+func IsCompletionEvent(ev *backend.HistoryEvent) bool {
+	return ev.GetTaskCompleted() != nil || ev.GetTaskFailed() != nil ||
+		ev.GetChildWorkflowInstanceCompleted() != nil || ev.GetChildWorkflowInstanceFailed() != nil
 }
 
 func operationFromHistoryEvent(ev *backend.HistoryEvent) (wfaclapi.WorkflowOperation, error) {

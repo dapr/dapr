@@ -94,6 +94,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		fopt(&opts)
 	}
 
+	if opts.mode == string(modes.StandaloneMode) {
+		if f := nameResolutionConfig(t); f != "" {
+			opts.configs = append([]string{f}, opts.configs...)
+		}
+	}
+
 	dir := t.TempDir()
 	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
@@ -166,6 +172,9 @@ spec:
 	if len(opts.sentryRequestJwtAudiences) > 0 {
 		args = append(args, "--sentry-request-jwt-audiences="+strings.Join(opts.sentryRequestJwtAudiences, ","))
 	}
+	if opts.workloadKeyAlgorithm != "" {
+		args = append(args, "--workload-key-algorithm="+opts.workloadKeyAlgorithm)
+	}
 	if len(opts.controlPlaneAddress) > 0 {
 		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
 	}
@@ -201,6 +210,9 @@ spec:
 	}
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
+	if opts.readBufferSize != nil {
+		args = append(args, "--read-buffer-size="+*opts.readBufferSize)
 	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
@@ -555,6 +567,17 @@ func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.M
 
 func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *MetadataActorRuntime {
 	return d.meta(t, ctx).ActorRuntime
+}
+
+// PlacementStatus returns the placement connection status the daprd reports,
+// such as "placement: connected". A failed metadata read fails t and returns
+// "".
+func (d *Daprd) PlacementStatus(t assert.TestingT, ctx context.Context) string {
+	rt := d.GetMetaActorRuntime(t, ctx)
+	if rt == nil {
+		return ""
+	}
+	return rt.Placement
 }
 
 func (d *Daprd) GetMetaResiliencies(t assert.TestingT, ctx context.Context) []*rtv1.MetadataResiliency {

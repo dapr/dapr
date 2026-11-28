@@ -22,8 +22,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
@@ -228,7 +230,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test", false)
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test", true)
 		defer teardown(true)
 
 		require.NoError(t, err)
@@ -262,7 +264,7 @@ func TestIntercept(t *testing.T) {
 			invokev1.CallerIDHeader:        []string{"admin"},
 			invokev1.CallerNamespaceHeader: []string{"kube-system"},
 		})
-		ctx, _, _, teardown, err := p.(*proxy).intercept(ctx, "/test", false)
+		ctx, _, _, teardown, err := p.(*proxy).intercept(ctx, "/test", true)
 		defer teardown(true)
 		require.NoError(t, err)
 
@@ -270,6 +272,58 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, []string{"a"}, md.Get(invokev1.CallerIDHeader))
 		assert.Equal(t, []string{"ns-a"}, md.Get(invokev1.CallerNamespaceHeader))
 		assert.Equal(t, []string{"b"}, md.Get(invokev1.CalleeIDHeader))
+	})
+
+	t.Run("internal server refuses to relay to a remote app", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: s, address: s + ":123"}, nil
+		})
+
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyCalleeIDKey: []string{"b"}})
+		_, conn, pt, teardown, err := p.(*proxy).intercept(ctx, "/test", false)
+		defer teardown(true)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		assert.Nil(t, conn)
+		assert.Nil(t, pt)
+	})
+
+	t.Run("same app id in another namespace is not local", func(t *testing.T) {
+		p := NewProxy(ProxyOpts{
+			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
+			AppID:             "a",
+			Namespace:         "ns1",
+			Resiliency:        resiliency.New(nil),
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
+			return remoteApp{id: "a", namespace: "ns2", address: "a:123"}, nil
+		})
+
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyCalleeIDKey: []string{"a.ns2"}})
+
+		_, conn, _, teardown, err := p.(*proxy).intercept(ctx, "/test", false)
+		defer teardown(true)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		assert.Nil(t, conn)
+
+		_, conn, pt, teardown, err := p.(*proxy).intercept(ctx, "/test", true)
+		defer teardown(true)
+		require.NoError(t, err)
+		assert.NotNil(t, conn)
+		require.NotNil(t, pt)
+		assert.Equal(t, "ns2", pt.Namespace)
 	})
 
 	t.Run("proxy to the app without mTLS keeps the last identity value", func(t *testing.T) {
@@ -314,7 +368,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 		p.SetRemoteAppFn(func(_ context.Context, s string) (remoteApp, error) {
-			return remoteApp{id: "a"}, nil
+			return remoteApp{id: "a", namespace: p.(*proxy).namespace}, nil
 		})
 
 		for name, md := range map[string]metadata.MD{

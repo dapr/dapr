@@ -15,19 +15,24 @@ package list
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	actorstate "github.com/dapr/dapr/pkg/actors/state"
 )
 
 type ListOptions struct {
-	ComponentStore *compstore.ComponentStore
-	Namespace      string
-	AppID          string
+	// StoreResolver resolves the state store of the workflow actor type,
+	// which is the default actor state store unless spec.workflow.stateStore
+	// binds another.
+	StoreResolver actorstate.StoreResolver
+	// WorkflowActorType is the app's workflow actor type, whose state store
+	// holds the instances.
+	WorkflowActorType string
+	AppID             string
+	// IDPrefix, when set, lists only the instance IDs starting with it.
+	IDPrefix string
 
 	PageSize          *uint32
 	ContinuationToken *string
@@ -39,17 +44,24 @@ type ListInstanceIDsResult struct {
 }
 
 func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsResult, error) {
-	store, _, ok := opts.ComponentStore.GetStateStoreActor()
-	if !ok {
-		return nil, errors.New("no state store with actor support found")
+	storeName, store, err := opts.StoreResolver.Resolve(opts.WorkflowActorType)
+	if err != nil {
+		return nil, err
 	}
 
 	ks, ok := store.(state.KeysLiker)
 	if !ok {
-		return nil, fmt.Errorf("state store %T does not support listing keys", store)
+		return nil, fmt.Errorf("state store %s does not support listing keys", storeName)
 	}
 
-	like := opts.AppID + "||" + todo.ActorTypePrefix + opts.Namespace + "." + opts.AppID + ".workflow||%||metadata"
+	// The pattern holds the prefix only up to its first LIKE metacharacter,
+	// as stores escape them differently; the filter below drops the extra
+	// matches. A page can come back short as a result.
+	likePrefix := opts.IDPrefix
+	if i := strings.IndexAny(likePrefix, `%_\`); i >= 0 {
+		likePrefix = likePrefix[:i]
+	}
+	like := opts.AppID + "||" + opts.WorkflowActorType + "||" + likePrefix + "%||metadata"
 
 	resp, err := ks.KeysLike(ctx, &state.KeysLikeRequest{
 		Pattern:           like,
@@ -67,7 +79,9 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 			return nil, fmt.Errorf("invalid key format: %s", key)
 		}
 
-		keys = append(keys, split[2])
+		if strings.HasPrefix(split[2], opts.IDPrefix) {
+			keys = append(keys, split[2])
+		}
 	}
 
 	return &ListInstanceIDsResult{

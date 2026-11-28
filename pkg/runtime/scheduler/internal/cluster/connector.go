@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/dapr/dapr/pkg/actors/router"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/retry"
@@ -30,6 +32,13 @@ type connector struct {
 	channels *channels.Channels
 	actors   router.Interface
 	wfengine wfengine.Interface
+
+	// addr is the scheduler address of client. pull, pullActorType and
+	// supportsPullSlots are handed to each streamer; see streamer.pull.
+	addr              string
+	pull              *Pull
+	pullActorType     string
+	supportsPullSlots bool
 }
 
 // run starts the scheduler connector, retrying on failures so that a single
@@ -59,7 +68,7 @@ func (c *connector) run(ctx context.Context) error {
 			}
 		}
 
-		if err = stream.Send(c.req); err != nil {
+		if err = stream.Send(c.initial()); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -88,6 +97,11 @@ func (c *connector) run(ctx context.Context) error {
 			channels: c.channels,
 			actors:   c.actors,
 			wfengine: c.wfengine,
+
+			addr:              c.addr,
+			pull:              c.pull,
+			pullActorType:     c.pullActorType,
+			supportsPullSlots: c.supportsPullSlots,
 		}).run(ctx)
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")
@@ -105,4 +119,18 @@ func (c *connector) run(ctx context.Context) error {
 		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
+}
+
+// initial returns the request that opens a stream. With pull dispatch it
+// carries the current free slots and the pull reminders this sidecar still
+// holds from earlier streams to the same scheduler.
+func (c *connector) initial() *schedulerv1pb.WatchJobsRequest {
+	if c.pull == nil {
+		return c.req
+	}
+	req := proto.Clone(c.req).(*schedulerv1pb.WatchJobsRequest)
+	free, _ := c.wfengine.ActivityFreeSlots()
+	req.GetInitial().PullSlots = []*schedulerv1pb.PullSlots{{ActorType: c.pullActorType, Free: free}}
+	req.GetInitial().InflightReminders = c.pull.refs(c.addr)
+	return req
 }
