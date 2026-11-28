@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 
@@ -28,11 +29,14 @@ import (
 	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
@@ -745,6 +749,95 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
 		assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 	})
+}
+
+type traceTestDaprServer struct {
+	runtimev1pb.UnimplementedDaprServer
+}
+
+func (traceTestDaprServer) GetSecret(context.Context, *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
+	return &runtimev1pb.GetSecretResponse{}, nil
+}
+
+func TestGetSecretGRPCTraceParent(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previousTracer := tracer
+	tracer = tp.Tracer(tracerName)
+	t.Cleanup(func() {
+		tracer = previousTracer
+		require.NoError(t, tp.Shutdown(context.Background()))
+	})
+
+	lis := bufconn.Listen(1 << 20)
+	server := grpc.NewServer(
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
+		grpc.ChainUnaryInterceptor(metadata.SetMetadataInContextUnary, GRPCTraceUnaryServerInterceptor("test", config.TracingSpec{SamplingRate: "1"})),
+	)
+	runtimev1pb.RegisterDaprServer(server, traceTestDaprServer{})
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve(lis) }()
+	t.Cleanup(func() {
+		server.Stop()
+		require.NoError(t, <-serverErr)
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	client := runtimev1pb.NewDaprClient(conn)
+
+	const (
+		traceID           = "6f2eed2b0bf08323048938f20459e47b"
+		appSpanID         = "9c307df915e062fc"
+		clientSpanID      = "4dab01140f3a0b65"
+		appTraceParent    = "00-" + traceID + "-" + appSpanID + "-01"
+		clientTraceParent = "00-" + traceID + "-" + clientSpanID + "-03"
+	)
+	appParent, ok := SpanContextFromW3CString(appTraceParent)
+	require.True(t, ok)
+	binary := string(diagUtils.BinaryFromSpanContext(appParent))
+
+	tests := []struct {
+		name        string
+		traceParent string
+		binary      string
+		wantParent  string
+	}{
+		{"conflicting headers", clientTraceParent, binary, clientSpanID},
+		{"matching headers", appTraceParent, binary, appSpanID},
+		{"traceparent only", clientTraceParent, "", clientSpanID},
+		{"grpc-trace-bin only", "", binary, appSpanID},
+		{"invalid traceparent", "invalid", binary, appSpanID},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder.Reset()
+			md := grpcMetadata.Pairs(diagConsts.TracestateHeader, "vendor=value")
+			if tt.traceParent != "" {
+				md.Set(diagConsts.TraceparentHeader, tt.traceParent)
+			}
+			if tt.binary != "" {
+				md.Set(diagConsts.GRPCTraceContextKey, tt.binary)
+			}
+			ctx := grpcMetadata.NewOutgoingContext(t.Context(), md)
+
+			_, err := client.GetSecret(ctx, &runtimev1pb.GetSecretRequest{StoreName: "test", Key: "test"})
+			require.NoError(t, err)
+
+			spans := recorder.Ended()
+			require.Len(t, spans, 1)
+			assert.Equal(t, runtimev1pb.Dapr_GetSecret_FullMethodName, spans[0].Name())
+			assert.Equal(t, traceID, spans[0].SpanContext().TraceID().String())
+			assert.Equal(t, tt.wantParent, spans[0].Parent().SpanID().String(), "GetSecret span parent ID")
+			assert.Equal(t, "vendor=value", spans[0].Parent().TraceState().String())
+		})
+	}
 }
 
 func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
