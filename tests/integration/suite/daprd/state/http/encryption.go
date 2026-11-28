@@ -127,7 +127,7 @@ func (e *encryption) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
-		assert.Equal(t, "value1", string(body))
+		assert.Equal(t, `"value1"`, string(body))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 	})

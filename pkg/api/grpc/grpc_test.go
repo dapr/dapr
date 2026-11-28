@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	inmemory "github.com/dapr/components-contrib/state/in-memory"
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
@@ -2976,6 +2977,80 @@ func TestExecuteStateTransaction(t *testing.T) {
 				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
+		})
+	}
+}
+
+func TestExecuteStateTransactionEncrypted(t *testing.T) {
+	const storeName = "encrypted-transaction-store"
+
+	keys, err := encryption.ComponentEncryptionKey(componentsV1alpha1.Component{
+		Spec: componentsV1alpha1.ComponentSpec{
+			Metadata: []commonapi.NameValuePair{
+				{
+					Name: "primaryEncryptionKey",
+					Value: commonapi.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("00112233445566778899aabbccddeeff")},
+					},
+					SecretKeyRef: commonapi.SecretKeyRef{Name: "mykey"},
+				},
+			},
+		},
+	}, daprt.FakeSecretStore{})
+	require.NoError(t, err)
+	encryption.AddEncryptedStateStore(storeName, keys)
+
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, inmemory.NewInMemoryStateStore(logger.NewLogger("grpc.api.test")))
+
+	fakeAPI := &api{
+		logger: logger.NewLogger("grpc.api.test"),
+		Universal: universal.New(universal.Options{
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
+		}),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
+	}
+	lis := startDaprAPIServer(t, fakeAPI, "")
+
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	_, err = client.SaveState(t.Context(), &runtimev1pb.SaveStateRequest{
+		StoreName: storeName,
+		States: []*commonv1pb.StateItem{
+			{Key: "saved", Value: []byte(`{"name":"dapr"}`)},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = client.ExecuteStateTransaction(t.Context(), &runtimev1pb.ExecuteStateTransactionRequest{
+		StoreName: storeName,
+		Operations: []*runtimev1pb.TransactionalStateOperation{
+			{
+				OperationType: string(state.OperationUpsert),
+				Request: &commonv1pb.StateItem{
+					Key:   "transacted",
+					Value: []byte(`{"name":"dapr"}`),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	for _, key := range []string{"saved", "transacted"} {
+		t.Run(key, func(t *testing.T) {
+			resp, err := client.GetState(t.Context(), &runtimev1pb.GetStateRequest{
+				StoreName: storeName,
+				Key:       key,
+			})
+			require.NoError(t, err)
+			assert.JSONEq(t, `{"name":"dapr"}`, string(resp.GetData()))
 		})
 	}
 }

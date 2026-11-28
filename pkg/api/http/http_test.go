@@ -4195,6 +4195,68 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	assert.Contains(t, string(resp.RawBody), "cannot query encrypted store")
 }
 
+func TestV1StateEndpointsEncrypted(t *testing.T) {
+	const storeName = "encrypted-json-store"
+
+	keys, err := encryption.ComponentEncryptionKey(componentsV1alpha1.Component{
+		Spec: componentsV1alpha1.ComponentSpec{
+			Metadata: []commonapi.NameValuePair{
+				{
+					Name: "primaryEncryptionKey",
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("00112233445566778899aabbccddeeff")},
+					},
+					SecretKeyRef: commonapi.SecretKeyRef{Name: "mykey"},
+				},
+			},
+		},
+	}, daprt.FakeSecretStore{})
+	require.NoError(t, err)
+	encryption.AddEncryptedStateStore(storeName, keys)
+
+	compStore := compstore.New()
+	compStore.AddStateStore(storeName, inmemory.NewInMemoryStateStore(logger.NewLogger("fakeLogger")))
+	testAPI := &api{
+		healthz: healthz.New(),
+		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
+		}),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
+	}
+	fakeServer := newFakeHTTPServer()
+	t.Cleanup(fakeServer.Shutdown)
+	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
+
+	for _, value := range []string{`{"name":"dapr"}`, `["a","b"]`, `"value1"`} {
+		t.Run(value, func(t *testing.T) {
+			resp := fakeServer.DoRequest("POST", "v1.0/state/"+storeName, []byte(`[{"key":"saved","value":`+value+`}]`), nil)
+			require.Equal(t, 204, resp.StatusCode, string(resp.RawBody))
+
+			resp = fakeServer.DoRequest("POST", "v1.0/state/"+storeName+"/transaction", []byte(`{"operations":[{"operation":"upsert","request":{"key":"transacted","value":`+value+`}}]}`), nil)
+			require.Equal(t, 204, resp.StatusCode, string(resp.RawBody))
+
+			for _, key := range []string{"saved", "transacted"} {
+				resp = fakeServer.DoRequest("GET", "v1.0/state/"+storeName+"/"+key, nil, nil)
+				assert.Equal(t, 200, resp.StatusCode)
+				assert.JSONEq(t, value, string(resp.RawBody))
+			}
+
+			resp = fakeServer.DoRequest("POST", "v1.0/state/"+storeName+"/bulk", []byte(`{"keys":["saved","transacted"]}`), nil)
+			assert.Equal(t, 200, resp.StatusCode)
+			var bulkResp []BulkGetResponse
+			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			require.Len(t, bulkResp, 2)
+			for _, item := range bulkResp {
+				assert.Empty(t, item.Error)
+				assert.JSONEq(t, value, string(item.Data))
+			}
+		})
+	}
+}
+
 const (
 	queryTestRequestOK = `{
 	"filter": {
