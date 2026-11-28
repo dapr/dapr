@@ -759,23 +759,17 @@ func (a *actors) convergeBoundStores(ctx context.Context) {
 	previous, current := a.boundStores, a.currentBoundStores()
 	a.boundStores = current
 
-	typesOf := make(map[string][]string)
-	for actorType, storeName := range a.stateResolver.Bindings() {
-		typesOf[storeName] = append(typesOf[storeName], actorType)
-	}
-
 	// Only the actor types this sidecar hosts have actors to deactivate. A
 	// sidecar which only calls a bound type keeps its calls to the host.
 	registered := a.table.Registered()
 
 	var changed, halt []string
-	for _, storeName := range slices.Sorted(maps.Keys(typesOf)) {
+	for _, bound := range a.stateResolver.BoundStores() {
+		storeName, actorTypes := bound.Name, bound.ActorTypes
 		was, now := previous[storeName], current[storeName]
 		if was == now || (!was.loaded && !now.loaded) {
 			continue
 		}
-		actorTypes := typesOf[storeName]
-		slices.Sort(actorTypes)
 		changed = append(changed, actorTypes...)
 
 		if !was.loaded {
@@ -820,10 +814,10 @@ func (a *actors) convergeBoundStores(ctx context.Context) {
 // and whether it is loaded.
 func (a *actors) currentBoundStores() map[string]boundStore {
 	stores := make(map[string]boundStore)
-	for _, storeName := range a.stateResolver.Bindings() {
-		_, loaded := a.compStore.GetStateStore(storeName)
-		stores[storeName] = boundStore{
-			rev:    a.compStore.GetStateStoreRevision(storeName),
+	for _, bound := range a.stateResolver.BoundStores() {
+		_, loaded := a.compStore.GetStateStore(bound.Name)
+		stores[bound.Name] = boundStore{
+			rev:    a.compStore.GetStateStoreRevision(bound.Name),
 			loaded: loaded,
 		}
 	}
@@ -855,6 +849,7 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 
 		return &runtimev1pb.ActorRuntime{
 			RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
+			StateStores:   a.boundStateStoresStatus(),
 		}
 	}
 
@@ -885,7 +880,29 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 		ActiveActors:  count,
 		Placement:     statusMessage,
 		HostReady:     hostReady,
+		StateStores:   a.boundStateStoresStatus(),
 	}
+}
+
+// boundStateStoresStatus returns the state stores bound to actor types,
+// sorted by name, each with its actor types, sorted, and whether the store
+// can hold their state now. If it cannot, the error says why.
+func (a *actors) boundStateStoresStatus() []*runtimev1pb.ActorRuntimeStateStore {
+	bound := a.stateResolver.BoundStores()
+	stores := make([]*runtimev1pb.ActorRuntimeStateStore, 0, len(bound))
+	for _, b := range bound {
+		store := &runtimev1pb.ActorRuntimeStateStore{
+			Name:       b.Name,
+			ActorTypes: b.ActorTypes,
+			Usable:     true,
+		}
+		if err := a.stateResolver.CheckBoundStore(b.Name); err != nil {
+			store.Usable = false
+			store.Error = ptr.Of(err.Error())
+		}
+		stores = append(stores, store)
+	}
+	return stores
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
