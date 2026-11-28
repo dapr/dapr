@@ -51,6 +51,26 @@ func TestPubSub(t *testing.T) {
 		assert.Equal(t, int64(1), viewData[1].Data.(*view.CountData).Value)
 	})
 
+	t.Run("record in-flight as a gauge", func(t *testing.T) {
+		c, meter := componentsMetrics()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+
+		c.PubsubIngressInFlight(t.Context(), componentName, "A", 3)
+		c.PubsubIngressInFlight(t.Context(), componentName, "A", 1)
+
+		viewData, err := meter.RetrieveData("component/pubsub_ingress/in_flight")
+		require.NoError(t, err)
+		require.Len(t, viewData, 1)
+
+		v := meter.Find("component/pubsub_ingress/in_flight")
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		// LastValue: the second record replaces the first rather than summing.
+		assert.InDelta(t, float64(1), viewData[0].Data.(*view.LastValueData).Value, 0)
+	})
+
 	t.Run("record ingress count", func(t *testing.T) {
 		c, meter := componentsMetrics()
 		t.Cleanup(func() {
