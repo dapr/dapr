@@ -177,6 +177,14 @@ func (r *Root) recordFatalInitError(err error) {
 	r.fatalErr.CompareAndSwap(nil, &err)
 }
 
+// FatalError returns the recorded fatal init error, if any.
+func (r *Root) FatalError() error {
+	if fatal := r.fatalErr.Load(); fatal != nil {
+		return *fatal
+	}
+	return nil
+}
+
 // Handle dispatches every event the root loop receives. The bodies of the
 // per-resource cases live in sibling files (component.go, httpendpoint.go,
 // mcpserver.go).
@@ -228,6 +236,7 @@ func (r *Root) handleBarrier(ev *loops.Barrier) {
 		return
 	}
 	if r.inFlight == 0 {
+		r.checkPendingDependents()
 		close(ev.Done)
 		return
 	}
