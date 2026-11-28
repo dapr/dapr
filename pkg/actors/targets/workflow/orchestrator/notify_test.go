@@ -422,6 +422,103 @@ func Test_parentNotification_noParentOrCompletion(t *testing.T) {
 	assert.Nil(t, msg, "not completed, nothing to notify")
 }
 
+func Test_parentNotification_terminalStatuses(t *testing.T) {
+	t.Parallel()
+
+	t.Run("terminated without failure details synthesizes WorkflowTerminated", func(t *testing.T) {
+		t.Parallel()
+		h := newNotifyHarness(t, nil, nil, false, nil)
+		st := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "wf", ActivityActorType: "act"})
+		st.AddToHistory(notifyStartEvent())
+		st.AddToHistory(&backend.HistoryEvent{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED,
+				},
+			},
+		})
+		msg, err := h.orch.parentNotification(t.Context(), st)
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		failed := msg.GetHistoryEvent().GetChildWorkflowInstanceFailed()
+		require.NotNil(t, failed)
+		assert.Equal(t, notifyTaskID, failed.GetTaskScheduledId())
+		require.NotNil(t, failed.GetFailureDetails())
+		assert.Equal(t, "WorkflowTerminated", failed.GetFailureDetails().GetErrorType())
+		assert.Equal(t, "child workflow was terminated", failed.GetFailureDetails().GetErrorMessage())
+	})
+
+	t.Run("failed without failure details synthesizes WorkflowFailed", func(t *testing.T) {
+		t.Parallel()
+		h := newNotifyHarness(t, nil, nil, false, nil)
+		st := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "wf", ActivityActorType: "act"})
+		st.AddToHistory(notifyStartEvent())
+		st.AddToHistory(&backend.HistoryEvent{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+				},
+			},
+		})
+		msg, err := h.orch.parentNotification(t.Context(), st)
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		failed := msg.GetHistoryEvent().GetChildWorkflowInstanceFailed()
+		require.NotNil(t, failed)
+		assert.Equal(t, notifyTaskID, failed.GetTaskScheduledId())
+		require.NotNil(t, failed.GetFailureDetails())
+		assert.Equal(t, "WorkflowFailed", failed.GetFailureDetails().GetErrorType())
+		assert.Equal(t, "child workflow failed", failed.GetFailureDetails().GetErrorMessage())
+	})
+
+	t.Run("failed with existing failure details preserves details", func(t *testing.T) {
+		t.Parallel()
+		h := newNotifyHarness(t, nil, nil, false, nil)
+		st := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "wf", ActivityActorType: "act"})
+		st.AddToHistory(notifyStartEvent())
+		st.AddToHistory(&backend.HistoryEvent{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionCompleted{
+				ExecutionCompleted: &protos.ExecutionCompletedEvent{
+					WorkflowStatus: protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED,
+					FailureDetails: &protos.TaskFailureDetails{
+						ErrorType:      "CustomError",
+						ErrorMessage:   "explicit failure",
+						IsNonRetriable: true,
+					},
+				},
+			},
+		})
+		msg, err := h.orch.parentNotification(t.Context(), st)
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		failed := msg.GetHistoryEvent().GetChildWorkflowInstanceFailed()
+		require.NotNil(t, failed)
+		require.NotNil(t, failed.GetFailureDetails())
+		assert.Equal(t, "CustomError", failed.GetFailureDetails().GetErrorType())
+		assert.Equal(t, "explicit failure", failed.GetFailureDetails().GetErrorMessage())
+		assert.True(t, failed.GetFailureDetails().GetIsNonRetriable())
+	})
+
+	t.Run("completed emits ChildWorkflowInstanceCompleted", func(t *testing.T) {
+		t.Parallel()
+		h := newNotifyHarness(t, nil, nil, false, nil)
+		st := wfenginestate.NewState(wfenginestate.Options{AppID: "testapp", WorkflowActorType: "wf", ActivityActorType: "act"})
+		st.AddToHistory(notifyStartEvent())
+		st.AddToHistory(notifyCompletedEvent(protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED))
+		msg, err := h.orch.parentNotification(t.Context(), st)
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		assert.Nil(t, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed())
+		completed := msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted()
+		require.NotNil(t, completed)
+		assert.Equal(t, notifyTaskID, completed.GetTaskScheduledId())
+		assert.Equal(t, `"out"`, completed.GetResult().GetValue())
+	})
+}
+
 func Test_runWorkflow_strayFireResendsAndClears(t *testing.T) {
 	t.Parallel()
 
