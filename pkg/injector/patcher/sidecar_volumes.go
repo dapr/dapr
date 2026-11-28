@@ -151,8 +151,8 @@ func parseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.Volu
 			continue
 		}
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      vmount[0],
-			MountPath: vmount[1],
+			Name:      strings.TrimSpace(vmount[0]),
+			MountPath: strings.TrimSpace(vmount[1]),
 			ReadOnly:  readOnly,
 		})
 	}
