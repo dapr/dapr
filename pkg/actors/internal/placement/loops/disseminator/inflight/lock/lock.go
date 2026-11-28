@@ -79,7 +79,11 @@ type CancelTypes struct {
 	Timeout               *time.Duration
 	PerTypeTimeouts       map[string]time.Duration
 	DrainRebalancedActors *bool
-	Done                  chan struct{}
+	// Async drains without holding the lock loop, which keeps issuing and
+	// releasing claims meanwhile. The claims drained are those held when the
+	// event is handled, so the caller must block the types first.
+	Async bool
+	Done  chan struct{}
 }
 
 type lock struct {
@@ -198,17 +202,31 @@ func (l *lock) handleAcquire(event *Acquire) {
 // handleCancelTypes drains all in-flight claims whose ActorType is in the
 // requested set. Same grace-period semantics as handleClose but the lock
 // loop continues running after this returns. Done is closed when the
-// operation finishes so callers can wait synchronously.
+// operation finishes so callers can wait synchronously. An Async event does
+// not hold the loop while its claims drain.
 //
 // Claims are grouped by actor type and drained in parallel: each group runs
 // against its own timer, using event.PerTypeTimeouts when set for that type
 // and falling back to event.Timeout otherwise. Total wall-clock is bounded
 // by the largest per-type drain, not the sum.
 func (l *lock) handleCancelTypes(event *CancelTypes) {
-	defer close(event.Done)
-
-	if len(event.Types) == 0 {
+	wait := l.cancelTypes(event)
+	if event.Async {
+		go func() {
+			wait()
+			close(event.Done)
+		}()
 		return
+	}
+	wait()
+	close(event.Done)
+}
+
+// cancelTypes starts the drain of event and returns a func which waits for
+// it to end. That func does not use the lock, so it can run off the loop.
+func (l *lock) cancelTypes(event *CancelTypes) func() {
+	if len(event.Types) == 0 {
+		return func() {}
 	}
 
 	byType := make(map[string][]*Claim)
@@ -218,7 +236,7 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 		}
 	}
 	if len(byType) == 0 {
-		return
+		return func() {}
 	}
 
 	if event.DrainRebalancedActors != nil && !*event.DrainRebalancedActors {
@@ -227,7 +245,7 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 				claim.Cancel(event.Error)
 			}
 		}
-		return
+		return func() {}
 	}
 
 	defaultTimeout := time.Second * 2
@@ -235,7 +253,7 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 		defaultTimeout = *event.Timeout
 	}
 
-	var wg sync.WaitGroup
+	wg := new(sync.WaitGroup)
 	for actorType, claims := range byType {
 		timeout := defaultTimeout
 		if t, ok := event.PerTypeTimeouts[actorType]; ok {
@@ -258,5 +276,5 @@ func (l *lock) handleCancelTypes(event *CancelTypes) {
 			}
 		})
 	}
-	wg.Wait()
+	return wg.Wait
 }

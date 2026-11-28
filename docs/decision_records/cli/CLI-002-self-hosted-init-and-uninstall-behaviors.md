@@ -24,7 +24,7 @@ Changes in behavior of `init` and `uninstall` on Self Hosted mode for. Discussed
   * Remove the folder containing binaries `bin` the default path `$HOME/.dapr` for Linux/MacOS and `%USERPROFILE%\.dapr` for Windows.
   * Remove the docker containers dapr_placement, dapr_redis and dapr_zipkin if Docker is installed.
   * Remove the default folder `$HOME/.dapr` in Linux/MacOS and `%USERPROFILE%\.dapr` in Windows.
-* CLI on the init command will fail if a prior installtion exists in the default path `$HOME/.dapr` for Linux/MacOS and `%USERPROFILE%\.dapr` for Windows.
+* CLI on the init command will fail if a prior installation exists in the default path `$HOME/.dapr` for Linux/MacOS and `%USERPROFILE%\.dapr` for Windows.
 * **There will no longer be an option for `--install-path` during init or during uninstall.**
 * The `dapr` CLI by default will expect the `daprd` in `$HOME/.dapr/bin` for Linux/MacOS and `%USERPROFILE%\.dapr\bin` for Windows. The command `dapr run` will not expect the `daprd` binary to be in the `PATH` variable, it will launch the binary from the default path.
   

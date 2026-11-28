@@ -2017,6 +2017,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Direct Message - 403 on reserved internal actor type", func(t *testing.T) {
 		for _, actorType := range []string{
+			"dapr.internal",
 			"dapr.internal.default.fakeAPI.workflow",
 			"dapr.internal.default.fakeAPI.activity",
 			"dapr.internal.default.fakeAPI.executor",

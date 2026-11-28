@@ -13,7 +13,11 @@ limitations under the License.
 
 package serialize
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/dapr/dapr/pkg/actors/reserved"
+)
 
 // PrefixesFromNamespace returns key prefixes for all jobs types for a given
 // namespace.
@@ -43,7 +47,7 @@ func QueueStateKey(jobName string) (string, string, bool) {
 		return namespace, parts[2], true
 
 	case "actorreminder":
-		appID, ok := strings.CutPrefix(parts[2], "dapr.internal."+namespace+".")
+		appID, ok := strings.CutPrefix(parts[2], reserved.InternalActorTypePrefix+namespace+".")
 		if !ok {
 			return "", "", false
 		}

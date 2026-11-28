@@ -44,7 +44,7 @@ func TestNoWorkerError(t *testing.T) {
 		if withStore {
 			require.NoError(t, cs.AddStateStoreActor("mystore", inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name()))))
 		}
-		be, err := New(Options{AppID: "myapp", Namespace: "default", ComponentStore: cs})
+		be, err := New(Options{AppID: "myapp", Namespace: "default", ComponentStore: cs, Actors: actorsWithResolver(cs, nil)})
 		require.NoError(t, err)
 		return be
 	}

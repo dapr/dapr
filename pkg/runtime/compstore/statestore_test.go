@@ -147,3 +147,34 @@ func TestGetStateStoreActorWithRevision(t *testing.T) {
 	require.True(t, ok)
 	assert.Greater(t, rev4, rev3)
 }
+
+func TestGetStateStoreRevision(t *testing.T) {
+	cs := New()
+
+	// A store that was never loaded has the zero revision.
+	assert.Equal(t, uint64(0), cs.GetStateStoreRevision("plain"))
+
+	cs.AddStateStore("plain", newTestStateStore(t))
+	rev1 := cs.GetStateStoreRevision("plain")
+	assert.Positive(t, rev1)
+
+	// Other stores do not change it.
+	cs.AddStateStore("other", newTestStateStore(t))
+	require.NoError(t, cs.AddStateStoreActor("actorstore", newTestStateStore(t)))
+	cs.DeleteStateStore("other")
+	assert.Equal(t, rev1, cs.GetStateStoreRevision("plain"))
+
+	// Deleting it changes it, and so does adding it again, so a reload
+	// (delete then add) is distinguishable from no change.
+	cs.DeleteStateStore("plain")
+	rev2 := cs.GetStateStoreRevision("plain")
+	assert.Greater(t, rev2, rev1)
+	cs.AddStateStore("plain", newTestStateStore(t))
+	assert.Greater(t, cs.GetStateStoreRevision("plain"), rev2)
+
+	// The actor state store has its own revision too.
+	rev3 := cs.GetStateStoreRevision("actorstore")
+	assert.Positive(t, rev3)
+	cs.DeleteStateStore("actorstore")
+	assert.Greater(t, cs.GetStateStoreRevision("actorstore"), rev3)
+}
