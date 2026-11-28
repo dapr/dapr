@@ -129,6 +129,14 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					HostReady:    actorRuntime.GetHostReady(),
 					Placement:    actorRuntime.GetPlacement(),
 				}
+				for _, store := range actorRuntime.GetStateStores() {
+					res.ActorRuntime.StateStores = append(res.ActorRuntime.StateStores, metadataActorRuntimeStateStore{
+						Name:       store.GetName(),
+						ActorTypes: store.GetActorTypes(),
+						Usable:     store.GetUsable(),
+						Error:      store.GetError(),
+					})
+				}
 
 				if out.GetWorkflows() != nil {
 					res.Workflows = metadataWorkflows{
@@ -196,6 +204,14 @@ type metadataActorRuntime struct {
 	ActiveActors []*runtimev1pb.ActiveActorsCount `json:"activeActors,omitempty"`
 	HostReady    bool                             `json:"hostReady"`
 	Placement    string                           `json:"placement,omitempty"`
+	StateStores  []metadataActorRuntimeStateStore `json:"stateStores,omitempty"`
+}
+
+type metadataActorRuntimeStateStore struct {
+	Name       string   `json:"name"`
+	ActorTypes []string `json:"actorTypes"`
+	Usable     bool     `json:"usable"`
+	Error      string   `json:"error,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {
