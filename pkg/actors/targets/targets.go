@@ -36,6 +36,10 @@ type Factory interface {
 	GetOrCreate(string) Interface
 	Exists(string) bool
 	HaltAll(context.Context) error
+	// DeactivateAll halts every actor of a type which stays hosted on this
+	// daprd, so they reactivate on their next call. Unlike HaltAll, it does
+	// not record them as rebalanced.
+	DeactivateAll(context.Context) error
 	HaltNonHosted(context.Context, func(*api.LookupActorRequest) bool) error
 	Len() int
 }

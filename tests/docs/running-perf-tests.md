@@ -208,7 +208,7 @@ Install the following in your Kubernetes cluster:
 
 ### Create a new namespace
 
-Create a new namesapce:
+Create a new namespace:
 
   ```bash
   DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics

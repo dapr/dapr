@@ -131,7 +131,7 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 			seq, toUnlock, d.namespace, d.id)
 
 		d.completeRound(ctx)
-		d.inflight.UnlockTypes(toUnlock)
+		d.unlockRoundTypes(toUnlock)
 
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Ack: &loops.Ack{Op: loops.OrderUnlock, Version: seq},
@@ -139,7 +139,9 @@ func (d *disseminator) handleOrderV2(ctx context.Context, order *loops.StreamOrd
 
 		ready := true
 		for _, t := range d.actorTable.Types() {
-			if !d.inflight.HasTables([]string{t}) && d.inflight.IsBlocked(t) {
+			// A type which only a halt blocks is not waiting for a round.
+			blocked := d.inflight.IsBlocked(t) && (d.halting[t] == 0 || d.roundBlocks(t))
+			if !d.inflight.HasTables([]string{t}) && blocked {
 				ready = false
 				break
 			}

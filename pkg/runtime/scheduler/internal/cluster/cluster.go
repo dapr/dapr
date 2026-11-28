@@ -173,8 +173,9 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 			actors:   router,
 			wfengine: c.wfengine,
 
-			pull:          pull,
-			pullActorType: pullActorType,
+			pull:              pull,
+			pullActorType:     pullActorType,
+			supportsPullSlots: c.supportsPullSlots,
 		}
 		if i < len(c.addresses) {
 			connectors[i].addr = c.addresses[i]

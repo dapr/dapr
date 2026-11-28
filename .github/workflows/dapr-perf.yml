@@ -56,7 +56,8 @@ env:
   # Timeout for tests
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus"
+  # Perf uses westus2 so that it does not share the westus vCPU quota with the AKS E2E tests (dapr-test.yml)
+  AZURE_REGIONS: "westus2"
   # Container registry where to cache perf test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
