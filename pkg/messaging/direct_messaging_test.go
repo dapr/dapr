@@ -293,6 +293,19 @@ func TestKubernetesNamespace(t *testing.T) {
 
 		require.Error(t, err)
 	})
+
+	t.Run("empty app id or namespace part", func(t *testing.T) {
+		for _, appID := range []string{"app1.", ".ns1", "."} {
+			t.Run(appID, func(t *testing.T) {
+				dm := &directMessaging{namespace: "default"}
+				id, ns, err := dm.requestAppIDAndNamespace(appID)
+
+				require.Error(t, err)
+				assert.Empty(t, id)
+				assert.Empty(t, ns)
+			})
+		}
+	})
 }
 
 func TestInvokeRemote(t *testing.T) {
