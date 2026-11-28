@@ -234,11 +234,12 @@ func apiAccessRuleToMap(rules config.APIAccessRules) map[string]struct{} {
 	res := map[string]struct{}{}
 
 	for _, rule := range rules {
-		if rule.Protocol != "grpc" {
+		if !strings.EqualFold(strings.TrimSpace(string(rule.Protocol)), string(config.APIAccessRuleProtocolGRPC)) {
 			continue
 		}
 
-		if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
+		key := strings.ToLower(strings.TrimSpace(rule.Name)) + "." + strings.ToLower(strings.TrimSpace(rule.Version))
+		if list, ok := endpoints[key]; ok {
 			for _, method := range list {
 				res[method] = struct{}{}
 			}
