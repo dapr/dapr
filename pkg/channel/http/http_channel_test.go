@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -995,4 +996,168 @@ func TestConcurrencyLimiterContext(t *testing.T) {
 			t.Fatal("TriggerJob did not return after context cancellation while the limiter was full")
 		}
 	})
+}
+
+func TestConstructRequest_TrailingSlash(t *testing.T) {
+	cs := compstore.New()
+	cs.AddHTTPEndpoint(httpEndpointsV1alpha1.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-endpoint",
+		},
+		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
+			BaseURL: "https://api.example.com/",
+		},
+	})
+	cs.AddHTTPEndpoint(httpEndpointsV1alpha1.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-endpoint-prefix",
+		},
+		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
+			BaseURL: "https://api.example.com/v1/",
+		},
+	})
+
+	testCases := []struct {
+		name        string
+		baseAddress string
+		appID       string
+		method      string
+		expectedURI string
+	}{
+		{
+			name:        "baseAddress without trailing slash, method without leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "",
+			method:      "users",
+			expectedURI: "http://localhost:3000/users",
+		},
+		{
+			name:        "baseAddress without trailing slash, method with leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "",
+			method:      "/users",
+			expectedURI: "http://localhost:3000/users",
+		},
+		{
+			name:        "baseAddress with trailing slash, method without leading slash",
+			baseAddress: "http://localhost:3000/",
+			appID:       "",
+			method:      "users",
+			expectedURI: "http://localhost:3000/users",
+		},
+		{
+			name:        "baseAddress with trailing slash, method with leading slash",
+			baseAddress: "http://localhost:3000/",
+			appID:       "",
+			method:      "/users",
+			expectedURI: "http://localhost:3000/users",
+		},
+		{
+			name:        "baseAddress with multiple trailing slashes",
+			baseAddress: "http://localhost:3000///",
+			appID:       "",
+			method:      "users",
+			expectedURI: "http://localhost:3000/users",
+		},
+		{
+			name:        "baseAddress with path prefix and trailing slash",
+			baseAddress: "http://localhost:3000/api/v1/",
+			appID:       "",
+			method:      "users",
+			expectedURI: "http://localhost:3000/api/v1/users",
+		},
+		{
+			name:        "baseAddress with path prefix and trailing slash, method with leading slash",
+			baseAddress: "http://localhost:3000/api/v1/",
+			appID:       "",
+			method:      "/users",
+			expectedURI: "http://localhost:3000/api/v1/users",
+		},
+		{
+			name:        "appID as external URL with trailing slash, method without leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "https://external.service.com/",
+			method:      "data",
+			expectedURI: "https://external.service.com/data",
+		},
+		{
+			name:        "appID as external URL with trailing slash, method with leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "https://external.service.com/",
+			method:      "/data",
+			expectedURI: "https://external.service.com/data",
+		},
+		{
+			name:        "HTTPEndpoint with trailing slash in BaseURL, method without leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "my-endpoint",
+			method:      "items",
+			expectedURI: "https://api.example.com/items",
+		},
+		{
+			name:        "HTTPEndpoint with trailing slash in BaseURL, method with leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "my-endpoint",
+			method:      "/items",
+			expectedURI: "https://api.example.com/items",
+		},
+		{
+			name:        "HTTPEndpoint with path prefix and trailing slash, method without leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "my-endpoint-prefix",
+			method:      "items",
+			expectedURI: "https://api.example.com/v1/items",
+		},
+		{
+			name:        "HTTPEndpoint with path prefix and trailing slash, method with leading slash",
+			baseAddress: "http://localhost:3000",
+			appID:       "my-endpoint-prefix",
+			method:      "/items",
+			expectedURI: "https://api.example.com/v1/items",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Channel{
+				baseAddress: tc.baseAddress,
+				compStore:   cs,
+			}
+			req := invokev1.NewInvokeMethodRequest(tc.method).WithHTTPExtension(http.MethodGet, "")
+			defer req.Close()
+
+			channelReq, err := c.constructRequest(t.Context(), req, tc.appID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedURI, channelReq.URL.String())
+		})
+	}
+}
+
+func TestCreateHTTPChannel_TrimsTrailingSlash(t *testing.T) {
+	appChan, err := CreateHTTPChannel(ChannelConfiguration{
+		Endpoint: "http://localhost:3500/",
+	})
+	require.NoError(t, err)
+	c, ok := appChan.(*Channel)
+	require.True(t, ok)
+	assert.Equal(t, "http://localhost:3500", c.baseAddress)
+}
+
+func TestHealthProbe_TrailingSlash(t *testing.T) {
+	var requestedURI string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedURI = r.RequestURI
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := &Channel{
+		client:      server.Client(),
+		baseAddress: server.URL + "/",
+	}
+	c.SetAppHealthCheckPath("/healthz")
+
+	_, err := c.HealthProbe(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "/healthz", requestedURI)
 }

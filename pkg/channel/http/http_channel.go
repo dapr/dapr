@@ -107,7 +107,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		middleware:          config.Middleware,
 		client:              config.Client,
 		compStore:           config.CompStore,
-		baseAddress:         config.Endpoint,
+		baseAddress:         strings.TrimRight(config.Endpoint, "/"),
 		tracingSpec:         config.TracingSpec,
 		appHeaderToken:      config.AppAPIToken,
 		maxResponseBodySize: config.MaxRequestBodySize,
@@ -214,7 +214,7 @@ func (h *Channel) constructJobRequest(ctx context.Context, name string, data *an
 		value = bytes.TrimSpace(data.GetValue())
 	}
 
-	uri := h.baseAddress + "/job/" + strings.TrimPrefix(name, "/")
+	uri := strings.TrimRight(h.baseAddress, "/") + "/job/" + strings.TrimPrefix(name, "/")
 	channelReq, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewReader(value))
 	if err != nil {
 		return nil, err
@@ -359,7 +359,7 @@ func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 
 // HealthProbe performs a health probe.
 func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
-	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
+	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(h.baseAddress, "/")+h.appHealthCheckPath, nil)
 	if err != nil {
 		reason := fmt.Sprintf("Failed to create request: %v", err)
 		return apphealth.NewStatus(false, &reason), nil
@@ -590,20 +590,23 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	uri := strings.Builder{}
 
+	var base string
 	if appID != "" {
 		// If appID includes http(s)://, use that as base URL
 		// Otherwise, use baseAddress if this is an internal endpoint, or the base URL from the external endpoint configuration if external
 		if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
-			uri.WriteString(appID)
+			base = appID
 		} else if endpoint, ok := h.compStore.GetHTTPEndpoint(appID); ok {
-			uri.WriteString(endpoint.Spec.BaseURL)
+			base = endpoint.Spec.BaseURL
 			headers = endpoint.Spec.Headers
 		} else {
-			uri.WriteString(h.baseAddress)
+			base = h.baseAddress
 		}
 	} else {
-		uri.WriteString(h.baseAddress)
+		base = h.baseAddress
 	}
+
+	uri.WriteString(strings.TrimRight(base, "/"))
 
 	if len(method) > 0 && method[0] != '/' {
 		uri.WriteRune('/')
