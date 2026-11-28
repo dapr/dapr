@@ -95,11 +95,9 @@ func (r *pathcorrectness) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("encoded percent is allowed", func(t *testing.T) {
-		// HTTP decodes %25 → %, NormalizeMethod allows it, but
-		// constructRequest fails building the outbound URL because
-		// Go's url.Parse rejects bare % followed by non-hex chars.
-		status, _ := invoke(t, "test%25stream")
-		assert.Equal(t, http.StatusInternalServerError, status)
+		status, body := invoke(t, "test%25stream")
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "/test%stream|", body)
 	})
 
 	t.Run("encoded null byte is rejected", func(t *testing.T) {
