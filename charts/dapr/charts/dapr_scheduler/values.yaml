@@ -78,6 +78,7 @@ debug:
   port: 40000
   initialDelaySeconds: 30000
 
+# Set runAsUser, runAsGroup or seLinuxOptions here to override global.securityContext.
 securityContext:
   runAsNonRoot: true
   # fsGroup makes the Scheduler process a member of the group that owns the
@@ -86,7 +87,7 @@ securityContext:
   # assign an fsGroup themselves from a namespace range (such as OpenShift)
   # reject an explicit value; on those, unset it with
   # --set dapr_scheduler.securityContext.fsGroup=null so no fsGroup is rendered.
-  fsGroup: 65532
+  # fsGroup: 65532
 
 resources: {}
 

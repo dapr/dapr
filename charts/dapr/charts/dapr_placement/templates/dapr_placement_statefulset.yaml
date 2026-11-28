@@ -52,8 +52,9 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
-      securityContext:
-        fsGroup: {{ .Values.fsGroup }}
+    {{- with include "dapr.podFSGroup" .Values }}
+      {{- . | nindent 6 }}
+    {{- end }}
     {{- with .Values.global.initContainers.placement }}
       initContainers:
         {{- toYaml . | nindent 8 }}
@@ -184,6 +185,9 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
+  {{- with include "dapr.containerSecurityContext" . }}
+    {{- . | nindent 10 }}
+  {{- end }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
           allowPrivilegeEscalation: false
   {{- if eq .Values.debug.enabled true }}

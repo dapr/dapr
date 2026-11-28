@@ -120,6 +120,8 @@ global:
   daprControlPlaneOs: linux
   labels: {}
   seccompProfile: ""
+  # Optional runAsUser, runAsGroup and seLinuxOptions for Linux control plane containers.
+  securityContext: {}
   k8sLabels:
     app.kubernetes.io/name: "{{ .Release.Name }}"
     app.kubernetes.io/version: "{{ .Values.global.tag }}"
