@@ -82,8 +82,8 @@ type executor struct {
 	wg             sync.WaitGroup
 }
 
-func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	if err := e.enter(); err != nil {
+func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (res *internalsv1pb.InternalInvokeResponse, err error) {
+	if err = e.enter(); err != nil {
 		if req.GetMessage().GetMethod() == MethodClaim {
 			return &internalsv1pb.InternalInvokeResponse{
 				Status: &internalsv1pb.Status{Code: int32(codes.NotFound)},
@@ -92,12 +92,16 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, err
 	}
 
-	var res *internalsv1pb.InternalInvokeResponse
 	var run func()
-	var err error
+	// A completion delivered here is answered once its result is saved.
+	var durably bool
 
 	defer func() {
-		if run != nil {
+		switch {
+		case run == nil:
+		case durably:
+			res, err = e.deliverDurably(ctx, req, run)
+		default:
 			run()
 		}
 	}()
@@ -106,6 +110,7 @@ func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	switch req.GetMessage().GetMethod() {
 	case MethodComplete:
 		run, err = e.complete(ctx, req)
+		durably = true
 	case MethodCancel:
 		run, err = e.cancel(req)
 	case MethodClaim:

@@ -17,9 +17,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -68,36 +66,13 @@ func (a *activity) localDrive(invocation *protos.ActivityInvocation, activityNam
 	})
 }
 
-// testBudget returns a predicate that reports true for the first n calls,
-// with n read once from the named test-only fault-injection variable (unset
-// or 0 disables it). Not a supported production knob.
-func testBudget(env string) func() bool {
-	var used atomic.Int64
-	budget := sync.OnceValue(func() int64 {
-		v := os.Getenv(env)
-		if v == "" {
-			return 0
-		}
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || n < 0 {
-			log.Warnf("Ignoring invalid %s %q", env, v)
-			return 0
-		}
-		return n
-	})
-	return func() bool {
-		n := budget()
-		return n != 0 && used.Add(1) <= n
-	}
-}
-
 // dropActivityDriveForTest: the first N local drive arms report success
 // without spawning their drive goroutine, reproducing a work item lost between
 // the arm and the execution claim (the arming host dying at a placement
 // handoff: no completion, no claim, nothing durable, because the accepted
 // Execute call was also the elision certification). Both the initial dispatch
 // and the janitor's elided re-dispatch arm through here.
-var dropActivityDriveForTest = testBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES")
+var dropActivityDriveForTest = common.TestBudget("DAPR_WORKFLOW_TEST_DROP_ACTIVITY_DRIVES")
 
 // testEscalationHold names a file each escalation waits for before creating
 // its reminder, so a test can purge the workflow first and then release the

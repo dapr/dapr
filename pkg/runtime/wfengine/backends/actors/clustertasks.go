@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 )
@@ -40,6 +42,9 @@ type ClusterTasksBackendOptions struct {
 	Actors            actors.Interface
 	ExecutorActorType string
 	Pending           *pending.Pending
+	// Durables receives the outcome a forwarded completion's owner reports;
+	// see completeTask. Optional.
+	Durables *todo.Durables
 }
 
 // ClusterTasksBackend rendezvouses pending work-item waiters with the
@@ -61,6 +66,7 @@ type ClusterTasksBackend struct {
 	actors            actors.Interface
 	executorActorType string
 	pending           *pending.Pending
+	durables          *todo.Durables
 
 	// forcedWatchFallbacks counts DAPR_WORKFLOW_TEST_FORCE_WATCH_FALLBACK
 	// injections.
@@ -90,6 +96,7 @@ func NewClusterTasksBackend(opts ClusterTasksBackendOptions) (*ClusterTasksBacke
 		actors:            opts.Actors,
 		executorActorType: opts.ExecutorActorType,
 		pending:           opts.Pending,
+		durables:          opts.Durables,
 	}, nil
 }
 
@@ -104,7 +111,7 @@ func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *p
 		return err
 	}
 
-	return be.completeTask(ctx, executor.TaskTypeActivity, key, data)
+	return be.completeTask(ctx, executor.TaskTypeActivity, key, resp.GetCompletionToken(), data)
 }
 
 func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
@@ -122,7 +129,7 @@ func (be *ClusterTasksBackend) CompleteWorkflowTask(ctx context.Context, resp *p
 		return err
 	}
 
-	return be.completeTask(ctx, executor.TaskTypeWorkflow, resp.GetInstanceId(), data)
+	return be.completeTask(ctx, executor.TaskTypeWorkflow, resp.GetInstanceId(), resp.GetCompletionToken(), data)
 }
 
 func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.InstanceID) error {
@@ -136,7 +143,12 @@ func (be *ClusterTasksBackend) CancelWorkflowTask(ctx context.Context, id api.In
 // namespaced by task type: the executor actor ID space is shared between
 // workflow and activity tasks and instance IDs may collide with activity
 // keys (see executor.PendingKey).
-func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key string, data []byte) error {
+//
+// The executor actor answers a forwarded completion once its result is
+// saved, and reports whether it was. That outcome is handed to the
+// completion call through durables, as if the result had been delivered
+// here.
+func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key, token string, data []byte) error {
 	if be.pending.Deliver(executor.PendingKey(taskType, key), data) {
 		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteLocal)
 		return nil
@@ -152,15 +164,33 @@ func (be *ClusterTasksBackend) completeTask(ctx context.Context, taskType, key s
 		WithActor(be.executorActorType, key).
 		WithData(data).
 		WithContentType(invokev1.ProtobufContentType).
-		WithMetadata(map[string][]string{executor.MetadataTaskType: {taskType}})
+		WithMetadata(map[string][]string{
+			executor.MetadataTaskType:        {taskType},
+			executor.MetadataCompletionToken: {token},
+			executor.MetadataAwaitSaved:      {strconv.FormatBool(be.durables != nil && be.durables.Expecting(key, token))},
+		})
 
-	_, err = router.Call(ctx, req)
-	if err == nil {
-		diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteActor)
+	res, err := router.Call(ctx, req)
+	if err != nil {
+		return err
 	}
+	diag.DefaultWorkflowMonitoring.WorkflowCompletionRoute(ctx, taskType, diag.CompletionRouteCompleteActor)
 
-	return err
+	if v, ok := res.GetHeaders()[executor.MetadataSaved]; ok && len(v.GetValues()) > 0 && be.durables != nil {
+		durable := todo.NewDurable()
+		if v.GetValues()[0] == "true" {
+			durable.Settle(nil)
+		} else {
+			durable.Settle(errNotSavedByOwner)
+		}
+		be.durables.Fulfil(key, token, durable)
+	}
+	return nil
 }
+
+// errNotSavedByOwner settles a forwarded completion whose owner reported
+// that its result was not saved.
+var errNotSavedByOwner = errors.New("the daprd that owns the task did not save the result")
 
 func (be *ClusterTasksBackend) cancelTask(ctx context.Context, taskType, key string) error {
 	if be.pending.Cancel(executor.PendingKey(taskType, key)) {

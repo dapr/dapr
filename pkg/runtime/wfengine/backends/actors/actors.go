@@ -164,6 +164,10 @@ type Actors struct {
 	activityPriority                func(workflowName, activityName string) (string, uint32)
 	pendingCompletions              *pending.Pending
 
+	// durables hands a completion call the Durable of the work item its
+	// result ended in; see completeDurably.
+	durables *todo.Durables
+
 	// activityCommitted counts activity work items handed to the engine and
 	// not yet completed or abandoned, against activityCap. See credits.go.
 	activityCap       int64
@@ -262,6 +266,7 @@ func New(opts Options) (*Actors, error) {
 
 	var pendingTasksBackend PendingTasksBackend
 	var pendingCompletions *pending.Pending
+	durables := todo.NewDurables()
 	if opts.EnableClusteredDeployment {
 		pendingCompletions = pending.New()
 		var err error
@@ -269,6 +274,7 @@ func New(opts Options) (*Actors, error) {
 			Actors:            opts.Actors,
 			ExecutorActorType: actorTypes.Executor,
 			Pending:           pendingCompletions,
+			Durables:          durables,
 		})
 		if err != nil {
 			return nil, err
@@ -297,6 +303,7 @@ func New(opts Options) (*Actors, error) {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       trackedPendingTasksBackend,
 		activityExecs:             newActivityExecutions(),
+		durables:                  durables,
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
@@ -856,6 +863,10 @@ func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Acti
 
 	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
+	// As for a workflow work item: a completion call waiting on this result
+	// sees the execution settle unsaved.
+	abe.fulfilActivityDurable(wi)
+
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
@@ -866,8 +877,13 @@ func (abe *Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Acti
 
 // AbandonWorkflowWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+func (abe *Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
+
+	// A result whose processing failed ends here rather than in
+	// CompleteWorkflowWorkItem; the completion call then waits to see the
+	// turn settle unsaved.
+	abe.fulfilDurable(wi)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
 	// TODO: @joshvanl: remove
@@ -962,13 +978,15 @@ func (abe *Actors) uniqueEventTimestamp() *timestamppb.Timestamp {
 func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	defer abe.releaseActivity()
 
+	abe.fulfilActivityDurable(wi)
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CompleteWorkflowWorkItem implements backend.Backend
-func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+func (abe *Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
+	abe.fulfilDurable(wi)
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -1290,36 +1308,75 @@ func (abe *Actors) StartSweep() (settled func()) {
 
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
-	return abe.callWithBackoff(ctx, func() error {
+	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
-	})
+	}))
 }
 
 // CancelWorkflowTask implements backend.Backend.
 func (abe *Actors) CancelWorkflowTask(ctx context.Context, instanceID api.InstanceID) error {
-	return abe.callWithBackoff(ctx, func() error {
+	return ignoreUnknownTask(abe.callWithBackoff(ctx, func() error {
 		return abe.pendingTasksBackend.CancelWorkflowTask(ctx, instanceID)
-	})
+	}))
 }
 
-// CompleteActivityTask implements backend.Backend.
+// CompleteActivityTask implements backend.Backend. When the worker asks for
+// it with the todo.DurableHeader request header, it answers only once the
+// result is published to the parent workflow; see completeDurably.
 func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
-	return abe.callWithBackoff(ctx, func() error {
+	deliver := func() error {
 		return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+	}
+	if !wantsDurable(ctx) {
+		return ignoreUnknownTask(abe.callWithBackoff(ctx, deliver))
+	}
+	key := common.ActivityActorID(response.GetInstanceId(), response.GetTaskId())
+	return abe.completeDurably(ctx, key, response.GetCompletionToken(), deliver)
+}
+
+// CompleteWorkflowTask implements backend.Backend. It answers only once the
+// workflow turn computed from the response is saved; see completeDurably.
+func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
+	return abe.completeDurably(ctx, response.GetInstanceId(), response.GetCompletionToken(), func() error {
+		err := abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
+		if err == nil {
+			abe.maybeDuplicateTurnCompletionForTest(response)
+		}
+		return err
 	})
 }
 
-// CompleteWorkflowTask implements backend.Backend.
-func (abe *Actors) CompleteWorkflowTask(ctx context.Context, response *protos.WorkflowResponse) error {
-	err := abe.callWithBackoff(ctx, func() error {
-		return abe.pendingTasksBackend.CompleteWorkflowTask(ctx, response)
-	})
-	if err == nil {
-		abe.maybeDuplicateTurnCompletionForTest(response)
+// fulfilDurable hands the turn's Durable to the completion call whose result
+// the work item ended in.
+func (abe *Actors) fulfilDurable(wi *backend.WorkflowWorkItem) {
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		abe.durables.Fulfil(string(wi.InstanceID), wi.CompletionToken, durable)
+	}
+}
+
+// fulfilActivityDurable hands the activity execution's Durable to the
+// completion call whose result the work item ended in.
+func (abe *Actors) fulfilActivityDurable(wi *backend.ActivityWorkItem) {
+	if durable, ok := wi.Properties[todo.DurableProperty].(*todo.Durable); ok {
+		key := common.ActivityActorID(string(wi.InstanceID), wi.NewEvent.GetEventId())
+		abe.durables.Fulfil(key, wi.CompletionToken, durable)
+	}
+}
+
+func isUnknownTask(err error) bool {
+	return api.IsUnknownTaskIDError(err) || api.IsUnknownInstanceIDError(err)
+}
+
+func ignoreUnknownTask(err error) error {
+	if isUnknownTask(err) {
+		log.Warnf("Ignoring complete task which no longer exists: %s", err)
+		return nil
 	}
 	return err
 }
 
+// callWithBackoff retries fn until it succeeds, or fails with an error that
+// a retry cannot fix. An unknown task is returned as is.
 func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 	return backoff.Retry(func() error {
 		err := fn()
@@ -1328,11 +1385,7 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 		case err == nil:
 			return nil
 
-		case api.IsUnknownTaskIDError(err), api.IsUnknownInstanceIDError(err):
-			log.Warnf("Ignoring complete task which no longer exists: %s", err)
-			return nil
-
-		case errors.Is(err, local.ErrAmbiguousCompletion):
+		case isUnknownTask(err), errors.Is(err, local.ErrAmbiguousCompletion):
 			return backoff.Permanent(err)
 
 		case abe.stopped.Load():

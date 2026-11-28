@@ -52,6 +52,10 @@ type execution struct {
 	// parentExecutionID is the execution ID of the workflow generation that
 	// dispatched the activity, empty when the dispatching daprd predates it.
 	parentExecutionID string
+	// durable is settled once the result is published to the parent
+	// workflow, or with the error that stopped the publish. The backend can
+	// wait for it before it answers the worker.
+	durable *todo.Durable
 
 	// start anchors the execution-duration metric; set once the engine has
 	// accepted the WorkItem.
@@ -74,6 +78,13 @@ func (f *factory) settle(key string, call *inflight.Call, err error) {
 	f.inflight.Release(key, call)
 }
 
+// settleExecution settles an execution's inflight entry and its Durable with
+// the same outcome.
+func (f *factory) settleExecution(ex *execution, err error) {
+	f.settle(ex.key, ex.call, err)
+	ex.durable.Settle(err)
+}
+
 // runOwned drives a single activity execution from WorkItem dispatch through
 // to publishing the result back to the workflow actor. Exactly one arrival per
 // inflight key runs it at a time (the owner), outside the actor lock: the
@@ -85,12 +96,14 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	// The app reports completion through this callback channel; there is no
 	// execution timeout, activities may run for hours.
 	callback := make(chan bool, 1)
+	durable := todo.NewDurable()
 	ex := &execution{
 		actorID:           a.actorID,
 		key:               key,
 		call:              call,
 		unregister:        func() {},
 		callback:          callback,
+		durable:           durable,
 		activityName:      activityName,
 		workflowID:        workflowID,
 		parentExecutionID: invocation.GetParentExecutionId(),
@@ -98,7 +111,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 			SequenceNumber:  int64(taskEvent.GetEventId()),
 			InstanceID:      api.InstanceID(workflowID),
 			NewEvent:        taskEvent,
-			Properties:      map[string]any{todo.CallbackChannelProperty: callback, todo.PullProperty: pull},
+			Properties:      map[string]any{todo.CallbackChannelProperty: callback, todo.PullProperty: pull, todo.DurableProperty: durable},
 			IncomingHistory: invocation.GetPropagatedHistory(),
 		},
 	}
@@ -115,7 +128,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 		// Not executed: the scheduler queues the trigger again. Released, not
 		// cached, so followers unpark into their own retries.
 		ex.unregister()
-		a.settle(key, call, err)
+		a.settleExecution(ex, err)
 		return err
 	}
 	if err != nil {
@@ -125,7 +138,7 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 			wfErr = wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
 		ex.unregister()
-		a.settle(key, call, wfErr)
+		a.settleExecution(ex, wfErr)
 		return wfErr
 	}
 	diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusSuccess, elapsed)
@@ -136,19 +149,26 @@ func (a *activity) runOwned(ctx context.Context, key string, call *inflight.Call
 	// published and the inflight entry finalised; retries arriving meanwhile
 	// follow the watcher's outcome via call.Done.
 	ex.start = time.Now()
-	select {
-	case <-ctx.Done():
-		a.watchAndPublish(ctx, ex)
-		return ctx.Err()
-	case completed := <-callback:
-		if cancelBeforePublishForTest() {
-			// TEST INJECTION: the result is in hand but the context carrying
-			// it is cut, exactly as a placement drain leaves it.
-			log.Warnf("TEST INJECTION: cancelling before publish for activity actor '%s'", a.actorID)
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithCancel(ctx)
-			cancel()
+	evicted := call.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			a.watchAndPublish(ctx, ex)
+			return ctx.Err()
+		case <-evicted:
+			// The claim was evicted as stale; see watchAndPublish.
+			durable.Settle(call.Err())
+			evicted = nil
+		case completed := <-callback:
+			if cancelBeforePublishForTest() {
+				// TEST INJECTION: the result is in hand but the context
+				// carrying it is cut, exactly as a placement drain leaves it.
+				log.Warnf("TEST INJECTION: cancelling before publish for activity actor '%s'", a.actorID)
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			return a.publishOwned(ctx, ex, completed)
 		}
-		return a.publishOwned(ctx, ex, completed)
 	}
 }

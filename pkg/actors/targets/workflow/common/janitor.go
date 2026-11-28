@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/kit/logger"
@@ -54,6 +55,18 @@ func EnvInt64Or(name string, def int64) int64 {
 		log.Warnf("Ignoring invalid %s %q", name, v)
 	}
 	return def
+}
+
+// TestBudget returns a predicate that reports true for the first n calls,
+// with n read once from the named test-only fault-injection variable (unset
+// or 0 disables it). Not a supported production knob.
+func TestBudget(env string) func() bool {
+	var used atomic.Int64
+	budget := sync.OnceValue(func() int64 { return EnvInt64Or(env, 0) })
+	return func() bool {
+		n := budget()
+		return n != 0 && used.Add(1) <= n
+	}
 }
 
 // JanitorPeriod resolves the janitor repeat interval once per process.

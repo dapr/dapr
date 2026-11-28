@@ -18,11 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/signing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -77,21 +79,33 @@ var errResultUndelivered = errors.New("activity result refused by the parent wor
 // abandoned at shutdown rather than parking forever.
 func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 	started := f.detached.Go(func(ctx context.Context) {
-		select {
-		case completed := <-ex.callback:
-			// There is no caller left to return the outcome to: it is
-			// recorded in metrics and carried on the settled call, which is
-			// what parked followers read.
-			_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
-		case <-ctx.Done():
-			// The callback can be ready too, and select picks a ready case at
-			// random. A result already in hand goes through the shutdown
-			// grace like any other.
+		evicted := ex.call.Done()
+		for {
 			select {
 			case completed := <-ex.callback:
+				// There is no caller left to return the outcome to: it is
+				// recorded in metrics and carried on the settled call, which
+				// is what parked followers read.
 				_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
-			default:
-				f.abandonPublish(ex)
+				return
+			case <-evicted:
+				// The claim was evicted as stale and a fresh owner re-runs the
+				// activity. A late result is still published, but a
+				// completion call waiting on this execution is told now that
+				// its result was not saved.
+				ex.durable.Settle(ex.call.Err())
+				evicted = nil
+			case <-ctx.Done():
+				// The callback can be ready too, and select picks a ready case
+				// at random. A result already in hand goes through the
+				// shutdown grace like any other.
+				select {
+				case completed := <-ex.callback:
+					_ = f.publishAndSettle(context.WithoutCancel(origCtx), ex, completed)
+				default:
+					f.abandonPublish(ex)
+				}
+				return
 			}
 		}
 	})
@@ -104,7 +118,27 @@ func (f *factory) watchAndPublish(origCtx context.Context, ex *execution) {
 // invocation context is cancelled before the result is published, making the
 // placement-drain race deterministic. Execution stays at-least-once either
 // way; the point is that a result already in hand is not thrown away.
-var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PUBLISH")
+var cancelBeforePublishForTest = common.TestBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PUBLISH")
+
+// testPublishHold is a test-only fault injection: every result publish waits
+// this long before it starts. Not a supported production knob.
+var testPublishHold = sync.OnceValue(func() time.Duration {
+	return common.EnvDurationOr("DAPR_WORKFLOW_TEST_ACTIVITY_PUBLISH_HOLD", 0)
+})
+
+func holdPublishForTest(ctx context.Context) error {
+	hold := testPublishHold()
+	if hold <= 0 {
+		return nil
+	}
+	log.Warnf("TEST INJECTION: holding the activity result publish for %s", hold)
+	select {
+	case <-time.After(hold):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // abandonPublish gives up on an execution's result at shutdown: the outcome
 // dies with this host and the parent workflow's janitor re-dispatches the
@@ -113,7 +147,7 @@ var cancelBeforePublishForTest = testBudget("DAPR_WORKFLOW_TEST_CANCEL_BEFORE_PU
 func (f *factory) abandonPublish(ex *execution) {
 	log.Warnf("Activity actor '%s': abandoning the result publish to workflow '%s' at shutdown; the work item is re-dispatched on the next owner", ex.actorID, ex.workflowID)
 	ex.unregister()
-	f.settle(ex.key, ex.call, errPublishAbandoned)
+	f.settleExecution(ex, errPublishAbandoned)
 }
 
 // publishOwned delivers the outcome an owner holds in hand. The publish must
@@ -179,7 +213,7 @@ func (f *factory) publishAndSettle(base context.Context, ex *execution, complete
 		f.abandonPublish(ex)
 		return errPublishAbandoned
 	}
-	f.settle(ex.key, ex.call, execErr)
+	f.settleExecution(ex, execErr)
 	ex.unregister()
 	if errors.Is(execErr, errResultUndelivered) {
 		// Acked: retrying the publish into a purged instance cannot succeed.
@@ -194,6 +228,9 @@ func (f *factory) publishAndSettle(base context.Context, ex *execution, complete
 // it must remain safe to invoke from a background goroutine after the
 // owning *activity may have been recycled.
 func (f *factory) publishResult(ctx context.Context, ex *execution, completed bool) error {
+	if err := holdPublishForTest(ctx); err != nil {
+		return err
+	}
 	executionStatus := ""
 	elapsed := diag.ElapsedSince(ex.start)
 	defer func() {

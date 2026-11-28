@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -170,6 +171,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// will trigger this callback channel.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
+	// The backend answers the worker's completion call once this is settled:
+	// nil as soon as a save commits the turn, including a stall or a save
+	// followed by an error, and the turn's error on any other return.
+	durable := todo.NewDurable()
+	wi.Properties[todo.DurableProperty] = durable
+	defer func() { durable.Settle(cmp.Or(err, errTurnNotSaved)) }()
 	// A turn that returns before its save commits is retried, so it is recorded
 	// as recoverable. The terminal status is set only once the save commits.
 	diagnoseStatus := diag.StatusRecoverable
@@ -285,8 +292,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				// scheduleWorkflowStart: a reminder created first can fire on
 				// another host before the save commits, ack SUCCESS off the
 				// old state and be deleted, stranding the pending start.
-				if err = o.signAndSaveState(ctx, state); err != nil {
-					// signAndSaveState already invalidated the cache.
+				// The newest generation the worker's results produced is
+				// saved by this, so the worker is told they were.
+				if err = o.signAndSaveTurn(ctx, state, durable); err != nil {
+					// signAndSaveTurn already invalidated the cache.
 					return todo.RunCompletedFalse, err
 				}
 				// The CAN save persisted the effect of every consumed event,
@@ -333,7 +342,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}()
 
-	if err = o.handleStalled(ctx, state, rs); err != nil {
+	if err = o.handleStalled(ctx, state, rs, durable); err != nil {
 		return todo.RunCompletedFalse, err
 	}
 	compactPatches(rs)
@@ -412,12 +421,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	dispatchErr := errors.Join(activityResult.Err, createResult.Err)
 	if dispatchErr != nil {
 		if errors.Is(dispatchErr, errPayloadSizeExceeded) {
-			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs,
+			return todo.RunCompletedFalse, o.stallWorkflow(ctx, state, rs, durable,
 				protos.StalledReason_PAYLOAD_SIZE_EXCEEDED, dispatchErr.Error())
 		}
 		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
 			cacheSettled = true
-			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, activityResult, createResult, dispatchErr)
+			return todo.RunCompletedFalse, o.savePartialDispatch(ctx, state, rs, durable, activityResult, createResult, dispatchErr)
 		}
 
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
@@ -440,7 +449,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		state.SetParentNotifyPending(true)
 	}
 
-	err = o.signAndSaveState(ctx, state)
+	if err = holdOrFailTurnSaveForTest(ctx); err != nil {
+		return todo.RunCompletedFalse, err
+	}
+	err = o.signAndSaveTurn(ctx, state, durable)
 	cacheSettled = true
 	if err != nil {
 		return todo.RunCompletedFalse, err
@@ -726,8 +738,9 @@ func (o *orchestrator) classifyStartability(ctx context.Context, state *wfengine
 // savePartialDispatch commits a first turn whose remote dispatches partly
 // failed: dispatched events stay in history, failed ones are withheld, and
 // the inbox is kept so the existing reminder retries. The caller owns the
-// cache-settled and diagnostic bookkeeping its deferred closures read.
-func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, activityResult, createResult messages.DispatchResult, dispatchErr error) error {
+// cache-settled and diagnostic bookkeeping its deferred closures read. The
+// turn is saved, so turn is settled as saved although an error is returned.
+func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfenginestate.State, rs *backend.WorkflowRuntimeState, turn *todo.Durable, activityResult, createResult messages.DispatchResult, dispatchErr error) error {
 	// Save state without the events that failed to dispatch so the
 	// workflow transitions to RUNNING. Successfully dispatched items
 	// keep their events in history so they are not re-dispatched on
@@ -755,7 +768,7 @@ func (o *orchestrator) savePartialDispatch(ctx context.Context, state *wfengines
 	rs.NewEvents = filtered
 	state.ApplyRuntimeStateChanges(rs)
 	rs.NewEvents = origNewEvents
-	if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
+	if saveErr := o.signAndSaveTurn(ctx, state, turn); saveErr != nil {
 		return saveErr
 	}
 	o.reapEscalatedCompletions(state)
@@ -791,7 +804,7 @@ func (o *orchestrator) guardPayloadSize(ctx context.Context, state *wfenginestat
 		}
 		committed = true
 	}
-	return true, committed, o.stallWorkflow(ctx, state, rs, reason, description)
+	return true, committed, o.stallWorkflow(ctx, state, rs, nil, reason, description)
 }
 
 // executionStatusForRuntimeStatus maps a terminal workflow runtime status to

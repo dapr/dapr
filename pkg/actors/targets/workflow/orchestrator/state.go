@@ -190,11 +190,18 @@ const commitTimeout = 30 * time.Second
 // state. This is the single entry point for all state persistence; callers
 // must never call saveInternalState directly.
 func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	return o.signAndSaveTurn(ctx, state, nil)
+}
+
+// signAndSaveTurn is signAndSaveState for a save that commits a turn: it
+// settles turn as saved as soon as the store commits, so an error returned
+// after the commit does not report the turn as unsaved.
+func (o *orchestrator) signAndSaveTurn(ctx context.Context, state *wfenginestate.State, turn *todo.Durable) error {
 	if err := o.signing.SignNewEvents(state); err != nil {
 		o.invalidateCachedState()
 		return fmt.Errorf("failed to sign new history events: %w", err)
 	}
-	if err := o.saveInternalState(ctx, state); err != nil {
+	if err := o.saveInternalState(ctx, state, turn); err != nil {
 		o.invalidateCachedState()
 		return err
 	}
@@ -360,7 +367,7 @@ func (o *orchestrator) resetForPurgedInstance() {
 	o.foldFlush()
 }
 
-func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
+func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State, turn *todo.Durable) error {
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(o.actorID)
 	if err != nil {
@@ -394,6 +401,11 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 			log.Debugf("Workflow actor '%s': save aborted by peer write (etag mismatch); surfacing for retry", o.actorID)
 		}
 		return err
+	}
+
+	// The turn is saved, whatever the metadata refresh below returns.
+	if turn != nil {
+		turn.Settle(nil)
 	}
 
 	// ResetChangeTracking should always be called after a save operation succeeds
